@@ -1,0 +1,6 @@
+version: 0.2
+phases:
+  build:
+    # add graph builds base on $PATHS
+    commands:
+      - $COMMAND
