@@ -1,12 +1,5 @@
-resource "random_integer" "artifact_bucket" {
-  count = var.enabled ? 1 : 0
-  min   = 10000000
-  max   = 99999999
-  seed  = 1
-}
-
 resource "aws_codestarconnections_connection" "github" {
-  name          = var.pipeline_name
+  name          = coalesce(var.codestar_name, substr(var.pipeline_name, 0, 32))
   provider_type = "GitHub"
 }
 
@@ -48,12 +41,13 @@ module "codepipeline" {
   account_id           = var.account_id
   name                 = var.pipeline_name
   cmk_arn              = var.cmk_arn
-  artifact_bucket_name = coalesce(var.artifact_bucket_name, "${var.pipeline_name}-${random_integer.artifact_bucket[0].result}")
   stages = concat([
     {
-      name = "1-${split("/", var.repo_id)[1]}"
+      name = "1-${var.repo_id}"
       actions = [
         {
+          name = "source"
+          category = "Source"
           owner            = "AWS"
           version          = 1
           provider         = "CodeStarSourceConnection"
@@ -71,6 +65,7 @@ module "codepipeline" {
       name = "${stage.order == 1 ? stage.order + 1 : stage.order}-${stage.name}"
       actions = [
         {
+          name = "plan"
           category         = "Test"
           owner            = "AWS"
           provider         = "CodeBuild"
@@ -80,22 +75,23 @@ module "codepipeline" {
           role_arn         = stage.tf_plan_role_arn
           configuration = {
             ProjectName = var.build_name
-            EnvironmentVariables = [
+            EnvironmentVariables = "${jsonencode([
               {
-                name  = "COMMAND"
-                value = "terragrunt run-all apply -auto-approve"
-                type  = "PLAINTEXT"
+                "name"  = "COMMAND"
+                "value" = var.plan_cmd
+                "type"  = "PLAINTEXT"
               },
               {
-                name  = "PATH"
-                value = stage.paths
-                type  = "PLAINTEXT"
+                "name"  = "PATH"
+                "value" = stage.paths
+                "type"  = "PLAINTEXT"
               }
-            ]
+            ])}"
           }
           run_order = 1
         },
         {
+          name = "approval"
           category  = "Approval"
           owner     = "AWS"
           provider  = "Manual"
@@ -103,6 +99,7 @@ module "codepipeline" {
           run_order = 2
         },
         {
+          name = "apply"
           category         = "Build"
           owner            = "AWS"
           provider         = "CodeBuild"
@@ -112,18 +109,18 @@ module "codepipeline" {
           role_arn         = stage.tf_apply_role_arn
           configuration = {
             ProjectName = var.build_name
-            EnvironmentVariables = [
+            EnvironmentVariables = "${jsonencode([
               {
-                name  = "COMMAND"
-                value = "terragrunt run-all apply -auto-approve"
-                type  = "PLAINTEXT"
+                "name"  = "COMMAND"
+                "value" = var.apply_cmd
+                "type"  = "PLAINTEXT"
               },
               {
-                name  = "PATH"
-                value = stage.paths
-                type  = "PLAINTEXT"
+                "name"  = "PATH"
+                "value" = stage.paths
+                "type"  = "PLAINTEXT"
               }
-            ]
+            ])}"
           }
           run_order = 3
         }

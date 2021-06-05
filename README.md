@@ -1,3 +1,33 @@
+# Terraform AWS Infrastructure Live CI
+AGW github webhook
+    - determines the dependency between cfg dirs given the changed paths
+    - update codepipeline with dependencies and tf/approval flow
+    - dependency order:
+        - if dir is a dependency of changed dir:
+            - recursively add dependencies to list of directories until depedendencies have no dependepency of its own
+        - order changed files by stage order paths
+
+run pipeline
+    - run tg plan
+    - approve/decline tf plan
+    - approve tf plan
+    - apply tf cfg
+    - run process above with dependencies
+
+rollback:
+    - rollback dependencies
+    - rollback current tf cfg
+    - rollback all of above
+    - rollback none
+rollback method:
+    - via artifact store get previous version and update pipeline
+
+## Problem
+
+`terragrunt run-all xxx` commands have a limitation of inaccurately outputting the dependency values for child terraform configurations if the parent terraform configuration changes. The current advice is to exclude `terragrunt run-all xxx` from CI systems and run individual `terragrunt xxx` within each target directory. This imposes the tedious process of manually updating what directories to run on and the explicit ordering between them within the CI pipeline. 
+
+## 
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
