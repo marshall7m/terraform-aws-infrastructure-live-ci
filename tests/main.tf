@@ -3,8 +3,6 @@ locals {
   mut_id = "mut-${local.mut}-${random_id.default.id}"
 }
 
-provider "random" {}
-
 resource "random_id" "default" {
   byte_length = 8
 }
@@ -16,18 +14,79 @@ resource "github_repository" "test" {
   visibility  = "public"
 }
 
-resource "github_repository_file" "test_push" {
+resource "null_resource" "setup_repo" {
+  triggers = {
+    run = github_repository.test.http_clone_url
+  }
+  provisioner "local-exec" {
+    command = templatefile("setup_repo.sh", {
+      clone_url = github_repository.test.http_clone_url
+    })
+  }
+}
+
+resource "github_repository_file" "test_baz" {
   repository          = github_repository.test.name
   branch              = "master"
-  file                = "test_cfg/main.tf"
+  file                = "baz/terragrunt.hcl"
   content             = <<EOF
-resource "aws_ssm_parameter" "test" {
-  name  = ${local.mut_id}
-  type  = "String"
-  value = "bar"
+terraform {
+    source = ".//"
+}
+
+inputs = {
+    value = "overwrite_baz"
 }
 EOF
-  commit_message      = "test ${local.mut_id}"
+  commit_message      = "overwrite baz"
+  overwrite_on_create = true
+  depends_on = [
+    module.mut_infrastructure_ci
+  ]
+}
+
+resource "github_repository_file" "test_bar" {
+  repository          = github_repository.test.name
+  branch              = "master"
+  file                = "bar/terragrunt.hcl"
+  content             = <<EOF
+terraform {
+    source = ".//"
+}
+
+dependency "baz" {
+    config_path = "../baz"
+}
+
+inputs = {
+    dependency = "overwrite_bar"
+}
+EOF
+  commit_message      = "overwrite bar"
+  overwrite_on_create = true
+  depends_on = [
+    module.mut_infrastructure_ci
+  ]
+}
+
+resource "github_repository_file" "test_foo" {
+  repository          = github_repository.test.name
+  branch              = "master"
+  file                = "foo/terragrunt.hcl"
+  content             = <<EOF
+terraform {
+    source = ".//"
+}
+
+dependency "bar" {
+    config_path = "../bar"
+}
+
+inputs = {
+    dependency = "overwrite_foo"
+}
+EOF
+  commit_message      = "overwrite foo"
   overwrite_on_create = true
   depends_on = [
     module.mut_infrastructure_ci

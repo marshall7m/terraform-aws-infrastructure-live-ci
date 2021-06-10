@@ -28,6 +28,10 @@ rollback method:
 
 ## 
 
+"""
+When you update a pipeline, CodePipeline gracefully completes all the running actions and then fails the stages and pipeline executions where the running actions were completed. When a pipeline is updated, you will need to re-run your pipeline.
+"""https://docs.aws.amazon.com/codepipeline/latest/userguide/pipelines-edit.html
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 

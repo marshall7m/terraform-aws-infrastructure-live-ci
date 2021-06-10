@@ -41,9 +41,11 @@ module "codepipeline" {
   account_id           = var.account_id
   name                 = var.pipeline_name
   cmk_arn              = var.cmk_arn
-  stages = concat([
+  # create placeholder stages since codepipeline requires two actions
+  # stages/actions are updated via Step Function
+  stages = [
     {
-      name = "1-${var.repo_id}"
+      name = "${var.repo_id}"
       actions = [
         {
           name = "source"
@@ -59,72 +61,18 @@ module "codepipeline" {
           }
         }
       ]
-    }
-    ],
-    [for stage in var.stages : {
-      name = "${stage.order == 1 ? stage.order + 1 : stage.order}-${stage.name}"
+    },
+    {
+      name = "placeholder"
       actions = [
-        {
-          name = "plan"
-          category         = "Test"
-          owner            = "AWS"
-          provider         = "CodeBuild"
-          version          = 1
-          input_artifacts  = [var.branch]
-          output_artifacts = ["${stage.name}-testing"]
-          role_arn         = stage.tf_plan_role_arn
-          configuration = {
-            ProjectName = var.build_name
-            EnvironmentVariables = "${jsonencode([
-              {
-                "name"  = "COMMAND"
-                "value" = var.plan_cmd
-                "type"  = "PLAINTEXT"
-              },
-              {
-                "name"  = "PATH"
-                "value" = stage.paths
-                "type"  = "PLAINTEXT"
-              }
-            ])}"
-          }
-          run_order = 1
-        },
         {
           name = "approval"
           category  = "Approval"
           owner     = "AWS"
           provider  = "Manual"
           version   = 1
-          run_order = 2
-        },
-        {
-          name = "apply"
-          category         = "Build"
-          owner            = "AWS"
-          provider         = "CodeBuild"
-          version          = 1
-          input_artifacts  = [var.branch]
-          output_artifacts = ["${stage.name}-apply"]
-          role_arn         = stage.tf_apply_role_arn
-          configuration = {
-            ProjectName = var.build_name
-            EnvironmentVariables = "${jsonencode([
-              {
-                "name"  = "COMMAND"
-                "value" = var.apply_cmd
-                "type"  = "PLAINTEXT"
-              },
-              {
-                "name"  = "PATH"
-                "value" = stage.paths
-                "type"  = "PLAINTEXT"
-              }
-            ])}"
-          }
-          run_order = 3
         }
       ]
-      }
-  ])
+    }
+  ]
 }
