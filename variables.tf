@@ -49,7 +49,7 @@ variable "cmk_arn" {
 
 variable "artifact_bucket_name" {
   description = "Name of the artifact S3 bucket to be created or the name of a pre-existing bucket name to be used for storing the pipeline's artifacts"
-  type = string
+  type        = string
   default     = null
 }
 
@@ -118,8 +118,8 @@ variable "role_tags" {
 #### CODESTAR ####
 variable "codestar_name" {
   description = "AWS CodeStar connection name used to define the source stage of the pipeline"
-  type = string
-  default = null
+  type        = string
+  default     = null
 }
 
 #### CODEBUILD ####
@@ -154,14 +154,14 @@ variable "buildspec" {
 
 variable "plan_cmd" {
   description = "Terragrunt/Terraform plan command to run on target paths"
-  type = string
-  default = "terragrunt run-all plan"
+  type        = string
+  default     = "terragrunt run-all plan"
 }
 
 variable "apply_cmd" {
   description = "Terragrunt/Terraform apply command to run on target paths"
-  type = string
-  default = "terragrunt run-all apply -auto-approve"
+  type        = string
+  default     = "terragrunt run-all apply -auto-approve"
 }
 
 variable "build_tags" {

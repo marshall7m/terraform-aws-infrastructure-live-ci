@@ -36,11 +36,11 @@ module "codebuild" {
 }
 
 module "codepipeline" {
-  count                = var.enabled ? 1 : 0
-  source               = "github.com/marshall7m/terraform-aws-codepipeline"
-  account_id           = var.account_id
-  name                 = var.pipeline_name
-  cmk_arn              = var.cmk_arn
+  count      = var.enabled ? 1 : 0
+  source     = "github.com/marshall7m/terraform-aws-codepipeline"
+  account_id = var.account_id
+  name       = var.pipeline_name
+  cmk_arn    = var.cmk_arn
   # create placeholder stages since codepipeline requires two actions
   # stages/actions are updated via Step Function
   stages = [
@@ -48,8 +48,8 @@ module "codepipeline" {
       name = "${var.repo_id}"
       actions = [
         {
-          name = "source"
-          category = "Source"
+          name             = "source"
+          category         = "Source"
           owner            = "AWS"
           version          = 1
           provider         = "CodeStarSourceConnection"
@@ -66,11 +66,11 @@ module "codepipeline" {
       name = "placeholder"
       actions = [
         {
-          name = "approval"
-          category  = "Approval"
-          owner     = "AWS"
-          provider  = "Manual"
-          version   = 1
+          name     = "approval"
+          category = "Approval"
+          owner    = "AWS"
+          provider = "Manual"
+          version  = 1
         }
       ]
     }

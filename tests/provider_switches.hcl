@@ -1,3 +1,3 @@
 locals {
-    include_github = true
+  include_github = true
 }
