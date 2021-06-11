@@ -1,5 +1,5 @@
 locals {
-  mut = "infrastructure-ci"
+  mut    = "infrastructure-ci"
   mut_id = "mut-${local.mut}-${random_id.default.id}"
 }
 
@@ -8,7 +8,7 @@ resource "random_id" "default" {
 }
 
 resource "github_repository" "test" {
-  name        = local.mut_id
+  name        = "mut-${local.mut}"
   description = "Test repo for mut: ${local.mut}"
   auto_init   = true
   visibility  = "public"
@@ -41,7 +41,7 @@ EOF
   commit_message      = "overwrite baz"
   overwrite_on_create = true
   depends_on = [
-    module.mut_infrastructure_ci
+    module.mut_infrastructure_live_ci
   ]
 }
 
@@ -65,7 +65,7 @@ EOF
   commit_message      = "overwrite bar"
   overwrite_on_create = true
   depends_on = [
-    module.mut_infrastructure_ci
+    module.mut_infrastructure_live_ci
   ]
 }
 
@@ -89,49 +89,39 @@ EOF
   commit_message      = "overwrite foo"
   overwrite_on_create = true
   depends_on = [
-    module.mut_infrastructure_ci
+    module.mut_infrastructure_live_ci
   ]
-}
-
-module "tf_plan_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = "${local.mut}-tf-plan-role"
-  trusted_entities = [module.mut_infrastructure_ci.codepipeline_role_arn]
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
-}
-
-module "tf_apply_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = "${local.mut}-tf-apply-role"
-  trusted_entities = [module.mut_infrastructure_ci.codepipeline_role_arn]
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
 
 data "aws_caller_identity" "current" {}
 
-module "mut_infrastructure_ci" {
+module "mut_infrastructure_live_ci" {
   source        = "..//"
   account_id    = data.aws_caller_identity.current.id
   pipeline_name = local.mut_id
-  
-  plan_cmd = "terraform plan"
-  apply_cmd = "terraform apply -auto-approve"
 
-  build_assumable_role_arns = [
-    module.tf_plan_role.role_arn,
-    module.tf_apply_role.role_arn
+  plan_cmd  = "terragrunt plan"
+  apply_cmd = "terragrunt apply -auto-approve"
+
+  plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+  apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
+
+  repo_name = github_repository.test.name
+  branch    = "master"
+
+  create_github_token_ssm_param = false
+  github_token_ssm_key          = "github-webhook-request-validator-github-token"
+
+  stage_parent_paths = [
+    "baz",
+    "foo"
   ]
-
-  repo_id = github_repository.test.full_name
-  branch  = "master"
-
-  stages = [
+  repo_filter_groups = [
     {
-      name              = "test"
-      paths             = ["test_cfg/"]
-      tf_plan_role_arn  = module.tf_plan_role.role_arn
-      tf_apply_role_arn = module.tf_apply_role.role_arn
-      order             = 1
+      events = ["pull_request"]
     }
+  ]
+  depends_on = [
+    github_repository.test
   ]
 }

@@ -3,11 +3,41 @@ resource "aws_codestarconnections_connection" "github" {
   provider_type = "GitHub"
 }
 
+module "plan_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name               = coalesce(var.plan_role_name, "${var.pipeline_name}-tf-plan-action")
+  trusted_entities        = ["codebuild.amazonaws.com"]
+  custom_role_policy_arns = var.plan_role_policy_arns
+  statements = [
+    {
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = var.plan_role_assumable_role_arns
+    }
+  ]
+}
+
+module "apply_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name               = coalesce(var.apply_role_name, "${var.pipeline_name}-tf-apply-action")
+  trusted_entities        = ["codebuild.amazonaws.com"]
+  custom_role_policy_arns = var.apply_role_policy_arns
+  statements = [
+    {
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = var.apply_role_assumable_role_arns
+    }
+  ]
+}
+
 module "codebuild" {
-  count               = var.enabled ? 1 : 0
-  source              = "github.com/marshall7m/terraform-aws-codebuild"
-  name                = var.build_name
-  assumable_role_arns = var.build_assumable_role_arns
+  source = "github.com/marshall7m/terraform-aws-codebuild"
+  name   = var.build_name
+  assumable_role_arns = [
+    module.plan_role.role_arn,
+    module.apply_role.role_arn
+  ]
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
     image        = "aws/codebuild/standard:3.0"
@@ -36,7 +66,6 @@ module "codebuild" {
 }
 
 module "codepipeline" {
-  count      = var.enabled ? 1 : 0
   source     = "github.com/marshall7m/terraform-aws-codepipeline"
   account_id = var.account_id
   name       = var.pipeline_name
@@ -45,18 +74,19 @@ module "codepipeline" {
   # stages/actions are updated via Step Function
   stages = [
     {
-      name = "${var.repo_id}"
+      name = data.github_repository.this.repo_id
       actions = [
         {
           name             = "source"
           category         = "Source"
           owner            = "AWS"
-          version          = 1
           provider         = "CodeStarSourceConnection"
+          version          = 1
           output_artifacts = [var.branch]
           configuration = {
-            ConnectionArn    = aws_codestarconnections_connection.github.arn
-            FullRepositoryId = var.repo_id
+            ConnectionArn = aws_codestarconnections_connection.github.arn
+            #retrieve full name of repo via data src given var.repos is used in for_each within `module.github_webhook`
+            FullRepositoryId = data.github_repository.this.repo_id
             BranchName       = var.branch
           }
         }
@@ -75,4 +105,8 @@ module "codepipeline" {
       ]
     }
   ]
+}
+
+data "github_repository" "this" {
+  name = var.repo_name
 }
