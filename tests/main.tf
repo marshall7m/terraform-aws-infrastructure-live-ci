@@ -12,23 +12,16 @@ resource "github_repository" "test" {
   description = "Test repo for mut: ${local.mut}"
   auto_init   = true
   visibility  = "public"
-}
-
-resource "null_resource" "setup_repo" {
-  triggers = {
-    run = github_repository.test.http_clone_url
-  }
-  provisioner "local-exec" {
-    command = templatefile("setup_repo.sh", {
-      clone_url = github_repository.test.http_clone_url
-    })
+  template {
+    owner      = "marshall7m"
+    repository = "infrastructure-live-testing-template"
   }
 }
 
 resource "github_repository_file" "test_baz" {
   repository          = github_repository.test.name
   branch              = "master"
-  file                = "baz/terragrunt.hcl"
+  file                = "dev-account/baz/terragrunt.hcl"
   content             = <<EOF
 terraform {
     source = ".//"
@@ -48,7 +41,7 @@ EOF
 resource "github_repository_file" "test_bar" {
   repository          = github_repository.test.name
   branch              = "master"
-  file                = "bar/terragrunt.hcl"
+  file                = "dev-account/bar/terragrunt.hcl"
   content             = <<EOF
 terraform {
     source = ".//"
@@ -72,7 +65,7 @@ EOF
 resource "github_repository_file" "test_foo" {
   repository          = github_repository.test.name
   branch              = "master"
-  file                = "foo/terragrunt.hcl"
+  file                = "dev-account/foo/terragrunt.hcl"
   content             = <<EOF
 terraform {
     source = ".//"
@@ -112,14 +105,14 @@ module "mut_infrastructure_live_ci" {
   create_github_token_ssm_param = false
   github_token_ssm_key          = "github-webhook-request-validator-github-token"
 
-  stage_parent_paths = [
-    "baz",
-    "foo"
-  ]
-  repo_filter_groups = [
-    {
-      events = ["pull_request"]
-    }
+  stage_parent_paths = ["dev-account"]
+  webhook_filter_groups = [
+    [
+      {
+        pattern = "PUSH"
+        type = "EVENT"
+      }
+    ]
   ]
   depends_on = [
     github_repository.test

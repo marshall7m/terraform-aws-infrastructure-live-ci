@@ -121,7 +121,7 @@ variable "codestar_name" {
 variable "build_name" {
   description = "CodeBuild project name"
   type        = string
-  default     = "infrastructure-live-ci"
+  default     = "infrastructure-live-ci-build"
 }
 
 variable "plan_role_name" {
@@ -201,18 +201,14 @@ variable "repo_name" {
   type        = string
 }
 
-variable "repo_filter_groups" {
-  description = "List of filter groups for the Github repository. The GitHub webhook request has to pass atleast one filter group in order to proceed to downstream actions"
-  type = list(object({
-    events                 = list(string)
-    pr_actions             = optional(list(string))
-    base_refs              = optional(list(string))
-    head_refs              = optional(list(string))
-    actor_account_ids      = optional(list(string))
-    commit_messages        = optional(list(string))
-    file_paths             = optional(list(string))
-    exclude_matched_filter = optional(bool)
-  }))
+variable "webhook_filter_groups" {
+  description = "List of webhook filter groups for the Github repository. The GitHub webhook has to pass atleast one filter group in order to proceed to downstream actions"
+  type = list(list(object({
+    pattern                 = string
+    type                    = string
+    exclude_matched_pattern = optional(bool)
+  })))
+  default = []
 }
 
 variable "api_name" {
@@ -256,38 +252,12 @@ variable "github_token_ssm_tags" {
   default     = {}
 }
 
-### GITHUB-SECRET ###
-
-variable "github_secret_ssm_key" {
-  description = "Key for github secret within AWS SSM Parameter Store"
-  type        = string
-  default     = "github-webhook-github-secret" #tfsec:ignore:GEN001
-}
-
-variable "github_secret_ssm_description" {
-  description = "Github secret SSM parameter description"
-  type        = string
-  default     = "Secret value for Github Webhooks" #tfsec:ignore:GEN001
-}
-
-variable "github_secret_ssm_tags" {
-  description = "Tags for Github webhook secret SSM parameter"
-  type        = map(string)
-  default     = {}
-}
-
 # STEP-FUNCTION #
 
 variable "step_function_name" {
   description = "Name of AWS Step Function machine"
   type        = string
   default     = "infrastructure-live-step-function"
-}
-
-variable "trigger_sf_lambda_function_name" {
-  description = "Name of the AWS Lambda function that will trigger a Step Function execution"
-  type        = string
-  default     = "infrastructure-live-step-function-trigger"
 }
 
 variable "update_cp_lambda_function_name" {

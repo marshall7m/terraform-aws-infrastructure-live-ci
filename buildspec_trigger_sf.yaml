@@ -1,0 +1,6 @@
+version: 0.2
+phases:
+  build:
+    commands:
+      - echo $CODEBUILD_SOURCE_VERSION
+      - aws stepfunctions start-execution --state-machine-arn ${STATE_MACHINE_ARN} --input "{\"source_version\" : \"${CODEBUILD_SOURCE_VERSION}\"}"

@@ -7,11 +7,11 @@ output "codepipeline_role_arn" {
 }
 
 output "codebuild_arn" {
-  value = try(module.codebuild[0].arn, null)
+  value = try(module.cp_codebuild[0].arn, null)
 }
 
 output "codebuild_role_arn" {
-  value = try(module.codebuild[0].role_arn, null)
+  value = try(module.cp_codebuild[0].role_arn, null)
 }
 
 # output "bucket_arn" {

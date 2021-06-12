@@ -6,32 +6,32 @@ resource "aws_codestarconnections_connection" "github" {
 module "plan_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name               = coalesce(var.plan_role_name, "${var.pipeline_name}-tf-plan-action")
-  trusted_entities        = ["codebuild.amazonaws.com"]
+  trusted_services        = ["codepipeline.amazonaws.com"]
   custom_role_policy_arns = var.plan_role_policy_arns
-  statements = [
+  statements = length(var.plan_role_assumable_role_arns) > 0 ? [
     {
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = var.plan_role_assumable_role_arns
     }
-  ]
+  ] : []
 }
 
 module "apply_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name               = coalesce(var.apply_role_name, "${var.pipeline_name}-tf-apply-action")
-  trusted_entities        = ["codebuild.amazonaws.com"]
+  trusted_services        = ["codepipeline.amazonaws.com"]
   custom_role_policy_arns = var.apply_role_policy_arns
-  statements = [
+  statements = length(var.apply_role_assumable_role_arns) > 0 ? [
     {
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = var.apply_role_assumable_role_arns
     }
-  ]
+  ] : []
 }
 
-module "codebuild" {
+module "cp_codebuild" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
   name   = var.build_name
   assumable_role_arns = [
@@ -70,8 +70,9 @@ module "codepipeline" {
   account_id = var.account_id
   name       = var.pipeline_name
   cmk_arn    = var.cmk_arn
-  # create placeholder stages since codepipeline requires two actions
-  # stages/actions are updated via Step Function
+
+
+  # create placeholder stages since codepipeline requires two stages
   stages = [
     {
       name = data.github_repository.this.repo_id
@@ -85,16 +86,42 @@ module "codepipeline" {
           output_artifacts = [var.branch]
           configuration = {
             ConnectionArn = aws_codestarconnections_connection.github.arn
-            #retrieve full name of repo via data src given var.repos is used in for_each within `module.github_webhook`
             FullRepositoryId = data.github_repository.this.repo_id
             BranchName       = var.branch
           }
         }
       ]
     },
+    #stage template that will be used to dynamically generate stages
     {
-      name = "placeholder"
+      name = "terr-dir"
       actions = [
+        # {
+        #   name = "plan"
+        #   category         = "Test"
+        #   owner            = "AWS"
+        #   provider         = "CodeBuild"
+        #   version          = 1
+        #   input_artifacts  = [var.branch]
+        #   output_artifacts = ["terr-dir-plan"]
+        #   role_arn         = module.plan_role.role_arn
+        #   configuration = {
+        #     ProjectName = module.cp_codebuild.name
+        #     EnvironmentVariables = jsonencode([
+        #       {
+        #         "name"  = "COMMAND"
+        #         "value" = var.plan_cmd
+        #         "type"  = "PLAINTEXT"
+        #       },
+        #       {
+        #         "name"  = "PATH"
+        #         "value" = ""
+        #         "type"  = "PLAINTEXT"
+        #       }
+        #     ])
+        #   }
+        #   run_order = 1          
+        # },
         {
           name     = "approval"
           category = "Approval"
@@ -102,6 +129,31 @@ module "codepipeline" {
           provider = "Manual"
           version  = 1
         }
+        # {
+        #   name = "apply"
+        #   category         = "Test"
+        #   owner            = "AWS"
+        #   provider         = "CodeBuild"
+        #   version          = 1
+        #   input_artifacts  = [var.branch]
+        #   output_artifacts = ["terr-dir-apply"]
+        #   role_arn         = module.apply_role.role_arn
+        #   configuration = {
+        #     ProjectName = module.cp_codebuild.name
+        #     EnvironmentVariables = jsonencode([
+        #       {
+        #         "name"  = "COMMAND"
+        #         "value" = var.apply_cmd
+        #         "type"  = "PLAINTEXT"
+        #       },
+        #       {
+        #         "name"  = "PATH"
+        #         "value" = ""
+        #         "type"  = "PLAINTEXT"
+        #       }
+        #     ])
+        #   }
+        # }
       ]
     }
   ]
