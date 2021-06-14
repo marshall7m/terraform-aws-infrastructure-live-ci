@@ -75,7 +75,7 @@ module "codepipeline" {
   # create placeholder stages since codepipeline requires two stages
   stages = [
     {
-      name = data.github_repository.this.repo_id
+      name = data.github_repository.this.name
       actions = [
         {
           name             = "source"
@@ -86,8 +86,11 @@ module "codepipeline" {
           output_artifacts = [var.branch]
           configuration = {
             ConnectionArn = aws_codestarconnections_connection.github.arn
-            FullRepositoryId = data.github_repository.this.repo_id
+            FullRepositoryId = data.github_repository.this.full_name
             BranchName       = var.branch
+            OutputArtifactFormat = "CODEBUILD_CLONE_REF"
+            #pipeline will be triggered via `module.trigger_cp` build
+            DetectChanges = false
           }
         }
       ]

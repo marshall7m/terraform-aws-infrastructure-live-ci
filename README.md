@@ -1,4 +1,6 @@
 # Terraform AWS Infrastructure Live CI
+
+Idea #1
 AGW github webhook
     - determines the dependency between cfg dirs given the changed paths
     - update codepipeline with dependencies and tf/approval flow
@@ -22,15 +24,53 @@ rollback:
 rollback method:
     - via artifact store get previous version and update pipeline
 
+Idea #2
+- Use CB webhook instead of custom API Gateway webhook
+- Poll for pipeline exeuction via CW rule
+- If pipeline is in succeed state, update pipeline stages cfg
+- Use Idea #1 pipeline process
+- Codepipeline Work around rollback process:
+    - within CB phase
+    - if terraform apply fails, checkout terraform code of the last commit of base ref
+    - if terraform code doesn’t exist within last commit, run terraform destroy with head ref
+
+Idea #3:
+- Cb with GitHub webhook that puts the commit into SQS queue
+- poll for step function execution with CW rule, use Lambda function as target
+- if step function is in succeed state, update step function definition with next SQS queue commit within Lambda Function
+- rollback task for each modified terraform cfg
+- create choice task that allows the approver to decide what type of rollback within manual approval process:
+    types of rollbacks:
+        - rollback all within head commit
+        - rollback selective cfg within head commit
+            - if selective, run state machine task for committing currently terraform applied cfg?
+
+Tradeoffs between CP and SF:
+
+CP:
+Pros:
+Integration source action
+Cons:
+No first class support for rollbacks and action failures
+Doesn’t allow for visual representation of rollback process
+
 ## Problem
 
 `terragrunt run-all xxx` commands have a limitation of inaccurately outputting the dependency values for child terraform configurations if the parent terraform configuration changes. The current advice is to exclude `terragrunt run-all xxx` from CI systems and run individual `terragrunt xxx` within each target directory. This imposes the tedious process of manually updating what directories to run on and the explicit ordering between them within the CI pipeline. 
 
-## 
+## Update Process 
 
+CodePipeline:
 """
 When you update a pipeline, CodePipeline gracefully completes all the running actions and then fails the stages and pipeline executions where the running actions were completed. When a pipeline is updated, you will need to re-run your pipeline.
-"""https://docs.aws.amazon.com/codepipeline/latest/userguide/pipelines-edit.html
+"""
+https://docs.aws.amazon.com/codepipeline/latest/userguide/pipelines-edit.html
+
+Step Function:
+"""
+When you update a state machine, your updates are eventually consistent. After a few seconds or minutes, all newly started executions will reflect your state machine's updated definition and roleARN. All currently running executions will run to completion under the previous definition and roleARN before updating.
+"""
+https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update-state-machine-step-3
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements

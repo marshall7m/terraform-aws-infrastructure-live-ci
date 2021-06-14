@@ -4,27 +4,46 @@ locals {
 
 data "aws_region" "current" {}
 
-# resource "aws_cloudwatch_event_rule" "pipeline" {
-#   name        = var.cloudwatch_event_name
-#   description = "Captures pipeline-level events for AWS CodePipeline: ${var.pipeline_name}"
+resource "aws_cloudwatch_event_rule" "pipeline" {
+  name        = var.cloudwatch_event_name
+  description = "Captures pipeline-level events for AWS CodePipeline: ${var.pipeline_name}"
 
-#   event_pattern = jsonencode(
-#     {
-#       source      = ["aws.codepipeline"]
-#       detail-type = ["CodePipeline Pipeline Execution State Change"]
-#       detail = {
-#         pipeline = [var.pipeline_name]
-#         state    = ["SUCCEEDED"]
-#       }
-#     }
-#   )
-# }
+  event_pattern = jsonencode(
+    {
+      source      = ["aws.codepipeline"]
+      detail-type = ["CodePipeline Pipeline Execution State Change"]
+      detail = {
+        pipeline = [var.pipeline_name]
+        state    = ["SUCCEEDED"]
+      }
+    }
+  )
+}
 
-# resource "aws_cloudwatch_event_target" "pipeline" {
-#   rule      = aws_cloudwatch_event_rule.pipeline.name
-#   target_id = "SendToSF"
-#   arn       = aws_sfn_state_machine.this.arn
-# }
+resource "aws_cloudwatch_event_target" "pipeline" {
+  rule      = aws_cloudwatch_event_rule.pipeline.name
+  target_id = "SendToSF"
+  arn       = aws_sfn_state_machine.this.arn
+  role_arn = module.cw_event_role.role_arn
+}
+
+module "cw_event_role" {
+  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+
+  role_name = var.cloudwatch_event_name
+  trusted_services = ["events.amazonaws.com"]
+
+  statements = [
+    {
+      sid = "StepFunctionInvokeAccess"
+      effect = "Allow"
+      actions = [
+        "states:StartExecution"
+      ]
+      resources = [aws_sfn_state_machine.this.arn]
+    }
+  ]
+}
 
 resource "aws_sfn_state_machine" "this" {
   name     = var.step_function_name
@@ -32,32 +51,13 @@ resource "aws_sfn_state_machine" "this" {
 
   definition = jsonencode(
     {
-      StartAt = "PollCP"
+      StartAt = "UpdateCP"
       States = {
-        PollCP = {
-          Type     = "Task"
-          Resource = "arn:aws:states:::events:putEvents.waitForTaskToken"
-          Parameters = {
-            Entries = [
-              {
-                Source = "aws.codepipeline"
-                DetailType  = "CodePipeline Pipeline Execution State Change"
-                Detail = {
-                  "TaskToken.$" =  "$$.Task.Token"
-                  Pipeline = [var.pipeline_name]
-                  State = ["SUCCEEDED"]
-                }
-              }
-            ]
-          }
-          Next = "UpdateCP"
-        },
         UpdateCP = {
           Type     = "Task"
           Resource = "arn:aws:states:::codebuild:startBuild.sync"
           Parameters = {
             ProjectName = local.trigger_cp_build_name
-            "SourceVersion.$" = "$.source_version"
           }
           End = true
         }
@@ -70,67 +70,13 @@ module "sf_role" {
   source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name        = var.step_function_name
   trusted_services = ["states.amazonaws.com"]
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/CloudWatchEventsFullAccess"]
   statements = [
     {
-      sid       = "LambdaInvokeAccess"
+      sid       = "CodeBuildInvokeAccess"
       effect    = "Allow"
       actions   = ["codebuild:StartBuild"]
       resources = [module.trigger_cp.arn]
-    },
-    {
-      sid       = "EventBridgeAccess"
-      effect    = "Allow"
-      actions   = [
-        "events:*"
-      ]
-      resources = ["*"]
-    }
-  ]
-}
-
-module "trigger_sf" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
-
-  name = "trigger-sf"
-  webhook_filter_groups = var.webhook_filter_groups
-
-  source_auth_token = var.github_token_ssm_value
-  source_auth_server_type = "GITHUB"
-  source_auth_type = "PERSONAL_ACCESS_TOKEN"
-  source_auth_ssm_param_name = var.github_token_ssm_key
-
-  build_source = {
-    type = "GITHUB"
-    buildspec       = "buildspec_trigger_sf.yaml"
-    git_clone_depth = 1
-    insecure_ssl        = false
-    location            = data.github_repository.this.git_clone_url
-    report_build_status = true
-  }
-
-  artifacts = {
-    type = "NO_ARTIFACTS"
-  }
-
-  environment = {
-    compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
-    type         = "LINUX_CONTAINER"
-    environment_variables = [
-      {
-        name  = "STATE_MACHINE_ARN"
-        value = aws_sfn_state_machine.this.arn
-        type  = "PLAINTEXT"
-      }
-    ]
-  }
-  
-  role_policy_statements = [
-    {
-      sid       = "StepFunctionTriggerAccess"
-      effect    = "Allow"
-      actions   = ["states:StartExecution"]
-      resources = [aws_sfn_state_machine.this.arn]
     }
   ]
 }
@@ -144,7 +90,7 @@ module "trigger_cp" {
     buildspec       = "buildspec"
     git_clone_depth = 1
     insecure_ssl        = false
-    location            = data.github_repository.this.git_clone_url
+    location            = data.github_repository.this.http_clone_url
     report_build_status = true
   }
 
