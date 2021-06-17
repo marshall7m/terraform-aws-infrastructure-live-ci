@@ -1,0 +1,22 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - pr_id=$(echo $CODEBUILD_SOURCE_VERSION | cut -d "/" -f 2)
+      - base_ref=$(echo $CODEBUILD_WEBHOOK_BASE_REF | cut -d "/" -f 3)
+      - head_ref=$(echo $CODEBUILD_WEBHOOK_HEAD_REF | cut -d "/" -f 3)
+      - |
+        attr=$( jq -n \
+            --arg base_ref "$base_ref" \
+            --arg head_ref "$head_ref" \
+            --arg build_num "$CODEBUILD_BUILD_NUMBER" \
+            '[{Name: "BaseRef", Value: $base_ref, Replace: false}, {Name: "HeadRef", Value: $head_ref, Replace: false}, {Name: "BuildNumber", Value: $build_num, Replace: false}]' )
+        cond=$( jq -n --arg build_num "2" '{"Name": "BuildNumber","Exists": false}')
+        echo $attr
+        aws sdb put-attributes \
+            --domain-name ${DOMAIN_NAME} \
+            --item-name ${pr_id} \
+            --attributes "$attr" \
+            --expected "$cond"

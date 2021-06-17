@@ -35,7 +35,11 @@ Idea #2
     - if terraform code doesn’t exist within last commit, run terraform destroy with head ref
 
 Idea #3:
-- Cb with GitHub webhook that puts the commit into SQS queue
+- Cb with GitHub webhook that puts the commit into
+    - SQS FIFO queue (although has retention max of 14 days)
+    - DynamoDB
+        - Use pull request number as primary key to only keep unique prs in table
+            
 - poll for step function execution with CW rule, use Lambda function as target
 - if step function is in succeed state, update step function definition with next SQS queue commit within Lambda Function
 - rollback task for each modified terraform cfg
@@ -44,6 +48,60 @@ Idea #3:
         - rollback all within head commit
         - rollback selective cfg within head commit
             - if selective, run state machine task for committing currently terraform applied cfg?
+    retry:
+        - after rollback, route back to tf plan build
+        - checkout recent pr commits and run plan
+        - repeat manual approval/apply for x amount of retries
+- task:
+    - remove PR from dynamodb queue table if:
+        - tf apply fails x amount of times
+        - step function succeeds
+Queue Ordering:
+    - By CB build number
+    - Manually run lambda to ignore queue and run specific pr ID
+
+Step function mapping:
+    main SF:
+        input: "{dir/": ["dir2"]}
+        map iterator with no max concurrency
+        passes each modified dir's dependency list into separate step function
+    sub SF:
+        input: ["dir2"]
+        map iterator with 1 max concurrency
+        run tf plan, approval, apply
+PROS of child SF:
+    - Lambda doesn't have to template new SF definition
+    - Cleaner main SF diagram
+CONS:
+    - Doesn't give a good high-level overview of entire process
+    - May be confusing to follow through
+    
+## AWS SQS vs. DynamoDB vs. SimpleDB
+
+### AWS SQS
+Pros:
+    - Offers FIFO (First-In First-Out) storage of queues. Maintains order integrity of the message coming in and out. 
+    - Integrates with Step Function
+    
+Cons:
+    - 14-day message retention period. Conflict with use case where PRs may be open for longer than 14 days. 
+
+### AWS DynamoDb
+Pros:
+    - Persistent storage
+    - Integrates with Step Funciton
+    - Use partition and sort key to preserve order of PRs and optimize read requests
+Cons:
+    - Needs explicit partition key in order to query the table. Work around of using the scan command is not ideal since it scans every element and doesn't allow for ordering the results
+
+### AWS SimpleDb
+Pros:
+    - Persistent storage
+    - Simple to use API
+    - Likely be fall under the free-tier given the small amount of storage and request needed for this use case
+Cons:
+    - Not integrated with Step Function (Easily worked around by using boto3 via Lambda function)
+
 
 Tradeoffs between CP and SF:
 
@@ -96,35 +154,34 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | api\_name | Name of AWS Rest API | `string` | `"terraform-infrastructure-live"` | no |
 | apply\_cmd | Terragrunt/Terraform apply command to run on target paths | `string` | `"terragrunt run-all apply -auto-approve"` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
-| apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `null` | no |
+| apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
 | artifact\_bucket\_force\_destroy | Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion) | `bool` | `false` | no |
 | artifact\_bucket\_name | Name of the artifact S3 bucket to be created or the name of a pre-existing bucket name to be used for storing the pipeline's artifacts | `string` | `null` | no |
 | artifact\_bucket\_tags | Tags to attach to provisioned S3 bucket | `map(string)` | `{}` | no |
-| branch | Repo branch the pipeline is associated with | `string` | `"master"` | no |
+| base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_env\_vars | Base environment variables that will be provided for each CodePipeline action build | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
-| build\_name | CodeBuild project name | `string` | `"infrastructure-live-ci"` | no |
+| build\_name | CodeBuild project name | `string` | `"infrastructure-live-ci-build"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | buildspec | CodeBuild buildspec path relative to the source repo root directory | `string` | `null` | no |
-| cloudwatch\_event\_name | Name of the CloudWatch event that will monitor the CodePipeline | `string` | `"infrastructure-live-cp-execution-event"` | no |
+| cloudwatch\_event\_name | Name of the CloudWatch event that will monitor the Step Function | `string` | `"infrastructure-live-execution-event"` | no |
 | cmk\_arn | ARN of a pre-existing CMK to use for encrypting CodePipeline artifacts at rest | `string` | `null` | no |
 | codestar\_name | AWS CodeStar connection name used to define the source stage of the pipeline | `string` | `null` | no |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
-| github\_secret\_ssm\_description | Github secret SSM parameter description | `string` | `"Secret value for Github Webhooks"` | no |
-| github\_secret\_ssm\_key | Key for github secret within AWS SSM Parameter Store | `string` | `"github-webhook-github-secret"` | no |
-| github\_secret\_ssm\_tags | Tags for Github webhook secret SSM parameter | `map(string)` | `{}` | no |
+| dynamodb\_tags | Tags to add to DynamoDB | `map(string)` | `{}` | no |
+| file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
 | github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used to give read access to the payload validator function to get file that differ between commits"` | no |
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
-| pipeline\_name | Pipeline name | `string` | `"infrastructure-live-ci-pipeline"` | no |
+| lambda\_trigger\_sf\_function\_name | Name of AWS Lambda function that will trigger the AWS Step Function | `string` | `"trigger-infrastructure-live-ci-step-function"` | no |
 | pipeline\_tags | Tags to attach to the pipeline | `map(string)` | `{}` | no |
 | plan\_cmd | Terragrunt/Terraform plan command to run on target paths | `string` | `"terragrunt run-all plan"` | no |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
-| plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `null` | no |
+| plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
-| repo\_filter\_groups | List of filter groups for the Github repository. The GitHub webhook request has to pass atleast one filter group in order to proceed to downstream actions | <pre>list(object({<br>    events                 = list(string)<br>    pr_actions             = optional(list(string))<br>    base_refs              = optional(list(string))<br>    head_refs              = optional(list(string))<br>    actor_account_ids      = optional(list(string))<br>    commit_messages        = optional(list(string))<br>    file_paths             = optional(list(string))<br>    exclude_matched_filter = optional(bool)<br>  }))</pre> | n/a | yes |
+| queue\_pr\_build\_name | AWS CodeBuild project name for the build that writes to the PR queue table hosted on AWS DynamodB | `string` | `"infrastructure-live-ci-queue-pr"` | no |
 | repo\_name | Name of the GitHub repository | `string` | n/a | yes |
 | role\_arn | Pre-existing IAM role ARN to use for the CodePipeline | `string` | `null` | no |
 | role\_description | n/a | `string` | `"Allows Amazon Codepipeline to call AWS services on your behalf"` | no |
@@ -133,19 +190,13 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | role\_path | Path to create policy | `string` | `"/"` | no |
 | role\_permissions\_boundary | Permission boundary policy ARN used for CodePipeline service role | `string` | `""` | no |
 | role\_tags | Tags to add to CodePipeline service role | `map(string)` | `{}` | no |
+| simpledb\_name | Name of the AWS SimpleDB domain used for queuing repo PRs | `string` | `"infrastructure-live-ci-PR-queue"` | no |
 | stage\_parent\_paths | Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage | `list(string)` | n/a | yes |
-| step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-step-function"` | no |
-| trigger\_sf\_lambda\_function\_name | Name of the AWS Lambda function that will trigger a Step Function execution | `string` | `"infrastructure-live-step-function-trigger"` | no |
-| update\_cp\_lambda\_function\_name | Name of the AWS Lambda function that will dynamically update AWS CodePipeline stages based on commit changes to the repository | `string` | `"infrastructure-live-update-cp-stages"` | no |
+| step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
+| update\_sf\_lambda\_function\_name | Name of the AWS Lambda function that will update the Step Function definitions based on commit changes to PRs within the repository | `string` | `"infrastructure-live-ci-update-sf"` | no |
 
 ## Outputs
 
-| Name | Description |
-|------|-------------|
-| codebuild\_arn | n/a |
-| codebuild\_role\_arn | n/a |
-| codepipeline\_arn | n/a |
-| codepipeline\_role\_arn | n/a |
-| codestar\_arn | n/a |
+No output.
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

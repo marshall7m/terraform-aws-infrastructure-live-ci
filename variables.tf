@@ -16,8 +16,8 @@ variable "stage_parent_paths" {
   type        = list(string)
 }
 
-variable "branch" {
-  description = "Repo branch the pipeline is associated with"
+variable "base_branch" {
+  description = "Base branch for repository that all PRs will compare to"
   type        = string
   default     = "master"
 }
@@ -26,12 +26,6 @@ variable "role_arn" {
   description = "Pre-existing IAM role ARN to use for the CodePipeline"
   type        = string
   default     = null
-}
-
-variable "pipeline_name" {
-  description = "Pipeline name"
-  type        = string
-  default     = "infrastructure-live-ci-pipeline"
 }
 
 variable "cmk_arn" {
@@ -127,7 +121,7 @@ variable "build_name" {
 variable "plan_role_name" {
   description = "Name of the IAM role used for running terr* plan commands"
   type        = string
-  default     = null
+  default     = "infrastructure-live-plan"
 }
 
 variable "plan_role_assumable_role_arns" {
@@ -145,7 +139,7 @@ variable "plan_role_policy_arns" {
 variable "apply_role_name" {
   description = "Name of the IAM role used for running terr* apply commands"
   type        = string
-  default     = null
+  default     = "infrastructure-live-apply"
 }
 
 variable "apply_role_assumable_role_arns" {
@@ -201,16 +195,21 @@ variable "repo_name" {
   type        = string
 }
 
-variable "webhook_filter_groups" {
-  description = "List of webhook filter groups for the Github repository. The GitHub webhook has to pass atleast one filter group in order to proceed to downstream actions"
-  type = list(list(object({
-    pattern                 = string
-    type                    = string
-    exclude_matched_pattern = optional(bool)
-  })))
-  default = []
-}
+# variable "webhook_filter_groups" {
+#   description = "List of webhook filter groups for the Github repository. The GitHub webhook has to pass atleast one filter group in order to proceed to downstream actions"
+#   type = list(list(object({
+#     pattern                 = string
+#     type                    = string
+#     exclude_matched_pattern = optional(bool)
+#   })))
+#   default = []
+# }
 
+variable "file_path_pattern" {
+  description = "Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension."
+  type        = string
+  default     = ".+\\.(hcl|tf)$"
+}
 variable "api_name" {
   description = "Name of AWS Rest API"
   type        = string
@@ -257,17 +256,41 @@ variable "github_token_ssm_tags" {
 variable "step_function_name" {
   description = "Name of AWS Step Function machine"
   type        = string
-  default     = "infrastructure-live-step-function"
+  default     = "infrastructure-live-ci"
 }
 
-variable "update_cp_lambda_function_name" {
-  description = "Name of the AWS Lambda function that will dynamically update AWS CodePipeline stages based on commit changes to the repository"
+variable "update_sf_lambda_function_name" {
+  description = "Name of the AWS Lambda function that will update the Step Function definitions based on commit changes to PRs within the repository"
   type        = string
-  default     = "infrastructure-live-update-cp-stages"
+  default     = "infrastructure-live-ci-update-sf"
 }
 
 variable "cloudwatch_event_name" {
-  description = "Name of the CloudWatch event that will monitor the CodePipeline"
+  description = "Name of the CloudWatch event that will monitor the Step Function"
   type        = string
-  default     = "infrastructure-live-cp-execution-event"
+  default     = "infrastructure-live-execution-event"
+}
+
+variable "dynamodb_tags" {
+  description = "Tags to add to DynamoDB"
+  type        = map(string)
+  default     = {}
+}
+
+variable "queue_pr_build_name" {
+  description = "AWS CodeBuild project name for the build that writes to the PR queue table hosted on AWS DynamodB"
+  type        = string
+  default     = "infrastructure-live-ci-queue-pr"
+}
+
+variable "lambda_trigger_sf_function_name" {
+  description = "Name of AWS Lambda function that will trigger the AWS Step Function"
+  type        = string
+  default     = "trigger-infrastructure-live-ci-step-function"
+}
+
+variable "simpledb_name" {
+  description = "Name of the AWS SimpleDB domain used for queuing repo PRs"
+  type        = string
+  default     = "infrastructure-live-ci-PR-queue"
 }

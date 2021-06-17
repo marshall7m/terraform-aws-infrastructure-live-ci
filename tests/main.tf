@@ -18,9 +18,26 @@ resource "github_repository" "test" {
   }
 }
 
-resource "github_repository_file" "test_baz" {
+resource "github_branch" "test_no_deps" {
+  repository    = github_repository.test.name
+  source_branch = "master"
+  branch        = "test-no-deps"
+}
+
+resource "github_repository_pull_request" "test_no_deps" {
+  base_repository = github_repository.test.name
+  base_ref        = "master"
+  head_ref        = github_branch.test_no_deps.branch
+  title           = "overite baz"
+  body            = "Test mut: ${local.mut} ability to handle the modified configurations with no dependencies"
+  depends_on = [
+    github_repository_file.test_no_deps
+  ]
+}
+
+resource "github_repository_file" "test_no_deps" {
   repository          = github_repository.test.name
-  branch              = "master"
+  branch              = github_branch.test_no_deps.branch
   file                = "dev-account/baz/terragrunt.hcl"
   content             = <<EOF
 terraform {
@@ -89,9 +106,8 @@ EOF
 data "aws_caller_identity" "current" {}
 
 module "mut_infrastructure_live_ci" {
-  source        = "..//"
-  account_id    = data.aws_caller_identity.current.id
-  pipeline_name = local.mut_id
+  source     = "..//"
+  account_id = data.aws_caller_identity.current.id
 
   plan_cmd  = "terragrunt plan"
   apply_cmd = "terragrunt apply -auto-approve"
@@ -99,21 +115,14 @@ module "mut_infrastructure_live_ci" {
   plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
   apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 
-  repo_name = github_repository.test.name
-  branch    = "master"
+  repo_name   = github_repository.test.name
+  base_branch = "master"
 
   create_github_token_ssm_param = false
   github_token_ssm_key          = "github-webhook-request-validator-github-token"
 
   stage_parent_paths = ["dev-account"]
-  webhook_filter_groups = [
-    [
-      {
-        pattern = "PUSH"
-        type = "EVENT"
-      }
-    ]
-  ]
+
   depends_on = [
     github_repository.test
   ]

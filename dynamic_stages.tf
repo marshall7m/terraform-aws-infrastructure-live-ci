@@ -1,46 +1,42 @@
-locals {
-  trigger_cp_build_name = "trigger-${var.pipeline_name}"
-}
-
 data "aws_region" "current" {}
 
-resource "aws_cloudwatch_event_rule" "pipeline" {
+resource "aws_cloudwatch_event_rule" "this" {
   name        = var.cloudwatch_event_name
-  description = "Captures pipeline-level events for AWS CodePipeline: ${var.pipeline_name}"
+  description = "Captures execution-level events for AWS Step Function: ${var.step_function_name}"
 
   event_pattern = jsonencode(
     {
-      source      = ["aws.codepipeline"]
-      detail-type = ["CodePipeline Pipeline Execution State Change"]
+      source      = ["aws.states"]
+      detail-type = ["Step Functions Execution Status Change"]
       detail = {
-        pipeline = [var.pipeline_name]
-        state    = ["SUCCEEDED"]
+        executionArn = [aws_sfn_state_machine.this.arn]
+        state        = ["SUCCEEDED"]
       }
     }
   )
 }
 
-resource "aws_cloudwatch_event_target" "pipeline" {
-  rule      = aws_cloudwatch_event_rule.pipeline.name
-  target_id = "SendToSF"
-  arn       = aws_sfn_state_machine.this.arn
-  role_arn = module.cw_event_role.role_arn
+resource "aws_cloudwatch_event_target" "sf" {
+  rule      = aws_cloudwatch_event_rule.this.name
+  target_id = "Send"
+  arn       = module.lambda_trigger_sf.function_arn
+  role_arn  = module.cw_event_role.role_arn
 }
 
 module "cw_event_role" {
   source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
 
-  role_name = var.cloudwatch_event_name
+  role_name        = var.cloudwatch_event_name
   trusted_services = ["events.amazonaws.com"]
 
   statements = [
     {
-      sid = "StepFunctionInvokeAccess"
+      sid    = "LambdaInvokeAccess"
       effect = "Allow"
       actions = [
-        "states:StartExecution"
+        "lambda:InvokeFunction"
       ]
-      resources = [aws_sfn_state_machine.this.arn]
+      resources = [module.lambda_trigger_sf.function_arn]
     }
   ]
 }
@@ -51,13 +47,13 @@ resource "aws_sfn_state_machine" "this" {
 
   definition = jsonencode(
     {
-      StartAt = "UpdateCP"
+      StartAt = "CreateTargets"
       States = {
-        UpdateCP = {
+        CreateTargets = {
           Type     = "Task"
           Resource = "arn:aws:states:::codebuild:startBuild.sync"
           Parameters = {
-            ProjectName = local.trigger_cp_build_name
+            ProjectName = module.codebuild_queue_pr.name
           }
           End = true
         }
@@ -66,29 +62,94 @@ resource "aws_sfn_state_machine" "this" {
   )
 }
 
+data "archive_file" "lambda_trigger_sf" {
+  type        = "zip"
+  source_dir  = "${path.module}/function"
+  output_path = "${path.module}/lambda_function.zip"
+}
+
+module "lambda_trigger_sf" {
+  source           = "github.com/marshall7m/terraform-aws-lambda"
+  filename         = data.archive_file.lambda_trigger_sf.output_path
+  source_code_hash = data.archive_file.lambda_trigger_sf.output_base64sha256
+  function_name    = var.lambda_trigger_sf_function_name
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.8"
+  allowed_to_invoke = [
+    {
+      statement_id = "CloudWatchInvokeAccess"
+      principal    = "events.amazonaws.com"
+      arn          = aws_cloudwatch_event_rule.this.arn
+    }
+  ]
+  env_vars = {
+    GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
+    REPO_FULL_NAME       = data.github_repository.this.full_name
+  }
+  enable_cw_logs = true
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  ]
+  statements = [
+    {
+      sid       = "SimpledbQueryAccess"
+      effect    = "Allow"
+      actions   = ["sdb:Select"]
+      resources = ["arn:aws:sdb:${data.aws_region.current.name}:${var.account_id}:domain/${var.simpledb_name}"]
+    },
+    {
+      sid       = "StepFunctionTriggerAccess"
+      effect    = "Allow"
+      actions   = ["states:StartExecution"]
+      resources = [aws_sfn_state_machine.this.arn]
+    }
+  ]
+}
+
 module "sf_role" {
   source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name        = var.step_function_name
   trusted_services = ["states.amazonaws.com"]
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/CloudWatchEventsFullAccess"]
   statements = [
     {
       sid       = "CodeBuildInvokeAccess"
       effect    = "Allow"
       actions   = ["codebuild:StartBuild"]
-      resources = [module.trigger_cp.arn]
+      resources = [module.codebuild_terraform.arn]
     }
   ]
 }
 
-module "trigger_cp" {
+
+module "codebuild_queue_pr" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
-  name = local.trigger_cp_build_name
+
+  webhook_filter_groups = [
+    [
+      {
+        pattern = "PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED"
+        type    = "EVENT"
+      },
+      {
+        pattern = var.base_branch
+        type    = "BASE_REF"
+      },
+      {
+        pattern = var.file_path_pattern
+        type    = "FILE_PATH"
+      }
+    ]
+  ]
+  source_auth_ssm_param_name = var.github_token_ssm_key
+  source_auth_type           = "PERSONAL_ACCESS_TOKEN"
+  source_auth_server_type    = "GITHUB"
+
+  name = var.queue_pr_build_name
   build_source = {
-    type = "GITHUB"
-    buildspec       = "buildspec"
-    git_clone_depth = 1
+    type                = "GITHUB"
+    buildspec           = file("${path.module}/buildspec_queue.yaml")
+    git_clone_depth     = 1
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
     report_build_status = true
@@ -104,19 +165,25 @@ module "trigger_cp" {
     type         = "LINUX_CONTAINER"
     environment_variables = [
       {
-        name  = "STATE_MACHINE_ARN"
-        value = "aws:states:${data.aws_region.current.name}:${var.account_id}:stateMachine:${var.step_function_name}"
+        name  = "DOMAIN_NAME"
         type  = "PLAINTEXT"
+        value = var.simpledb_name
       }
     ]
   }
 
   role_policy_statements = [
     {
-      sid       = "CodePipelineTriggerAccess"
-      effect    = "Allow"
-      actions   = ["codepipeline:StartPipelineExecution"]
-      resources = [module.codepipeline.arn]
+      sid    = "SimpleDBWriteAccess"
+      effect = "Allow"
+      actions = [
+        "sdb:PutAttributes"
+      ]
+      resources = ["arn:aws:sdb:${data.aws_region.current.name}:${var.account_id}:domain/${var.simpledb_name}"]
     }
   ]
+}
+
+resource "aws_simpledb_domain" "queue" {
+  name = var.simpledb_name
 }
