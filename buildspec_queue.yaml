@@ -4,6 +4,7 @@ env:
 phases:
   build:
     commands:
+      - aws configure set preview.sdb true
       - pr_id=$(echo $CODEBUILD_SOURCE_VERSION | cut -d "/" -f 2)
       - base_ref=$(echo $CODEBUILD_WEBHOOK_BASE_REF | cut -d "/" -f 3)
       - head_ref=$(echo $CODEBUILD_WEBHOOK_HEAD_REF | cut -d "/" -f 3)

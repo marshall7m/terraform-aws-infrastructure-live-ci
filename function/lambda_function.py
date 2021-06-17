@@ -28,9 +28,9 @@ def lambda_handler(event, context):
     """
 
     log = logging.getLogger(__name__)
-	log.setLevel(logging.DEBUG)
+    log.setLevel(logging.DEBUG)
 
-    pr = sdb.select(SelectExpression=f"SELECT * FROM {os.environ['DOMAIN_NAME']}", )['Items']['Attributes']
+    pr = {attr['Name']:attr['Value'] for attr in sdb.select(SelectExpression=f"SELECT * FROM `{os.environ['DOMAIN_NAME']}`")['Items'][0]['Attributes']}
 
     github_token = ssm.get_parameter(Name=os.environ['GITHUB_TOKEN_SSM_KEY'], WithDecryption=True)['Parameter']['Value']
     gh = Github(github_token)
@@ -39,14 +39,16 @@ def lambda_handler(event, context):
 	#gets unique directories of files that changed between PR head commit and base commit
     modified_dirs = set([os.path.dirname(path.filename) for path in repo.compare(pr['BaseRef'], pr['HeadRef']).files])
 
+    cwd = os.getcwd()
     with tempfile.TemporaryDirectory() as tmpdirname:
         print('created temporary directory', tmpdirname)
-
-        cmd = f"git clone {repo['clone_url']} -b {pr['HeadRef']} --single-branch".split('')
-        proc = subprocess.run(cmd, capture_output=True, text=True).stdout
+        os.chdir(tmpdirname)
+        cmd = f'git clone {repo.clone_url} -b {pr["HeadRef"]} --single-branch {tmpdirname}'.split(' ')
+        proc = subprocess.run(cmd, capture_output=True)
         
         dep_dict = get_run_order(modified_dirs)
 
+    os.chdir(cwd)
     print(dep_dict)
 
 def get_run_order(modified_dirs: list) -> Dict[str, List[str]]:

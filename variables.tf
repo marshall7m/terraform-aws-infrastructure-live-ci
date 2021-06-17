@@ -213,7 +213,7 @@ variable "file_path_pattern" {
 variable "api_name" {
   description = "Name of AWS Rest API"
   type        = string
-  default     = "terraform-infrastructure-live"
+  default     = "infrastructure-live"
 }
 
 ## SSM ##
@@ -259,12 +259,6 @@ variable "step_function_name" {
   default     = "infrastructure-live-ci"
 }
 
-variable "update_sf_lambda_function_name" {
-  description = "Name of the AWS Lambda function that will update the Step Function definitions based on commit changes to PRs within the repository"
-  type        = string
-  default     = "infrastructure-live-ci-update-sf"
-}
-
 variable "cloudwatch_event_name" {
   description = "Name of the CloudWatch event that will monitor the Step Function"
   type        = string
@@ -286,7 +280,7 @@ variable "queue_pr_build_name" {
 variable "lambda_trigger_sf_function_name" {
   description = "Name of AWS Lambda function that will trigger the AWS Step Function"
   type        = string
-  default     = "trigger-infrastructure-live-ci-step-function"
+  default     = "infrastructure-live-ci-trigger-sf"
 }
 
 variable "simpledb_name" {

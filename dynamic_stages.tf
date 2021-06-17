@@ -9,8 +9,8 @@ resource "aws_cloudwatch_event_rule" "this" {
       source      = ["aws.states"]
       detail-type = ["Step Functions Execution Status Change"]
       detail = {
-        executionArn = [aws_sfn_state_machine.this.arn]
-        state        = ["SUCCEEDED"]
+        stateMachineArn = [aws_sfn_state_machine.this.arn]
+        state           = ["SUCCEEDED"]
       }
     }
   )
@@ -18,27 +18,8 @@ resource "aws_cloudwatch_event_rule" "this" {
 
 resource "aws_cloudwatch_event_target" "sf" {
   rule      = aws_cloudwatch_event_rule.this.name
-  target_id = "Send"
+  target_id = "LambdaTriggerSF"
   arn       = module.lambda_trigger_sf.function_arn
-  role_arn  = module.cw_event_role.role_arn
-}
-
-module "cw_event_role" {
-  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-
-  role_name        = var.cloudwatch_event_name
-  trusted_services = ["events.amazonaws.com"]
-
-  statements = [
-    {
-      sid    = "LambdaInvokeAccess"
-      effect = "Allow"
-      actions = [
-        "lambda:InvokeFunction"
-      ]
-      resources = [module.lambda_trigger_sf.function_arn]
-    }
-  ]
 }
 
 resource "aws_sfn_state_machine" "this" {
@@ -50,12 +31,8 @@ resource "aws_sfn_state_machine" "this" {
       StartAt = "CreateTargets"
       States = {
         CreateTargets = {
-          Type     = "Task"
-          Resource = "arn:aws:states:::codebuild:startBuild.sync"
-          Parameters = {
-            ProjectName = module.codebuild_queue_pr.name
-          }
-          End = true
+          Type = "Pass"
+          End  = true
         }
       }
     }
@@ -67,6 +44,42 @@ data "archive_file" "lambda_trigger_sf" {
   source_dir  = "${path.module}/function"
   output_path = "${path.module}/lambda_function.zip"
 }
+
+data "archive_file" "lambda_deps" {
+  type        = "zip"
+  source_dir  = "${path.module}/deps"
+  output_path = "${path.module}/lambda_deps.zip"
+  depends_on = [
+    null_resource.lambda_pip_deps
+  ]
+}
+
+# pip install runtime packages needed for function
+resource "null_resource" "lambda_pip_deps" {
+  triggers = {
+    zip_hash = fileexists("${path.module}/lambda_deps.zip") ? 0 : timestamp()
+  }
+  provisioner "local-exec" {
+    command = <<EOF
+    pip install --target ${path.module}/deps/python PyGithub==1.54.1
+    EOF
+  }
+}
+
+resource "aws_ssm_parameter" "github_token" {
+  count       = var.create_github_token_ssm_param && var.github_token_ssm_value != "" ? 1 : 0
+  name        = var.github_token_ssm_key
+  description = var.github_token_ssm_description
+  type        = "SecureString"
+  value       = var.github_token_ssm_value
+  tags        = var.github_token_ssm_tags
+}
+
+data "aws_ssm_parameter" "github_token" {
+  count = var.create_github_token_ssm_param == false && var.github_token_ssm_value == "" ? 1 : 0
+  name  = var.github_token_ssm_key
+}
+
 
 module "lambda_trigger_sf" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
@@ -85,6 +98,7 @@ module "lambda_trigger_sf" {
   env_vars = {
     GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
     REPO_FULL_NAME       = data.github_repository.this.full_name
+    DOMAIN_NAME          = aws_simpledb_domain.queue.id
   }
   enable_cw_logs = true
   custom_role_policy_arns = [
@@ -98,10 +112,25 @@ module "lambda_trigger_sf" {
       resources = ["arn:aws:sdb:${data.aws_region.current.name}:${var.account_id}:domain/${var.simpledb_name}"]
     },
     {
+      sid       = "GithubTokenSSMParamAccess"
+      effect    = "Allow"
+      actions   = ["ssm:GetParameter"]
+      resources = [try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)]
+    },
+    {
       sid       = "StepFunctionTriggerAccess"
       effect    = "Allow"
       actions   = ["states:StartExecution"]
       resources = [aws_sfn_state_machine.this.arn]
+    }
+  ]
+  lambda_layers = [
+    {
+      filename         = data.archive_file.lambda_deps.output_path
+      name             = "${var.lambda_trigger_sf_function_name}-deps"
+      runtimes         = ["python3.8"]
+      source_code_hash = data.archive_file.lambda_deps.output_base64sha256
+      description      = "Dependencies for lambda function: ${var.lambda_trigger_sf_function_name}"
     }
   ]
 }
