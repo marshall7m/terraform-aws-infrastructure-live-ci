@@ -76,7 +76,7 @@ CONS:
     - Doesn't give a good high-level overview of entire process
     - May be confusing to follow through
     
-## AWS SQS vs. DynamoDB vs. SimpleDB
+## AWS SQS vs. DynamoDB vs. SimpleDB for PR Queue
 
 ### AWS SQS
 Pros:
@@ -102,6 +102,22 @@ Pros:
 Cons:
     - Not integrated with Step Function (Easily worked around by using boto3 via Lambda function)
 
+
+## AWS CodeBuild vs AWS Lambda for Trigger Step Function Operation
+
+### AWS CodeBuild
+Pros:
+    - GitHub source integrated into build environment
+    - Install required binaries `git`, `terraform`, and `terragrunt` via AWS ECR image
+Cons:
+    - Scripts must be imported via secondary source or be included with Github source
+
+### AWS Lambda
+Pros:
+    - Run python commands right from `lambda_handler()` function
+Cons:
+    - Can't cleanly import required binaries
+    - Git clone Github repository within Lambda handler
 
 Tradeoffs between CP and SF:
 

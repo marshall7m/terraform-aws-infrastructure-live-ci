@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 ssm = boto3.client('ssm')
 sdb = boto3.client('sdb')
-def lambda_handler(event, context):
+def main():
     """
 
     Requirements:
@@ -55,7 +55,7 @@ def get_run_order(modified_dirs: list) -> Dict[str, List[str]]:
 	"""
 	Returns a map of the modified directory and its's associated Terragrunt depedency directories ordered by least immediate to most immediate depedency
 
-	:param modified_dirs: List of directories that contain atleast Terragrunt *.hcl file
+	:param modified_dirs: List of directories that contain Terragrunt *.hcl files
 	"""
 	log = logging.getLogger(__name__)
 	log.setLevel(logging.DEBUG)
@@ -73,8 +73,8 @@ def get_run_order(modified_dirs: list) -> Dict[str, List[str]]:
 			log.debug(f'order dependencies: {ordered_deps}')
 			dep_dirs = []
 			for dep in ordered_deps:
-				if is_modified(dep) and dep != mod_dir:
-					dep_dirs.append(dep)
+				# if is_modified(dep) and dep != mod_dir:
+				# 	dep_dirs.append(dep)
 				if dep in modified_dirs:
 					# skip runninng graph-deps on modified directory since directory and dependencies will be add within this iteration
 					modified_dirs.remove(dep)
@@ -118,5 +118,5 @@ def is_modified(dep):
 		# Use beter regex when terragrunt improves error formatting
 		pattern = re.escape("but detected no outputs. Either the target module has not been applied yet, or the module has no outputs. If this is expected, set the skip_outputs flag to true on the dependency block")
 		if re.search(pattern, out.stderr.decode('utf-8')):
-			log.debug('Dependency of dependecy has not been applied. Returning True')
+			log.debug('Dependency of dependency has not been applied. Returning True')
 			return True

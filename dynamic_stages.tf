@@ -80,57 +80,59 @@ data "aws_ssm_parameter" "github_token" {
   name  = var.github_token_ssm_key
 }
 
+module "trigger_sf" {
+  source = "github.com/marshall7m/terraform-aws-codebuild"
 
-module "lambda_trigger_sf" {
-  source           = "github.com/marshall7m/terraform-aws-lambda"
-  filename         = data.archive_file.lambda_trigger_sf.output_path
-  source_code_hash = data.archive_file.lambda_trigger_sf.output_base64sha256
-  function_name    = var.lambda_trigger_sf_function_name
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.8"
-  allowed_to_invoke = [
-    {
-      statement_id = "CloudWatchInvokeAccess"
-      principal    = "events.amazonaws.com"
-      arn          = aws_cloudwatch_event_rule.this.arn
-    }
-  ]
-  env_vars = {
-    GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
-    REPO_FULL_NAME       = data.github_repository.this.full_name
-    DOMAIN_NAME          = aws_simpledb_domain.queue.id
+  name = "trigger-sf"
+
+  source_auth_token          = var.github_token_ssm_value
+  source_auth_server_type    = "GITHUB"
+  source_auth_type           = "PERSONAL_ACCESS_TOKEN"
+  source_auth_ssm_param_name = var.github_token_ssm_key
+
+  build_source = {
+    type                = "GITHUB"
+    buildspec           = "buildspec_trigger_sf.yaml"
+    git_clone_depth     = 1
+    insecure_ssl        = false
+    location            = data.github_repository.this.git_clone_url
+    report_build_status = true
   }
-  enable_cw_logs = true
-  custom_role_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-  ]
-  statements = [
-    {
-      sid       = "SimpledbQueryAccess"
-      effect    = "Allow"
-      actions   = ["sdb:Select"]
-      resources = ["arn:aws:sdb:${data.aws_region.current.name}:${var.account_id}:domain/${var.simpledb_name}"]
-    },
-    {
-      sid       = "GithubTokenSSMParamAccess"
-      effect    = "Allow"
-      actions   = ["ssm:GetParameter"]
-      resources = [try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)]
-    },
+
+  artifacts = {
+    type = "NO_ARTIFACTS"
+  }
+
+  environment = {
+    compute_type = "BUILD_GENERAL1_SMALL"
+    image        = "aws/codebuild/standard:3.0"
+    type         = "LINUX_CONTAINER"
+    environment_variables = [
+      {
+        name  = "STATE_MACHINE_ARN"
+        value = aws_sfn_state_machine.this.arn
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "DOMAIN_NAME"
+        value = aws_simpledb_domain.queue.id
+        type  = "PLAINTEXT"
+      }
+    ]
+  }
+
+  role_policy_statements = [
     {
       sid       = "StepFunctionTriggerAccess"
       effect    = "Allow"
       actions   = ["states:StartExecution"]
       resources = [aws_sfn_state_machine.this.arn]
-    }
-  ]
-  lambda_layers = [
+    },
     {
-      filename         = data.archive_file.lambda_deps.output_path
-      name             = "${var.lambda_trigger_sf_function_name}-deps"
-      runtimes         = ["python3.8"]
-      source_code_hash = data.archive_file.lambda_deps.output_base64sha256
-      description      = "Dependencies for lambda function: ${var.lambda_trigger_sf_function_name}"
+      sid       = "SimpledbQueryAccess"
+      effect    = "Allow"
+      actions   = ["sdb:Select"]
+      resources = ["arn:aws:sdb:${data.aws_region.current.name}:${var.account_id}:domain/${var.simpledb_name}"]
     }
   ]
 }
