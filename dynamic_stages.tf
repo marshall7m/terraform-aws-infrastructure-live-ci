@@ -16,54 +16,108 @@ resource "aws_cloudwatch_event_rule" "this" {
   )
 }
 
+module "cw_target_role" {
+  source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name        = "CodeBuildTriggerStepFunction"
+  trusted_services = ["events.amazonaws.com"]
+  statements = [
+    {
+      sid       = "CodeBuildInvokeAccess"
+      effect    = "Allow"
+      actions   = ["codebuild:StartBuild"]
+      resources = [module.codebuild_trigger_sf.arn]
+    }
+  ]
+}
+
 resource "aws_cloudwatch_event_target" "sf" {
   rule      = aws_cloudwatch_event_rule.this.name
-  target_id = "LambdaTriggerSF"
-  arn       = module.lambda_trigger_sf.function_arn
+  target_id = "CodeBuildTriggerStepFunction"
+  arn       = module.codebuild_trigger_sf.arn
+  role_arn = module.cw_target_role.role_arn
+}
+
+resource "aws_sfn_activity" "manual_approval" {
+  name = "manual-approval"
 }
 
 resource "aws_sfn_state_machine" "this" {
   name     = var.step_function_name
   role_arn = module.sf_role.role_arn
 
-  definition = jsonencode(
-    {
-      StartAt = "CreateTargets"
-      States = {
-        CreateTargets = {
-          Type = "Pass"
-          End  = true
+  definition = <<EOF
+{
+  "StartAt": "Parallelize Stack",
+  "States": {
+    "Parallelize Stack": {
+      "Type": "Map",
+      "End": true,
+      "Iterator": {
+        "StartAt": "Deploy",
+        "States": {
+          "Deploy": {
+            "Type": "Map",
+            "Parameters": {
+              "Path.$": "$$.Map.Item.Value"
+            },
+            "End": true,
+            "Iterator": {
+              "StartAt": "Plan",
+              "States": {
+                "Plan": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::codebuild:startBuild",
+                  "Parameters": {
+                    "ProjectName": "${var.build_name}",
+                    "EnvironmentVariablesOverride.$": "[
+                      {
+                        "name": "PATH",
+                        "type": "PLAINTEXT",
+                        "value": "$.Path"
+                      },
+                      {
+                        "name": "COMMAND",
+                        "type": "PLAINTEXT",
+                        "value": "plan"
+                      }
+                    ]"
+                  },
+                  "Next": "Approval"
+                },
+                "Approval": {
+                  "Type": "Task",
+                  "Resource": "${aws_sfn_activity.manual_approval.id}",
+                  "Next": "Apply"
+                },
+                "Apply": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::codebuild:startBuild",
+                  "Parameters": {
+                    "ProjectName": "${var.build_name}",
+                    "EnvironmentVariablesOverride.$": "[
+                      {
+                        "name": "PATH",
+                        "type": "PLAINTEXT",
+                        "value": "$.Path"
+                      },
+                      {
+                        "name": "COMMAND",
+                        "type": "PLAINTEXT",
+                        "value": "plan"
+                      }
+                    ]"
+                  },
+                  "End": true
+                }
+              }
+            }
+          }
         }
       }
     }
-  )
-}
-
-data "archive_file" "lambda_trigger_sf" {
-  type        = "zip"
-  source_dir  = "${path.module}/function"
-  output_path = "${path.module}/lambda_function.zip"
-}
-
-data "archive_file" "lambda_deps" {
-  type        = "zip"
-  source_dir  = "${path.module}/deps"
-  output_path = "${path.module}/lambda_deps.zip"
-  depends_on = [
-    null_resource.lambda_pip_deps
-  ]
-}
-
-# pip install runtime packages needed for function
-resource "null_resource" "lambda_pip_deps" {
-  triggers = {
-    zip_hash = fileexists("${path.module}/lambda_deps.zip") ? 0 : timestamp()
   }
-  provisioner "local-exec" {
-    command = <<EOF
-    pip install --target ${path.module}/deps/python PyGithub==1.54.1
-    EOF
-  }
+}
+  EOF
 }
 
 resource "aws_ssm_parameter" "github_token" {
@@ -80,7 +134,7 @@ data "aws_ssm_parameter" "github_token" {
   name  = var.github_token_ssm_key
 }
 
-module "trigger_sf" {
+module "codebuild_trigger_sf" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
   name = "trigger-sf"
@@ -95,7 +149,7 @@ module "trigger_sf" {
     buildspec           = "buildspec_trigger_sf.yaml"
     git_clone_depth     = 1
     insecure_ssl        = false
-    location            = data.github_repository.this.git_clone_url
+    location            = data.github_repository.this.http_clone_url
     report_build_status = true
   }
 

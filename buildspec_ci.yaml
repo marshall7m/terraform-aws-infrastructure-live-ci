@@ -1,0 +1,7 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - terragrunt $COMMAND --terragrunt-working-dir $PATH

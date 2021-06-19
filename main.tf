@@ -56,7 +56,7 @@ module "codebuild_terraform" {
   }
   build_source = {
     type                = "GITHUB"
-    buildspec           = "buildspec"
+    buildspec           = file("${path.module}/buildspec_ci.yaml")
     git_clone_depth     = 1
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
