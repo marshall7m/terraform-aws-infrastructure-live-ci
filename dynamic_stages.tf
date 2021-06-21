@@ -69,18 +69,18 @@ resource "aws_sfn_state_machine" "this" {
                   "Resource": "arn:aws:states:::codebuild:startBuild",
                   "Parameters": {
                     "ProjectName": "${var.build_name}",
-                    "EnvironmentVariablesOverride.$": "[
+                    "EnvironmentVariablesOverride": [
                       {
-                        "name": "PATH",
-                        "type": "PLAINTEXT",
-                        "value": "$.Path"
+                        "Name": "PATH",
+                        "Type": "PLAINTEXT",
+                        "Value.$": "$.Path"
                       },
                       {
-                        "name": "COMMAND",
-                        "type": "PLAINTEXT",
-                        "value": "plan"
+                        "Name": "COMMAND",
+                        "Type": "PLAINTEXT",
+                        "Value": "plan"
                       }
-                    ]"
+                    ]
                   },
                   "Next": "Approval"
                 },
@@ -94,18 +94,18 @@ resource "aws_sfn_state_machine" "this" {
                   "Resource": "arn:aws:states:::codebuild:startBuild",
                   "Parameters": {
                     "ProjectName": "${var.build_name}",
-                    "EnvironmentVariablesOverride.$": "[
+                    "EnvironmentVariablesOverride": [
                       {
-                        "name": "PATH",
-                        "type": "PLAINTEXT",
-                        "value": "$.Path"
+                        "Name": "PATH",
+                        "Type": "PLAINTEXT",
+                        "Value.$": "$.Path"
                       },
                       {
-                        "name": "COMMAND",
-                        "type": "PLAINTEXT",
-                        "value": "plan"
+                        "Name": "COMMAND",
+                        "Type": "PLAINTEXT",
+                        "Value": "plan"
                       }
-                    ]"
+                    ]
                   },
                   "End": true
                 }
