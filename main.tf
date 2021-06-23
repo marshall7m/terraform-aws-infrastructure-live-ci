@@ -26,7 +26,7 @@ module "apply_role" {
   ] : []
 }
 
-module "codebuild_terraform" {
+module "codebuild_terraform_deploy" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
   name   = var.build_name
   assumable_role_arns = [
@@ -66,4 +66,29 @@ module "codebuild_terraform" {
 
 data "github_repository" "this" {
   name = var.repo_name
+}
+
+module "codebuild_rollback_provider" {
+  source = "github.com/marshall7m/terraform-aws-codebuild"
+  name   = var.rollback_provider_build_name
+  assumable_role_arns = [
+    module.plan_role.role_arn
+  ]
+  environment = {
+    compute_type = "BUILD_GENERAL1_SMALL"
+    image        = "aws/codebuild/standard:3.0"
+    type         = "LINUX_CONTAINER"
+  }
+
+  artifacts = {
+    type = "NO_ARTIFACTS"
+  }
+  build_source = {
+    type                = "GITHUB"
+    buildspec           = file("${path.module}/buildspec_rollback_new_provider.yaml")
+    git_clone_depth     = 1
+    insecure_ssl        = false
+    location            = data.github_repository.this.http_clone_url
+    report_build_status = false
+  }
 }

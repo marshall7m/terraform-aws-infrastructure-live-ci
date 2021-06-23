@@ -90,7 +90,7 @@ CONS:
 		Single Rollback:
 			New cfg:
 				- Remove all resources from cfg
-				- Only keep the providers
+				- Only keep the providers (doesn't work if provider is configured via attributes from other cfg within head ref)
 				- Run terra apply
 				- `rm rf dir/`
 			Existing cfg:	
@@ -100,6 +100,7 @@ CONS:
 					- If previous commits has dependencies that have been changed by PR, then that may break previous commit changes
 			cons:
 				- If downstream dependencies, then those will error in terra plan if new dir
+
 
 - Rollback for new providers:
     Scenario:
@@ -111,7 +112,11 @@ CONS:
         - Create downstream terraform deploy step function mapping to target destroy the new provider resources
         - Once the destroy deployment is approved/deployed, then revert the tf cfg to base ref and rerun the deploy process
         - Run the rollback process in the same order as the tg graph dependeny order
-        
+    
+    tf flow map handled by rollback and not individual tf flow task
+    indentifies new providers
+    tf flow with new providers
+    tf flow with reversion
 Test tf plan within code build trigger sf function:
 	- If exit code == 1; then remove PR from queue and retry build
     
@@ -197,10 +202,8 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Version |
 |------|---------|
-| archive | n/a |
 | aws | >= 3.44 |
 | github | n/a |
-| null | n/a |
 
 ## Inputs
 
@@ -246,6 +249,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | role\_path | Path to create policy | `string` | `"/"` | no |
 | role\_permissions\_boundary | Permission boundary policy ARN used for CodePipeline service role | `string` | `""` | no |
 | role\_tags | Tags to add to CodePipeline service role | `map(string)` | `{}` | no |
+| rollback\_provider\_build\_name | CodeBuild project name for getting new provider resources to destroy on deployment rollback | `string` | `"infrastructure-live-ci-get-rollback-providers"` | no |
 | simpledb\_name | Name of the AWS SimpleDB domain used for queuing repo PRs | `string` | `"infrastructure-live-ci-PR-queue"` | no |
 | stage\_parent\_paths | Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage | `list(string)` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |

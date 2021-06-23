@@ -34,7 +34,7 @@ resource "aws_cloudwatch_event_target" "sf" {
   rule      = aws_cloudwatch_event_rule.this.name
   target_id = "CodeBuildTriggerStepFunction"
   arn       = module.codebuild_trigger_sf.arn
-  role_arn = module.cw_target_role.role_arn
+  role_arn  = module.cw_target_role.role_arn
 }
 
 resource "aws_sfn_activity" "manual_approval" {
@@ -52,6 +52,12 @@ resource "aws_sfn_state_machine" "this" {
     "Parallelize Stack": {
       "Type": "Map",
       "End": true,
+      "Catch": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "Next": "Stack Rollback"
+        }
+      ],
       "Iterator": {
         "StartAt": "Deploy",
         "States": {
@@ -90,6 +96,87 @@ resource "aws_sfn_state_machine" "this" {
                   "Next": "Apply"
                 },
                 "Apply": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::codebuild:startBuild",
+                  "Parameters": {
+                    "ProjectName": "${var.build_name}",
+                    "EnvironmentVariablesOverride": [
+                      {
+                        "Name": "PATH",
+                        "Type": "PLAINTEXT",
+                        "Value.$": "$.Path"
+                      },
+                      {
+                        "Name": "COMMAND",
+                        "Type": "PLAINTEXT",
+                        "Value": "plan"
+                      }
+                    ]
+                  },
+                  "End": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Stack Rollback": {
+      "Type": "Map",
+      "End": true,
+      "Iterator": {
+        "StartAt": "Deploy Rollback",
+        "States": {
+          "Deploy Rollback": {
+            "Type": "Map",
+            "Parameters": {
+              "Path.$": "$$.Map.Item.Value"
+            },
+            "End": true,
+            "Iterator": {
+              "StartAt": "Get Rollback Providers",
+              "States": {
+                "Get Rollback Providers": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::codebuild:startBuild",
+                  "Parameters": {
+                      "ProjectName": "${var.rollback_provider_build_name}",
+                      "EnvironmentVariablesOverride": [
+                          {
+                              "Name": "PATH",
+                              "Type": "PLAINTEXT",
+                              "Value.$": "$.Path"
+                          }
+                      ]
+                  },
+                  "Next": "Plan Rollback"
+                },
+                "Plan Rollback": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::codebuild:startBuild",
+                  "Parameters": {
+                    "ProjectName": "${var.build_name}",
+                    "EnvironmentVariablesOverride": [
+                      {
+                        "Name": "PATH",
+                        "Type": "PLAINTEXT",
+                        "Value.$": "$.Path"
+                      },
+                      {
+                        "Name": "COMMAND",
+                        "Type": "PLAINTEXT",
+                        "Value": "plan"
+                      }
+                    ]
+                  },
+                  "Next": "Approval Rollback"
+                },
+                "Approval Rollback": {
+                  "Type": "Task",
+                  "Resource": "${aws_sfn_activity.manual_approval.id}",
+                  "Next": "Apply Rollback"
+                },
+                "Apply Rollback": {
                   "Type": "Task",
                   "Resource": "arn:aws:states:::codebuild:startBuild",
                   "Parameters": {
@@ -197,10 +284,13 @@ module "sf_role" {
   trusted_services = ["states.amazonaws.com"]
   statements = [
     {
-      sid       = "CodeBuildInvokeAccess"
-      effect    = "Allow"
-      actions   = ["codebuild:StartBuild"]
-      resources = [module.codebuild_terraform.arn]
+      sid     = "CodeBuildInvokeAccess"
+      effect  = "Allow"
+      actions = ["codebuild:StartBuild"]
+      resources = [
+        module.codebuild_terraform_deploy.arn,
+        module.codebuild_rollback_provider.arn
+      ]
     }
   ]
 }

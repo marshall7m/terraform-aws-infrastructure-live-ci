@@ -188,6 +188,12 @@ variable "build_tags" {
   default     = {}
 }
 
+variable "rollback_provider_build_name" {
+  description = "CodeBuild project name for getting new provider resources to destroy on deployment rollback"
+  type        = string
+  default     = "infrastructure-live-ci-get-rollback-providers"
+}
+
 # GITHUB-WEBHOOK #
 
 variable "repo_name" {

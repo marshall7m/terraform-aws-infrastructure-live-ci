@@ -4,7 +4,8 @@ env:
 phases:
   build:
     commands:
-      - providers=$(terraform providers)
+      - cd $PATH
+      - providers=$(terragrunt providers)
       - cfg_providers=($(echo "$providers" | grep -oP '─\sprovider\[\K.+(?=\])'))
       - state_providers=($(echo "$providers" | grep -oP '\s{4}provider\[\K.+(?=\])'))
       - | 
@@ -28,7 +29,7 @@ phases:
       - |
         echo "New Providers:"
         echo "${new_providers[*]}"
-      - state=$(terraform state pull)
+      - state=$(terragrunt state pull)
       - |
         jq_regex=$(echo $new_providers | tr '\n(?!$)' '|' | sed '$s/|$//')
         destroy_resources=$(echo $state | jq -r \

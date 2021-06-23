@@ -74,4 +74,6 @@ phases:
           stateMachineArn=os.environ['STEP_MACHINE_ARN'],
           input=sf_input
       )
+
+      # TODO: Add rm from sdb queue
       HEREDOC
