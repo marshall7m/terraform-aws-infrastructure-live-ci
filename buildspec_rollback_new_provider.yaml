@@ -1,0 +1,39 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - providers=$(terraform providers)
+      - cfg_providers=($(echo "$providers" | grep -oP '─\sprovider\[\K.+(?=\])'))
+      - state_providers=($(echo "$providers" | grep -oP '\s{4}provider\[\K.+(?=\])'))
+      - | 
+        echo "config providers:"
+        echo "${cfg_providers[*]}"
+        echo "state providers:"
+        echo "${state_providers[*]}"
+      - |
+        new_providers=()
+
+        for provider in "${state_providers[@]}"; do
+          if [[ ! " ${cfg_providers[@]} " =~ " ${provider} " ]]; then
+              new_providers+="$provider"
+          fi
+        done
+
+        if [ "${#new_providers}" == 0 ]; then
+          echo "No new providers were detected"
+          exit 0
+        fi 
+      - |
+        echo "New Providers:"
+        echo "${new_providers[*]}"
+      - state=$(terraform state pull)
+      - |
+        jq_regex=$(echo $new_providers | tr '\n(?!$)' '|' | sed '$s/|$//')
+        destroy_resources=$(echo $state | jq -r \
+          --arg NEW_PROVIDERS "$jq_regex" \
+          '.resources | .[] | select( (.provider | test($NEW_PROVIDERS) == true) and .mode != "data" ) | {type, name} | join(".") ')
+      - |
+        echo "Resources to Destroy:"
+        echo "${destroy_resources}"

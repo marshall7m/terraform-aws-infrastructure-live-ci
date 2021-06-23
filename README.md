@@ -58,7 +58,7 @@ Idea #3:
         - step function succeeds
 Queue Ordering:
     - By CB build number
-    - Manually run lambda to ignore queue and run specific pr ID
+    - Feature: Override queue and run specific PR
 
 Step function mapping:
     main SF:
@@ -75,6 +75,45 @@ PROS of child SF:
 CONS:
     - Doesn't give a good high-level overview of entire process
     - May be confusing to follow through
+    
+
+
+- Create rollbacks
+	- git checkout master branch and run apply with master
+		- cons:
+			- If PR creates new tf directory, then the master branch can’t destroy a non-existing directory
+	- Create initial new branch for testing the PR that is based on master
+		- Merge PR into testing branch
+		For full rollback before PR:
+			- Checkout previous commit before PR merge to rollback cfg
+			- Run apply-all to 
+		Single Rollback:
+			New cfg:
+				- Remove all resources from cfg
+				- Only keep the providers
+				- Run terra apply
+				- `rm rf dir/`
+			Existing cfg:	
+				- Revert back to previous commit and run apply
+				- Push previous commit to PR
+				Cons:
+					- If previous commits has dependencies that have been changed by PR, then that may break previous commit changes
+			cons:
+				- If downstream dependencies, then those will error in terra plan if new dir
+
+- Rollback for new providers:
+    Scenario:
+        - Terraform apply task is executed and updates the tf state with the new provider and resources
+        - Terrraform plan will error if tf cfg is reverted back to base ref since it doesn't have the new provider defined
+        - The provider is needed to destroy the new resources given Terraform needs to know what provider to destroy the resources from
+    - Possible Solution:
+        - Create script to indentify the provider address and the associated resources
+        - Create downstream terraform deploy step function mapping to target destroy the new provider resources
+        - Once the destroy deployment is approved/deployed, then revert the tf cfg to base ref and rerun the deploy process
+        - Run the rollback process in the same order as the tg graph dependeny order
+        
+Test tf plan within code build trigger sf function:
+	- If exit code == 1; then remove PR from queue and retry build
     
 ## AWS SQS vs. DynamoDB vs. SimpleDB for PR Queue
 

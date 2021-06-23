@@ -11,9 +11,9 @@ output "sandbox" {
     value = data.aws_caller_identity.sandbox.id
 }
 
-resource "aws_ssm_parameter" "sandbox" {
-  name  = "foo"
-  type  = "String"
-  value = "bar"
-  provider = aws.sandbox
-}
+# provider "random" {}
+
+# resource "random_id" "test" {
+#     byte_length = 4
+# }
+
