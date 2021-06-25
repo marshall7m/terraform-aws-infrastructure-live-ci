@@ -92,3 +92,79 @@ module "codebuild_rollback_provider" {
     report_build_status = false
   }
 }
+
+resource "aws_sns_topic_policy" "approval" {
+  arn = aws_sns_topic.approval.arn
+
+  policy = data.aws_iam_policy_document.sns_approval.json
+}
+
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "sns_approval" {
+  policy_id = "__default_policy_ID"
+
+  statement {
+    sid = "__default_statement_ID"
+
+    effect = "Allow"
+
+    actions = [
+      "SNS:Subscribe",
+      "SNS:SetTopicAttributes",
+      "SNS:RemovePermission",
+      "SNS:Receive",
+      "SNS:Publish",
+      "SNS:ListSubscriptionsByTopic",
+      "SNS:GetTopicAttributes",
+      "SNS:DeleteTopic",
+      "SNS:AddPermission"
+    ]
+
+    resources = [
+      aws_sns_topic.approval.arn
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceOwner"
+
+      values = [
+        data.aws_caller_identity.current.id
+      ]
+    }
+
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+  }
+
+}
+
+resource "aws_sns_topic" "approval" {
+  name            = "${var.step_function_name}-approval"
+  delivery_policy = <<EOF
+{
+  "http": {
+    "defaultHealthyRetryPolicy": {
+      "minDelayTarget": 20,
+      "maxDelayTarget": 20,
+      "numRetries": 3,
+      "numMaxDelayRetries": 0,
+      "numNoDelayRetries": 0,
+      "numMinDelayRetries": 0,
+      "backoffFunction": "linear"
+    },
+    "disableSubscriptionOverrides": false
+  }
+}
+  EOF
+}
+
+resource "aws_sns_topic_subscription" "approval" {
+  count     = length(var.approval_emails)
+  topic_arn = aws_sns_topic.approval.arn
+  protocol  = "email"
+  endpoint  = var.approval_emails[count.index]
+}

@@ -1,3 +1,32 @@
+locals {
+  approval_msg = <<EOF
+This is an email requiring an approval for a step functions execution
+Check the following information and click "Approve" link if you want to approve
+
+Step Function State Machine: {}
+Execution ID: {}
+
+Approve:
+${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=approve&ex={}&sm={}&taskToken={}
+
+Reject:
+${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=reject&ex={}&sm={}&taskToken={}
+  EOF
+
+  message = jsonencode(<<EOF
+States.Format('${local.approval_msg}',
+  $$.StateMachine.Id,
+  $$.Execution.Id,
+  $$.StateMachine.Id,
+  $$.Task.Token,
+  $$.Execution.Id,
+  $$.StateMachine.Id,
+  $$.Task.Token
+)
+  EOF
+  )
+}
+
 data "aws_region" "current" {}
 
 resource "aws_cloudwatch_event_rule" "this" {
@@ -54,7 +83,7 @@ resource "aws_sfn_state_machine" "this" {
       "End": true,
       "Catch": [
         {
-          "ErrorEquals": ["States.TaskFailed"],
+          "ErrorEquals": ["States.TaskFailed", "RejectedPlan"],
           "Next": "Stack Rollback"
         }
       ],
@@ -88,12 +117,31 @@ resource "aws_sfn_state_machine" "this" {
                       }
                     ]
                   },
-                  "Next": "Approval"
+                  "Next": "Request Approval"
                 },
-                "Approval": {
+                "Request Approval": {
                   "Type": "Task",
-                  "Resource": "${aws_sfn_activity.manual_approval.id}",
-                  "Next": "Apply"
+                  "Resource": "arn:aws:states:::sns:publish.waitForTaskToken",
+                  "Next": "Approval Results",
+                  "Parameters": {
+                    "TopicArn": "${aws_sns_topic.approval.arn}",
+                    "Message.$": ${local.message}
+                  }
+                },
+                "Approval Results": {
+                  "Type": "Choice",
+                  "Choices": [
+                    {
+                      "Variable": "$.Status",
+                      "StringEquals": "Approve",
+                      "Next": "Apply"
+                    },
+                    {
+                      "Variable": "$.Status",
+                      "StringEquals": "Reject",
+                      "Next": "Rejected State"
+                    }
+                  ]
                 },
                 "Apply": {
                   "Type": "Task",
@@ -114,6 +162,11 @@ resource "aws_sfn_state_machine" "this" {
                     ]
                   },
                   "End": true
+                },
+                "Reject": {
+                  "Type": "Fail",
+                  "Cause": "Terraform plan was rejected",
+                  "Error": "RejectedPlan"
                 }
               }
             }

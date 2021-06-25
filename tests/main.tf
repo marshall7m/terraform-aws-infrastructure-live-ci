@@ -18,89 +18,8 @@ resource "github_repository" "test" {
   }
 }
 
-resource "github_branch" "test_no_deps" {
-  repository    = github_repository.test.name
-  source_branch = "master"
-  branch        = "test-no-deps"
-}
-
-resource "github_repository_pull_request" "test_no_deps" {
-  base_repository = github_repository.test.name
-  base_ref        = "master"
-  head_ref        = github_branch.test_no_deps.branch
-  title           = "overite baz"
-  body            = "Test mut: ${local.mut} ability to handle the modified configurations with no dependencies"
-  depends_on = [
-    github_repository_file.test_no_deps
-  ]
-}
-
-resource "github_repository_file" "test_no_deps" {
-  repository          = github_repository.test.name
-  branch              = github_branch.test_no_deps.branch
-  file                = "dev-account/baz/terragrunt.hcl"
-  content             = <<EOF
-terraform {
-    source = ".//"
-}
-
-inputs = {
-    value = "overwrite_baz"
-}
-EOF
-  commit_message      = "overwrite baz"
-  overwrite_on_create = true
-  depends_on = [
-    module.mut_infrastructure_live_ci
-  ]
-}
-
-resource "github_repository_file" "test_bar" {
-  repository          = github_repository.test.name
-  branch              = "master"
-  file                = "dev-account/bar/terragrunt.hcl"
-  content             = <<EOF
-terraform {
-    source = ".//"
-}
-
-dependency "baz" {
-    config_path = "../baz"
-}
-
-inputs = {
-    dependency = "overwrite_bar"
-}
-EOF
-  commit_message      = "overwrite bar"
-  overwrite_on_create = true
-  depends_on = [
-    module.mut_infrastructure_live_ci
-  ]
-}
-
-resource "github_repository_file" "test_foo" {
-  repository          = github_repository.test.name
-  branch              = "master"
-  file                = "dev-account/foo/terragrunt.hcl"
-  content             = <<EOF
-terraform {
-    source = ".//"
-}
-
-dependency "bar" {
-    config_path = "../bar"
-}
-
-inputs = {
-    dependency = "overwrite_foo"
-}
-EOF
-  commit_message      = "overwrite foo"
-  overwrite_on_create = true
-  depends_on = [
-    module.mut_infrastructure_live_ci
-  ]
+data "aws_ssm_parameter" "testing_email" {
+  name = "testing-email"
 }
 
 data "aws_caller_identity" "current" {}
@@ -123,7 +42,24 @@ module "mut_infrastructure_live_ci" {
 
   stage_parent_paths = ["dev-account"]
 
+  approval_emails = [data.aws_ssm_parameter.testing_email.value]
   depends_on = [
     github_repository.test
   ]
+}
+
+module "test_simpledb_queue" {
+  source           = "digitickets/cli/aws"
+  version          = "4.0.0"
+  aws_cli_commands = ["sdb", "select", "--select-expression", "'SELECT * FROM `${module.mut_infrastructure_live_ci.queue_db_name}`'"]
+
+  depends_on = [
+    github_repository_file.test_no_deps,
+    github_repository_file.test_one_dep,
+    github_repository_file.test_two_deps
+  ]
+}
+
+output "test" {
+  value = module.test_simpledb_queue.result
 }

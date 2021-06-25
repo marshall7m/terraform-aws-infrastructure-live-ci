@@ -294,3 +294,9 @@ variable "simpledb_name" {
   type        = string
   default     = "infrastructure-live-ci-PR-queue"
 }
+
+variable "approval_emails" {
+  description = "Email addresses of trusted entities that can approve the terraform deployments"
+  type        = list(string)
+  sensitive   = true
+}

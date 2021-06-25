@@ -2,7 +2,7 @@ version: 0.2
 phases:
   build:
     commands:
-      - next_pr=$(aws sdb select --select-expression "SELECT * FROM $DOMAIN_NAME" --max-items 1 | jq '.Items[0]')
+      - next_pr=$(aws sdb select --select-expression "SELECT * FROM `$DOMAIN_NAME`" --max-items 1 | jq '.Items[0]')
       - pr_id=$(echo $next_pr | jq '.Name')
       - head_ref=$(echo $next_pr | jq '.Attributes | .[] | select(.Name=="HeadRef") | .Value')
       - git fetch origin pull/$pr_id/head:$head_ref

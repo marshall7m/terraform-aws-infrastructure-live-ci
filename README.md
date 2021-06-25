@@ -202,6 +202,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Version |
 |------|---------|
+| archive | n/a |
 | aws | >= 3.44 |
 | github | n/a |
 
@@ -215,6 +216,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
+| approval\_emails | Email addresses of trusted entities that can approve the terraform deployments | `list(string)` | n/a | yes |
 | artifact\_bucket\_force\_destroy | Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion) | `bool` | `false` | no |
 | artifact\_bucket\_name | Name of the artifact S3 bucket to be created or the name of a pre-existing bucket name to be used for storing the pipeline's artifacts | `string` | `null` | no |
 | artifact\_bucket\_tags | Tags to attach to provisioned S3 bucket | `map(string)` | `{}` | no |
@@ -256,6 +258,14 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 ## Outputs
 
-No output.
+| Name | Description |
+|------|-------------|
+| queue\_db\_name | AWS SimpleDB domanin name used for queueing PRs |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+
+# TODO:
+
+- Test email SNS approval
+- Add retries to deploy and rollback apply states
+- Figure out "rollback of rollback" strategy 
