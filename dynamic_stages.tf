@@ -139,7 +139,7 @@ resource "aws_sfn_state_machine" "this" {
                     {
                       "Variable": "$.Status",
                       "StringEquals": "Reject",
-                      "Next": "Rejected State"
+                      "Next": "Reject"
                     }
                   ]
                 },
@@ -277,7 +277,7 @@ data "aws_ssm_parameter" "github_token" {
 module "codebuild_trigger_sf" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
-  name = "trigger-sf"
+  name = var.trigger_step_function_build_name
 
   source_auth_token          = var.github_token_ssm_value
   source_auth_server_type    = "GITHUB"
@@ -286,7 +286,7 @@ module "codebuild_trigger_sf" {
 
   build_source = {
     type                = "GITHUB"
-    buildspec           = "buildspec_trigger_sf.yaml"
+    buildspec           = file("${path.module}/buildspec_trigger_sf.yaml")
     git_clone_depth     = 1
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url

@@ -236,7 +236,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
-| lambda\_trigger\_sf\_function\_name | Name of AWS Lambda function that will trigger the AWS Step Function | `string` | `"infrastructure-live-ci-trigger-sf"` | no |
 | pipeline\_tags | Tags to attach to the pipeline | `map(string)` | `{}` | no |
 | plan\_cmd | Terragrunt/Terraform plan command to run on target paths | `string` | `"terragrunt run-all plan"` | no |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
@@ -255,6 +254,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | simpledb\_name | Name of the AWS SimpleDB domain used for queuing repo PRs | `string` | `"infrastructure-live-ci-PR-queue"` | no |
 | stage\_parent\_paths | Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage | `list(string)` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
+| trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `"infrastructure-live-ci-trigger-sf"` | no |
 
 ## Outputs
 

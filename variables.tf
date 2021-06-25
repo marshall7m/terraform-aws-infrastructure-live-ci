@@ -283,8 +283,8 @@ variable "queue_pr_build_name" {
   default     = "infrastructure-live-ci-queue-pr"
 }
 
-variable "lambda_trigger_sf_function_name" {
-  description = "Name of AWS Lambda function that will trigger the AWS Step Function"
+variable "trigger_step_function_build_name" {
+  description = "Name of AWS CodeBuild project that will trigger the AWS Step Function"
   type        = string
   default     = "infrastructure-live-ci-trigger-sf"
 }

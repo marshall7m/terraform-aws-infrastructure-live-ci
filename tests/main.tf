@@ -54,6 +54,7 @@ module "test_simpledb_queue" {
   aws_cli_commands = ["sdb", "select", "--select-expression", "'SELECT * FROM `${module.mut_infrastructure_live_ci.queue_db_name}`'"]
 
   depends_on = [
+    module.mut_infrastructure_live_ci,
     github_repository_file.test_no_deps,
     github_repository_file.test_one_dep,
     github_repository_file.test_two_deps
