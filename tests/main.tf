@@ -40,7 +40,7 @@ module "mut_infrastructure_live_ci" {
   create_github_token_ssm_param = false
   github_token_ssm_key          = "github-webhook-request-validator-github-token"
 
-  stage_parent_paths = ["dev-account"]
+  account_parent_paths = ["dev-account"]
 
   approval_emails = [data.aws_ssm_parameter.testing_email.value]
   depends_on = [
@@ -63,4 +63,8 @@ module "test_simpledb_queue" {
 
 output "test" {
   value = module.test_simpledb_queue.result
+}
+
+output "definition" {
+  value = jsondecode(module.mut_infrastructure_live_ci.definition)
 }

@@ -11,7 +11,7 @@ variable "common_tags" {
 
 # CODEPIPELINE #
 
-variable "stage_parent_paths" {
+variable "account_parent_paths" {
   description = "Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage"
   type        = list(string)
 }
@@ -188,7 +188,7 @@ variable "build_tags" {
   default     = {}
 }
 
-variable "rollback_provider_build_name" {
+variable "get_rollback_providers_build_name" {
   description = "CodeBuild project name for getting new provider resources to destroy on deployment rollback"
   type        = string
   default     = "infrastructure-live-ci-get-rollback-providers"

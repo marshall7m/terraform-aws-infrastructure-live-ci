@@ -1,30 +1,54 @@
 locals {
+  sf_definition = jsonencode({
+    StartAt = var.account_parent_paths[0]
+    States  = merge(local.deploy_def, local.rollback_def)
+  })
+
+  deploy_def = { for i in range(length(var.account_parent_paths)) : var.account_parent_paths[i] => jsondecode(templatefile("${path.module}/definition.json", {
+    stage            = var.account_parent_paths[i]
+    transition_type  = i + 1 == length(var.account_parent_paths) ? "End" : "Next"
+    transition_value = i + 1 == length(var.account_parent_paths) ? true : "${var.account_parent_paths[i + 1]}"
+
+    plan_build_name  = var.build_name
+    apply_build_name = var.build_name
+
+    approval_sns_arn = aws_sns_topic.approval.arn
+    approval_msg     = jsonencode(local.approval_msg)
+  })) }
+
+  rollback_def = {
+    "Rollback Stack" = jsondecode(templatefile("${path.module}/rollback_definition.json", {
+      approval_sns_arn = aws_sns_topic.approval.arn
+      approval_msg     = jsonencode(local.approval_msg)
+
+      get_rollback_providers_build_name = var.get_rollback_providers_build_name
+      plan_rollback_build_name          = var.build_name
+      apply_rollback_build_name         = var.build_name
+    }))
+  }
   approval_msg = <<EOF
-This is an email requiring an approval for a step functions execution
-Check the following information and click "Approve" link if you want to approve
+States.Format('
+  This is an email requiring an approval for a step functions execution
+  Check the following information and click "Approve" link if you want to approve
 
-Step Function State Machine: {}
-Execution ID: {}
+  Step Function State Machine: {}
+  Execution ID: {}
 
-Approve:
-${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=approve&ex={}&sm={}&taskToken={}
+  Approve:
+  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=approve&ex={}&sm={}&taskToken={}
 
-Reject:
-${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=reject&ex={}&sm={}&taskToken={}
-  EOF
-
-  message = jsonencode(<<EOF
-States.Format('${local.approval_msg}',
+  Reject:
+  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=reject&ex={}&sm={}&taskToken={}
+  ', 
   $$.StateMachine.Id,
   $$.Execution.Id,
   $$.StateMachine.Id,
   $$.Task.Token,
   $$.Execution.Id,
   $$.StateMachine.Id,
-  $$.Task.Token
-)
+  $$.Task.Token)
   EOF
-  )
+
 }
 
 data "aws_region" "current" {}
@@ -71,193 +95,13 @@ resource "aws_sfn_activity" "manual_approval" {
 }
 
 resource "aws_sfn_state_machine" "this" {
-  name     = var.step_function_name
-  role_arn = module.sf_role.role_arn
-
-  definition = <<EOF
-{
-  "StartAt": "Parallelize Stack",
-  "States": {
-    "Parallelize Stack": {
-      "Type": "Map",
-      "End": true,
-      "Catch": [
-        {
-          "ErrorEquals": ["States.TaskFailed", "RejectedPlan"],
-          "Next": "Stack Rollback"
-        }
-      ],
-      "Iterator": {
-        "StartAt": "Deploy",
-        "States": {
-          "Deploy": {
-            "Type": "Map",
-            "Parameters": {
-              "Path.$": "$$.Map.Item.Value"
-            },
-            "End": true,
-            "Iterator": {
-              "StartAt": "Plan",
-              "States": {
-                "Plan": {
-                  "Type": "Task",
-                  "Resource": "arn:aws:states:::codebuild:startBuild",
-                  "Parameters": {
-                    "ProjectName": "${var.build_name}",
-                    "EnvironmentVariablesOverride": [
-                      {
-                        "Name": "PATH",
-                        "Type": "PLAINTEXT",
-                        "Value.$": "$.Path"
-                      },
-                      {
-                        "Name": "COMMAND",
-                        "Type": "PLAINTEXT",
-                        "Value": "plan"
-                      }
-                    ]
-                  },
-                  "Next": "Request Approval"
-                },
-                "Request Approval": {
-                  "Type": "Task",
-                  "Resource": "arn:aws:states:::sns:publish.waitForTaskToken",
-                  "Next": "Approval Results",
-                  "Parameters": {
-                    "TopicArn": "${aws_sns_topic.approval.arn}",
-                    "Message.$": ${local.message}
-                  }
-                },
-                "Approval Results": {
-                  "Type": "Choice",
-                  "Choices": [
-                    {
-                      "Variable": "$.Status",
-                      "StringEquals": "Approve",
-                      "Next": "Apply"
-                    },
-                    {
-                      "Variable": "$.Status",
-                      "StringEquals": "Reject",
-                      "Next": "Reject"
-                    }
-                  ]
-                },
-                "Apply": {
-                  "Type": "Task",
-                  "Resource": "arn:aws:states:::codebuild:startBuild",
-                  "Parameters": {
-                    "ProjectName": "${var.build_name}",
-                    "EnvironmentVariablesOverride": [
-                      {
-                        "Name": "PATH",
-                        "Type": "PLAINTEXT",
-                        "Value.$": "$.Path"
-                      },
-                      {
-                        "Name": "COMMAND",
-                        "Type": "PLAINTEXT",
-                        "Value": "plan"
-                      }
-                    ]
-                  },
-                  "End": true
-                },
-                "Reject": {
-                  "Type": "Fail",
-                  "Cause": "Terraform plan was rejected",
-                  "Error": "RejectedPlan"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Stack Rollback": {
-      "Type": "Map",
-      "End": true,
-      "Iterator": {
-        "StartAt": "Deploy Rollback",
-        "States": {
-          "Deploy Rollback": {
-            "Type": "Map",
-            "Parameters": {
-              "Path.$": "$$.Map.Item.Value"
-            },
-            "End": true,
-            "Iterator": {
-              "StartAt": "Get Rollback Providers",
-              "States": {
-                "Get Rollback Providers": {
-                  "Type": "Task",
-                  "Resource": "arn:aws:states:::codebuild:startBuild",
-                  "Parameters": {
-                      "ProjectName": "${var.rollback_provider_build_name}",
-                      "EnvironmentVariablesOverride": [
-                          {
-                              "Name": "PATH",
-                              "Type": "PLAINTEXT",
-                              "Value.$": "$.Path"
-                          }
-                      ]
-                  },
-                  "Next": "Plan Rollback"
-                },
-                "Plan Rollback": {
-                  "Type": "Task",
-                  "Resource": "arn:aws:states:::codebuild:startBuild",
-                  "Parameters": {
-                    "ProjectName": "${var.build_name}",
-                    "EnvironmentVariablesOverride": [
-                      {
-                        "Name": "PATH",
-                        "Type": "PLAINTEXT",
-                        "Value.$": "$.Path"
-                      },
-                      {
-                        "Name": "COMMAND",
-                        "Type": "PLAINTEXT",
-                        "Value": "plan"
-                      }
-                    ]
-                  },
-                  "Next": "Approval Rollback"
-                },
-                "Approval Rollback": {
-                  "Type": "Task",
-                  "Resource": "${aws_sfn_activity.manual_approval.id}",
-                  "Next": "Apply Rollback"
-                },
-                "Apply Rollback": {
-                  "Type": "Task",
-                  "Resource": "arn:aws:states:::codebuild:startBuild",
-                  "Parameters": {
-                    "ProjectName": "${var.build_name}",
-                    "EnvironmentVariablesOverride": [
-                      {
-                        "Name": "PATH",
-                        "Type": "PLAINTEXT",
-                        "Value.$": "$.Path"
-                      },
-                      {
-                        "Name": "COMMAND",
-                        "Type": "PLAINTEXT",
-                        "Value": "plan"
-                      }
-                    ]
-                  },
-                  "End": true
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  name       = var.step_function_name
+  role_arn   = module.sf_role.role_arn
+  definition = local.sf_definition
 }
-  EOF
+
+output "definition" {
+  value = local.sf_definition
 }
 
 resource "aws_ssm_parameter" "github_token" {

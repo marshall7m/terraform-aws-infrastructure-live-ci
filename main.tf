@@ -70,7 +70,7 @@ data "github_repository" "this" {
 
 module "codebuild_rollback_provider" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
-  name   = var.rollback_provider_build_name
+  name   = var.get_rollback_providers_build_name
   assumable_role_arns = [
     module.plan_role.role_arn
   ]

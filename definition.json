@@ -1,0 +1,97 @@
+{
+	"Type": "Map",
+	"ItemsPath": "$.${stage}",
+	"${transition_type}": ${transition_value},
+	"Catch": [
+		{
+			"ErrorEquals": ["States.TaskFailed", "RejectedPlan"],
+			"Next": "Rollback Stack"
+		}
+	],
+	"Iterator": {
+		"StartAt": "Deploy",
+		"States": {
+			"Deploy": {
+				"Type": "Map",
+				"Parameters": {
+					"Path.$": "$$.Map.Item.Value"
+				},
+				"End": true,
+				"Iterator": {
+					"StartAt": "Plan",
+					"States": {
+						"Plan": {
+							"Type": "Task",
+							"Resource": "arn:aws:states:::codebuild:startBuild",
+							"Parameters": {
+								"ProjectName": "${plan_build_name}",
+								"EnvironmentVariablesOverride": [
+									{
+										"Name": "PATH",
+										"Type": "PLAINTEXT",
+										"Value.$": "$.Path"
+									},
+									{
+										"Name": "COMMAND",
+										"Type": "PLAINTEXT",
+										"Value": "plan"
+									}
+								]
+							},
+							"Next": "Request Approval"
+						},
+						"Request Approval": {
+							"Type": "Task",
+							"Resource": "arn:aws:states:::sns:publish.waitForTaskToken",
+							"Next": "Approval Results",
+							"Parameters": {
+								"TopicArn": "${approval_sns_arn}",
+								"Message.$": "${approval_msg}"
+							}
+						},
+						"Approval Results": {
+							"Type": "Choice",
+							"Choices": [
+								{
+									"Variable": "$.Status",
+									"StringEquals": "Approve",
+									"Next": "Apply"
+								},
+								{
+									"Variable": "$.Status",
+									"StringEquals": "Reject",
+									"Next": "Reject"
+								}
+							]
+						},
+						"Apply": {
+							"Type": "Task",
+							"Resource": "arn:aws:states:::codebuild:startBuild",
+							"Parameters": {
+								"ProjectName": "${apply_build_name}",
+								"EnvironmentVariablesOverride": [
+									{
+										"Name": "PATH",
+										"Type": "PLAINTEXT",
+										"Value.$": "$.Path"
+									},
+									{
+										"Name": "COMMAND",
+										"Type": "PLAINTEXT",
+										"Value": "plan"
+									}
+								]
+							},
+							"End": true
+						},
+						"Reject": {
+							"Type": "Fail",
+							"Cause": "Terraform plan was rejected",
+							"Error": "RejectedPlan"
+						}
+					}
+				}
+			}
+		}
+	}
+}
