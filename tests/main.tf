@@ -64,7 +64,3 @@ module "test_simpledb_queue" {
 output "test" {
   value = module.test_simpledb_queue.result
 }
-
-output "definition" {
-  value = jsondecode(module.mut_infrastructure_live_ci.definition)
-}

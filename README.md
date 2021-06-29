@@ -260,14 +260,12 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description |
 |------|-------------|
-| definition | n/a |
 | queue\_db\_name | AWS SimpleDB domanin name used for queueing PRs |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
 # TODO:
 
-- Migrate json step function to terraform objects
 - Test email SNS approval
 - Add retries to deploy and rollback apply states
 - Figure out "rollback of rollback" strategy 

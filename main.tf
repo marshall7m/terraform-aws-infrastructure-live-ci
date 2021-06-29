@@ -78,6 +78,13 @@ module "codebuild_rollback_provider" {
     compute_type = "BUILD_GENERAL1_SMALL"
     image        = "aws/codebuild/standard:3.0"
     type         = "LINUX_CONTAINER"
+    environment_variables = [
+      {
+        name  = "ACCOUNT_PARENT_PATHS"
+        type  = "PLAINTEXT"
+        value = join(",", var.account_parent_paths)
+      }
+    ]
   }
 
   artifacts = {
