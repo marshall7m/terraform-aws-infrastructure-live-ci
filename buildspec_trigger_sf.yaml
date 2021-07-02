@@ -2,13 +2,21 @@ version: 0.2
 env:
   shell: bash
 phases:
-  build:
+  pre_build:
+    on-failure: ABORT
     commands:
-      - next_pr=$(aws sdb select --select-expression "SELECT * FROM `$DOMAIN_NAME`" --max-items 1 | jq '.Items[0]')
-      - pr_id=$(echo $next_pr | jq '.Name')
+      - git remote -v
+      - aws configure set preview.sdb true
+      - next_pr=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
+      - pr_id=$(echo $next_pr | jq '.Name' | tr -d '"')
+      - "echo pr_id: $pr_id"
       - head_ref=$(echo $next_pr | jq '.Attributes | .[] | select(.Name=="HeadRef") | .Value')
+      - "echo head_ref: $head_ref"
       - git fetch origin pull/$pr_id/head:$head_ref
       - git checkout $head_ref
+  build:
+    on-failure: ABORT
+    commands:
       - |
         declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
         script_logging_level="DEBUG"
@@ -43,8 +51,14 @@ phases:
 
         # get directories that terragrunt detected a difference between the tf state and their cfg
         diff_paths=($(echo "$tg_plan_out" | grep -Po 'exit\sstatus\s2\sprefix=\[\K.+?(?=\])'))
-        log "Directories with difference in terraform plan:" "DEBUG"
-        log " ${diff_paths[*]}" "DEBUG"
+
+        if [ ${#diff_paths[@]} -ne 0 ]; then
+          log "Directories with difference in terraform plan:" "DEBUG"
+          log "${diff_paths[*]}" "DEBUG"
+        else
+          log "Deteted no directories with differences in terraform plan" "ERROR"
+          exit 1
+        fi
 
         # terragrunt run-all plan run order
         stack=$(echo "$tg_plan_out" | grep -Po '=>\sModule\s\K.+?(?=\))')
@@ -142,5 +156,7 @@ phases:
         log "Step Function Input:" "INFO"
         log "${sf_input}" "INFO"
 
-        aws stepfunctions start-execution --state-machine-arn $STEP_MACHINE_ARN --input "${sf_input}"
+  post_build:
+    commands:
+      - aws stepfunctions start-execution --state-machine-arn $STEP_MACHINE_ARN --input "${sf_input}"
       - aws sdb delete-attributes --item-name $pr_id --domain-name $DOMAIN_NAME

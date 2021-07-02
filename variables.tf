@@ -9,8 +9,6 @@ variable "common_tags" {
   default     = {}
 }
 
-# CODEPIPELINE #
-
 variable "account_parent_paths" {
   description = "Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage"
   type        = list(string)

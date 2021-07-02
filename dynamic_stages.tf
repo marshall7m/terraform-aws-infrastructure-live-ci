@@ -333,7 +333,7 @@ module "codebuild_trigger_sf" {
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
+    image        = module.terra_img.img_name
     type         = "LINUX_CONTAINER"
     environment_variables = [
       {
@@ -396,6 +396,16 @@ module "sf_role" {
       resources = [
         aws_sns_topic.approval.arn
       ]
+    },
+    {
+      sid    = "CloudWatchEventsAccess"
+      effect = "Allow"
+      actions = [
+        "events:PutTargets",
+        "events:PutRule",
+        "events:DescribeRule"
+      ]
+      resources = ["*"]
     }
   ]
 }
@@ -465,4 +475,8 @@ module "codebuild_queue_pr" {
 
 resource "aws_simpledb_domain" "queue" {
   name = var.simpledb_name
+}
+
+module "terra_img" {
+  count = var.terra_img == null ? 1 : 0
 }

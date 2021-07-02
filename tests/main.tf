@@ -28,9 +28,6 @@ module "mut_infrastructure_live_ci" {
   source     = "..//"
   account_id = data.aws_caller_identity.current.id
 
-  plan_cmd  = "terragrunt plan"
-  apply_cmd = "terragrunt apply -auto-approve"
-
   plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
   apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 
@@ -61,6 +58,6 @@ module "test_simpledb_queue" {
   ]
 }
 
-output "test" {
-  value = module.test_simpledb_queue.result
-}
+# output "test" {
+#   value = module.test_simpledb_queue.result
+# }
