@@ -138,7 +138,7 @@ resource "aws_api_gateway_deployment" "approval" {
 resource "aws_api_gateway_stage" "approval" {
   deployment_id = aws_api_gateway_deployment.approval.id
   rest_api_id   = aws_api_gateway_rest_api.approval.id
-  stage_name    = "approval"
+  stage_name    = "prod"
 }
 
 

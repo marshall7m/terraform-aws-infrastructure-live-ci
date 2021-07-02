@@ -254,6 +254,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | role\_tags | Tags to add to CodePipeline service role | `map(string)` | `{}` | no |
 | simpledb\_name | Name of the AWS SimpleDB domain used for queuing repo PRs | `string` | `"infrastructure-live-ci-PR-queue"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
+| terragrunt\_parent\_dir | Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on<br>to retrieve terragrunt child directories that contain differences within their respective plan. Defaults<br>to the root of `var.repo_name` | `string` | `"./"` | no |
 | trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `"infrastructure-live-ci-trigger-sf"` | no |
 
 ## Outputs
@@ -267,5 +268,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 # TODO:
 
 - Test email SNS approval
+- add head_ref and PR_ID to codebuild deploy via SF input
 - Add retries to deploy and rollback apply states
 - Figure out "rollback of rollback" strategy 

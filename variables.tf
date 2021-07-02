@@ -16,6 +16,16 @@ variable "account_parent_paths" {
   type        = list(string)
 }
 
+variable "terragrunt_parent_dir" {
+  description = <<EOF
+Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on
+to retrieve terragrunt child directories that contain differences within their respective plan. Defaults
+to the root of `var.repo_name`
+EOF
+  type        = string
+  default     = "./"
+}
+
 variable "base_branch" {
   description = "Base branch for repository that all PRs will compare to"
   type        = string

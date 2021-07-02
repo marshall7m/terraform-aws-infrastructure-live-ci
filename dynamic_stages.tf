@@ -8,12 +8,13 @@ States.Format('
   Execution ID: {}
 
   Approve:
-  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=approve&ex={}&sm={}&taskToken={}
+  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}?action=approve&ex={}&sm={}&taskToken={}
 
   Reject:
-  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}/execution?action=reject&ex={}&sm={}&taskToken={}
-  ', 
+  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}?action=reject&ex={}&sm={}&taskToken={}
+  ',
   $$.StateMachine.Id,
+  $$.Execution.Id,
   $$.Execution.Id,
   $$.StateMachine.Id,
   $$.Task.Token,
@@ -21,7 +22,6 @@ States.Format('
   $$.StateMachine.Id,
   $$.Task.Token)
   EOF
-
 }
 
 resource "aws_sfn_state_machine" "this" {
@@ -41,12 +41,13 @@ resource "aws_sfn_state_machine" "this" {
           Next = "Rollback Stack"
         },
       ]
-      ItemsPath = "$.${var.account_parent_paths[i]}"
+      ItemsPath = "$.${var.account_parent_paths[i]}.RunOrder"
       Iterator = {
         StartAt = "Deploy"
         States = {
           Deploy = {
-            Type = "Map"
+            Type           = "Map"
+            MaxConcurrency = 1
             Parameters = {
               "Path.$" = "$$.Map.Item.Value"
             }
@@ -71,13 +72,14 @@ resource "aws_sfn_state_machine" "this" {
                     ]
                     ProjectName = var.build_name
                   }
-                  Resource = "arn:aws:states:::codebuild:startBuild"
+                  Resource = "arn:aws:states:::codebuild:startBuild.sync"
                   Type     = "Task"
                 },
                 "Request Approval" = {
                   Next = "Approval Results"
                   Parameters = {
                     TopicArn    = aws_sns_topic.approval.arn
+                    Subject     = "Infrastructure-Live Approval Request"
                     "Message.$" = local.approval_msg
                   }
                   Resource = "arn:aws:states:::sns:publish.waitForTaskToken"
@@ -110,12 +112,17 @@ resource "aws_sfn_state_machine" "this" {
                       {
                         Name  = "COMMAND"
                         Type  = "PLAINTEXT"
-                        Value = "plan"
+                        Value = "apply"
+                      },
+                      {
+                        Name  = "EXTRA_ARGS"
+                        Type  = "PLAINTEXT"
+                        Value = "-auto-approve"
                       }
                     ]
                     ProjectName = var.build_name
                   }
-                  Resource = "arn:aws:states:::codebuild:startBuild"
+                  Resource = "arn:aws:states:::codebuild:startBuild.sync"
                   Type     = "Task"
                 },
                 Reject = {
@@ -147,7 +154,7 @@ resource "aws_sfn_state_machine" "this" {
                   States = {
                     "Get Rollback Providers" = {
                       Type     = "Task"
-                      Resource = "arn:aws:states:::codebuild:startBuild"
+                      Resource = "arn:aws:states:::codebuild:startBuild.sync"
                       Parameters = {
                         EnvironmentVariablesOverride = [
                           {
@@ -177,7 +184,7 @@ resource "aws_sfn_state_machine" "this" {
                         ]
                         ProjectName = var.build_name
                       }
-                      Resource = "arn:aws:states:::codebuild:startBuild"
+                      Resource = "arn:aws:states:::codebuild:startBuild.sync"
                       Type     = "Task"
                     },
                     "Request Rollback Approval" = {
@@ -216,12 +223,17 @@ resource "aws_sfn_state_machine" "this" {
                           {
                             Name  = "COMMAND"
                             Type  = "PLAINTEXT"
-                            Value = "plan"
+                            Value = "apply"
+                          },
+                          {
+                            Name  = "EXTRA_ARGS"
+                            Type  = "PLAINTEXT"
+                            Value = "-auto-approve"
                           }
                         ]
                         ProjectName = var.build_name
                       }
-                      Resource = "arn:aws:states:::codebuild:startBuild"
+                      Resource = "arn:aws:states:::codebuild:startBuild.sync"
                       Type     = "Task"
                     },
                     "Reject Rollback" = {
@@ -235,7 +247,8 @@ resource "aws_sfn_state_machine" "this" {
             }
           }
         }
-  }) })
+    })
+  })
 }
 
 data "aws_region" "current" {}
@@ -332,6 +345,16 @@ module "codebuild_trigger_sf" {
         name  = "DOMAIN_NAME"
         value = aws_simpledb_domain.queue.id
         type  = "PLAINTEXT"
+      },
+      {
+        name  = "TERRAGRUNT_WORKING_DIR"
+        type  = "PLAINTEXT"
+        value = var.terragrunt_parent_dir
+      },
+      {
+        name  = "ACCOUNT_PARENT_PATHS"
+        type  = "PLAINTEXT"
+        value = join(",", var.account_parent_paths)
       }
     ]
   }
@@ -364,6 +387,14 @@ module "sf_role" {
       resources = [
         module.codebuild_terraform_deploy.arn,
         module.codebuild_rollback_provider.arn
+      ]
+    },
+    {
+      sid     = "SNSAccess"
+      effect  = "Allow"
+      actions = ["sns:Publish"]
+      resources = [
+        aws_sns_topic.approval.arn
       ]
     }
   ]
