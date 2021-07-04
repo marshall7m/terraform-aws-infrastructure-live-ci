@@ -7,13 +7,16 @@ phases:
     commands:
       - git remote -v
       - aws configure set preview.sdb true
-      - next_pr=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
-      - pr_id=$(echo $next_pr | jq '.Name' | tr -d '"')
-      - "echo pr_id: $pr_id"
-      - head_ref=$(echo $next_pr | jq '.Attributes | .[] | select(.Name=="HeadRef") | .Value')
-      - "echo head_ref: $head_ref"
-      - git fetch origin pull/$pr_id/head:$head_ref
-      - git checkout $head_ref
+      - PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
+      - PULL_REQUEST_ID=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
+      - "echo PULL_REQUEST_ID: $PULL_REQUEST_ID"
+      - HEAD_REF=$(echo $PULL_REQUEST_RECORD | jq '.Attributes | .[] | select(.Name=="HeadRef") | .Value')
+      - "echo HEAD_REF: $HEAD_REF"
+      - git fetch origin pull/$PULL_REQUEST_ID/head:$HEAD_REF
+      - git checkout $HEAD_REF
+      - CURRENT_COMMIT=$( git rev-parse --verify HEAD )
+      - GIT_SOURCE_VERSION=refs/pull/$PULL_REQUEST_ID/head^{$CURRENT_COMMIT}
+      - "echo GIT_SOURCE_VERSION: $GIT_SOURCE_VERSION"
   build:
     on-failure: ABORT
     commands:
@@ -153,10 +156,12 @@ phases:
             done
         done
 
+        # add PR to CodeBuild source version parameter for quicker downloads since CodeBuild will only have to download the PR instead of entire git repo
+        sf_input=$( echo $sf_input | jq --arg source_version "$GIT_SOURCE_VERSION" '. + {"source_version": $source_version}'
         log "Step Function Input:" "INFO"
         log "${sf_input}" "INFO"
 
   post_build:
     commands:
       - aws stepfunctions start-execution --state-machine-arn $STEP_MACHINE_ARN --input "${sf_input}"
-      - aws sdb delete-attributes --item-name $pr_id --domain-name $DOMAIN_NAME
+      - aws sdb delete-attributes --item-name $PULL_REQUEST_ID --domain-name $DOMAIN_NAME

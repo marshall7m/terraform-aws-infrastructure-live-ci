@@ -1,7 +1,9 @@
 import boto3
 import logging
 import json
+import os
 
+s3 = boto3.client('s3')
 sf = boto3.client('stepfunctions')
 log = logging.getLogger(__name__)
 
@@ -26,10 +28,35 @@ def lambda_handler(event, context):
         log.error('Unrecognized action. Expected: approve, reject.')
         raise ClientException({"Status": "Failed to process the request. Unrecognized Action."})
     
-    sf.send_task_success(
-        taskToken=task_token,
-        output=json.load(msg)
-    )
+    approval = s3.get_object(
+        Bucket=os.environ['approval_bucket_name'],
+        Key=os.environ['approval_bucket_key']
+    )['Body'].read().decode()
+
+    approval[task_token]['count'] = approval[task_token]['count'] + 1
+    approval_count = approval[task_token]['count']
+    approval_required = approval[task_token]['required']
+
+    log.debug(f'Approval count: {approval_count}')
+    log.debug(f'Approval count requirement: {approval_required}')
+
+    if approval[task_token]['count'] == approval_required:
+        log.info('Approval count met requirement')
+        log.info('Sending task token to Step Function Machine')
+
+        sf.send_task_success(
+            taskToken=task_token,
+            output=json.load(msg)
+        )
+
+        log.info('Deleting Task Token from approval map')
+        del approval[task_token]
+
+    s3.put_object(
+            ACL='private',
+            Body=approval,
+            Bucket=os.environ['approval_bucket_name']
+        )
 
     lambda_arn = context['invokedFunctionArn'].split(':')
 

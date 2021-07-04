@@ -269,7 +269,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 - Test email SNS approval
     - Fix email approval/deny link (currently getting internal server error when clicked)
     - AGW Lambda is not triggered so problem related to just AGW API
-- add head_ref and PR_ID to codebuild deploy via SF input
 - Add retries to deploy and rollback apply states
 - Add account_parent_paths feature to allow for parrallel builds between accounts:
     - create a list of objects with attributes:
@@ -277,6 +276,5 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
         - depends_on = []
         - approval_emails = []
         - approval_count = x
-
-for testing image:
-    - create/use module that provisions the ECR image within user's account
+- create s3 approval bucket for count map: tasktoken: {count: required:}
+- transform testing-img to packer template?

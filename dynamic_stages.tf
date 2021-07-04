@@ -39,7 +39,7 @@ resource "aws_sfn_state_machine" "this" {
             "RejectedPlan",
           ]
           Next = "Rollback Stack"
-        },
+        }
       ]
       ItemsPath = "$.${var.account_parent_paths[i]}.RunOrder"
       Iterator = {
@@ -58,6 +58,7 @@ resource "aws_sfn_state_machine" "this" {
                 "Plan" = {
                   Next = "Request Approval"
                   Parameters = {
+                    SourceVersion = "$.source_version"
                     EnvironmentVariablesOverride = [
                       {
                         Name      = "PATH"
@@ -103,6 +104,7 @@ resource "aws_sfn_state_machine" "this" {
                 Apply = {
                   End = true
                   Parameters = {
+                    SourceVersion = "$.source_version"
                     EnvironmentVariablesOverride = [
                       {
                         Name      = "PATH"
@@ -156,6 +158,7 @@ resource "aws_sfn_state_machine" "this" {
                       Type     = "Task"
                       Resource = "arn:aws:states:::codebuild:startBuild.sync"
                       Parameters = {
+                        SourceVersion = "$.source_version"
                         EnvironmentVariablesOverride = [
                           {
                             Name      = "PATH"
@@ -170,6 +173,7 @@ resource "aws_sfn_state_machine" "this" {
                     "Plan Rollback" = {
                       Next = "Request Rollback Approval"
                       Parameters = {
+                        SourceVersion = "$.source_version"
                         EnvironmentVariablesOverride = [
                           {
                             Name      = "PATH"
@@ -214,6 +218,7 @@ resource "aws_sfn_state_machine" "this" {
                     "Apply Rollback" = {
                       End = true
                       Parameters = {
+                        SourceVersion = "$.source_version"
                         EnvironmentVariablesOverride = [
                           {
                             Name      = "PATH"
@@ -333,7 +338,7 @@ module "codebuild_trigger_sf" {
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = module.terra_img.img_name
+    image        = coalesce(var.terra_img, module.terra_img[0].full_image_url)
     type         = "LINUX_CONTAINER"
     environment_variables = [
       {
@@ -478,5 +483,12 @@ resource "aws_simpledb_domain" "queue" {
 }
 
 module "terra_img" {
-  count = var.terra_img == null ? 1 : 0
+  count  = var.terra_img == null ? 1 : 0
+  source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
+
+  create_repo         = true
+  source_path         = "${path.module}/../modules/testing-img"
+  repo_name           = "infrastructure-live-ci"
+  tag                 = "latest"
+  trigger_build_paths = ["${path.module}/../modules/testing-img"]
 }
