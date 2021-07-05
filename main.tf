@@ -1,3 +1,7 @@
+locals {
+  sns_subscription_list = concat([for entity in var.account_parent_cfg : setproduct([entity.name], entity.approval_emails)]...)
+}
+
 module "plan_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name               = var.plan_role_name
@@ -80,9 +84,9 @@ module "codebuild_rollback_provider" {
     type         = "LINUX_CONTAINER"
     environment_variables = [
       {
-        name  = "ACCOUNT_PARENT_PATHS"
+        name  = "TERRAGRUNT_WORKING_DIR"
         type  = "PLAINTEXT"
-        value = join(",", var.account_parent_paths)
+        value = var.terragrunt_parent_dir
       }
     ]
   }
@@ -98,12 +102,6 @@ module "codebuild_rollback_provider" {
     location            = data.github_repository.this.http_clone_url
     report_build_status = false
   }
-}
-
-resource "aws_sns_topic_policy" "approval" {
-  arn = aws_sns_topic.approval.arn
-
-  policy = data.aws_iam_policy_document.sns_approval.json
 }
 
 data "aws_caller_identity" "current" {}
@@ -128,9 +126,7 @@ data "aws_iam_policy_document" "sns_approval" {
       "SNS:AddPermission"
     ]
 
-    resources = [
-      aws_sns_topic.approval.arn
-    ]
+    resources = [for name in var.account_parent_cfg[*].name : aws_sns_topic.approval[name].arn]
 
     condition {
       test     = "StringEquals"
@@ -150,7 +146,8 @@ data "aws_iam_policy_document" "sns_approval" {
 }
 
 resource "aws_sns_topic" "approval" {
-  name            = "${var.step_function_name}-approval"
+  for_each        = toset([for entity in var.account_parent_cfg : entity.name])
+  name            = "${var.step_function_name}-${each.value}-approval"
   delivery_policy = <<EOF
 {
   "http": {
@@ -169,9 +166,16 @@ resource "aws_sns_topic" "approval" {
   EOF
 }
 
+resource "aws_sns_topic_policy" "approval" {
+  for_each = toset([for entity in var.account_parent_cfg : entity.name])
+  arn      = aws_sns_topic.approval[each.value].arn
+
+  policy = data.aws_iam_policy_document.sns_approval.json
+}
+
 resource "aws_sns_topic_subscription" "approval" {
-  count     = length(var.approval_emails)
-  topic_arn = aws_sns_topic.approval.arn
+  count     = length(local.sns_subscription_list)
+  topic_arn = aws_sns_topic.approval[sns_subscription_list.test[count.index][0]].arn
   protocol  = "email"
-  endpoint  = var.approval_emails[count.index]
+  endpoint  = local.sns_subscription_list[count.index][1]
 }

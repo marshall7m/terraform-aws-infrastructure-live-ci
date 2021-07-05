@@ -9,9 +9,14 @@ variable "common_tags" {
   default     = {}
 }
 
-variable "account_parent_paths" {
-  description = "Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage"
-  type        = list(string)
+variable "account_parent_cfg" {
+  description = "Any modified child filepath of the parent path will be processed within the parent path associated Map task"
+  type = list(object({
+    name               = string
+    paths              = list(string)
+    approval_emails    = list(string)
+    min_approval_count = number
+  }))
 }
 
 variable "terragrunt_parent_dir" {
@@ -119,6 +124,12 @@ variable "codestar_name" {
 }
 
 # CODEBUILD #
+
+variable "terra_img" {
+  description = "Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects"
+  type        = string
+  default     = null
+}
 
 variable "build_name" {
   description = "CodeBuild project name"
@@ -301,10 +312,4 @@ variable "simpledb_name" {
   description = "Name of the AWS SimpleDB domain used for queuing repo PRs"
   type        = string
   default     = "infrastructure-live-ci-PR-queue"
-}
-
-variable "approval_emails" {
-  description = "Email addresses of trusted entities that can approve the terraform deployments"
-  type        = list(string)
-  sensitive   = true
 }

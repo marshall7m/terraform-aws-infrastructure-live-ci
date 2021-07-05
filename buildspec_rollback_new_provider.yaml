@@ -1,11 +1,12 @@
 version: 0.2
 env:
   shell: bash
+  exported-variables:
+    - destroy_resources
 phases:
   build:
     commands:
-      - cd $PATH
-      - providers=$(terragrunt providers)
+      - providers=$(terragrunt providers --terragrunt-working-dir $TERRAGRUNT_WORKING_DIR)
       - cfg_providers=($(echo "$providers" | grep -oP '─\sprovider\[\K.+(?=\])'))
       - state_providers=($(echo "$providers" | grep -oP '\s{4}provider\[\K.+(?=\])'))
       - | 
@@ -24,12 +25,13 @@ phases:
 
         if [ "${#new_providers}" == 0 ]; then
           echo "No new providers were detected"
+          destroy_resources=$( echo -ne '\0' )
           exit 0
         fi 
       - |
         echo "New Providers:"
         echo "${new_providers[*]}"
-      - state=$(terragrunt state pull)
+      - state=$(terragrunt state pull --terragrunt-working-dir $TERRAGRUNT_WORKING_DIR)
       - |
         jq_regex=$(echo $new_providers | tr '\n(?!$)' '|' | sed '$s/|$//')
         destroy_resources=$(echo $state | jq -r \

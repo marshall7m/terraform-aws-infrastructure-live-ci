@@ -211,13 +211,12 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | account\_id | AWS account id | `number` | n/a | yes |
-| account\_parent\_paths | Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage | `list(string)` | n/a | yes |
+| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name               = string<br>    paths              = list(string)<br>    approval_emails    = list(string)<br>    min_approval_count = number<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `"infrastructure-live"` | no |
 | apply\_cmd | Terragrunt/Terraform apply command to run on target paths | `string` | `"terragrunt run-all apply -auto-approve"` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
-| approval\_emails | Email addresses of trusted entities that can approve the terraform deployments | `list(string)` | n/a | yes |
 | artifact\_bucket\_force\_destroy | Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion) | `bool` | `false` | no |
 | artifact\_bucket\_name | Name of the artifact S3 bucket to be created or the name of a pre-existing bucket name to be used for storing the pipeline's artifacts | `string` | `null` | no |
 | artifact\_bucket\_tags | Tags to attach to provisioned S3 bucket | `map(string)` | `{}` | no |
@@ -254,6 +253,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | role\_tags | Tags to add to CodePipeline service role | `map(string)` | `{}` | no |
 | simpledb\_name | Name of the AWS SimpleDB domain used for queuing repo PRs | `string` | `"infrastructure-live-ci-PR-queue"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
+| terra\_img | Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects | `string` | `null` | no |
 | terragrunt\_parent\_dir | Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on<br>to retrieve terragrunt child directories that contain differences within their respective plan. Defaults<br>to the root of `var.repo_name` | `string` | `"./"` | no |
 | trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `"infrastructure-live-ci-trigger-sf"` | no |
 
@@ -270,11 +270,13 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
     - Fix email approval/deny link (currently getting internal server error when clicked)
     - AGW Lambda is not triggered so problem related to just AGW API
 - Add retries to deploy and rollback apply states
-- Add account_parent_paths feature to allow for parrallel builds between accounts:
-    - create a list of objects with attributes:
-        - path = ""
-        - depends_on = []
-        - approval_emails = []
-        - approval_count = x
+    - Have get rollback providers state within each map iteration
+    - Have rollback commit from base ref as source_version for rollback builds
+    - Have a retry on map iteration or downstream tasks with base ref to revert changes
+    - Catch apply error and run previous parallel iteration
+    - Have a test rollback flow?
+        - deploy changes
+        - deploy rollback changes
+        - if rollback changes succeed consider it ready to be applied
 - create s3 approval bucket for count map: tasktoken: {count: required:}
 - transform testing-img to packer template?

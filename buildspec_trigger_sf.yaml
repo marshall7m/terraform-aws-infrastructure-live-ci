@@ -10,12 +10,17 @@ phases:
       - PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
       - PULL_REQUEST_ID=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
       - "echo PULL_REQUEST_ID: $PULL_REQUEST_ID"
-      - HEAD_REF=$(echo $PULL_REQUEST_RECORD | jq '.Attributes | .[] | select(.Name=="HeadRef") | .Value')
-      - "echo HEAD_REF: $HEAD_REF"
+      - "echo BASE_REF: $BASE_REF"
+      - BASE_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
+      - "echo BASE_REF_CURRENT_COMMIT: $BASE_REF_CURRENT_COMMIT"
+      - GIT_ROLLBACK_SOURCE_VERSION=refs/heads/$BASE_REF^{$BASE_REF_CURRENT_COMMIT}
+      - "echo GIT_ROLLBACK_SOURCE_VERSION: $GIT_ROLLBACK_SOURCE_VERSION"
       - git fetch origin pull/$PULL_REQUEST_ID/head:$HEAD_REF
       - git checkout $HEAD_REF
-      - CURRENT_COMMIT=$( git rev-parse --verify HEAD )
-      - GIT_SOURCE_VERSION=refs/pull/$PULL_REQUEST_ID/head^{$CURRENT_COMMIT}
+      - HEAD_REF=$(echo $PULL_REQUEST_RECORD | jq '.Attributes | .[] | select(.Name=="HeadRef") | .Value')
+      - "echo HEAD_REF: $HEAD_REF"
+      - HEAD_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
+      - GIT_SOURCE_VERSION=refs/pull/$PULL_REQUEST_ID/head^{$HEAD_REF_CURRENT_COMMIT}
       - "echo GIT_SOURCE_VERSION: $GIT_SOURCE_VERSION"
   build:
     on-failure: ABORT
@@ -157,7 +162,10 @@ phases:
         done
 
         # add PR to CodeBuild source version parameter for quicker downloads since CodeBuild will only have to download the PR instead of entire git repo
-        sf_input=$( echo $sf_input | jq --arg source_version "$GIT_SOURCE_VERSION" '. + {"source_version": $source_version}'
+        sf_input=$( echo $sf_input | jq \
+            --arg source_version "$GIT_SOURCE_VERSION" \
+            --arg rollback_source_version "$GIT_ROLLBACK_SOURCE_VERSION" \
+            '. + {"source_version": $source_version, "rollback_source_version": $rollback_source_version}')
         log "Step Function Input:" "INFO"
         log "${sf_input}" "INFO"
 
