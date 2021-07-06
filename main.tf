@@ -175,7 +175,7 @@ resource "aws_sns_topic_policy" "approval" {
 
 resource "aws_sns_topic_subscription" "approval" {
   count     = length(local.sns_subscription_list)
-  topic_arn = aws_sns_topic.approval[sns_subscription_list.test[count.index][0]].arn
+  topic_arn = aws_sns_topic.approval[local.sns_subscription_list[count.index][0]].arn
   protocol  = "email"
   endpoint  = local.sns_subscription_list[count.index][1]
 }

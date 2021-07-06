@@ -41,7 +41,6 @@ resource "aws_sfn_state_machine" "this" {
             ItemsPath = "$.${account}.RunOrder"
             Iterator = {
               StartAt = "Deploy"
-              End     = true
               States = {
                 Deploy = {
                   Type           = "Map"
@@ -51,8 +50,12 @@ resource "aws_sfn_state_machine" "this" {
                   }
                   End = true
                   Iterator = {
-                    StartAt = "Get Rollback Providers"
+                    StartAt = "Account: ${account}"
                     States = {
+                      "Account: ${account}" : {
+                        "Type" : "Pass",
+                        "Next" : "Get Rollback Providers"
+                      }
                       "Get Rollback Providers" = {
                         Type     = "Task"
                         Resource = "arn:aws:states:::codebuild:startBuild.sync"
@@ -415,6 +418,8 @@ module "codebuild_queue_pr" {
       }
     ]
   ]
+
+  create_source_auth         = true
   source_auth_ssm_param_name = var.github_token_ssm_key
   source_auth_type           = "PERSONAL_ACCESS_TOKEN"
   source_auth_server_type    = "GITHUB"
@@ -467,8 +472,9 @@ module "terra_img" {
   source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
 
   create_repo         = true
-  source_path         = "${path.root}/modules/testing-img"
+  codebuild_access    = true
+  source_path         = "${path.module}/modules/testing-img"
   repo_name           = "infrastructure-live-ci"
   tag                 = "latest"
-  trigger_build_paths = ["${path.root}/modules/testing-img"]
+  trigger_build_paths = ["${path.module}/modules/testing-img"]
 }
