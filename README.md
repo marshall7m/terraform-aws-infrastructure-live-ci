@@ -266,9 +266,29 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
 # TODO:
-- Test email SNS approval
-    - Fix email approval/deny link (currently getting internal server error when clicked)
-    - AGW Lambda is not triggered so problem related to just AGW API
+- Create approval flow:
+    - Methods:
+        - Slack
+        - email
+    - Allow approver to send response of why deployment is rejected 
+        - log response in artifact bucket
+        - notify PR owner response via github PR page or email (if reason is private)
+
+- Artifact Bucket:
+    - PR ID 
+        - execution ID
+            - initial run order (get from cb plan out)
+            - get next stack (get from lambda next stack)
+                - update rollback stack
+                - update next stack
+            - directory
+                - attempt/retry number
+                    - min approvals
+                    - approval count
+                    - rejection responses
+                    - Codebuild plan artifact
+                    - Codebuild apply artifact
+
 - Add retries to deploy and rollback apply states
     - Have get rollback providers state within each map iteration
     - Have rollback commit from base ref as source_version for rollback builds
@@ -281,5 +301,15 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 - create s3 approval bucket for count map: tasktoken: {count: required:}
     - add approval count to simpledb 
     - pr_id, approval count, approval_min
-    
+
 - transform testing-img to packer template?
+
+
+Step function input: {parent_path: [[["b", "c"], "foo"], [["bar", "naz"], "dar", baz"], "mod_dir"}
+
+- foo
+-- dar
+-- baz
+----bar
+----naz
+-mod_dir

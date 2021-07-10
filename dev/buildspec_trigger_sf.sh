@@ -1,5 +1,5 @@
 #test vars
-TERRAGRUNT_WORKING_DIR="../../mut-infrastructure-ci"
+TERRAGRUNT_WORKING_DIR="../../../infrastructure-live-testing-template/infrastructure-live"
 cd $TERRAGRUNT_WORKING_DIR
 TERRAGRUNT_WORKING_DIR="./"
 ACCOUNT_PARENT_PATHS="dev-account"
@@ -56,32 +56,31 @@ else
 fi
 
 # terragrunt run-all plan run order
-stack=$(echo "$tg_plan_out" | grep -Po '=>\sModule\s\K.+?(?=\))')
+stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
+log "Raw Stack: $stack" "DEBUG"
 
-#terragrunt directories within stack
-modules=( $(echo "$stack" | grep -Po '.+?(?=\s\(excluded:)') )
+run_order=$(jq -n '{}')
+git_root=$(git rev-parse --show-toplevel)
 
-log "Modules:" "DEBUG"
-log "${modules[*]}" "DEBUG"
+while read -r line; do
+    log "Stack Layer: $(printf \n\t%s\n "$line")" "DEBUG"
+    parent=$( echo "$line" | grep -Po '.+?(?=\s\(excluded:)' | xargs realpath -e --relative-to="$git_root" )
+    deps=$( echo "$line" | grep -Po 'dependencies:\s+\[\K.+?(?=\])' | grep -Po '.+?(?=,\s|$)' | xargs realpath -e --relative-to="$git_root" )
+    
+    log "Parent: ${parent}" "DEBUG"
+    log "Dependencies: ${deps}" "DEBUG"    
 
-#`modules` dependency directories
-deps=( $(echo "$stack" | grep -Po 'dependencies:\s+\K.+') )
+    if [[ " ${diff_paths[@]} " =~ " $parent " ]]; then
+        run_order=$( echo $run_order | jq --arg parent "$parent" --arg deps "$deps" '.[$parent] += try [$deps | split(", ")] // []' )
+    fi
+done <<< "$stack"
 
-log "Dependencies:" "DEBUG"
-log "${deps[*]}" "DEBUG"
+echo ${run_order}
 
-#should be a module directory for every list of dependencies
-if [ ${#modules[@]} -ne ${#deps[@]} ]; then
-    log "Modules Count: ${#modules[@]}" "DEBUG"
-    log "Dependency Nested Lists Count: ${#deps[@]}" "DEBUG"
-    log "Error parsing stack: Length of modules directories and deps array are not equal" "ERROR"
-    exit 1
-fi
-
+exit 1 
 declare -A parsed_stack
 
 # gets absolute path to the root of git repo
-git_root=$(git rev-parse --show-toplevel)
 
 # filters out target directories that didn't have a difference in terraform plan
 for i in $(seq 0 $(( ${#modules[@]} - 1 ))); do
