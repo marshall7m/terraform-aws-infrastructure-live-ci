@@ -5,20 +5,27 @@ phases:
   pre_build:
     on-failure: ABORT
     commands:
+      - "echo Terraform version: $(terraform --version)"
+      - "echo Terragrunt version: $(terragrunt --version)"
+      - "echo TERRAGRUNT_WORKING_DIR: ${TERRAGRUNT_WORKING_DIR}"
       - git remote -v
       - aws configure set preview.sdb true
-      - PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
-      - PULL_REQUEST_ID=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
+      - |
+        if [ -z $PULL_REQUEST_ID ]; then
+            PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
+            PULL_REQUEST_ID=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
+        else
+            echo "Skip pulling Pull Request from queue"
+            echo "Using Overridden Pull Request ID"
+        fi
       - "echo PULL_REQUEST_ID: $PULL_REQUEST_ID"
       - "echo BASE_REF: $BASE_REF"
       - BASE_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
       - "echo BASE_REF_CURRENT_COMMIT: $BASE_REF_CURRENT_COMMIT"
       - GIT_ROLLBACK_SOURCE_VERSION=refs/heads/$BASE_REF^{$BASE_REF_CURRENT_COMMIT}
       - "echo GIT_ROLLBACK_SOURCE_VERSION: $GIT_ROLLBACK_SOURCE_VERSION"
-      - git fetch origin pull/$PULL_REQUEST_ID/head:$HEAD_REF
-      - git checkout $HEAD_REF
-      - HEAD_REF=$(echo $PULL_REQUEST_RECORD | jq '.Attributes | .[] | select(.Name=="HeadRef") | .Value')
-      - "echo HEAD_REF: $HEAD_REF"
+      - git fetch origin pull/$PULL_REQUEST_ID/head:pr-${PULL_REQUEST_ID}
+      - git checkout pr-${PULL_REQUEST_ID}
       - HEAD_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
       - GIT_SOURCE_VERSION=refs/pull/$PULL_REQUEST_ID/head^{$HEAD_REF_CURRENT_COMMIT}
       - "echo GIT_SOURCE_VERSION: $GIT_SOURCE_VERSION"
@@ -45,27 +52,36 @@ phases:
 
         ACCOUNT_PARENT_PATHS=(${ACCOUNT_PARENT_PATHS//,/ })
         # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)
-        tg_plan_cmd="terragrunt run-all plan --terragrunt-working-dir $TERRAGRUNT_WORKING_DIR --terragrunt-non-interactive -detailed-exitcode"
-
-        tg_plan_out=$(eval "$tg_plan_cmd 2>&1")
+        
+        tg_plan_out=$(terragrunt run-all plan --terragrunt-working-dir $TERRAGRUNT_WORKING_DIR --terragrunt-non-interactive -detailed-exitcode 2>&1)
 
         exitcode=$?
         if [ $exitcode -eq 1 ]; then
-            log "$tg_plan_cmd failed" "INFO"
-            log "error output" "INFO"
-            log "$tg_plan_out" "INFO"
-            exit 1
+            # TODO: Handle directories with to-be-created remote backends once terragrunt issue is resolved: https://github.com/gruntwork-io/terragrunt/issues/1747
+            # see if error is related to remote backend state not being initialized
+            if [ ${#new_remote_state} -ne 0 ]; then
+                log "Directories with new backends:" "DEBUG"
+                log "${new_remote_state[*]}" "DEBUG"
+            else
+                log "Command Output:" "INFO"
+                log "$tg_plan_out" "INFO"
+                exit 1
+            fi
         fi
 
-        # get directories that terragrunt detected a difference between the tf state and their cfg
-        diff_paths=($(echo "$tg_plan_out" | grep -Po 'exit\sstatus\s2\sprefix=\[\K.+?(?=\])'))
+        # Get absolute paths of directories that terragrunt detected a difference between their tf state and their cfg
+        # use (\n|\s|\t)+ since output format may differ between terragrunt versions
+        # use grep for single line parsing to workaround lookbehind fixed width constraint
+        diff_paths=($(echo "$tg_plan_out" | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])'))
 
         if [ ${#diff_paths[@]} -ne 0 ]; then
-          log "Directories with difference in terraform plan:" "DEBUG"
-          log "${diff_paths[*]}" "DEBUG"
+            log "Directories with difference in terraform plan:" "DEBUG"
+            log "${diff_paths[*]}" "DEBUG"
         else
-          log "Deteted no directories with differences in terraform plan" "ERROR"
-          exit 1
+            log "Detected no directories with differences in terraform plan" "ERROR"
+            log "Command Output:" "DEBUG"
+            log "$tg_plan_out" "DEBUG"
+            exit 1
         fi
 
         # terragrunt run-all plan run order
@@ -117,17 +133,23 @@ phases:
         declare -A run_order
 
         log "Getting run order" "INFO"
+        # TODO: Change key iteration to loop on all dep values to save iterations
         for key in "${!parsed_stack[@]}"; do
             for sub_key in "${!parsed_stack[@]}"; do
                 if [ "$key" != "$sub_key" ]; then
+                    log "" "DEBUG"
                     log "Checking if directory: ${key}" "DEBUG"
-                    log "is a dependency of: ${sub_key}" "DEBUG"
+                    log "is a direct dependency of: ${sub_key}" "DEBUG"
                     log "Dependency List:" "DEBUG"
                     log "${parsed_stack[$sub_key]}" "DEBUG"
                     # if the terragrunt directory defined under `modules` is within a depedency list, add `modules` dependencies to the parent dependency list
                     if [[ " ${parsed_stack[$sub_key]} " =~ " $key " ]]; then
                         log "${key} is a dependency of ${sub_key}" "DEBUG"
+                        # if sub_key is not a dependency in all of run_order list
                         run_order["$sub_key"]=$(echo "${parsed_stack[$key]} ${parsed_stack[$sub_key]}")
+                        # if sub_key's dependency includes a key in run_order, remove key from run_order
+                    else
+
                     fi
                 fi
             done
@@ -168,8 +190,7 @@ phases:
             '. + {"source_version": $source_version, "rollback_source_version": $rollback_source_version}')
         log "Step Function Input:" "INFO"
         log "${sf_input}" "INFO"
-
   post_build:
     commands:
-      - aws stepfunctions start-execution --state-machine-arn $STEP_MACHINE_ARN --input "${sf_input}"
+      - aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "${sf_input}"
       - aws sdb delete-attributes --item-name $PULL_REQUEST_ID --domain-name $DOMAIN_NAME

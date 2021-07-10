@@ -279,4 +279,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
         - deploy rollback changes
         - if rollback changes succeed consider it ready to be applied
 - create s3 approval bucket for count map: tasktoken: {count: required:}
+    - add approval count to simpledb 
+    - pr_id, approval count, approval_min
+    
 - transform testing-img to packer template?
