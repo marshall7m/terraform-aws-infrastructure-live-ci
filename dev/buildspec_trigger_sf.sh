@@ -40,14 +40,17 @@ if [ $exitcode -eq 1 ]; then
     fi
 fi
 
-# Get absolute paths of directories that terragrunt detected a difference between their tf state and their cfg
+# gets absolute path to the root of git repo
+git_root=$(git rev-parse --show-toplevel)
+
+# Get git repo root path relative path to the directories that terragrunt detected a difference between their tf state and their cfg
 # use (\n|\s|\t)+ since output format may differ between terragrunt versions
 # use grep for single line parsing to workaround lookbehind fixed width constraint
-diff_paths=($(echo "$tg_plan_out" | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])'))
+diff_paths=($(echo "$tg_plan_out" | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])' | xargs realpath -e --relative-to="$git_root"))
 
 if [ ${#diff_paths[@]} -ne 0 ]; then
     log "Directories with difference in terraform plan:" "DEBUG"
-    log "${diff_paths[*]}" "DEBUG"
+    log "$(printf "\n\t%s" "${diff_paths[*]}")" "DEBUG"
 else
     log "Detected no directories with differences in terraform plan" "ERROR"
     log "Command Output:" "DEBUG"
@@ -57,55 +60,38 @@ fi
 
 # terragrunt run-all plan run order
 stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
-log "Raw Stack: $stack" "DEBUG"
+log "Raw Stack: $(printf "\n\t%s" "$stack")" "DEBUG"
 
 run_order=$(jq -n '{}')
-git_root=$(git rev-parse --show-toplevel)
 
 while read -r line; do
-    log "Stack Layer: $(printf \n\t%s\n "$line")" "DEBUG"
+    log "Stack Layer: $(printf "\n\t%s\n" "$line")" "DEBUG"
     parent=$( echo "$line" | grep -Po '.+?(?=\s\(excluded:)' | xargs realpath -e --relative-to="$git_root" )
     deps=$( echo "$line" | grep -Po 'dependencies:\s+\[\K.+?(?=\])' | grep -Po '.+?(?=,\s|$)' | xargs realpath -e --relative-to="$git_root" )
     
-    log "Parent: ${parent}" "DEBUG"
-    log "Dependencies: ${deps}" "DEBUG"    
+    log "Parent: $(printf "\n\t%s" "${parent}")" "DEBUG"
+    log "Dependencies: $(printf "\n\t%s" "${deps}")" "DEBUG"
 
-    if [[ " ${diff_paths[@]} " =~ " $parent " ]]; then
-        run_order=$( echo $run_order | jq --arg parent "$parent" --arg deps "$deps" '.[$parent] += try [$deps | split(", ")] // []' )
+    if [[ " ${diff_paths[@]} " =~ " ${parent} " ]]; then
+        log "Found difference in plan" "DEBUG"
+        run_order=$( echo $run_order | jq --arg parent "$parent" --arg deps "$deps" '.[$parent] += try [$deps | split("\n")] // []' )
+        log "Run Order:" "DEBUG"
+        log "$run_order" "DEBUG"
+    else
+        log "Detected no difference in terraform plan for directory: ${parent}" "DEBUG"
     fi
 done <<< "$stack"
 
 echo ${run_order}
 
-exit 1 
-declare -A parsed_stack
 
-# gets absolute path to the root of git repo
+uniq_deps=$( echo "$run_order" | jq .[] | jq .[] | jq .[] | jq  -s '.' | jq 'unique' )
+echo "$uniq_deps"
+echo "TEST"
+# echo "$run_order" | jq --arg uniq_deps "$uniq_deps"  'with_entries(select([.key] | inside($uniq_deps)))'
+echo "$run_order" | jq .[] | 
 
-# filters out target directories that didn't have a difference in terraform plan
-for i in $(seq 0 $(( ${#modules[@]} - 1 ))); do
-    if [[ " ${diff_paths[@]} " =~ " ${modules[i]} " ]]; then
-        # for every directory addded to parsed_stack, only add the git root directory's relative path to the directory
-        # Reason is for path portability (absolute paths will differ between instances)
-        if [ "${deps[i]}" == "[]" ]; then
-            parsed_stack[$(realpath -e --relative-to="$git_root" "${modules[i]}")]+=""
-        else 
-            parsed_stack[$(realpath -e --relative-to="$git_root" "${modules[i]}")]+=$(realpath -e --relative-to="$git_root" $( echo "${deps[i]}" | sed 's/[][]//g' ))            
-        fi
-    fi
-done
-
-log "Parsed Stack:" "INFO"
-for i in ${!parsed_stack[@]}; do 
-    log "parsed_stack[$i] = ${parsed_stack[$i]}" "DEBUG"
-done
-
-for i in ${parsed_stack[*]}; do 
-    log "$i" "DEBUG"
-done
 exit 1
-declare -A run_order
-
 log "Getting run order" "INFO"
 # for every directory that is a dependency of another directory
 # create copy of keys since bash doesn't allow deletion of for loop's list elements within for loop
