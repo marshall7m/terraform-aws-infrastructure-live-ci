@@ -62,7 +62,7 @@ fi
 stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
 log "Raw Stack: $(printf "\n\t%s" "$stack")" "DEBUG"
 
-run_order=$(jq -n '{}')
+shallow_run_order=$(jq -n '{}')
 
 while read -r line; do
     log "Stack Layer: $(printf "\n\t%s\n" "$line")" "DEBUG"
@@ -74,54 +74,28 @@ while read -r line; do
 
     if [[ " ${diff_paths[@]} " =~ " ${parent} " ]]; then
         log "Found difference in plan" "DEBUG"
-        run_order=$( echo $run_order | jq --arg parent "$parent" --arg deps "$deps" '.[$parent] += try [$deps | split("\n")] // []' )
+        shallow_run_order=$( echo $shallow_run_order | jq --arg parent "$parent" --arg deps "$deps" '.[$parent] += try [$deps | split("\n") | reverse] // []' )
         log "Run Order:" "DEBUG"
-        log "$run_order" "DEBUG"
+        log "$shallow_run_order" "DEBUG"
     else
         log "Detected no difference in terraform plan for directory: ${parent}" "DEBUG"
     fi
 done <<< "$stack"
 
-echo ${run_order}
+echo "shallow"
+echo ${shallow_run_order}
 
+run_order=$(echo ${shallow_run_order} | jq '([.. | .[]? | strings] | unique) as $uniq_deps 
+    | . as $origin 
+    | with_entries(select([.key] 
+    | inside($uniq_deps) 
+    | not)) 
+    | map_values(. += $origin[.. | .[]? | strings] | reverse)'
+)
 
-uniq_deps=$( echo "$run_order" | jq .[] | jq .[] | jq .[] | jq  -s '.' | jq 'unique' )
-echo "$uniq_deps"
-echo "TEST"
-# echo "$run_order" | jq --arg uniq_deps "$uniq_deps"  'with_entries(select([.key] | inside($uniq_deps)))'
-echo "$run_order" | jq .[] | 
-
+echo "run order:"
+echo $run_order
 exit 1
-log "Getting run order" "INFO"
-# for every directory that is a dependency of another directory
-# create copy of keys since bash doesn't allow deletion of for loop's list elements within for loop
-parent_keys=("${!parsed_stack[@]}")
-for key in "${parsed_stack[*]}"; do
-    for sub_key in "${parent_keys[@]}"; do
-        if [ "$key" != "$sub_key" ]; then
-            log "" "DEBUG"
-            log "Checking if directory: ${key}" "DEBUG"
-            log "is a direct dependency of: ${sub_key}" "DEBUG"
-            log "Dependency List:" "DEBUG"
-            log "${parsed_stack[$sub_key]}" "DEBUG"
-            # if directory is in a dependency list
-            if [[ " ${parsed_stack[$sub_key]} " =~ " $key " ]] ; then
-                log "${key} is a dependency of ${sub_key}" "DEBUG"
-                #add directory's dependencies to the front of list
-                run_order["$sub_key"]=$(echo "${parsed_stack[$key]} ${parsed_stack[$sub_key]}")
-            fi
-        fi
-    done
-done
-
-for key in run_order[@]; do
-    if [[ " ${run_order[*]} " =~ " $key " ]]; then
-        pop 
-
-log "Stack Run Order:" "DEBUG"
-for i in ${!run_order[@]}; do 
-    log "run_order[$i] = ${run_order[$i]}" "DEBUG"
-done
 
 log "Creating Step Function Input" "INFO"
 sf_input=$(jq -n '{}')
