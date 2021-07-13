@@ -35,94 +35,6 @@ variable "base_branch" {
   default     = "master"
 }
 
-variable "role_arn" {
-  description = "Pre-existing IAM role ARN to use for the CodePipeline"
-  type        = string
-  default     = null
-}
-
-variable "cmk_arn" {
-  description = "ARN of a pre-existing CMK to use for encrypting CodePipeline artifacts at rest"
-  type        = string
-  default     = null
-}
-
-variable "artifact_bucket_name" {
-  description = "Name of the artifact S3 bucket to be created or the name of a pre-existing bucket name to be used for storing the pipeline's artifacts"
-  type        = string
-  default     = null
-}
-
-variable "artifact_bucket_force_destroy" {
-  description = "Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion)"
-  type        = bool
-  default     = false
-}
-
-variable "artifact_bucket_tags" {
-  description = "Tags to attach to provisioned S3 bucket"
-  type        = map(string)
-  default     = {}
-}
-
-# variable "stages" {
-#   description = "List of pipeline stages (see: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codepipeline)"
-#   type = list(object({
-#     name              = string
-#     order             = number
-#     paths             = list(string)
-#     tf_plan_role_arn  = optional(string)
-#     tf_apply_role_arn = optional(string)
-#   }))
-# }
-
-variable "pipeline_tags" {
-  description = "Tags to attach to the pipeline"
-  type        = map(string)
-  default     = {}
-}
-
-variable "role_path" {
-  description = "Path to create policy"
-  default     = "/"
-}
-
-variable "role_max_session_duration" {
-  description = "Max session duration (seconds) the role can be assumed for"
-  default     = 3600
-  type        = number
-}
-
-variable "role_description" {
-  default = "Allows Amazon Codepipeline to call AWS services on your behalf"
-}
-
-variable "role_force_detach_policies" {
-  description = "Determines attached policies to the CodePipeline service roles should be forcefully detached if the role is destroyed"
-  type        = bool
-  default     = false
-}
-
-variable "role_permissions_boundary" {
-  description = "Permission boundary policy ARN used for CodePipeline service role"
-  type        = string
-  default     = ""
-}
-
-variable "role_tags" {
-  description = "Tags to add to CodePipeline service role"
-  type        = map(string)
-  default     = {}
-}
-
-# CODESTAR #
-
-variable "codestar_name" {
-  description = "AWS CodeStar connection name used to define the source stage of the pipeline"
-  type        = string
-  default     = null
-}
-
 # CODEBUILD #
 
 variable "terra_img" {
@@ -174,19 +86,13 @@ variable "apply_role_policy_arns" {
 }
 
 variable "build_env_vars" {
-  description = "Base environment variables that will be provided for each CodePipeline action build"
+  description = "Base environment variables that will be provided for tf plan/apply builds"
   type = list(object({
     name  = string
     value = string
     type  = optional(string)
   }))
   default = []
-}
-
-variable "buildspec" {
-  description = "CodeBuild buildspec path relative to the source repo root directory"
-  type        = string
-  default     = null
 }
 
 variable "plan_cmd" {
@@ -312,4 +218,30 @@ variable "simpledb_name" {
   description = "Name of the AWS SimpleDB domain used for queuing repo PRs"
   type        = string
   default     = "infrastructure-live-ci-PR-queue"
+}
+
+# S3 bucket #
+
+variable "artifact_bucket_name" {
+  description = "Name of the AWS S3 bucket to store AWS Step Function execution artifacts under"
+  type        = string
+  default     = null
+}
+
+variable "cmk_arn" {
+  description = "AWS KMS CMK (Customer Master Key) ARN used to encrypt Step Function artifacts"
+  type        = string
+  default     = null
+}
+
+variable "artifact_bucket_tags" {
+  description = "Tags for AWS S3 bucket used to store step function artifacts"
+  type        = map(string)
+  default     = {}
+}
+
+variable "artifact_bucket_force_destroy" {
+  description = "Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion)"
+  type        = bool
+  default     = false
 }

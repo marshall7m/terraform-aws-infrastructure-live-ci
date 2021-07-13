@@ -205,6 +205,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | archive | n/a |
 | aws | >= 3.44 |
 | github | n/a |
+| random | n/a |
 
 ## Inputs
 
@@ -218,16 +219,14 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
 | artifact\_bucket\_force\_destroy | Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion) | `bool` | `false` | no |
-| artifact\_bucket\_name | Name of the artifact S3 bucket to be created or the name of a pre-existing bucket name to be used for storing the pipeline's artifacts | `string` | `null` | no |
-| artifact\_bucket\_tags | Tags to attach to provisioned S3 bucket | `map(string)` | `{}` | no |
+| artifact\_bucket\_name | Name of the AWS S3 bucket to store AWS Step Function execution artifacts under | `string` | `null` | no |
+| artifact\_bucket\_tags | Tags for AWS S3 bucket used to store step function artifacts | `map(string)` | `{}` | no |
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
-| build\_env\_vars | Base environment variables that will be provided for each CodePipeline action build | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
+| build\_env\_vars | Base environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | build\_name | CodeBuild project name | `string` | `"infrastructure-live-ci-build"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
-| buildspec | CodeBuild buildspec path relative to the source repo root directory | `string` | `null` | no |
 | cloudwatch\_event\_name | Name of the CloudWatch event that will monitor the Step Function | `string` | `"infrastructure-live-execution-event"` | no |
-| cmk\_arn | ARN of a pre-existing CMK to use for encrypting CodePipeline artifacts at rest | `string` | `null` | no |
-| codestar\_name | AWS CodeStar connection name used to define the source stage of the pipeline | `string` | `null` | no |
+| cmk\_arn | AWS KMS CMK (Customer Master Key) ARN used to encrypt Step Function artifacts | `string` | `null` | no |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | dynamodb\_tags | Tags to add to DynamoDB | `map(string)` | `{}` | no |
@@ -237,20 +236,12 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
-| pipeline\_tags | Tags to attach to the pipeline | `map(string)` | `{}` | no |
 | plan\_cmd | Terragrunt/Terraform plan command to run on target paths | `string` | `"terragrunt run-all plan"` | no |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
 | queue\_pr\_build\_name | AWS CodeBuild project name for the build that writes to the PR queue table hosted on AWS DynamodB | `string` | `"infrastructure-live-ci-queue-pr"` | no |
 | repo\_name | Name of the GitHub repository | `string` | n/a | yes |
-| role\_arn | Pre-existing IAM role ARN to use for the CodePipeline | `string` | `null` | no |
-| role\_description | n/a | `string` | `"Allows Amazon Codepipeline to call AWS services on your behalf"` | no |
-| role\_force\_detach\_policies | Determines attached policies to the CodePipeline service roles should be forcefully detached if the role is destroyed | `bool` | `false` | no |
-| role\_max\_session\_duration | Max session duration (seconds) the role can be assumed for | `number` | `3600` | no |
-| role\_path | Path to create policy | `string` | `"/"` | no |
-| role\_permissions\_boundary | Permission boundary policy ARN used for CodePipeline service role | `string` | `""` | no |
-| role\_tags | Tags to add to CodePipeline service role | `map(string)` | `{}` | no |
 | simpledb\_name | Name of the AWS SimpleDB domain used for queuing repo PRs | `string` | `"infrastructure-live-ci-PR-queue"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_img | Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects | `string` | `null` | no |
@@ -304,12 +295,10 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 - transform testing-img to packer template?
 
-
-Step function input: {parent_path: [[["b", "c"], "foo"], [["bar", "naz"], "dar", baz"], "mod_dir"}
-
-- foo
--- dar
--- baz
-----bar
-----naz
--mod_dir
+Create order within step function execution instead of tf applying the order
+- codebuild plan-out pull s3 artifacts
+    - set account path via env vars to allow user to override order
+    - after map state completes, run next map state
+sf input:
+    - set next map state input
+    - allow user to override paths to run deployment with

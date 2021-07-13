@@ -262,7 +262,7 @@ module "cw_target_role" {
       sid       = "CodeBuildInvokeAccess"
       effect    = "Allow"
       actions   = ["codebuild:StartBuild"]
-      resources = [module.codebuild_trigger_sf.arn]
+      resources = [module.codebuild_deployment_run_order.arn]
     }
   ]
 }
@@ -270,7 +270,7 @@ module "cw_target_role" {
 resource "aws_cloudwatch_event_target" "sf" {
   rule      = aws_cloudwatch_event_rule.this.name
   target_id = "CodeBuildTriggerStepFunction"
-  arn       = module.codebuild_trigger_sf.arn
+  arn       = module.codebuild_deployment_run_order.arn
   role_arn  = module.cw_target_role.role_arn
 }
 
@@ -292,7 +292,7 @@ data "aws_ssm_parameter" "github_token" {
   name  = var.github_token_ssm_key
 }
 
-module "codebuild_trigger_sf" {
+module "codebuild_deployment_run_order" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
   name = var.trigger_step_function_build_name
@@ -308,7 +308,7 @@ module "codebuild_trigger_sf" {
     git_clone_depth     = 1
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
-    report_build_status = true
+    report_build_status = false
   }
 
   artifacts = {
@@ -329,11 +329,6 @@ module "codebuild_trigger_sf" {
       {
         name  = "DOMAIN_NAME"
         value = aws_simpledb_domain.queue.id
-        type  = "PLAINTEXT"
-      },
-      {
-        name  = "BASE_REF"
-        value = var.base_branch
         type  = "PLAINTEXT"
       },
       {
