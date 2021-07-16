@@ -19,6 +19,11 @@ variable "account_parent_cfg" {
   }))
 }
 
+variable "approval_request_sender_email" {
+  description = "Email address to use for sending approval requests"
+  type        = string
+}
+
 variable "terragrunt_parent_dir" {
   description = <<EOF
 Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on

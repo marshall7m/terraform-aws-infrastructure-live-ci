@@ -15,6 +15,11 @@ def lambda_handler(event, context):
     log.info(event)
     log.info(context)
 
+
+    print(event)
+    print()
+    print(context)
+    return
     action = event['query']['action']
     task_token = event['query']['taskToken']
     state_machine = event['query']['sm']
@@ -29,8 +34,8 @@ def lambda_handler(event, context):
         raise ClientException({"Status": "Failed to process the request. Unrecognized Action."})
     
     approval = s3.get_object(
-        Bucket=os.environ['approval_bucket_name'],
-        Key=os.environ['approval_bucket_key']
+        Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
+        Key=execution
     )['Body'].read().decode()
 
     approval[task_token]['count'] = approval[task_token]['count'] + 1
@@ -55,7 +60,7 @@ def lambda_handler(event, context):
     s3.put_object(
             ACL='private',
             Body=approval,
-            Bucket=os.environ['approval_bucket_name']
+            Bucket=os.environ['ARTIFACT_BUCKET_NAME']
         )
 
     lambda_arn = context['invokedFunctionArn'].split(':')

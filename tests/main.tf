@@ -37,10 +37,17 @@ module "mut_infrastructure_live_ci" {
   create_github_token_ssm_param = false
   github_token_ssm_key          = "github-webhook-request-validator-github-token"
 
+  approval_request_sender_email = data.aws_ssm_parameter.testing_email.value
   account_parent_cfg = [
     {
-      name               = "test"
-      paths              = ["dev"]
+      name               = "dev"
+      paths              = ["dev/"]
+      approval_emails    = [data.aws_ssm_parameter.testing_email.value]
+      min_approval_count = 1
+    },
+    {
+      name               = "prod"
+      paths              = ["prod/"]
       approval_emails    = [data.aws_ssm_parameter.testing_email.value]
       min_approval_count = 1
     }

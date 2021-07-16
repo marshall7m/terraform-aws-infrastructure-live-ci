@@ -218,6 +218,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
+| approval\_request\_sender\_email | Email address to use for sending approval requests | `string` | n/a | yes |
 | artifact\_bucket\_force\_destroy | Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion) | `bool` | `false` | no |
 | artifact\_bucket\_name | Name of the AWS S3 bucket to store AWS Step Function execution artifacts under | `string` | `null` | no |
 | artifact\_bucket\_tags | Tags for AWS S3 bucket used to store step function artifacts | `map(string)` | `{}` | no |

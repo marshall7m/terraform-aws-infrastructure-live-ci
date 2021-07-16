@@ -36,13 +36,14 @@ resource "aws_sfn_state_machine" "this" {
         StartAt = "${account}"
         States = {
           "${account}" = {
-            Type      = "Map"
-            End       = true
-            ItemsPath = "$.${account}.RunOrder"
+            Type           = "Map"
+            MaxConcurrency = 0
+            End            = true
+            ItemsPath      = "$.${account}.RunOrder"
             Iterator = {
-              StartAt = "Deploy"
+              StartAt = "${account}: Deploy"
               States = {
-                Deploy = {
+                "${account}: Deploy" = {
                   Type           = "Map"
                   MaxConcurrency = 1
                   Parameters = {
@@ -54,9 +55,9 @@ resource "aws_sfn_state_machine" "this" {
                     States = {
                       "Account: ${account}" : {
                         "Type" : "Pass",
-                        "Next" : "Get Rollback Providers"
+                        "Next" : "${account}: Get Rollback Providers"
                       }
-                      "Get Rollback Providers" = {
+                      "${account}: Get Rollback Providers" = {
                         Type     = "Task"
                         Resource = "arn:aws:states:::codebuild:startBuild.sync"
                         Parameters = {
@@ -71,10 +72,10 @@ resource "aws_sfn_state_machine" "this" {
                           ProjectName = var.get_rollback_providers_build_name
                         }
                         ResultPath = "$.rollback_provider_flags"
-                        Next       = "Plan"
+                        Next       = "${account}: Plan"
                       },
-                      "Plan" = {
-                        Next = "Request Approval"
+                      "${account}: Plan" = {
+                        Next = "${account}: Request Approval"
                         Parameters = {
                           SourceVersion = "$.source_version"
                           EnvironmentVariablesOverride = [
@@ -94,32 +95,36 @@ resource "aws_sfn_state_machine" "this" {
                         Resource = "arn:aws:states:::codebuild:startBuild.sync"
                         Type     = "Task"
                       },
-                      "Request Approval" = {
-                        Next = "Approval Results"
+                      "${account}: Request Approval" = {
+                        Next = "${account}: Approval Results"
                         Parameters = {
-                          TopicArn    = aws_sns_topic.approval[var.account_parent_cfg[i].name].arn
-                          Subject     = "Infrastructure-Live Approval Request"
-                          "Message.$" = local.approval_msg
+                          FunctionName = module.lambda_approval_request.function_arn
+                          Payload = {
+                            StateMachine         = "$$.StateMachine.Id"
+                            ExecutionId          = "$$.Execution.Id"
+                            TaskToken            = "$$.Task.Token"
+                            TargetEmailAddresses = "${var.account_parent_cfg[i].approval_emails}"
+                          }
                         }
-                        Resource = "arn:aws:states:::sns:publish.waitForTaskToken"
+                        Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
                         Type     = "Task"
                       },
-                      "Approval Results" = {
+                      "${account}: Approval Results" = {
                         Choices = [
                           {
-                            Next         = "Apply"
+                            Next         = "${account}: Apply"
                             StringEquals = "Approve"
                             Variable     = "$.Status"
                           },
                           {
-                            Next         = "Reject"
+                            Next         = "${account}: Reject"
                             StringEquals = "Reject"
                             Variable     = "$.Status"
                           }
                         ]
                         Type = "Choice"
                       },
-                      Apply = {
+                      "${account}: Apply" = {
                         End = true
                         Parameters = {
                           SourceVersion = "$.source_version"
@@ -147,32 +152,32 @@ resource "aws_sfn_state_machine" "this" {
                         Catch = [
                           {
                             ErrorEquals = ["States.TaskFailed"]
-                            Next        = "New Providers?"
+                            Next        = "${account}: New Providers?"
                           }
                         ]
                       },
-                      "Reject" = {
+                      "${account}: Reject" = {
                         Cause = "Terraform plan was rejected"
                         Error = "RejectedPlan"
                         Type  = "Fail"
                       },
-                      "New Providers?" = {
+                      "${account}: New Providers?" = {
                         Choices = [
                           {
-                            Next     = "Rollback New Providers"
+                            Next     = "${account}: Rollback New Providers"
                             IsNull   = false
                             Variable = "$.rollback_provider_flags"
                           },
                           {
-                            Next     = "Apply Rollback"
+                            Next     = "${account}: Apply Rollback"
                             IsNull   = true
                             Variable = "$.rollback_provider_flags"
                           }
                         ]
                         Type = "Choice"
                       },
-                      "Rollback New Providers" = {
-                        Next = "Apply Rollback"
+                      "${account}: Rollback New Providers" = {
+                        Next = "${account}: Apply Rollback"
                         Parameters = {
                           SourceVersion = "$.source_version"
                           EnvironmentVariablesOverride = [
@@ -197,7 +202,7 @@ resource "aws_sfn_state_machine" "this" {
                         Resource = "arn:aws:states:::codebuild:startBuild.sync"
                         Type     = "Task"
                       },
-                      "Apply Rollback" = {
+                      "${account}: Apply Rollback" = {
                         End = true
                         Parameters = {
                           SourceVersion = "$.rollback_source_version"
@@ -375,10 +380,12 @@ module "sf_role" {
       ]
     },
     {
-      sid       = "SNSAccess"
-      effect    = "Allow"
-      actions   = ["sns:Publish"]
-      resources = [for name in var.account_parent_cfg[*].name : aws_sns_topic.approval[name].arn]
+      sid     = "LambdaInvokeAccess"
+      effect  = "Allow"
+      actions = ["lambda:Invoke"]
+      resources = [
+        module.lambda_approval_request.function_arn
+      ]
     },
     {
       sid    = "CloudWatchEventsAccess"

@@ -37,7 +37,7 @@ resource "aws_api_gateway_integration" "approval" {
   http_method             = aws_api_gateway_method.approval.http_method
   integration_http_method = "POST"
   type                    = "AWS"
-  uri                     = module.lambda_approval.function_invoke_arn
+  uri                     = module.lambda_approval_response.function_invoke_arn
 
   request_templates = {
     "application/json" = <<EOF
@@ -145,20 +145,62 @@ resource "aws_api_gateway_stage" "approval" {
 }
 
 
-data "archive_file" "lambda_function" {
+data "archive_file" "lambda_approval_response" {
   type        = "zip"
-  source_dir  = "${path.module}/function"
-  output_path = "${path.module}/function.zip"
+  source_dir  = "${path.module}/functions/approval_response"
+  output_path = "${path.module}/approval_response.zip"
 }
 
-module "lambda_approval" {
+module "lambda_approval_response" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
-  filename         = data.archive_file.lambda_function.output_path
-  source_code_hash = data.archive_file.lambda_function.output_base64sha256
+  filename         = data.archive_file.lambda_approval_response.output_path
+  source_code_hash = data.archive_file.lambda_approval_response.output_base64sha256
   function_name    = local.approval_resources_name
   handler          = "lambda_handler"
   runtime          = "python3.8"
   env_vars = {
-    foo = "bar"
+    ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
   }
+}
+
+data "archive_file" "lambda_approval_request" {
+  type        = "zip"
+  source_dir  = "${path.module}/functions/approval_request"
+  output_path = "${path.module}/approval_request.zip"
+}
+
+module "lambda_approval_request" {
+  source           = "github.com/marshall7m/terraform-aws-lambda"
+  filename         = data.archive_file.lambda_approval_request.output_path
+  source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
+  function_name    = "infrastructure-live-approval-request"
+  handler          = "lambda_handler"
+  runtime          = "python3.8"
+  env_vars = {
+    APPROVAL_API         = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}"
+    SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
+  }
+}
+
+
+resource "aws_ses_email_identity" "approval" {
+  email = var.approval_request_sender_email
+}
+
+data "aws_iam_policy_document" "approval" {
+  statement {
+    actions   = ["SES:SendEmail", "SES:SendRawEmail"]
+    resources = [aws_ses_email_identity.approval.arn]
+
+    principals {
+      identifiers = ["*"]
+      type        = "AWS"
+    }
+  }
+}
+
+resource "aws_ses_identity_policy" "approval" {
+  identity = aws_ses_email_identity.approval.arn
+  name     = "infrastructure-live-ses-approval"
+  policy   = data.aws_iam_policy_document.approval.json
 }
