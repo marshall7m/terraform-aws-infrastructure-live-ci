@@ -3,6 +3,7 @@ import logging
 import json
 import os
 
+
 s3 = boto3.client('s3')
 ses = boto3.client('ses')
 log = logging.getLogger(__name__)
@@ -18,24 +19,35 @@ def lambda_handler(event, context):
     task_token = event['payload']['TaskToken']
     state_machine = event['payload']['StateMachine']
     execution = event['payload']['ExecutionId']
-    target_email_addresses = event['payload']['TargetEmailAddresses']
-    
-    approval = s3.get_object(
-        Bucket=os.environ['approval_bucket_name'],
-        Key=os.environ['approval_bucket_key']
+    account = event['payload']['Account']
+    path = event['payload']['Path']
+
+    execution_data = s3.get_object(
+        Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
+        Key=execution
     )['Body'].read().decode()
 
-    approval[task_token]['count'] = approval[task_token]['count'] + 1
-    approval_count = approval[task_token]['count']
-    approval_required = approval[task_token]['required']
+    path_item = {
+        'Path': path
+        'Count': 0,
+        'Required': len(approval_emails),
+        'AwaitingApprovals': approval_emails,
+        'TaskToken': task_token
+    }
+    
+    approval_item = approval[account]['Deployments'].append(path_item)
 
-    log.debug(f'Approval count: {approval_count}')
-    log.debug(f'Approval count requirement: {approval_required}')
-
+    s3.put_object(
+        ACL='private',
+        Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
+        Key=execution
+        Body=approval_item
+    )
     
     raw_msg =f"""
-    MIME-Version: 1.0
+    MIME-Version: 1.0k
     Content-Type: text/html
+    Subject: {state_machine} Approval for Path: {path}
 
     <!DOCTYPE html>
     <title>Approval Request</title>
@@ -52,10 +64,9 @@ def lambda_handler(event, context):
     <input type="submit" value="Submit" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
     </form>
     """ 
-    destination = ['To:' + email for email in target_email_addresses.split(',')]
     ses.send_raw_email(
         Source=os.environ['SENDER_EMAIL_ADDRESS'],
-        Destinations = destination,
+        Destinations = ['To:' + email for email in approval_emails],
         RawMessage=raw_msg
     )
 

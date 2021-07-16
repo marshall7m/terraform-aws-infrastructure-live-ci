@@ -303,3 +303,46 @@ Create order within step function execution instead of tf applying the order
 sf input:
     - set next map state input
     - allow user to override paths to run deployment with
+
+Artifact Bucket:
+    Initial Execution json:
+        state_machine/
+            execution_id.json
+                {
+                    "dev-account": {
+                        approvers = []
+                        "Deployments": []
+                    }
+                }
+    
+    Approval Request:
+        execution_id.json
+                {
+                    "dev-account": {
+                        approvers = []
+                        "Deployments": [
+                            {
+                                path = ""
+                                task_token = ""
+                                count
+                                required
+                                awaiting_approvals = []
+                                approval_results = {
+                                    "address": {
+                                        approved: True
+                                        comment: ""
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+
+    Approval Response:
+        execution_id.json
+            approval_results = {
+                "address": {
+                    approved: True
+                    comment: ""
+                }
+            }

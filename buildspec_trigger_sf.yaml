@@ -193,4 +193,12 @@ phases:
   post_build:
     commands:
       - aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "${sf_input}"
+    #   TODO: add execution artifact to s3 bucket with initial attributes:
+    #   execution_id.json >> 
+    #   {
+    #     "dev-account": {
+    #         approvers = []
+    #         "Deployments": []
+    #     }
+    #   }
       - aws sdb delete-attributes --item-name $PULL_REQUEST_ID --domain-name $DOMAIN_NAME

@@ -155,7 +155,7 @@ module "lambda_approval_response" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
   filename         = data.archive_file.lambda_approval_response.output_path
   source_code_hash = data.archive_file.lambda_approval_response.output_base64sha256
-  function_name    = local.approval_resources_name
+  function_name    = "${var.step_function_name}-response"
   handler          = "lambda_handler"
   runtime          = "python3.8"
   env_vars = {
@@ -173,7 +173,7 @@ module "lambda_approval_request" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
   filename         = data.archive_file.lambda_approval_request.output_path
   source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
-  function_name    = "infrastructure-live-approval-request"
+  function_name    = "${var.step_function_name}-request"
   handler          = "lambda_handler"
   runtime          = "python3.8"
   env_vars = {
