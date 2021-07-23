@@ -2,6 +2,10 @@ import boto3
 import logging
 import json
 import os
+from botocore.exceptions import ClientError
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 
 
 s3 = boto3.client('s3')
@@ -22,18 +26,17 @@ def lambda_handler(event, context):
     account = event['payload']['Account']
     path = event['payload']['Path']
 
-    approval_mapping = s3.get_object(
+    approval_mapping = json.loads(s3.get_object(
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
         Key=os.environ['APPROVAL_MAPPING_S3_KEY']
-    )['Body'].read().decode()
+    )['Body'].read().decode())
 
     log.debug(f'Approval Mapping: {approval_mapping}')
 
-    log.debug("Getting execution data")
-    execution = s3.get_object(
+    execution = json.loads(s3.get_object(
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
         Key=f'{execution_id}.json',
-    )['Body'].read().decode()
+    )['Body'].read().decode())
 
     email_addresses = approval_mapping[account]['approval_emails']
 
@@ -46,7 +49,7 @@ def lambda_handler(event, context):
     }
     log.debug(f'Path Item: {path_item}')
 
-    execution = execution[account]['Deployments'].append(path_item)
+    execution[account]['Deployments'].append(path_item)
     log.debug(f'Updated Execution Data: {execution}')
 
     full_approval_api = f'{os.environ["APPROVAL_API"]}?ex={execution_id}&sm={state_machine}&taskToken={task_token}'
@@ -56,17 +59,12 @@ def lambda_handler(event, context):
         ACL='private',
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
         Key=f'{execution_id}.json',
-        Body=execution
+        Body=json.dumps(execution)
     )
-    
-    raw_msg =f"""
-    MIME-Version: 1.0k
-    Content-Type: text/html
-    Subject: {state_machine} Approval for Path: {path}
 
-    <!DOCTYPE html>
-    <title>Approval Request</title>
+    BODY_TEXT = "Hello,\r\nPlease see the attached terraform plan and fill out the approval form."
 
+    BODY_HTML = """\
     <form action="{full_approval_api}" method="post">
     <label for="action">Choose an action:</label>
     <select name="action" id="action">
@@ -78,9 +76,43 @@ def lambda_handler(event, context):
     </textarea>
     <input type="submit" value="Submit" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
     </form>
-    """ 
-    ses.send_raw_email(
-        Source=os.environ['SENDER_EMAIL_ADDRESS'],
-        Destinations = ['To:' + email for email in email_addresses],
-        RawMessage=raw_msg
-    )
+    """
+
+    msg = MIMEMultipart('mixed')
+
+    msg['Subject'] = f'{state_machine} Approval for Path: {path}' 
+    msg['From'] = os.environ['SENDER_EMAIL_ADDRESS'] 
+    msg['To'] = ', '.join(email_addresses)
+
+    msg_body = MIMEMultipart('alternative')
+
+    # Encode the text and HTML
+    textpart = MIMEText(BODY_TEXT.encode('utf-8'), 'plain', 'utf-8')
+    htmlpart = MIMEText(BODY_HTML.encode('utf-8'), 'html', 'utf-8')
+
+    # Add the text and HTML
+    msg_body.attach(textpart)
+    msg_body.attach(htmlpart)
+
+    ATTACHMENT = "lambda_function.py"
+    # Encode attachment
+    att = MIMEApplication(open(ATTACHMENT, 'rb').read())
+
+    # Label type as attachment
+    att.add_header('Content-Disposition','attachment',filename=os.path.basename(ATTACHMENT))
+    msg.attach(msg_body)
+    msg.attach(att)
+    
+    try:
+        response = ses.send_raw_email(
+            Source=os.environ['SENDER_EMAIL_ADDRESS'],
+            Destinations=email_addresses,
+            RawMessage={
+                'Data': msg.as_string()
+            }
+        )
+    except ClientError as e:
+        print(e.response['Error']['Message'])
+    else:
+        print("Email was succesfully sent")
+        print(f"Message ID: {response['MessageId']}")

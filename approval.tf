@@ -1,6 +1,6 @@
 locals {
   approval_resources_name = "${var.step_function_name}-approval"
-  approval_mapping_s3_key = "approval-mapping"
+  approval_mapping_s3_key = "approval-mapping.json"
 }
 resource "aws_api_gateway_rest_api" "approval" {
   name        = local.approval_resources_name
@@ -132,6 +132,14 @@ resource "aws_cloudwatch_log_group" "agw" {
 resource "aws_api_gateway_deployment" "approval" {
   rest_api_id = aws_api_gateway_rest_api.approval.id
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  triggers = {
+    redeployment = filesha1("${path.module}/approval.tf")
+  }
+
   depends_on = [
     aws_api_gateway_resource.approval,
     aws_api_gateway_method.approval,
@@ -163,7 +171,7 @@ module "lambda_approval_request" {
   env_vars = {
     ARTIFACT_BUCKET_NAME    = aws_s3_bucket.artifacts.id
     APPROVAL_MAPPING_S3_KEY = local.approval_mapping_s3_key
-    APPROVAL_API            = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}"
+    APPROVAL_API            = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}"
     SENDER_EMAIL_ADDRESS    = var.approval_request_sender_email
   }
   statements = [
@@ -173,12 +181,21 @@ module "lambda_approval_request" {
       actions = [
         "s3:GetObject",
         "s3:ListBucket",
-        "s3:GetObjectVersion"
+        "s3:GetObjectVersion",
+        "s3:PutObject"
       ]
       resources = [
         aws_s3_bucket.artifacts.arn,
         "${aws_s3_bucket.artifacts.arn}/*"
       ]
+    },
+    {
+      sid    = "SESSendAccess"
+      effect = "Allow"
+      actions = [
+        "SES:SendRawEmail"
+      ]
+      resources = [aws_ses_email_identity.approval.arn]
     }
   ]
 }

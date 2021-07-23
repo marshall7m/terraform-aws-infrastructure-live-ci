@@ -350,3 +350,14 @@ Artifact Bucket:
 Figure out html response to send approver to:
     - Step function console
     - None (stays on email)
+
+
+
+## Why not use Terraform Workspace for deployment flow?
+
+- Free tier only allows up to 5 users
+    - Limited to the number of users who can approve the deployment unless users are willing to share Terraform Cloud accounts
+- Single workspace doesn't allow for granular approval request and approval count based on configuration directory (e.g. `dev/` requires Bob's approval while `prod/` requires Bob and Ann's approval)
+- Requires scripting to meticulously trigger terraform workspace runs based on Terragrunt configuration depedencies?
+    - TODO: (Research) - Does Terraform Workspace refresh previously queued plans once they are next in deployment?
+    - TODO: (Research) - Does Terraform Workspace run update remote configuartion if PR commit changes configuration?
