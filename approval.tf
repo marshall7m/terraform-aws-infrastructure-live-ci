@@ -1,5 +1,6 @@
 locals {
   approval_resources_name = "${var.step_function_name}-approval"
+  approval_mapping_s3_key = "approval-mapping"
 }
 resource "aws_api_gateway_rest_api" "approval" {
   name        = local.approval_resources_name
@@ -15,7 +16,7 @@ resource "aws_api_gateway_resource" "approval" {
 resource "aws_api_gateway_method" "approval" {
   rest_api_id   = aws_api_gateway_rest_api.approval.id
   resource_id   = aws_api_gateway_resource.approval.id
-  http_method   = "GET"
+  http_method   = "POST"
   authorization = "NONE"
 }
 
@@ -40,28 +41,30 @@ resource "aws_api_gateway_integration" "approval" {
   uri                     = module.lambda_approval_response.function_invoke_arn
 
   request_templates = {
-    "application/json" = <<EOF
+    # converts to key-value pairs (e.g. {'action': 'accept', 'comments': 'Reasoning for action\r\n'})
+    "application/x-www-form-urlencoded" = <<EOF
 {
-  "body" : $input.json('$'),
-  "headers": {
-    #foreach($header in $input.params().header.keySet())
-    "$header": "$util.escapeJavaScript($input.params().header.get($header))" #if($foreach.hasNext),#end
-
+  "body": {
+    #foreach( $token in $input.path('$').split('&') )
+        #set( $keyVal = $token.split('=') )
+        #set( $keyValSize = $keyVal.size() )
+        #if( $keyValSize >= 1 )
+            #set( $key = $util.urlDecode($keyVal[0]) )
+            #if( $keyValSize >= 2 )
+                #set( $val = $util.urlDecode($keyVal[1]) )
+            #else
+                #set( $val = '' )
+            #end
+            "$key": "$util.escapeJavaScript($val)"#if($foreach.hasNext),#end
+        #end
     #end
-  },
-  "method": "$context.httpMethod",
-  "params": {
-    #foreach($param in $input.params().path.keySet())
-    "$param": "$util.escapeJavaScript($input.params().path.get($param))" #if($foreach.hasNext),#end
-
-    #end
-  },
+    },
   "query": {
     #foreach($queryParam in $input.params().querystring.keySet())
     "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam))" #if($foreach.hasNext),#end
 
     #end
-  }  
+  }
 }
   EOF
   }
@@ -144,6 +147,41 @@ resource "aws_api_gateway_stage" "approval" {
   stage_name    = "prod"
 }
 
+data "archive_file" "lambda_approval_request" {
+  type        = "zip"
+  source_dir  = "${path.module}/functions/approval_request"
+  output_path = "${path.module}/approval_request.zip"
+}
+
+module "lambda_approval_request" {
+  source           = "github.com/marshall7m/terraform-aws-lambda"
+  filename         = data.archive_file.lambda_approval_request.output_path
+  source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
+  function_name    = "${var.step_function_name}-request"
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.8"
+  env_vars = {
+    ARTIFACT_BUCKET_NAME    = aws_s3_bucket.artifacts.id
+    APPROVAL_MAPPING_S3_KEY = local.approval_mapping_s3_key
+    APPROVAL_API            = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}"
+    SENDER_EMAIL_ADDRESS    = var.approval_request_sender_email
+  }
+  statements = [
+    {
+      sid    = "GetS3ArtifactObjects"
+      effect = "Allow"
+      actions = [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetObjectVersion"
+      ]
+      resources = [
+        aws_s3_bucket.artifacts.arn,
+        "${aws_s3_bucket.artifacts.arn}/*"
+      ]
+    }
+  ]
+}
 
 data "archive_file" "lambda_approval_response" {
   type        = "zip"
@@ -156,32 +194,17 @@ module "lambda_approval_response" {
   filename         = data.archive_file.lambda_approval_response.output_path
   source_code_hash = data.archive_file.lambda_approval_response.output_base64sha256
   function_name    = "${var.step_function_name}-response"
-  handler          = "lambda_handler"
+  handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
+  allowed_to_invoke = [
+    {
+      principal = "apigateway.amazonaws.com"
+    }
+  ]
   env_vars = {
     ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
   }
 }
-
-data "archive_file" "lambda_approval_request" {
-  type        = "zip"
-  source_dir  = "${path.module}/functions/approval_request"
-  output_path = "${path.module}/approval_request.zip"
-}
-
-module "lambda_approval_request" {
-  source           = "github.com/marshall7m/terraform-aws-lambda"
-  filename         = data.archive_file.lambda_approval_request.output_path
-  source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
-  function_name    = "${var.step_function_name}-request"
-  handler          = "lambda_handler"
-  runtime          = "python3.8"
-  env_vars = {
-    APPROVAL_API         = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}"
-    SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
-  }
-}
-
 
 resource "aws_ses_email_identity" "approval" {
   email = var.approval_request_sender_email

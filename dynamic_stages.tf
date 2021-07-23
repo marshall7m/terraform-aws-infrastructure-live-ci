@@ -367,9 +367,9 @@ module "codebuild_deployment_run_order" {
         value = var.terragrunt_parent_dir
       },
       {
-        name  = "ACCOUNT_PARENT_PATHS"
+        name  = "ARTIFACT_BUCKET_NAME"
         type  = "PLAINTEXT"
-        value = join(",", flatten(var.account_parent_cfg[*].paths))
+        value = aws_s3_bucket.artifacts.id
       }
     ]
   }

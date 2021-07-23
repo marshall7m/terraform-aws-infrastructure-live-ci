@@ -18,30 +18,45 @@ def lambda_handler(event, context):
 
     task_token = event['payload']['TaskToken']
     state_machine = event['payload']['StateMachine']
-    execution = event['payload']['ExecutionId']
+    execution_id = event['payload']['ExecutionId']
     account = event['payload']['Account']
     path = event['payload']['Path']
 
-    execution_data = s3.get_object(
+    approval_mapping = s3.get_object(
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=execution
+        Key=os.environ['APPROVAL_MAPPING_S3_KEY']
     )['Body'].read().decode()
 
+    log.debug(f'Approval Mapping: {approval_mapping}')
+
+    log.debug("Getting execution data")
+    execution = s3.get_object(
+        Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
+        Key=f'{execution_id}.json',
+    )['Body'].read().decode()
+
+    email_addresses = approval_mapping[account]['approval_emails']
+
     path_item = {
-        'Path': path
+        'Path': path,
         'Count': 0,
-        'Required': len(approval_emails),
-        'AwaitingApprovals': approval_emails,
+        'Required': approval_mapping[account]['min_approval_count'],
+        'AwaitingApprovals': email_addresses,
         'TaskToken': task_token
     }
-    
-    approval_item = approval[account]['Deployments'].append(path_item)
+    log.debug(f'Path Item: {path_item}')
+
+    execution = execution[account]['Deployments'].append(path_item)
+    log.debug(f'Updated Execution Data: {execution}')
+
+    full_approval_api = f'{os.environ["APPROVAL_API"]}?ex={execution_id}&sm={state_machine}&taskToken={task_token}'
+    log.debug(f'API Full URL: {full_approval_api}')
 
     s3.put_object(
         ACL='private',
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=execution
-        Body=approval_item
+        Key=f'{execution_id}.json',
+        Body=execution
     )
     
     raw_msg =f"""
@@ -52,7 +67,7 @@ def lambda_handler(event, context):
     <!DOCTYPE html>
     <title>Approval Request</title>
 
-    <form action="{os.environ['APPROVAL_API']}" method="post">
+    <form action="{full_approval_api}" method="post">
     <label for="action">Choose an action:</label>
     <select name="action" id="action">
     <option value="accept">Accept</option>
@@ -66,9 +81,6 @@ def lambda_handler(event, context):
     """ 
     ses.send_raw_email(
         Source=os.environ['SENDER_EMAIL_ADDRESS'],
-        Destinations = ['To:' + email for email in approval_emails],
+        Destinations = ['To:' + email for email in email_addresses],
         RawMessage=raw_msg
     )
-
-class ClientException(error):
-    pass

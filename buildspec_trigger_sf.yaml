@@ -192,13 +192,13 @@ phases:
         log "${sf_input}" "INFO"
   post_build:
     commands:
-      - aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "${sf_input}"
-    #   TODO: add execution artifact to s3 bucket with initial attributes:
-    #   execution_id.json >> 
-    #   {
-    #     "dev-account": {
-    #         approvers = []
-    #         "Deployments": []
-    #     }
-    #   }
+      - |
+        execution_id=$(aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "${sf_input}" \
+            | jq '.executionArn | split(":")[-1]')
+        
+        aws s3api put-object \
+            --acl private \
+            --body $execution_file_path \
+            --bucket $
+            --key executions/$execution_id.json
       - aws sdb delete-attributes --item-name $PULL_REQUEST_ID --domain-name $DOMAIN_NAME

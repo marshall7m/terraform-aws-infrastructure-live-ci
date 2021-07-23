@@ -346,3 +346,7 @@ Artifact Bucket:
                     comment: ""
                 }
             }
+
+Figure out html response to send approver to:
+    - Step function console
+    - None (stays on email)
