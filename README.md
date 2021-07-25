@@ -212,7 +212,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | account\_id | AWS account id | `number` | n/a | yes |
-| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name               = string<br>    paths              = list(string)<br>    approval_emails    = list(string)<br>    min_approval_count = number<br>  }))</pre> | n/a | yes |
+| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    paths                    = list(string)<br>    approval_emails          = list(string)<br>    approval_count_required  = number<br>    rejection_count_required = number<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `"infrastructure-live"` | no |
 | apply\_cmd | Terragrunt/Terraform apply command to run on target paths | `string` | `"terragrunt run-all apply -auto-approve"` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
@@ -357,7 +357,15 @@ Figure out html response to send approver to:
 
 - Free tier only allows up to 5 users
     - Limited to the number of users who can approve the deployment unless users are willing to share Terraform Cloud accounts
-- Single workspace doesn't allow for granular approval request and approval count based on configuration directory (e.g. `dev/` requires Bob's approval while `prod/` requires Bob and Ann's approval)
-- Requires scripting to meticulously trigger terraform workspace runs based on Terragrunt configuration depedencies?
+- Single workspace doesn't allow for granular approval request and approval count based on configuration directory (e.g. `dev/` requires Bob's approval while `prod/` requires Bob and Ann's approval) Unless use separate workspaces for separate approvers?
+- Requires scripting to meticulously trigger terraform workspace runs based on Terragrunt configuration dependencies?
     - TODO: (Research) - Does Terraform Workspace refresh previously queued plans once they are next in deployment?
     - TODO: (Research) - Does Terraform Workspace run update remote configuartion if PR commit changes configuration?
+
+## Terraform Workspace Idea
+
+- Use Codebuild script to generate dependency order
+- Pass configuration to Terraform Workspace to create run via TF Cloud API
+- Create Workspace webhook with AGW API to tell Codebuild to pass next configuration when apply is successful
+- Create workspace for each AWS account
+- Create workspace notifaction for email/slack

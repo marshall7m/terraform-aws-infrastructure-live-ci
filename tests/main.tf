@@ -40,16 +40,18 @@ module "mut_infrastructure_live_ci" {
   approval_request_sender_email = data.aws_ssm_parameter.testing_email.value
   account_parent_cfg = [
     {
-      name               = "dev"
-      paths              = ["dev/"]
-      approval_emails    = [data.aws_ssm_parameter.testing_email.value]
-      min_approval_count = 1
+      name                     = "dev"
+      paths                    = ["dev/"]
+      approval_emails          = [data.aws_ssm_parameter.testing_email.value]
+      approval_count_required  = 2
+      rejection_count_required = 2
     },
     {
-      name               = "prod"
-      paths              = ["prod/"]
-      approval_emails    = [data.aws_ssm_parameter.testing_email.value]
-      min_approval_count = 1
+      name                     = "prod"
+      paths                    = ["prod/"]
+      approval_emails          = [data.aws_ssm_parameter.testing_email.value]
+      approval_count_required  = 2
+      rejection_count_required = 2
     }
   ]
 

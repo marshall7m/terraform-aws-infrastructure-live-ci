@@ -12,10 +12,11 @@ variable "common_tags" {
 variable "account_parent_cfg" {
   description = "Any modified child filepath of the parent path will be processed within the parent path associated Map task"
   type = list(object({
-    name               = string
-    paths              = list(string)
-    approval_emails    = list(string)
-    min_approval_count = number
+    name                     = string
+    paths                    = list(string)
+    approval_emails          = list(string)
+    approval_count_required  = number
+    rejection_count_required = number
   }))
 }
 
