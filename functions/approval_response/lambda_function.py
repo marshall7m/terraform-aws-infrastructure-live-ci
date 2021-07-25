@@ -16,6 +16,8 @@ def lambda_handler(event, context):
 
     action = event['body']['action']
     comments = event['body']['comments']
+    recipient = event['body']['recipient']
+
     task_token = event['query']['taskToken']
     state_machine = event['query']['sm']
     execution_id = event['query']['ex']
@@ -27,13 +29,40 @@ def lambda_handler(event, context):
         Key=f'{execution_id}.json',
     )['Body'].read().decode())
     log.debug(f'Current Execution Data: {execution}')
+    
+    approval_voters = execution[account]['Deployments'][path]['Approval']['Voters']
+    rejection_voters = execution[account]['Deployments'][path]['Rejection']['Voters']
 
     if action == 'approve':
-        msg = {'Status': 'Approve'}
-        execution[account]['Deployments'][path]['Approval']['Count'] = execution[account]['Deployments'][path]['Approval']['Count'] + 1
+        while recipient in rejection_voters:
+            log.info('Removing {recipient} from Rejection Voters')
+            execution[account]['Deployments'][path]['Rejection']['Voters'].remove(recipient)
+        if recipient not in execution[account]['Deployments'][path]['Approval']['Voters']:
+            msg = {'Status': 'Approve'}
+            execution[account]['Deployments'][path]['Approval']['Count'] = execution[account]['Deployments'][path]['Approval']['Count'] + 1
+            execution[account]['Deployments'][path]['Approval']['Voters'].append(recipient)
+        else:
+            log.info('Choice was resubmitted')
+            response = {
+                'statusCode': 302,
+                'message': 'Your choice was already submitted'
+            }
+            return response
     elif action == 'reject':
-        msg = {'Status': 'Reject'}
-        execution[account]['Deployments'][path]['Rejection']['Count'] = execution[account]['Deployments'][path]['Rejection']['Count'] + 1
+        while recipient in approval_voters:
+            log.info('Removing {recipient} from Approval Voters')
+            execution[account]['Deployments'][path]['Approval']['Voters'].remove(recipient)
+        if recipient not in execution[account]['Deployments'][path]['Rejection']['Voters']:
+            msg = {'Status': 'Reject'}
+            execution[account]['Deployments'][path]['Rejection']['Count'] = execution[account]['Deployments'][path]['Rejection']['Count'] + 1
+            execution[account]['Deployments'][path]['Rejection']['Voters'].append(recipient)
+        else:
+            log.info('Choice was already resubmitted')
+            response = {
+                'statusCode': 302,
+                'message': 'Your choice was already submitted'
+            }
+            return response
     else:
         log.error('Unrecognized action. Expected: approve, reject.')
         raise {"Status": "Failed to process the request. Unrecognized Action."}

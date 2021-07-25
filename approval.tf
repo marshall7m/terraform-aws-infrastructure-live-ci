@@ -77,9 +77,6 @@ resource "aws_api_gateway_integration_response" "approval" {
   http_method = aws_api_gateway_method.approval.http_method
 
   status_code = aws_api_gateway_method_response.response_302.status_code
-  response_parameters = {
-    "method.response.header.Location" = "integration.response.body.headers.Location"
-  }
 
   depends_on = [
     aws_api_gateway_integration.approval
@@ -92,9 +89,6 @@ resource "aws_api_gateway_method_response" "response_302" {
   http_method = aws_api_gateway_method.approval.http_method
 
   status_code = "302"
-  response_parameters = {
-    "method.response.header.Location" = true
-  }
 }
 
 resource "aws_api_gateway_account" "approval" {
@@ -173,7 +167,9 @@ module "lambda_approval_request" {
     APPROVAL_MAPPING_S3_KEY = local.approval_mapping_s3_key
     APPROVAL_API            = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}"
     SENDER_EMAIL_ADDRESS    = var.approval_request_sender_email
+    SES_TEMPLATE            = aws_ses_template.approval.name
   }
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
   statements = [
     {
       sid    = "GetS3ArtifactObjects"
@@ -221,6 +217,24 @@ module "lambda_approval_response" {
   env_vars = {
     ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
   }
+
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+  statements = [
+    {
+      sid    = "GetS3ArtifactObjects"
+      effect = "Allow"
+      actions = [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetObjectVersion",
+        "s3:PutObject"
+      ]
+      resources = [
+        aws_s3_bucket.artifacts.arn,
+        "${aws_s3_bucket.artifacts.arn}/*"
+      ]
+    }
+  ]
 }
 
 resource "aws_ses_email_identity" "approval" {
@@ -229,7 +243,7 @@ resource "aws_ses_email_identity" "approval" {
 
 data "aws_iam_policy_document" "approval" {
   statement {
-    actions   = ["SES:SendEmail", "SES:SendRawEmail"]
+    actions   = ["ses:SendEmail", "ses:SendBulkTemplatedEmail"]
     resources = [aws_ses_email_identity.approval.arn]
 
     principals {
@@ -243,4 +257,23 @@ resource "aws_ses_identity_policy" "approval" {
   identity = aws_ses_email_identity.approval.arn
   name     = "infrastructure-live-ses-approval"
   policy   = data.aws_iam_policy_document.approval.json
+}
+
+resource "aws_ses_template" "approval" {
+  name    = "${var.step_function_name}-approval"
+  subject = "${var.step_function_name} Approval for path: {{path}}"
+  html    = <<EOF
+<form action="{{full_approval_api}}" method="post">
+<label for="action">Choose an action:</label>
+<select name="action" id="action">
+<option value="approve">Approve</option>
+<option value="reject">Reject</option>
+</select>
+<textarea name="comments" id="comments" style="width:96%;height:90px;background-color:lightgrey;color:black;border:none;padding:2%;font:14px/30px sans-serif;">
+Reasoning for action
+</textarea>
+<input type="hidden" id="recipient" name="recipient" value="{{email_address}}">
+<input type="submit" value="Submit" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
+</form>
+  EOF
 }
