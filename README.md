@@ -262,24 +262,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
     - Methods:
         - Slack
         - email
-    - Allow approver to send response of why deployment is rejected 
-        - log response in artifact bucket
-        - notify PR owner response via github PR page or email (if reason is private)
-
-- Artifact Bucket:
-    - PR ID 
-        - execution ID
-            - initial run order (get from cb plan out)
-            - get next stack (get from lambda next stack)
-                - update rollback stack
-                - update next stack
-            - directory
-                - attempt/retry number
-                    - min approvals
-                    - approval count
-                    - rejection responses
-                    - Codebuild plan artifact
-                    - Codebuild apply artifact
 
 - Add retries to deploy and rollback apply states
     - Have get rollback providers state within each map iteration
@@ -290,68 +272,64 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
         - deploy changes
         - deploy rollback changes
         - if rollback changes succeed consider it ready to be applied
-- create s3 approval bucket for count map: tasktoken: {count: required:}
-    - add approval count to simpledb 
-    - pr_id, approval count, approval_min
 
 - transform testing-img to packer template?
 
-Create order within step function execution instead of tf applying the order
-- codebuild plan-out pull s3 artifacts
-    - set account path via env vars to allow user to override order
-    - after map state completes, run next map state
-sf input:
-    - set next map state input
-    - allow user to override paths to run deployment with
-
 Artifact Bucket:
-    Initial Execution json:
-        state_machine/
+    Initial (TF Apply this module):
+        approval_mapping.json
+            #TODO: Add example approval_mapping.json
+    
+    Codebuild Trigger Step Function:
+        New PR Execution:
+            approval_mapping.json
+            executions/
+                execution_id.json
+                    {
+                        "DeploymentQueue": [
+                            ["dev/foo"], 
+                            ["dev/bar", "dev/baz]
+                        ],
+                        "PlanUptoDate": true
+                    }
+
+    Deployment in Progress:
+        approval_mapping.json
+        executions/
             execution_id.json
                 {
-                    "dev-account": {
-                        approvers = []
-                        "Deployments": []
-                    }
-                }
-    
-    Approval Request:
-        execution_id.json
-                {
-                    "dev-account": {
-                        approvers = []
-                        "Deployments": [
-                            {
-                                path = ""
-                                task_token = ""
-                                count
-                                required
-                                awaiting_approvals = []
-                                approval_results = {
-                                    "address": {
-                                        approved: True
-                                        comment: ""
+                    "DeploymentQueue": [
+                            ["dev/foo"], 
+                            ["dev/bar", "dev/baz]
+                        ],
+                    "PlanUptoDate": true | false
+                    "Accounts": {
+                        {
+                            "dev": {
+                                "Deployments": {
+                                    "dev/foo": {
+                                        "Approval": {
+                                            "Required": 2,
+                                            "Count": 1,
+                                            "Voters": [
+                                                "approver@example.com"
+                                            ]
+                                        },
+                                        "Rejection": {
+                                            "Required": 2,
+                                            "Count": 0,
+                                            "Voters": []
+                                        },
+                                        "AwaitingApprovals": [
+                                            "approver2@example.com"
+                                        ]
+                                        "TaskToken": "123"
                                     }
                                 }
                             }
-                        ]
+                        }
                     }
                 }
-
-    Approval Response:
-        execution_id.json
-            approval_results = {
-                "address": {
-                    approved: True
-                    comment: ""
-                }
-            }
-
-Figure out html response to send approver to:
-    - Step function console
-    - None (stays on email)
-
-
 
 ## Why not use Terraform Workspace for deployment flow?
 
@@ -369,3 +347,26 @@ Figure out html response to send approver to:
 - Create Workspace webhook with AGW API to tell Codebuild to pass next configuration when apply is successful
 - Create workspace for each AWS account
 - Create workspace notifaction for email/slack
+
+# Pipeline Flow 
+
+Codebuild: Queue incoming PRs
+
+Codebuild: Get depedency order and run Step Function
+    Triggers:
+        - Cloudwatch trigger by parent SF success
+        - Webhook associated with current PR no matter state of execution
+    - If new commit only contains changes to cfg within dependency run order:
+        - run tg plan-all from changed cfg
+        - reason: removes unnecessary tf plans that can be assumed to be not related to PR
+
+SF:
+    Lambda: 
+        - Create/Update s3 artifact run order
+        - Pass next cfg from depdency order to deployment
+    -> Codebuild deployment
+        Reject ->
+        - Rollback upstream cfg
+        - Allow for new commits for retries
+            - Fail Step function execution to prevent CW trigger next in queue
+            - Allow x retries of new commits to execution

@@ -1,0 +1,43 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - "echo Terraform version: $(terraform --version)"
+      - "echo Terragrunt version: $(terragrunt --version)"
+      - "echo TERRAGRUNT_WORKING_DIR: ${TERRAGRUNT_WORKING_DIR}"
+      - git remote -v
+      - aws configure set preview.sdb true
+      - |
+        if [ -z $PULL_REQUEST_ID ]; then
+            PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
+            PULL_REQUEST_ID=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
+        else
+            echo "Skip pulling Pull Request from queue"
+            echo "Using Overridden Pull Request ID"
+        fi
+      - "echo PULL_REQUEST_ID: $PULL_REQUEST_ID"
+      - "echo BASE_REF: $BASE_REF"
+      - BASE_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
+      - "echo BASE_REF_CURRENT_COMMIT: $BASE_REF_CURRENT_COMMIT"
+      - GIT_ROLLBACK_SOURCE_VERSION=refs/heads/$BASE_REF^{$BASE_REF_CURRENT_COMMIT}
+      - "echo GIT_ROLLBACK_SOURCE_VERSION: $GIT_ROLLBACK_SOURCE_VERSION"
+      - git fetch origin pull/$PULL_REQUEST_ID/head:pr-${PULL_REQUEST_ID}
+      - git checkout pr-${PULL_REQUEST_ID}
+      - HEAD_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
+      - GIT_SOURCE_VERSION=refs/pull/$PULL_REQUEST_ID/head^{$HEAD_REF_CURRENT_COMMIT}
+      - "echo GIT_SOURCE_VERSION: $GIT_SOURCE_VERSION"
+  build:
+    on-failure: ABORT
+    commands:
+      - |
+        if [ -z  $CODEBUILD_WEBHOOK_TRIGGER ]; then
+            log "Starting a new Step Function execution with new Pull Request"
+        else
+            log "Updating Current Step Function execution run queue"
+        fi
+  post_build:
+    commands:
+      - 
