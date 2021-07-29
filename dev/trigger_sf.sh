@@ -9,13 +9,18 @@ sf_input=$( echo $sf_input | jq \
 log "Step Function Input:" "INFO"
 log "${sf_input}" "INFO"
 
+sf_name="${pull_request_id}-${head_ref_current_commit_id}"
+log "Execution Name: ${sf_name}" "INFO"
 
-execution_id=$(aws stepfunctions start-execution --state-machine-arn $STATE_MACHINE_ARN --input "${sf_input}" \
-            | jq '.executionArn | split(":")[-1]')
-        
+log "Uploading execution artifact to S3" "INFO"
 aws s3api put-object \
     --acl private \
     --body $execution_file_path \
     --bucket $
     --key executions/$execution_id.json
-aws sdb delete-attributes --item-name $PULL_REQUEST_ID --domain-name $DOMAIN_NAME
+
+log "Starting Execution" "INFO"
+aws stepfunctions start-execution \
+    --state-machine-arn $STATE_MACHINE_ARN \
+    --name "${sf_name}" \
+    --input "${sf_input}"

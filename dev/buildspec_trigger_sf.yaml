@@ -8,35 +8,49 @@ phases:
       - "echo Terraform version: $(terraform --version)"
       - "echo Terragrunt version: $(terragrunt --version)"
       - "echo TERRAGRUNT_WORKING_DIR: ${TERRAGRUNT_WORKING_DIR}"
-      - git remote -v
-      - aws configure set preview.sdb true
-      - |
-        if [ -z $PULL_REQUEST_ID ]; then
-            PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
-            PULL_REQUEST_ID=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
-        else
-            echo "Skip pulling Pull Request from queue"
-            echo "Using Overridden Pull Request ID"
-        fi
-      - "echo PULL_REQUEST_ID: $PULL_REQUEST_ID"
-      - "echo BASE_REF: $BASE_REF"
-      - BASE_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
-      - "echo BASE_REF_CURRENT_COMMIT: $BASE_REF_CURRENT_COMMIT"
-      - GIT_ROLLBACK_SOURCE_VERSION=refs/heads/$BASE_REF^{$BASE_REF_CURRENT_COMMIT}
-      - "echo GIT_ROLLBACK_SOURCE_VERSION: $GIT_ROLLBACK_SOURCE_VERSION"
-      - git fetch origin pull/$PULL_REQUEST_ID/head:pr-${PULL_REQUEST_ID}
-      - git checkout pr-${PULL_REQUEST_ID}
-      - HEAD_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
-      - GIT_SOURCE_VERSION=refs/pull/$PULL_REQUEST_ID/head^{$HEAD_REF_CURRENT_COMMIT}
-      - "echo GIT_SOURCE_VERSION: $GIT_SOURCE_VERSION"
   build:
     on-failure: ABORT
     commands:
       - |
+        script_path="CODEBUILD_SRC_DIR_${secondary_source_identifier}"
         if [ -z  $CODEBUILD_WEBHOOK_TRIGGER ]; then
-            log "Starting a new Step Function execution with new Pull Request"
-        else
-            log "Updating Current Step Function execution run queue"
+          log "Starting a new Step Function execution with new Pull Request" "INFO"
+          if [ -z $PULL_REQUEST_ID ]; then
+            log "Pulling next Pull Request from queue" "INFO"
+            aws configure set preview.sdb true
+            PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
+            PULL_REQUEST_ID=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
+
+            log "Removing Pull Request from queue" "INFO"
+            aws sdb delete-attributes --item-name $PULL_REQUEST_ID --domain-name $DOMAIN_NAME
+          else
+              log "Skip pulling Pull Request from queue" "INFO"
+              log "Using Overridden Pull Request ID" "INFO"
+          fi
+          log "Pull Request ID: $PULL_REQUEST_ID" "DEBUG"
+          log "Base Ref: $BASE_REF" "DEBUG"
+          BASE_REF_CURRENT_COMMIT=$( git rev-parse --verify HEAD )
+          log "BASE_REF_CURRENT_COMMIT: $BASE_REF_CURRENT_COMMIT" "DEBUG"
+          GIT_ROLLBACK_SOURCE_VERSION=refs/heads/$BASE_REF^{$BASE_REF_CURRENT_COMMIT}
+          log "GIT_ROLLBACK_SOURCE_VERSION: $GIT_ROLLBACK_SOURCE_VERSION" "DEBUG"
+          git fetch origin pull/$PULL_REQUEST_ID/head:pr-${PULL_REQUEST_ID}
+          git checkout pr-${PULL_REQUEST_ID}
+      else
+        log "New commits were added to pull request" "INFO"
+        log "Stopping current Step Function execution" "INFO"
+        bash $script_path/stop_sf_exec.sh
+      fi
+
+        # Use PR's Codebuild plan/apply source_version
+        # Allows faster Codebuild builds since it only downloads PR instead of entire repo
+        head_ref_current_commit_id=$( git rev-parse --verify HEAD )
+        git_source_version=refs/pull/$PULL_REQUEST_ID/head^{$head_ref_current_commit_id}
+        log "Git Source Version: $git_source_version" "DEBUG"
+
+        bash $script_path/generate_dependency_order.sh
+
+        if [ -z "${DRY_RUN}" ]; then
+          bash $script_path/trigger_sf.sh
         fi
   post_build:
     commands:

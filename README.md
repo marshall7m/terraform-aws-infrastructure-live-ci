@@ -370,3 +370,16 @@ SF:
         - Allow for new commits for retries
             - Fail Step function execution to prevent CW trigger next in queue
             - Allow x retries of new commits to execution
+
+If expire, then return expire action then rerun Lambda
+queue
+
+If new commit:
+    - mark approval expired for ses response 
+    - Fail execution once:
+        - Apply Deployments are done
+
+
+
+TODO:
+
