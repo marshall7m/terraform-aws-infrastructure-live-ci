@@ -33,22 +33,6 @@ phases:
     on-failure: ABORT
     commands:
       - |
-        declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
-        script_logging_level="DEBUG"
-
-        log() {
-            local log_message=$1
-            local log_priority=$2
-
-            #check if level exists
-            [[ ${levels[$log_priority]} ]] || return 1
-
-            #check if level is enough
-            (( ${levels[$log_priority]} < ${levels[$script_logging_level]} )) && return 2
-
-            #log here
-            echo "${log_priority} : ${log_message}"
-        }
 
         ACCOUNT_PARENT_PATHS=(${ACCOUNT_PARENT_PATHS//,/ })
         # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)

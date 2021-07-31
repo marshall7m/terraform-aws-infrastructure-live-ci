@@ -14,7 +14,7 @@ variable "account_parent_cfg" {
   type = list(object({
     name                     = string
     paths                    = list(string)
-    approval_emails          = list(string)
+    voters                   = list(string)
     approval_count_required  = number
     rejection_count_required = number
   }))

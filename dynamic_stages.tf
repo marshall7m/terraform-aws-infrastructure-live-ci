@@ -370,6 +370,11 @@ module "codebuild_deployment_run_order" {
         name  = "ARTIFACT_BUCKET_NAME"
         type  = "PLAINTEXT"
         value = aws_s3_bucket.artifacts.id
+      },
+      {
+        name  = "APPROVAL_MAPPING_S3_KEY"
+        type  = "PLAINTEXT"
+        value = local.approval_mapping_s3_key
       }
     ]
   }

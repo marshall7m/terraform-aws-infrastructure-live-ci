@@ -212,7 +212,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | account\_id | AWS account id | `number` | n/a | yes |
-| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    paths                    = list(string)<br>    approval_emails          = list(string)<br>    approval_count_required  = number<br>    rejection_count_required = number<br>  }))</pre> | n/a | yes |
+| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    paths                    = list(string)<br>    voters                   = list(string)<br>    approval_count_required  = number<br>    rejection_count_required = number<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `"infrastructure-live"` | no |
 | apply\_cmd | Terragrunt/Terraform apply command to run on target paths | `string` | `"terragrunt run-all apply -auto-approve"` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
@@ -383,3 +383,5 @@ If new commit:
 
 TODO:
 
+- Create execution deployment path item within Codebuild logic
+- Use execution s3 artifact as only source of truth (not SF input)

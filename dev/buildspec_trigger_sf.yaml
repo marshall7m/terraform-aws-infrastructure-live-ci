@@ -11,8 +11,10 @@ phases:
   build:
     on-failure: ABORT
     commands:
+      - export SECONDARY_SOURCE_DIR="CODEBUILD_SRC_DIR_${secondary_source_identifier}"
       - |
-        script_path="CODEBUILD_SRC_DIR_${secondary_source_identifier}"
+        for file in $SECONDARY_SOURCE_DIR/*; do source $file; done
+
         if [ -z  $CODEBUILD_WEBHOOK_TRIGGER ]; then
           log "Starting a new Step Function execution with new Pull Request" "INFO"
           if [ -z $PULL_REQUEST_ID ]; then
@@ -35,11 +37,11 @@ phases:
           log "GIT_ROLLBACK_SOURCE_VERSION: $GIT_ROLLBACK_SOURCE_VERSION" "DEBUG"
           git fetch origin pull/$PULL_REQUEST_ID/head:pr-${PULL_REQUEST_ID}
           git checkout pr-${PULL_REQUEST_ID}
-      else
-        log "New commits were added to pull request" "INFO"
-        log "Stopping current Step Function execution" "INFO"
-        bash $script_path/stop_sf_exec.sh
-      fi
+        else
+          log "New commits were added to pull request" "INFO"
+          log "Stopping current Step Function execution" "INFO"
+          bash $SECONDARY_SOURCE_DIR/stop_sf_exec.sh
+        fi
 
         # Use PR's Codebuild plan/apply source_version
         # Allows faster Codebuild builds since it only downloads PR instead of entire repo
@@ -47,11 +49,11 @@ phases:
         git_source_version=refs/pull/$PULL_REQUEST_ID/head^{$head_ref_current_commit_id}
         log "Git Source Version: $git_source_version" "DEBUG"
 
-        bash $script_path/generate_dependency_order.sh
+        bash $SECONDARY_SOURCE_DIR/create_path_artifact.sh
 
         if [ -z "${DRY_RUN}" ]; then
-          bash $script_path/trigger_sf.sh
+          bash $SECONDARY_SOURCE_DIR/trigger_sf.sh
         fi
   post_build:
     commands:
-      - 
+     
