@@ -108,7 +108,8 @@ create_stack() {
         
         log "Parent: $(printf "\n\t%s" "${parent}")" "DEBUG"
         log "Dependencies: $(printf "\n\t%s" "${deps}")" "DEBUG"
-
+        
+        #TODO: filter out deps that haven't changed
         if [[ " ${diff_paths[@]} " =~ " ${parent} " ]]; then
             log "Found difference in plan" "DEBUG"
             stack=$( echo $stack | jq --arg parent "$parent" --arg deps "$deps" '.[$parent] += try ($deps | split("\n") | reverse) // []' )
@@ -116,22 +117,6 @@ create_stack() {
             log "Detected no difference in terraform plan for directory: ${parent}" "DEBUG"
         fi
     done <<< "$raw_stack"
-}
-
-
-create_source_versions() {
-    local base_source_version=$1
-    local head_source_version=$2
-
-    # Allows faster Codebuild builds since it only downloads PR instead of entire repo
-    source_versions=$(jq -n \
-        --arg base_source_version $base_source_version \
-        --arg head_source_version $head_source_version '
-        {
-            "BaseSourceVersion": $base_source_version,
-            "HeadSourceVersion": $head_source_version
-        }'
-    )
 }
 
 create_account_stacks() {
@@ -161,8 +146,7 @@ create_account_stacks() {
             ($stack | fromjson) as $stack
             | . +  {
                     ($account): {
-                        "Stack": $stack,
-                        "StackQueue": $stack
+                        "Stack": $stack
                     }
                 }' 
         )
@@ -174,9 +158,6 @@ create_execution_artifact() {
     local base_source_version=$1
     local head_source_version=$2
     local approval_mapping=$3
-    
-    log "Creating Source Version" "INFO"
-    create_source_versions $base_source_version $head_source_version
 
     log "Creating Account Approval Stacks" "INFO"
     create_account_stacks "$approval_mapping"
@@ -184,9 +165,24 @@ create_execution_artifact() {
     log "Creating Execution" "INFO"
     execution=$(jq -n \
         --arg account_stacks "$account_stacks" \
-        --arg source_versions "$source_versions" '
-        ($source_versions | fromjson) as $source_versions
+        --arg base_source_version $base_source_version \
+        --arg head_source_version $head_source_version \
+        --arg approval_mapping $approval_mapping '
             | ($account_stacks | fromjson) as $account_stacks
-            | $source_versions + $account_stacks'
+            | ($approval_mapping | fromjson) as $approval_mapping
+            | {
+                "AccountStack": ($approval_mapping | .keys[]),
+                "BaseSourceVersion": $base_source_version,
+                "HeadSourceVersion": $head_source_version
+            } + $account_stacks'
     )
 }
+
+#add to sf def in module
+# Allows faster Codebuild builds since it only downloads PR instead of entire repo
+
+# create initial account stack within tf module
+
+# if account stack is empty, then remove account from initial account stack
+
+#TODO: filter out deps that haven't changed

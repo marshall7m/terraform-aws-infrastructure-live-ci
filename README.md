@@ -382,5 +382,27 @@ If new commit:
 
 TODO:
 
-- Create execution deployment path item within Codebuild logic
-- Use execution s3 artifact as only source of truth (not SF input)
+- Fix Step function definition 
+    - Remove nested SF mapping
+
+get parent directories with deps not in keys
+
+pass dir to deployment flow
+
+if deployment succeeds, pass dir to function
+
+pop dir from any parent dependency list with dir
+
+repeat process
+
+
+Rollback?
+
+Rollback parent dir
+
+rollback parent dir's dependencies
+
+once rollback succeeds, repeat process until parent dir's dependency doesn't exists in keys
+
+
+deployment flow must output the path and pass path to lambda

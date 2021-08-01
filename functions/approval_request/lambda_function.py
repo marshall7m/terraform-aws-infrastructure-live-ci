@@ -3,10 +3,6 @@ import logging
 import json
 import os
 from botocore.exceptions import ClientError
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
-
 
 s3 = boto3.client('s3')
 ses = boto3.client('ses')
@@ -29,7 +25,7 @@ def lambda_handler(event, context):
 
     task_token = event['payload']['TaskToken']
     state_machine = event['payload']['StateMachine']
-    execution_name = event['payload']['ExecutionId']
+    execution_name = event['payload']['ExecutionName']
     account = event['payload']['Account']
     path = event['payload']['Path']
     
