@@ -13,7 +13,15 @@ ses = boto3.client('ses')
 log = logging.getLogger(__name__)
 
 def lambda_handler(event, context):
+    """
+    Creates approval object for input path and uploads to S3 execution artifact. Sends approval request email to
+    email addresses asssociated with path.
 
+    Individual path approval objects are created here and not within the trigger step function CodeBuild project 
+    to prevent unnecessary cluttering of the execution artifact and prevent any confusion on what paths are awaiting
+    approval. 
+    """
+    
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
 
@@ -21,10 +29,10 @@ def lambda_handler(event, context):
 
     task_token = event['payload']['TaskToken']
     state_machine = event['payload']['StateMachine']
-    execution_id = event['payload']['ExecutionId']
+    execution_name = event['payload']['ExecutionId']
     account = event['payload']['Account']
     path = event['payload']['Path']
-
+    
     approval_mapping = json.loads(s3.get_object(
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
         Key=os.environ['APPROVAL_MAPPING_S3_KEY']
@@ -53,7 +61,7 @@ def lambda_handler(event, context):
 
     execution = json.loads(s3.get_object(
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=f'{execution_id}.json',
+        Key=f'{execution_name}.json',
     )['Body'].read().decode())
     log.debug(f'Current Execution Data: {execution}')
 
@@ -63,11 +71,11 @@ def lambda_handler(event, context):
     s3.put_object(
         ACL='private',
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=f'{execution_id}.json',
+        Key=f'{execution_name}.json',
         Body=json.dumps(execution)
     )
 
-    full_approval_api = f'{os.environ["APPROVAL_API"]}?ex={execution_id}&sm={state_machine}&taskToken={task_token}&account={account}&path={path}'
+    full_approval_api = f'{os.environ["APPROVAL_API"]}?ex={execution_name}&sm={state_machine}&taskToken={task_token}&account={account}&path={path}'
     log.debug(f'API Full URL: {full_approval_api}')
 
     destinations = []

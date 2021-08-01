@@ -20,13 +20,13 @@ def lambda_handler(event, context):
 
     task_token = event['query']['taskToken']
     state_machine = event['query']['sm']
-    execution_id = event['query']['ex']
+    execution_name = event['query']['ex']
     account = event['query']['account']
     path = event['query']['path']
 
     execution = json.loads(s3.get_object(
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=f'{execution_id}.json',
+        Key=f'{execution_name}.json',
     )['Body'].read().decode())
     log.debug(f'Current Execution Data: {execution}')
     
@@ -106,7 +106,7 @@ def lambda_handler(event, context):
     s3.put_object(
         ACL='private',
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=f'{execution_id}.json',
+        Key=f'{execution_name}.json',
         Body=json.dumps(execution)
     )
 

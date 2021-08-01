@@ -1,27 +1,5 @@
 locals {
-  approval_msg = <<EOF
-States.Format('
-  This is an email requiring an approval for a step functions execution
-  Check the following information and click "Approve" link if you want to approve
-
-  Step Function State Machine: {}
-  Execution ID: {}
-
-  Approve:
-  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}?action=approve&ex={}&sm={}&taskToken={}
-
-  Reject:
-  ${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_resource.approval.path}?action=reject&ex={}&sm={}&taskToken={}
-  ',
-  $$.StateMachine.Id,
-  $$.Execution.Id,
-  $$.Execution.Id,
-  $$.StateMachine.Id,
-  $$.Task.Token,
-  $$.Execution.Id,
-  $$.StateMachine.Id,
-  $$.Task.Token)
-  EOF
+  buildspec_scripts_key = "build-scripts"
 }
 
 resource "aws_sfn_state_machine" "this" {
@@ -118,7 +96,7 @@ resource "aws_sfn_state_machine" "this" {
                                         FunctionName = module.lambda_approval_request.function_arn
                                         Payload = {
                                           StateMachine = "$$.StateMachine.Id"
-                                          ExecutionId  = "$$.Execution.Id"
+                                          ExecutionId  = "$$.Execution.Name"
                                           TaskToken    = "$$.Task.Token"
                                           Account      = "$.Account"
                                           Path         = "$.Path"
@@ -352,6 +330,11 @@ module "codebuild_deployment_run_order" {
     type                        = "LINUX_CONTAINER"
     environment_variables = [
       {
+        name  = "BUILD_NAME"
+        value = var.trigger_step_function_build_name
+        type  = "PLAINTEXT"
+      },
+      {
         name  = "STATE_MACHINE_ARN"
         value = aws_sfn_state_machine.this.arn
         type  = "PLAINTEXT"
@@ -375,6 +358,11 @@ module "codebuild_deployment_run_order" {
         name  = "APPROVAL_MAPPING_S3_KEY"
         type  = "PLAINTEXT"
         value = local.approval_mapping_s3_key
+      },
+      {
+        name  = "SECONDARY_SOURCE_IDENTIFIER"
+        type  = "PLAINTEXT"
+        value = local.buildspec_scripts_key
       }
     ]
   }

@@ -283,19 +283,18 @@ Artifact Bucket:
     Codebuild Trigger Step Function:
         New PR Execution:
             approval_mapping.json
-            executions/
                 execution_id.json
                     {
-                        "DeploymentQueue": [
-                            ["dev/foo"], 
-                            ["dev/bar", "dev/baz]
-                        ],
-                        "PlanUptoDate": true
+                        "Stack": {
+                            "dev/foo": ["dev/bar", "dev/baz"]
+                        },
+                        "StackQueue": {
+                            "dev/foo": ["dev/bar"]
+                        }
                     }
 
     Deployment in Progress:
         approval_mapping.json
-        executions/
             execution_id.json
                 {
                     "DeploymentQueue": [

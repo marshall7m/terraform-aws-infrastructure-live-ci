@@ -1,7 +1,7 @@
 #!/bin/bash
 
 declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
-script_logging_level="${script_logging_level:="DEBUG"}"
+script_logging_level="${script_logging_level:="INFO"}"
 
 log() {
     local log_message=$1
@@ -17,19 +17,20 @@ log() {
     echo "${log_priority} : ${log_message}"
 }
 
-update_codebuild_webhook() {
+create_pr_codebuild_webhook() {
 
-    local project_name=$1
+    local build_name=$1
     local base_ref=$2
     local head_ref=$3
 
-    log "Codebuild Project Name: ${project_name}" "DEBUG"
+    log "Codebuild Project Name: ${build_name}" "DEBUG"
     log "Base Ref: ${base_ref}" "DEBUG"
     log "Head Ref: ${head_ref}" "DEBUG"
 
+    #TODO: Add filepath filter for .hcl|.tf files from account paths
     filter_group=$(jq -n \
-        --arg BASE_REF $base_ref \
-        --arg HEAD_REF $head_ref \
+        --arg base_ref $base_ref \
+        --arg head_ref $head_ref \
         '[
             [
                 {
@@ -38,11 +39,11 @@ update_codebuild_webhook() {
                 },
                 {
                     "type": "BASE_REF",
-                    "pattern": "refs/heads/\($BASE_REF)"
+                    "pattern": "refs/heads/\($base_ref)"
                 },
                 {
                     "type": "HEAD_REF",
-                    "pattern": "refs/heads/\($HEAD_REF)"
+                    "pattern": "refs/heads/\($head_ref)"
                 }
             ]
         ]')
@@ -52,36 +53,8 @@ update_codebuild_webhook() {
 
     log "Updating Build Webhook" "DEBUG"
     aws codebuild update-webhook \
-        --project-name $project_name \
+        --project-name $build_name \
         --filter-groups $filter_group
-}
-
-expire_approval_requests() {
-    local bucket=$1
-    local key=$2
-
-    execution_path=$(basename $key)
-    
-    log "Getting Execution Artifact" "INFO"
-    aws s3api get-object \
-        --bucket $bucket \
-        --key $key \
-        "$execution_path" > /dev/null
-
-    execution=$(jq . "$execution_path")
-    log "Current Execution:" "DEBUG"
-    log "$execution" "DEBUG"
-
-    log "Updating Approval Status" "INFO"
-    updated_execution=$(echo $execution | jq '.PlanUptoDate = false')
-    log "Updated Execution:" "DEBUG"
-    log "$updated_execution" "DEBUG"
-
-    log "Uploading Updated Execution Artifact" "INFO"
-    aws s3api put-object \
-        --bucket $bucket \
-        --key $key \
-        --body "$execution_path" > /dev/null
 }
 
 create_stack() {
@@ -147,25 +120,32 @@ create_stack() {
 
 
 create_source_versions() {
-    source_versions=$(jq -n '{
-        "source_version": $source_version,
-        "rollback_source_version": $rollback_source_version
-    }')
+    local base_source_version=$1
+    local head_source_version=$2
+
+    # Allows faster Codebuild builds since it only downloads PR instead of entire repo
+    source_versions=$(jq -n \
+        --arg base_source_version $base_source_version \
+        --arg head_source_version $head_source_version '
+        {
+            "BaseSourceVersion": $base_source_version,
+            "HeadSourceVersion": $head_source_version
+        }'
+    )
 }
 
 create_account_stacks() {
-    
-    aws s3api get-object \
-    --bucket $ARTIFACT_BUCKET_NAME \
-    --key $APPROVAL_MAPPING_S3_KEY \
-    approval_mapping.json > /dev/null
-
-    approval_mapping=$(jq . approval_mapping.json)
-    log "Approval Mapping:" "DEBUG"
-    log "$approval_mapping" "DEBUG"
+    local approval_mapping=$1
 
     account_stacks=$(jq -n '{}')
-    while read -r account; do
+
+    #converts jq array to bash array
+    readarray -t approval_mapping < <( echo $approval_mapping | jq -c 'keys | .[]' )
+    log "Account Array: ${approval_mapping[*]}" "DEBUG"
+
+    for account in "${approval_mapping[@]}"; do
+        account=$( echo "${account}" | tr -d '"' )
+        
         log "account: $account" "DEBUG"
 
         log "Getting account stack" "DEBUG"
@@ -178,51 +158,35 @@ create_account_stacks() {
         account_stacks=$(echo $account_stacks | jq \
             --arg account $account \
             --arg stack "$stack" '
-                ($stack | fromjson) as $stack
-                | . +  {
-                        ($account): {
-                            "Stack": $stack,
-                            "StackQueue": $stack
-                        }
-                    }' )
-        
-        log "Execution:" "DEBUG"
-        log "$execution" "DEBUG"
-    done <<< $(echo $approval_mapping | jq -r 'keys | .[]')
-
+            ($stack | fromjson) as $stack
+            | . +  {
+                    ($account): {
+                        "Stack": $stack,
+                        "StackQueue": $stack
+                    }
+                }' 
+        )
+    done
 }
 
 create_execution_artifact() {
 
-    #join all artifact pieces into single json
+    local base_source_version=$1
+    local head_source_version=$2
+    local approval_mapping=$3
+    
+    log "Creating Source Version" "INFO"
+    create_source_versions $base_source_version $head_source_version
 
-    create_source_versions
-    create_account_stacks
+    log "Creating Account Approval Stacks" "INFO"
+    create_account_stacks "$approval_mapping"
 
+    log "Creating Execution" "INFO"
     execution=$(jq -n \
-        --arg account_stacks $account_stacks \
-        --arg repo_versions $source_versions \
-        '$account_stacks + $repo_versions'
+        --arg account_stacks "$account_stacks" \
+        --arg source_versions "$source_versions" '
+        ($source_versions | fromjson) as $source_versions
+            | ($account_stacks | fromjson) as $account_stacks
+            | $source_versions + $account_stacks'
     )
-}
-
-trigger_sf() {
-    sf_name="${pull_request_id}-${head_ref_current_commit_id}"
-    log "Execution Name: ${sf_name}" "INFO"
-
-    create_execution_artifact
-
-    execution > execution.json
-    log "Uploading execution artifact to S3" "INFO"
-    aws s3api put-object \
-        --acl private \
-        --body $execution_file_path \
-        --bucket $
-        --key executions/$execution_id.json
-
-    log "Starting Execution" "INFO"
-    aws stepfunctions start-execution \
-        --state-machine-arn $STATE_MACHINE_ARN \
-        --name "${sf_name}" \
-        --input "${sf_input}"
 }

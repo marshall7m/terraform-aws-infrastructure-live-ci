@@ -68,6 +68,12 @@ data "aws_kms_key" "s3" {
   key_id = "alias/aws/s3"
 }
 
+resource "aws_s3_bucket_object" "build_scripts" {
+  bucket = aws_s3_bucket.artifacts.id
+  key    = local.buildspec_scripts_key
+  source = "${path.module}/files/utils.sh"
+}
+
 resource "aws_s3_bucket_object" "approval_mapping" {
   bucket         = aws_s3_bucket.artifacts.id
   key            = local.approval_mapping_s3_key
