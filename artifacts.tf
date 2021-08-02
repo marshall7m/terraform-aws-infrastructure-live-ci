@@ -79,3 +79,25 @@ resource "aws_s3_bucket_object" "approval_mapping" {
   key            = local.approval_mapping_s3_key
   content_base64 = base64encode(format("%v", { for account in var.account_parent_cfg : account.name => account }))
 }
+
+data "aws_iam_policy_document" "execution_artifacts_access" {
+  statement {
+    sid    = "GetS3ArtifactObjects"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:ListBucket",
+      "s3:GetObjectVersion",
+      "s3:PutObject"
+    ]
+    resources = [
+      aws_s3_bucket.artifacts.arn,
+      "${aws_s3_bucket.artifacts.arn}/*"
+    ]
+  }
+}
+resource "aws_iam_policy" "execution_artifacts_access" {
+  name        = "${local.bucket_name}-access"
+  description = "Allows Read/Write access to step function execution files within artifact bucket"
+  policy      = data.aws_iam_policy_document.execution_artifacts_access.json
+}

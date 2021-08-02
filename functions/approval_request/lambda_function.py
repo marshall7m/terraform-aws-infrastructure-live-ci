@@ -36,7 +36,7 @@ def lambda_handler(event, context):
 
     log.debug(f'Approval Mapping: {approval_mapping}')
 
-    email_addresses = approval_mapping[account]['approval_emails']
+    email_addresses = approval_mapping[account]['voters']
     log.debug(f'Email Recipents: {email_addresses}')
 
     path_item = {

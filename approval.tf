@@ -169,22 +169,11 @@ module "lambda_approval_request" {
     SENDER_EMAIL_ADDRESS    = var.approval_request_sender_email
     SES_TEMPLATE            = aws_ses_template.approval.name
   }
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    aws_iam_policy.execution_artifacts_access.arn
+  ]
   statements = [
-    {
-      sid    = "GetS3ArtifactObjects"
-      effect = "Allow"
-      actions = [
-        "s3:GetObject",
-        "s3:ListBucket",
-        "s3:GetObjectVersion",
-        "s3:PutObject"
-      ]
-      resources = [
-        aws_s3_bucket.artifacts.arn,
-        "${aws_s3_bucket.artifacts.arn}/*"
-      ]
-    },
     {
       sid    = "SESSendAccess"
       effect = "Allow"
@@ -218,22 +207,9 @@ module "lambda_approval_response" {
     ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
   }
 
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
-  statements = [
-    {
-      sid    = "GetS3ArtifactObjects"
-      effect = "Allow"
-      actions = [
-        "s3:GetObject",
-        "s3:ListBucket",
-        "s3:GetObjectVersion",
-        "s3:PutObject"
-      ]
-      resources = [
-        aws_s3_bucket.artifacts.arn,
-        "${aws_s3_bucket.artifacts.arn}/*"
-      ]
-    }
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    aws_iam_policy.execution_artifacts_access.arn
   ]
 }
 
