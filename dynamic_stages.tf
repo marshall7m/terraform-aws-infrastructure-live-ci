@@ -1,5 +1,6 @@
 locals {
   buildspec_scripts_key = "build-scripts"
+  pr_queue_key          = "pr_queue.json"
 }
 
 resource "aws_sfn_state_machine" "this" {
@@ -305,11 +306,6 @@ module "codebuild_trigger_sf" {
         type  = "PLAINTEXT"
       },
       {
-        name  = "DOMAIN_NAME"
-        value = aws_simpledb_domain.queue.id
-        type  = "PLAINTEXT"
-      },
-      {
         name  = "TERRAGRUNT_WORKING_DIR"
         type  = "PLAINTEXT"
         value = var.terragrunt_parent_dir
@@ -331,6 +327,7 @@ module "codebuild_trigger_sf" {
       }
     ]
   }
+  role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
 
   role_policy_statements = [
     {
@@ -338,14 +335,9 @@ module "codebuild_trigger_sf" {
       effect    = "Allow"
       actions   = ["states:StartExecution"]
       resources = [aws_sfn_state_machine.this.arn]
-    },
-    {
-      sid       = "SimpledbQueryAccess"
-      effect    = "Allow"
-      actions   = ["sdb:Select"]
-      resources = ["arn:aws:sdb:${data.aws_region.current.name}:${var.account_id}:domain/${var.simpledb_name}"]
     }
   ]
+
 }
 
 module "sf_role" {
@@ -430,27 +422,19 @@ module "codebuild_queue_pr" {
     type         = "LINUX_CONTAINER"
     environment_variables = [
       {
-        name  = "DOMAIN_NAME"
+        name  = "ARTIFACT_BUCKET_NAME"
         type  = "PLAINTEXT"
-        value = var.simpledb_name
+        value = aws_s3_bucket.artifacts.id
+      },
+      {
+        name  = "ARTIFACT_BUCKET_PR_QUEUE_KEY"
+        type  = "PLAINTEXT"
+        value = local.pr_queue_key
       }
     ]
   }
 
-  role_policy_statements = [
-    {
-      sid    = "SimpleDBWriteAccess"
-      effect = "Allow"
-      actions = [
-        "sdb:PutAttributes"
-      ]
-      resources = ["arn:aws:sdb:${data.aws_region.current.name}:${var.account_id}:domain/${var.simpledb_name}"]
-    }
-  ]
-}
-
-resource "aws_simpledb_domain" "queue" {
-  name = var.simpledb_name
+  role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
 }
 
 module "terra_img" {

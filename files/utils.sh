@@ -153,7 +153,43 @@ create_account_stacks() {
     done
 }
 
-create_execution_artifact() {
+get_deploy_stack() {
+    local stack=$1
+
+    account_stack=$(echo $stack | jq '.AccountStack')
+    pop_stack "$stack"
+
+    account_peek=$peek
+    account_stack=$updated_stack
+
+    declare -A deploy_stack
+    for account in "${account_peek[@]}"; do
+        account_stack=$(echo $stack | jq '.AccountStack')
+        deploy_stack+=($)
+}
+
+pop_stack() {
+    stack=$1
+
+    log "Getting peek" "DEBUG"
+    peek=$( echo $stack | jq '[to_entries[] | select(.value == []) | .key]')
+    log "Peek:" "DEBUG"
+    log "$peek" "DEBUG"
+
+    log "Getting updated stack" "DEBUG"
+    updated_stack=$( echo $stack | jq --arg peek "$peek" '
+        ($peek | fromjson) as $peek 
+            | with_entries(select([.key] 
+            | inside($peek) | not))' 
+    )
+    log "Updated Stack:" "DEBUG"
+    log "$updated_stack" "DEBUG"
+}
+
+stack=$(jq -n '{"foo": ["do"], "baz": []}')
+pop_stack "$stack"
+
+create_commit_stack() {
 
     local base_source_version=$1
     local head_source_version=$2
@@ -166,23 +202,11 @@ create_execution_artifact() {
     execution=$(jq -n \
         --arg account_stacks "$account_stacks" \
         --arg base_source_version $base_source_version \
-        --arg head_source_version $head_source_version \
-        --arg approval_mapping $approval_mapping '
+        --arg head_source_version $head_source_version '
             | ($account_stacks | fromjson) as $account_stacks
-            | ($approval_mapping | fromjson) as $approval_mapping
             | {
-                "AccountStack": ($approval_mapping | .keys[]),
                 "BaseSourceVersion": $base_source_version,
                 "HeadSourceVersion": $head_source_version
             } + $account_stacks'
     )
 }
-
-#add to sf def in module
-# Allows faster Codebuild builds since it only downloads PR instead of entire repo
-
-# create initial account stack within tf module
-
-# if account stack is empty, then remove account from initial account stack
-
-#TODO: filter out deps that haven't changed

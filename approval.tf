@@ -171,7 +171,7 @@ module "lambda_approval_request" {
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.execution_artifacts_access.arn
+    aws_iam_policy.artifact_bucket_access.arn
   ]
   statements = [
     {
@@ -209,7 +209,7 @@ module "lambda_approval_response" {
 
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.execution_artifacts_access.arn
+    aws_iam_policy.artifact_bucket_access.arn
   ]
 }
 

@@ -14,61 +14,92 @@ phases:
       - |
         source "CODEBUILD_SRC_DIR_${SECONDARY_SOURCE_IDENTIFIER}/utils.sh"
 
-        if [ -z  $CODEBUILD_WEBHOOK_TRIGGER ]; then
-          log "Starting a new Step Function execution with new Pull Request" "INFO"
-          if [ -z $pull_request_id ]; then
-            log "Pulling next Pull Request from queue" "INFO"
-            aws configure set preview.sdb true
-            PULL_REQUEST_RECORD=$(aws sdb select --select-expression 'SELECT * FROM `'"$DOMAIN_NAME"'`' --max-items 1 | jq '.Items[0]')
-            pull_request_id=$(echo $PULL_REQUEST_RECORD | jq '.Name' | tr -d '"')
-            head_ref=$(echo $PULL_REQUEST_RECORD | jq '.HeadRef' | tr -d '"')
+        aws s3api get-object \
+          --bucket $ARTIFACT_BUCKET_NAME \
+          --key $ARTIFACT_BUCKET_PR_QUEUE_KEY \
+          pr_queue.json > /dev/null
 
-            log "Removing Pull Request from queue" "INFO"
-            aws sdb delete-attributes --item-name $pull_request_id --domain-name $DOMAIN_NAME
-          else
-              log "Skip pulling Pull Request from queue" "INFO"
-              log "Using Overridden Pull Request ID" "INFO"
-          fi
+        pr_queue=$(jq . pr_queue.json)
+        log "Pull Request Queue:" "DEBUG"
+        log "$pr_queue" "DEBUG"
+
+        in_progress=$( echo $pr_queue | jq '.InProgress' )
+        if [ $in_progress == "" ] ; then
+          create_new_artifact=true
+          log "Starting a new Step Function execution with new Pull Request" "INFO"
+          
+          log "Pulling next Pull Request from queue" "DEBUG"
+          pull_request_id=$( echo $pr_queue | jq '.Queue[0]' )
           log "Pull Request ID: $pull_request_id" "DEBUG"
+
+          head_ref=$( echo $pr_queue | jq '.BaseRef' )
+
+          log "Removing Pull Request from queue" "INFO"
+          updated_pr_queue=$( echo $pr_queue | jq 'del(.Queue[0])' )
+          
+          echo "$updated_pr_queue" > $pr_queue.json
+          log "Uploading Updated PR Queue" "DEBUG"
+          aws s3api put-object \
+            --acl private \
+            --body ./pr_queue.json \
+            --bucket $ARTIFACT_BUCKET_NAME \
+            --key $ARTIFACT_BUCKET_PR_QUEUE_KEY.json
+
+          log "Locking Deployments only from PR"
+          create_pr_codebuild_webhook $BUILD_NAME $BASE_REF $head_ref
+
           git fetch origin pull/$pull_request_id/head:pr-${pull_request_id}
-          git checkout pr-${pull_request_id}
-          create_pr_codebuild_webhook $BUILD_NAME $BASE_REF $HEAD_REF
-        else
+          git checkout pr-${pull_request_id}  
+        
+        elif [ -n  $CODEBUILD_WEBHOOK_TRIGGER ]; then
+          create_new_artifact=true
+
+          log "New commits were added" "INFO"
+
           pull_request_id=$( echo "${CODEBUILD_WEBHOOK_TRIGGER}" | cut -d '/' -f 2 )
           log "Pull Request ID: $pull_request_id" "DEBUG"
 
-          log "New commits were added to pull request" "INFO"
-        fi
+          if [ -z "${DRY_RUN}" ]; then
+            current_execution_arn=$(aws stepfunctions list-executions \
+              --state-machine-arn $STATE_MACHINE_ARN \
+              --status-filter "RUNNING" | jq '.executions | .[] | .executionArn'
+            )
 
-        log "Base Ref: $BASE_REF" "DEBUG"
-        base_source_version=refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}
-        log "Base Ref Source Version: $base_source_version" "DEBUG"
+            log "Stopping Step Function execution: $current_execution_arn" "INFO"
+            aws stepfunctions stop-execution \
+              --execution-arn $current_execution_arn \
+              --cause "New commits were added to pull request"
+          fi
+        fi
 
         head_source_version=refs/pull/$pull_request_id/head^{$( git rev-parse --verify HEAD )}
         log "Head Ref Source Version: $head_source_version" "DEBUG"
 
-        aws s3api get-object \
-          --bucket $ARTIFACT_BUCKET_NAME \
-          --key $APPROVAL_MAPPING_S3_KEY \
-          approval_mapping.json > /dev/null
+        if [ -n $create_new_artifact ]; then
+        
+          log "Base Ref: $BASE_REF" "DEBUG"
+          base_source_version=refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}
+          log "Base Ref Source Version: $base_source_version" "DEBUG"
 
-        approval_mapping=$(jq . approval_mapping.json)
-        log "Approval Mapping:" "DEBUG"
-        log "$approval_mapping" "DEBUG"
+          head_source_version=refs/pull/$pull_request_id/head^{$( git rev-parse --verify HEAD )}
+          log "Head Ref Source Version: $head_source_version" "DEBUG"
 
-        create_execution_artifact $base_source_version $head_source_version "$approval_mapping"
+          aws s3api get-object \
+            --bucket $ARTIFACT_BUCKET_NAME \
+            --key $APPROVAL_MAPPING_S3_KEY \
+            approval_mapping.json > /dev/null
 
+          approval_mapping=$(jq . approval_mapping.json)
+          log "Approval Mapping:" "DEBUG"
+          log "$approval_mapping" "DEBUG"
+
+          create_commit_stack $base_source_version $head_source_version "$approval_mapping"
+        fi
+        
+        get_deploy_stack $commit_stack
+        
+        
         if [ -z "${DRY_RUN}" ]; then
-          current_execution_arn=$(aws stepfunctions list-executions \
-            --state-machine-arn $STATE_MACHINE_ARN \
-            --status-filter "RUNNING" | jq '.executions | .[] | .executionArn'
-          )
-
-          log "Stopping Step Function execution: $current_execution_arn" "INFO"
-          aws stepfunctions stop-execution \
-            --execution-arn $current_execution_arn \
-            --cause "New commits were added to pull request"
-          
           execution_name="${head_source_version}"
           log "Execution Name: ${execution_name}" "INFO"
 
@@ -84,6 +115,6 @@ phases:
           aws stepfunctions start-execution \
               --state-machine-arn $STATE_MACHINE_ARN \
               --name "${execution_name}" \
-              --input '"input": "{}"'
+              --input $sf_input
           fi
      

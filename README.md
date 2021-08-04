@@ -230,7 +230,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | cmk\_arn | AWS KMS CMK (Customer Master Key) ARN used to encrypt Step Function artifacts | `string` | `null` | no |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
-| dynamodb\_tags | Tags to add to DynamoDB | `map(string)` | `{}` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
 | get\_rollback\_providers\_build\_name | CodeBuild project name for getting new provider resources to destroy on deployment rollback | `string` | `"infrastructure-live-ci-get-rollback-providers"` | no |
 | github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used to give read access to the payload validator function to get file that differ between commits"` | no |
@@ -241,9 +240,8 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
-| queue\_pr\_build\_name | AWS CodeBuild project name for the build that writes to the PR queue table hosted on AWS DynamodB | `string` | `"infrastructure-live-ci-queue-pr"` | no |
+| queue\_pr\_build\_name | AWS CodeBuild project name for the build that queues PRs for the Step Function deployment | `string` | `"infrastructure-live-ci-queue-pr"` | no |
 | repo\_name | Name of the GitHub repository | `string` | n/a | yes |
-| simpledb\_name | Name of the AWS SimpleDB domain used for queuing repo PRs | `string` | `"infrastructure-live-ci-PR-queue"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_img | Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects | `string` | `null` | no |
 | terragrunt\_parent\_dir | Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on<br>to retrieve terragrunt child directories that contain differences within their respective plan. Defaults<br>to the root of `var.repo_name` | `string` | `"./"` | no |
@@ -251,9 +249,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 ## Outputs
 
-| Name | Description |
-|------|-------------|
-| queue\_db\_name | AWS SimpleDB domanin name used for queueing PRs |
+No output.
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
@@ -379,12 +375,6 @@ If new commit:
         - Apply Deployments are done
 
 
-
-TODO:
-
-- Fix Step function definition 
-    - Remove nested SF mapping
-
 get parent directories with deps not in keys
 
 pass dir to deployment flow
@@ -406,3 +396,64 @@ once rollback succeeds, repeat process until parent dir's dependency doesn't exi
 
 
 deployment flow must output the path and pass path to lambda
+
+CW event for SF success:
+GH webhook for new commits -> Codebuild generate order
+
+CW & GH webhook execution name via head_ref commit_id given source version is with PR
+
+if nothing left in queue, checkout next PR ID
+webhook deactivated if new PR (artifact queue is empty)
+
+Artifact bucket:
+- pr_queue.json:
+    # PR Ids
+    {
+        Queue: [
+            {
+                "ID": 1
+                "BaseRef": master
+                "HeadRef": "feature"
+                "Stack": {
+                    dev: {
+                        depends_on: []
+                        stack: {
+                            "foo": {
+                                rollback: all | single ?
+                                depends_on: ["bar"]
+                            }
+                            "baz": []
+                        }
+                    }
+                }
+            },
+            {
+                "ID": 2
+                "BaseRef": master
+                "HeadRef": "feature-2"
+            }
+        ]
+        InProgress: "1"
+    }
+
+
+- run-{pr}-{short-commit-id}-{hash}/
+    - approval.json
+    - terraform.tfstate
+    - Error/logs
+
+
+SF input:
+{
+    Path: ""
+    Rollback: false
+    SourceVersions:
+}
+TODO:
+- change artifact bucket structure
+- Use pr_queue as the entire step function queue json
+    - Update:
+        - buildspec_trigger_sf
+        - all lambda approval functions
+        - sf definition
+- Add SF task to update PR InProgress

@@ -4,7 +4,6 @@ env:
 phases:
   pre_build:
       commands:
-        - aws configure set preview.sdb true
         - pr_id=$(echo $CODEBUILD_SOURCE_VERSION | cut -d "/" -f 2)
         - "echo Pull Request ID: ${pr_id}"
         - base_ref=$(echo $CODEBUILD_WEBHOOK_BASE_REF | cut -d "/" -f 3)
@@ -12,19 +11,35 @@ phases:
         - head_ref=$(echo $CODEBUILD_WEBHOOK_HEAD_REF | cut -d "/" -f 3)
         - "echo Head Ref: ${head_ref}"
         - "echo Build Number: ${CODEBUILD_BUILD_NUMBER}"
-        - "echo Queue DB: ${DOMAIN_NAME}"
+        - "echo Artifact Bucket: ${ARTIFACT_BUCKET_NAME}"
+        - "echo Bucket Key: ${ARTIFACT_BUCKET_PR_QUEUE_KEY}"
       on-failure: ABORT
   build:
     commands:
       - |
-        attr=$( jq -n \
+        echo "Getting Current PR Queue"
+        aws s3api get-object \
+          --bucket $ARTIFACT_BUCKET_NAME \
+          --key $ARTIFACT_BUCKET_PR_QUEUE_KEY \
+          pr_queue.json > /dev/null
+        
+        pr_queue=$(jq . pr_queue.json 
+          | jq \
           --arg base_ref "$base_ref" \
           --arg head_ref "$head_ref" \
-          --arg pr_id "$pr_id" \
-          '[{Name: "BaseRef", Value: $base_ref, Replace: true}, {Name: "HeadRef", Value: $head_ref, Replace: true}]' )
-        echo Record Attributes: $attr
-      
-        aws sdb put-attributes \
-          --domain-name ${DOMAIN_NAME} \
-          --item-name ${pr_id} \
-          --attributes "$attr" 
+          --arg pr_id "$pr_id" '
+          .Queue
+              | . + {
+                "ID": $pr_id,
+                "BaseRef": $base_ref,
+                "HeadRef": $head_ref
+              }
+          ' 
+        )
+        
+        echo "$pr_queue" > $pr_queue.json
+        aws s3api put-object \
+          --acl private \
+          --body ./pr_queue.json \
+          --bucket $ARTIFACT_BUCKET_NAME \
+          --key $ARTIFACT_BUCKET_PR_QUEUE_KEY.json

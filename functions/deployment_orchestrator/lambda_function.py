@@ -26,7 +26,6 @@ def lambda_handler(event, context):
 
     account_peek, _ = pop_stack(execution['AccountStack'])
     
-    
     deploy_stack = []
     for account in account_peek:
         account_deploy_peek, account_deploy_stack = pop_stack(execution[account])

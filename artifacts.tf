@@ -80,7 +80,16 @@ resource "aws_s3_bucket_object" "approval_mapping" {
   content_base64 = base64encode(format("%v", { for account in var.account_parent_cfg : account.name => account }))
 }
 
-data "aws_iam_policy_document" "execution_artifacts_access" {
+resource "aws_s3_bucket_object" "pr_queue" {
+  bucket = aws_s3_bucket.artifacts.id
+  key    = local.pr_queue_key
+  content_base64 = base64encode(format("%v", {
+    Queue      = []
+    InProgress = ""
+  }))
+}
+
+data "aws_iam_policy_document" "artifact_bucket_access" {
   statement {
     sid    = "GetS3ArtifactObjects"
     effect = "Allow"
@@ -96,8 +105,10 @@ data "aws_iam_policy_document" "execution_artifacts_access" {
     ]
   }
 }
-resource "aws_iam_policy" "execution_artifacts_access" {
+resource "aws_iam_policy" "artifact_bucket_access" {
   name        = "${local.bucket_name}-access"
   description = "Allows Read/Write access to step function execution files within artifact bucket"
-  policy      = data.aws_iam_policy_document.execution_artifacts_access.json
+  policy      = data.aws_iam_policy_document.artifact_bucket_access.json
 }
+
+

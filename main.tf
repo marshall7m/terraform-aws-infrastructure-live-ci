@@ -62,6 +62,9 @@ module "codebuild_terraform_deploy" {
     location            = data.github_repository.this.http_clone_url
     report_build_status = false
   }
+
+  role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
+
 }
 
 data "github_repository" "this" {

@@ -202,14 +202,8 @@ variable "cloudwatch_event_name" {
   default     = "infrastructure-live-execution-event"
 }
 
-variable "dynamodb_tags" {
-  description = "Tags to add to DynamoDB"
-  type        = map(string)
-  default     = {}
-}
-
 variable "queue_pr_build_name" {
-  description = "AWS CodeBuild project name for the build that writes to the PR queue table hosted on AWS DynamodB"
+  description = "AWS CodeBuild project name for the build that queues PRs for the Step Function deployment"
   type        = string
   default     = "infrastructure-live-ci-queue-pr"
 }
@@ -219,13 +213,6 @@ variable "trigger_step_function_build_name" {
   type        = string
   default     = "infrastructure-live-ci-trigger-sf"
 }
-
-variable "simpledb_name" {
-  description = "Name of the AWS SimpleDB domain used for queuing repo PRs"
-  type        = string
-  default     = "infrastructure-live-ci-PR-queue"
-}
-
 # S3 bucket #
 
 variable "artifact_bucket_name" {
