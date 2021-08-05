@@ -2,10 +2,6 @@ checkout_pr() {
     return
 }
 
-get_git_root() {
-    echo "$PWD"
-}
-
 get_rel_path() {
     local rel_to=$1
     local path=$2

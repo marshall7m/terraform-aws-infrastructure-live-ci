@@ -116,3 +116,6 @@ EOT
 }
 
 trigger_sf
+
+
+# generate local verison of testing repo

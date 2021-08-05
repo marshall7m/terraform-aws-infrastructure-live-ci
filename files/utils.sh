@@ -12,8 +12,9 @@ log() {
     # returns exit status 0 instead of 2 to prevent `set -e ` from exiting if log priority doesn't meet log level
     (( ${levels[$log_priority]} < ${levels[$script_logging_level]} )) && return
 
-    #log here
-    echo "${log_priority} : ${log_message}"
+    # redirects log message to stderr (>&2) to prevent cases where sub-function
+    # uses log() and sub-function stdout results and log() stdout results are combined
+    echo "${log_priority} : ${log_message}" >&2
 }
 
 create_pr_codebuild_webhook() {
@@ -88,67 +89,82 @@ get_rel_path() {
     echo "$(xargs realpath -e --relative-to=$rel_to $path)"
 }
 
-create_stack() {
-    local terragrunt_working_dir=$1
+get_diff_paths() {
+    local tg_plan_out=$1
+    local rel_to=$2
 
-    tg_plan_out=$(get_tg_plan_out $terragrunt_working_dir)
-    # gets absolute path to the root of git repo
-    
-    git_root=$(get_git_root)
-    echo "$git_root"
-    exit 1
     # Get git repo root path relative path to the directories that terragrunt detected a difference between their tf state and their cfg
     # use (\n|\s|\t)+ since output format may differ between terragrunt versions
     # use grep for single line parsing to workaround lookbehind fixed width constraint
-    diff_paths=($(echo "$tg_plan_out" | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])' | get_rel_path "$git_root" $1))
-    echo "blue"
-    echo "${diff_paths[*]}"
-    exit 1
-    if [ ${#diff_paths[@]} -ne 0 ]; then
-        log "Directories with difference in terraform plan:" "DEBUG"
-        log "$(printf "\n\t%s" "${diff_paths[*]}")" "DEBUG"
-    else
-        log "Detected no directories with differences in terraform plan" "INFO"
-        log "Command Output:" "DEBUG"
-        log "$tg_plan_out" "DEBUG"
-        exit 1
-    fi
+    diff_paths=($(echo "$tg_plan_out" | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])' | get_rel_path "$rel_to" $1))
+    echo "${diff_paths}"
+}
 
-    # terragrunt run-all plan run order
+get_parsed_stack() {
+    local tg_plan_out=$1
+    local rel_to=$2
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     raw_stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
+
+    echo "$tg_plan_out"
     log "Raw Stack: $(printf "\n\t%s" "$raw_stack")" "DEBUG"
-
-    stack=$(jq -n '{}')
-
+    
+    parsed_stack=$(jq -n '{}')
     while read -r line; do
         log "Stack Layer: $(printf "\n\t%s\n" "$line")" "DEBUG"
-        parent=$( echo "$line" | grep -Po '.+?(?=\s\(excluded:)' | get_rel_path $git_root $1 )
+        parent=$( echo "$line" | grep -Po '.+?(?=\s\(excluded:)' | get_rel_path $rel_to $1 )
         deps=$( echo "$line" | grep -Po 'dependencies:\s+\[\K.+?(?=\])' | grep -Po '.+?(?=,\s|$)' | get_rel_path "$git_root" $1 )
         
         log "Parent: $(printf "\n\t%s" "${parent}")" "DEBUG"
         log "Dependencies: $(printf "\n\t%s" "${deps}")" "DEBUG"
-        
-        #TODO: filter out deps that haven't changed
-        if [[ " ${diff_paths[@]} " =~ " ${parent} " ]]; then
-            log "Found difference in plan" "DEBUG"
-            stack=$( echo $stack | jq --arg parent "$parent" --arg deps "$deps" '.[$parent] += try ($deps | split("\n") | reverse) // []' )
-        else
-            log "Detected no difference in terraform plan for directory: ${parent}" "DEBUG"
-        fi
+        parsed_stack=$( echo $parsed_stack 
+            | jq --arg parent "$parent" --arg deps "$deps" '
+                .[$parent] += try ($deps | split("\n") | reverse) // []' 
+        )
     done <<< "$raw_stack"
+
+    echo "$parsed_stack"
+}
+
+create_stack() {
+    local terragrunt_working_dir=$1
+
+    tg_plan_out=$(get_tg_plan_out $terragrunt_working_dir)
+    
+    # gets absolute path to the root of git repo
+    git_root=$(get_git_root)
+    
+    log "Git Root: $git_root" "DEBUG"
+
+    diff_paths=$(get_diff_paths $tg_plan_out $git_root)
+    num_diff_paths="${#diff_paths[@]}"
+    log "Terragrunt Paths with Detected Difference: $(printf "\n\t%s" "$diff_paths")" "DEBUG"
+    log "Count: $num_diff_paths" "DEBUG"
+
+    parsed_stack=$(get_parsed_stack $tg_plan_out $git_root)
+    log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
+    exit 1
+    log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
+    stack=$( echo $parsed_stack | jq \
+        --arg diff_paths $diff_paths \
+        --arg parsed_stack $parsed_stack '
+        . | select( | contains($diff_paths) )
+        '
+    )
 
     echo "$stack"
 }
 
-create_account_stacks() {
-    local approval_mapping="$1"
+create_account_stacks() {   
+    local approval_mapping=$1
 
     account_stacks=$(jq -n '{}')
-
-    #converts jq array to bash array
+    
+    log "Converting Approval Mapping to Bash Array" "DEBUG"
     readarray -t approval_mapping < <( echo "$approval_mapping" | jq -c 'keys | .[]' )
     log "Account Array: ${approval_mapping[*]}" "DEBUG"
-
+    
     for account in "${approval_mapping[@]}"; do
         account=$( echo "${account}" | tr -d '"' )
         
@@ -208,28 +224,6 @@ pop_stack() {
     )
     log "Updated Stack:" "DEBUG"
     log "$updated_stack" "DEBUG"
-}
-
-create_commit_stack() {
-    #TODO: Figure out why func doesn't output stdout
-    local base_source_version="$1"
-    local head_source_version="$2"
-    local approval_mapping="$3"
-    exit 1
-    log "Creating Account Approval Stacks" "INFO"
-    account_stacks=$(create_account_stacks "$approval_mapping")
-
-    log "Creating Execution" "INFO"
-    echo $(jq -n \
-        --arg account_stacks "$account_stacks" \
-        --arg base_source_version $base_source_version \
-        --arg head_source_version $head_source_version '
-            | ($account_stacks | fromjson) as $account_stacks
-            | {
-                "BaseSourceVersion": $base_source_version,
-                "HeadSourceVersion": $head_source_version
-            } + $account_stacks'
-    )
 }
 
 checkout_pr() {
@@ -352,17 +346,18 @@ trigger_sf() {
         log "$approval_mapping" "DEBUG"
 
         log "Getting Stacks" "INFO"
-        # stack=$(create_commit_stack \
-        #     "$base_source_version" \
-        #     "$head_source_version" \
-        #     "$approval_mapping"
-        # )
-        stack=$( create_commit_stack "foo" "bar" "baz" )
-
+        account_stacks=$(create_account_stacks "$approval_mapping")
+        exit 1
         log "Adding Stacks to PR Queue"  "INFO"
         pr_queue=$( echo $pr_queue | jq \
-            --arg stack $stack '
-            .Queue.Stack = $stack
+            --arg stack $stack \
+            --arg base_source_version $base_source_version \
+            --arg head_source_version $head_source_version '
+            .InProgress | . + {
+                "Stack": $stack,
+                "BaseSourceVersion": $base_source_version,
+                "HeadSourceVersion": $head_source_version
+            }
             '
         )
         

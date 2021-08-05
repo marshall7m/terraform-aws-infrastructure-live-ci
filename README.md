@@ -436,6 +436,21 @@ Artifact bucket:
         InProgress: "1"
     }
 
+[
+    {
+        "dev": {
+            "foo": ["bar"]
+        }
+    }
+]
+Default Rollback:
+rollback all deps failures and rollback single for PR target
+    - Given deps failure will likely be unrelated to PR and will result in separate PR to fix it
+    - If the PR modifies a leaf Terragrunt directory, rollback will only be for the leaf Terragrunt directory
+
+Where to define rollback:
+    - In Approval response
+    - PR committer?
 
 - run-{pr}-{short-commit-id}-{hash}/
     - approval.json
@@ -456,10 +471,7 @@ TODO:
         - buildspec_trigger_sf
         - all lambda approval functions
         - sf definition
-- Add SF task to update PR InProgress
-
-
-
+- Make sure buildspec_queue_pr updates head_ref
 Successful deployment
     - Pass next group
 New commit
