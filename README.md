@@ -457,3 +457,13 @@ TODO:
         - all lambda approval functions
         - sf definition
 - Add SF task to update PR InProgress
+
+
+
+Successful deployment
+    - Pass next group
+New commit
+    - Update deployment stack
+    - Update head version
+New PR
+    - Get next in queue
