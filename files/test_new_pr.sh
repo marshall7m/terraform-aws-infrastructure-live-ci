@@ -26,19 +26,33 @@ get_pr_queue() {
     ')
 }
 
+# get_approval_mapping() {
+#     echo $(jq -n '
+#         {
+#             "Testing-Env": {
+#                 "Name": "Testing-Env",
+#                 "Paths": ["dev-account"],
+#                 "Voters": ["test-user"],
+#                 "ApprovalCountRequired": 2,
+#                 "RejectionCountRequired": 2
+#             },
+#             "Global-Env": {
+#                 "Name": "Global-Env",
+#                 "Paths": ["shared-services", "security"],
+#                 "Voters": ["test-user"],
+#                 "ApprovalCountRequired": 2,
+#                 "RejectionCountRequired": 2
+#             }
+#         }
+#     ')
+# }
+
 get_approval_mapping() {
     echo $(jq -n '
         {
             "Testing-Env": {
                 "Name": "Testing-Env",
-                "Paths": ["dev", "staging"],
-                "Voters": ["test-user"],
-                "ApprovalCountRequired": 2,
-                "RejectionCountRequired": 2
-            },
-            "Global-Env": {
-                "Name": "Global-Env",
-                "Paths": ["shared-services", "security"],
+                "Paths": ["directory_dependency/dev-account"],
                 "Voters": ["test-user"],
                 "ApprovalCountRequired": 2,
                 "RejectionCountRequired": 2
@@ -47,75 +61,18 @@ get_approval_mapping() {
     ')
 }
 
-get_tg_plan_out() {
-    # terragrunt version: 0.31.0
-    cat << EOT
-INFO[0000] Stack at /Users/ci-user:
-  => Module /Users/ci-user/shared-services/bar (excluded: false, dependencies: [/Users/ci-user/security/baz])
-  => Module /Users/ci-user/security/baz (excluded: false, dependencies: [])
-  => Module /Users/ci-user/shared-services/doo (excluded: false, dependencies: [])
-  => Module /Users/ci-user/dev/foo (excluded: false, dependencies: [/Users/ci-user/shared-services/bar]) 
-WARN[0001] No double-slash (//) found in source URL /Users/ci-user/security/baz. Relative paths in downloaded Terraform code may not work.  prefix=[/Users/ci-user/security/baz] 
-random_id.test: Refreshing state... [id=Jlxvnihksts]
-random_id.test: Refreshing state... [id=8qWJRup1Fis]
+log "Setting up testing repo" "INFO"
+export SKIP_TERRAFORM_TESTING_STATE=true
+setup_test_env \
+  --clone-url "https://github.com/marshall7m/infrastructure-live-testing-template.git" \
+  --clone-destination "./tmp" \
+  --terragrunt-working-dir "directory_dependency" \
+  --modify "dev-acco unt/us-west-2/env-one/doo" 
 
-Terraform used the selected providers to generate the following execution
-plan. Resource actions are indicated with the following symbols:
-
-Terraform will perform the following actions:
-
-Plan: 0 to add, 0 to change, 0 to destroy.
-
-Terraform used the selected providers to generate the following execution
-plan. Resource actions are indicated with the following symbols:
-
-Terraform will perform the following actions:
-
-Plan: 0 to add, 0 to change, 0 to destroy.
-
-Changes to Outputs:
-  ~ random_value = "Jlxvnihksts" -> "security/baz"
-
-─────────────────────────────────────────────────────────────────────────────
-
-Changes to Outputs:
-  ~ random_value = "8qWJRup1Fis" -> "do"
-
-─────────────────────────────────────────────────────────────────────────────
-
-Note: You didn't use the -out option to save this plan, so Terraform can't
-guarantee to take exactly these actions if you run "terraform apply" now.
-
-Note: You didn't use the -out option to save this plan, so Terraform can't
-guarantee to take exactly these actions if you run "terraform apply" now.
-ERRO[0004] Module /Users/ci-user/shared-services/doo has finished with an error: 1 error occurred:
-	* exit status 2
-  prefix=[/Users/ci-user/shared-services/doo] 
-ERRO[0004] Module /Users/ci-user/security/baz has finished with an error: 1 error occurred:
-	* exit status 2
-  prefix=[/Users/ci-user/security/baz] 
-ERRO[0004] Dependency /Users/ci-user/security/baz of module /Users/ci-user/shared-services/bar just finished with an error. Module /Users/ci-user/shared-services/bar will have to return an error too.  prefix=[/Users/ci-user/shared-services/bar] 
-ERRO[0004] Module /Users/ci-user/shared-services/bar has finished with an error: Cannot process module Module /Users/ci-user/shared-services/bar (excluded: false, dependencies: [/Users/ci-user/security/baz]) because one of its dependencies, Module /Users/ci-user/security/baz (excluded: false, dependencies: []), finished with an error: 1 error occurred:
-	* exit status 2
-  prefix=[/Users/ci-user/shared-services/bar] 
-ERRO[0004] Dependency /Users/ci-user/shared-services/bar of module /Users/ci-user/dev/foo just finished with an error. Module /Users/ci-user/dev/foo will have to return an error too.  prefix=[/Users/ci-user/dev/foo] 
-ERRO[0004] Module /Users/ci-user/dev/foo has finished with an error: Cannot process module Module /Users/ci-user/dev/foo (excluded: false, dependencies: [/Users/ci-user/shared-services/bar]) because one of its dependencies, Module /Users/ci-user/shared-services/bar (excluded: false, dependencies: [/Users/ci-user/security/baz]), finished with an error: Cannot process module Module /Users/ci-user/shared-services/bar (excluded: false, dependencies: [/Users/ci-user/security/baz]) because one of its dependencies, Module /Users/ci-user/security/baz (excluded: false, dependencies: []), finished with an error: 1 error occurred:
-	* exit status 2
-  prefix=[/Users/ci-user/dev/foo] 
-INFO[0004] time=2021-08-04T17:02:38-07:00 level=info msg=Executing hook: before_hook prefix=[/Users/ci-user/shared-services/doo]  
-ERRO[0004] 4 errors occurred:
-	* Cannot process module Module /Users/ci-user/shared-services/bar (excluded: false, dependencies: [/Users/ci-user/security/baz]) because one of its dependencies, Module /Users/ci-user/security/baz (excluded: false, dependencies: []), finished with an error: 1 error occurred:
-	* exit status 2
-
-
-	* exit status 2
-	* exit status 2
-	* Cannot process module Module /Users/ci-user/dev/foo (excluded: false, dependencies: [/Users/ci-user/shared-services/bar]) because one of its dependencies, Module /Users/ci-user/shared-services/bar (excluded: false, dependencies: [/Users/ci-user/security/baz]), finished with an error: Cannot process module Module /Users/ci-user/shared-services/bar (excluded: false, dependencies: [/Users/ci-user/security/baz]) because one of its dependencies, Module /Users/ci-user/security/baz (excluded: false, dependencies: []), finished with an error: 1 error occurred:
-	* exit status 2s
-EOT
-}
+log "Testing repo is ready" "INFO"
 
 trigger_sf
 
-
-# generate local verison of testing repo
+#TODO
+# Fix misleading Count: for detected diffs
+# return empty stack if no diffs

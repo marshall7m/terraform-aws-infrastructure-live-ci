@@ -60,26 +60,14 @@ create_pr_codebuild_webhook() {
 get_tg_plan_out() {
     local terragrunt_working_dir=$1
     # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)
-    tg_plan_out=$(terragrunt run-all plan --terragrunt-working-dir $terragrunt_working_dir --terragrunt-non-interactive -detailed-exitcode 2>&1)
-    
-    exitcode=$?
-    if [ $exitcode -eq 1 ]; then
-        # TODO: Handle directories with to-be-created remote backends once terragrunt issue is resolved: https://github.com/gruntwork-io/terragrunt/issues/1747
-        # see if error is related to remote backend state not being initialized
-        if [ ${#new_remote_state} -ne 0 ]; then
-            log "Directories with new backends:" "DEBUG"
-            log "${new_remote_state[*]}" "DEBUG"
-        else
-            log "Error running terragrunt commmand" "ERROR" >&2
-            log "Command Output:" "ERROR" >&2
-            log "$tg_plan_out" "ERROR" >&2
-            exit 1
-        fi
-    fi
+    terragrunt run-all plan \
+        --terragrunt-working-dir $terragrunt_working_dir \
+        --terragrunt-non-interactive \
+        -detailed-exitcode 2>&1
 }
 
 get_git_root() {
-    git_root=$(git rev-parse --show-toplevel)
+    echo $(git rev-parse --show-toplevel)
 }
 
 get_rel_path() {
@@ -96,7 +84,10 @@ get_diff_paths() {
     # Get git repo root path relative path to the directories that terragrunt detected a difference between their tf state and their cfg
     # use (\n|\s|\t)+ since output format may differ between terragrunt versions
     # use grep for single line parsing to workaround lookbehind fixed width constraint
-    diff_paths=($(echo "$tg_plan_out" | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])' | get_rel_path "$rel_to" $1))
+    diff_paths=($(echo "$tg_plan_out" \
+        | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])' \
+        | get_rel_path "$rel_to" $1
+    ))
     echo "${diff_paths}"
 }
 
@@ -106,8 +97,8 @@ get_parsed_stack() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     raw_stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
+    log "RAW: ${raw_stack[*]}" "DEBUG"
 
-    echo "$tg_plan_out"
     log "Raw Stack: $(printf "\n\t%s" "$raw_stack")" "DEBUG"
     
     parsed_stack=$(jq -n '{}')
@@ -129,20 +120,23 @@ get_parsed_stack() {
 
 create_stack() {
     local terragrunt_working_dir=$1
+    local git_root=$2
 
     tg_plan_out=$(get_tg_plan_out $terragrunt_working_dir)
-    
-    # gets absolute path to the root of git repo
-    git_root=$(get_git_root)
-    
-    log "Git Root: $git_root" "DEBUG"
+    exitcode=$?
+    if [ $exitcode -eq 1 ]; then
+        log "Error running terragrunt commmand" "ERROR"
+        log "Command Output:" "ERROR"
+        log "$tg_plan_out" "ERROR"
+        exit 1
+    fi
+    diff_paths=$(get_diff_paths "$tg_plan_out" "$git_root")
+    log "Terragrunt Paths with Detected Difference: $(printf "\n\t%s" "${diff_paths[@]}")" "DEBUG"
 
-    diff_paths=$(get_diff_paths $tg_plan_out $git_root)
     num_diff_paths="${#diff_paths[@]}"
-    log "Terragrunt Paths with Detected Difference: $(printf "\n\t%s" "$diff_paths")" "DEBUG"
     log "Count: $num_diff_paths" "DEBUG"
 
-    parsed_stack=$(get_parsed_stack $tg_plan_out $git_root)
+    parsed_stack=$(get_parsed_stack "$tg_plan_out" "$git_root")
     log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
     exit 1
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
@@ -162,8 +156,12 @@ create_account_stacks() {
     account_stacks=$(jq -n '{}')
     
     log "Converting Approval Mapping to Bash Array" "DEBUG"
-    readarray -t approval_mapping < <( echo "$approval_mapping" | jq -c 'keys | .[]' )
+    readarray -t approval_mapping < <( echo "$approval_mapping" | jq -c '.[] | .Paths | .[]' )
     log "Account Array: ${approval_mapping[*]}" "DEBUG"
+
+    # gets absolute path to the root of git repo
+    git_root=$(get_git_root)
+    log "Git Root: $git_root" "DEBUG"
     
     for account in "${approval_mapping[@]}"; do
         account=$( echo "${account}" | tr -d '"' )
@@ -171,7 +169,7 @@ create_account_stacks() {
         log "account: $account" "DEBUG"
 
         log "Getting account stack" "DEBUG"
-        stack=$(create_stack $account)
+        stack=$(create_stack $account $git_root) || exit 1
         
         log "Account stack:" "DEBUG"
         log "$stack" "DEBUG"
