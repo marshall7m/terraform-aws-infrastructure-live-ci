@@ -74,7 +74,7 @@ get_rel_path() {
     local rel_to=$1
     local path=$2
 
-    echo "$(xargs realpath -e --relative-to=$rel_to $path)"
+    echo "$(realpath -e --relative-to=$rel_to $path)"
 }
 
 get_diff_paths() {
@@ -84,11 +84,22 @@ get_diff_paths() {
     # Get git repo root path relative path to the directories that terragrunt detected a difference between their tf state and their cfg
     # use (\n|\s|\t)+ since output format may differ between terragrunt versions
     # use grep for single line parsing to workaround lookbehind fixed width constraint
-    diff_paths=($(echo "$tg_plan_out" \
-        | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' | grep -oP '(?<=prefix=\[).+?(?=\])' \
-        | get_rel_path "$rel_to" $1
-    ))
-    echo "${diff_paths}"
+    # diff_paths=($(echo "$tg_plan_out" \
+    #     | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' \
+    #     | grep -oP 'exit\s+status\s+2.+?prefix=\[\K(.+)?(?=\])' \
+    #     | get_rel_path "$rel_to"
+    # ))
+
+    # echo $( echo "$tg_plan_out" | grep -oP 'exit\s+status\s+2.+?prefix=\[\K(.+)?(?=\])')
+    # echo $( echo "$tg_plan_out" \
+    #     | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' \
+    #     | grep -oP 'exit\s+status\s+2.+?prefix=\[\K(.+)?(?=\])'
+    # )
+    # use pcregrep with -M multiline option to scan terragrunt plan output for
+    # directories that exited plan with exit status 2 (diff in plan)
+    echo $( echo "$tg_plan_out" \
+        | pcregrep -Mo -N CRLF '(?<=exit\sstatus\s2\n).+?(?=\])' | grep -oP 'prefix=\[\K.+'
+    )
 }
 
 get_parsed_stack() {
@@ -97,19 +108,29 @@ get_parsed_stack() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     raw_stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
-    log "RAW: ${raw_stack[*]}" "DEBUG"
 
-    log "Raw Stack: $(printf "\n\t%s" "$raw_stack")" "DEBUG"
+    log "Raw Stack:" "DEBUG"
+    log "${raw_stack[*]}" "DEBUG"
     
     parsed_stack=$(jq -n '{}')
     while read -r line; do
+        log "" "DEBUG"
         log "Stack Layer: $(printf "\n\t%s\n" "$line")" "DEBUG"
-        parent=$( echo "$line" | grep -Po '.+?(?=\s\(excluded:)' | get_rel_path $rel_to $1 )
-        deps=$( echo "$line" | grep -Po 'dependencies:\s+\[\K.+?(?=\])' | grep -Po '.+?(?=,\s|$)' | get_rel_path "$git_root" $1 )
-        
+
+        parent=$( echo "$line" \
+            | grep -Po '.+?(?=\s\(excluded:)' \
+            | get_rel_path "$git_root" 
+        )
         log "Parent: $(printf "\n\t%s" "${parent}")" "DEBUG"
-        log "Dependencies: $(printf "\n\t%s" "${deps}")" "DEBUG"
-        parsed_stack=$( echo $parsed_stack 
+
+        deps=($( echo "$line" \
+            | grep -Po 'dependencies:\s+\[\K.+?(?=\])' \
+            | grep -Po '\/.+?(?=,|$)' \
+            | get_rel_path "$git_root"
+        ))
+        log "Dependencies: $(printf "\n\t%s" "${deps[@]}")" "DEBUG"
+
+        parsed_stack=$( echo $parsed_stack \
             | jq --arg parent "$parent" --arg deps "$deps" '
                 .[$parent] += try ($deps | split("\n") | reverse) // []' 
         )
@@ -130,7 +151,7 @@ create_stack() {
         log "$tg_plan_out" "ERROR"
         exit 1
     fi
-    diff_paths=$(get_diff_paths "$tg_plan_out" "$git_root")
+    diff_paths=($(get_diff_paths "$tg_plan_out" "$git_root"))
     log "Terragrunt Paths with Detected Difference: $(printf "\n\t%s" "${diff_paths[@]}")" "DEBUG"
 
     num_diff_paths="${#diff_paths[@]}"
@@ -138,16 +159,28 @@ create_stack() {
 
     parsed_stack=$(get_parsed_stack "$tg_plan_out" "$git_root")
     log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
-    exit 1
+
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
-    stack=$( echo $parsed_stack | jq \
-        --arg diff_paths $diff_paths \
-        --arg parsed_stack $parsed_stack '
-        . | select( | contains($diff_paths) )
+    # stack=$( echo $parsed_stack | jq \
+    #     --arg diff_paths "$diff_paths" '
+    #     try ($diff_paths | split("\n") | reverse) // [] as $diff_paths
+    #         | $diff_paths'
+    # )
+    # stack=$( echo $parsed_stack | jq \
+    #     --arg diff_paths "${diff_paths[*]}" '
+    #     try ($diff_paths | split(" ")) // [] as $diff_paths
+    #         | with_entries(select([.key] | inside($diff_paths)))
+    #     '
+    # )
+    stack=$( echo "$parsed_stack" | jq \
+        --arg diff_paths "${diff_paths[*]}" '
+        try ($diff_paths | split(" ")) // [] as $diff_paths
+            .[] | select(.key in .$diff_paths)
         '
     )
 
-    echo "$stack"
+    log "$stack" "DEBUG"
+    exit 1
 }
 
 create_account_stacks() {   
