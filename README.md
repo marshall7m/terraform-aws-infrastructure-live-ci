@@ -482,23 +482,34 @@ Pass next deploy stack to SF
 TODO:
 - Change Stack to use object:
     {
-        "Account: { 
-            "Dependencies": [] 
-            "Stack": {
-                "Parent": {
-                    "Dependencies": [] 
+        "commit_id": {
+            "BaseSourceVersion": "",
+            "HeadSourceVersion": "",
+            "Account: { 
+                "Dependencies": [] 
+                "Stack": {
+                    "Parent": {
+                        "Dependencies": [] 
+                    }
                 }
             }
-        }
-    }
-    OR:
-
-    {
-        "Account": []
+        }   
     }
 
-    {
-        "Account": {
-            "Path": []
-        }
-    }
+cases:
+
+successful/failed deployments:
+    - Get $.Input.Path from CW success/failure SF event
+    - Add path to `rollback_deployments`
+    - if Failed execution and rollback `all` is enabled:
+    - pass `rollback_deployments` to `diff_paths`
+    - Filter out parsed_stack with `diff_paths` on key and values
+    - Pass deploy_stack to step function with rollback tasks
+
+Rollback tasks:
+    - Get new providers
+    - Get new .hcl files
+    - If new providers or new .hcl: use terragrunt destroy command
+    - else use `base_source_version` for Codebuild deployments to apply cfg's base version
+
+Loop throuhg every commit `pr_queue` with rollback process until head_source_version == base_source_version
