@@ -74,7 +74,3 @@ setup_test_env \
 log "Testing repo is ready" "INFO"
 
 trigger_sf
-
-#TODO
-# Fix misleading Count: for detected diffs
-# return empty stack if no diffs

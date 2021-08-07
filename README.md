@@ -414,15 +414,16 @@ Artifact bucket:
                 "ID": 1
                 "BaseRef": master
                 "HeadRef": "feature"
-                "Stack": {
-                    dev: {
+                "Accounts": {
+                    "dev": {
                         depends_on: []
-                        stack: {
+                        "Stack": {
                             "foo": {
-                                rollback: all | single ?
                                 depends_on: ["bar"]
                             }
-                            "baz": []
+                            "baz": {
+                                depends_on: []
+                            }
                         }
                     }
                 }
@@ -443,6 +444,8 @@ Artifact bucket:
         }
     }
 ]
+
+
 Default Rollback:
 rollback all deps failures and rollback single for PR target
     - Given deps failure will likely be unrelated to PR and will result in separate PR to fix it
@@ -459,23 +462,43 @@ Where to define rollback:
 
 
 SF input:
-{
-    Path: ""
-    Rollback: false
-    SourceVersions:
-}
+    {
+        Path: "dev/bar",
+        BaseSourceVersion: "master",
+        HeadSourceVersion: "feature"
+    }
+
+FEATURES:
+- Create webpage for displaying pr_queue.json
+
+Scope of Codebuild trigger_sf build:
+
+Create/update commit artifact that the webpage will retrieve data from
+    - Update the next deploy stack data
+    - Update the list of complete deployments
+Pass next deploy stack to SF
+
+
 TODO:
-- change artifact bucket structure
-- Use pr_queue as the entire step function queue json
-    - Update:
-        - buildspec_trigger_sf
-        - all lambda approval functions
-        - sf definition
-- Make sure buildspec_queue_pr updates head_ref
-Successful deployment
-    - Pass next group
-New commit
-    - Update deployment stack
-    - Update head version
-New PR
-    - Get next in queue
+- Change Stack to use object:
+    {
+        "Account: { 
+            "Dependencies": [] 
+            "Stack": {
+                "Parent": {
+                    "Dependencies": [] 
+                }
+            }
+        }
+    }
+    OR:
+
+    {
+        "Account": []
+    }
+
+    {
+        "Account": {
+            "Path": []
+        }
+    }

@@ -79,7 +79,7 @@ get_rel_path() {
 
 get_diff_paths() {
     local tg_plan_out=$1
-    local rel_to=$2
+    local git_root=$2
 
     # Get git repo root path relative path to the directories that terragrunt detected a difference between their tf state and their cfg
     # use (\n|\s|\t)+ since output format may differ between terragrunt versions
@@ -97,14 +97,17 @@ get_diff_paths() {
     # )
     # use pcregrep with -M multiline option to scan terragrunt plan output for
     # directories that exited plan with exit status 2 (diff in plan)
+    # -N flag defines the convention for newline and CRLF defines any of the conventions
     echo $( echo "$tg_plan_out" \
-        | pcregrep -Mo -N CRLF '(?<=exit\sstatus\s2\n).+?(?=\])' | grep -oP 'prefix=\[\K.+'
+        | pcregrep -Mo -N CRLF '(?<=exit\sstatus\s2\n).+?(?=\])' \
+        | grep -oP 'prefix=\[\K.+' \
+        | get_rel_path "$git_root"
     )
 }
 
 get_parsed_stack() {
     local tg_plan_out=$1
-    local rel_to=$2
+    local git_root=$2
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     raw_stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
@@ -161,26 +164,15 @@ create_stack() {
     log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
 
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
-    # stack=$( echo $parsed_stack | jq \
-    #     --arg diff_paths "$diff_paths" '
-    #     try ($diff_paths | split("\n") | reverse) // [] as $diff_paths
-    #         | $diff_paths'
-    # )
-    # stack=$( echo $parsed_stack | jq \
-    #     --arg diff_paths "${diff_paths[*]}" '
-    #     try ($diff_paths | split(" ")) // [] as $diff_paths
-    #         | with_entries(select([.key] | inside($diff_paths)))
-    #     '
-    # )
     stack=$( echo "$parsed_stack" | jq \
         --arg diff_paths "${diff_paths[*]}" '
-        try ($diff_paths | split(" ")) // [] as $diff_paths
-            .[] | select(.key in .$diff_paths)
+        (try ($diff_paths | split(" ")) // []) as $diff_paths
+            | with_entries(select(.key | IN($diff_paths[])))
+            | map_values([.[] | select(. | IN($diff_paths[])) ])
         '
     )
 
-    log "$stack" "DEBUG"
-    exit 1
+    echo "$stack"
 }
 
 create_account_stacks() {   
@@ -208,7 +200,7 @@ create_account_stacks() {
         log "$stack" "DEBUG"
 
         log "Adding account artifact" "DEBUG"
-        account_stacks=$(echo $account_stacks | jq \
+        account_stacks=$( echo "$account_stacks" | jq \
             --arg account $account \
             --arg stack "$stack" '
             ($stack | fromjson) as $stack
@@ -225,8 +217,8 @@ create_account_stacks() {
 
 get_deploy_stack() {
     local stack=$1
-
-    account_stack=$(echo $stack | jq '.AccountStack')
+    readarray -t approval_mapping < <( echo "$stack" | jq -c '.[] | .keys | .[]' )
+    account_stack=$(echo "$stack" | jq '.AccountStack')
     pop_stack "$stack"
 
     account_peek=$peek
@@ -250,8 +242,8 @@ pop_stack() {
     log "Getting updated stack" "DEBUG"
     updated_stack=$( echo $stack | jq --arg peek "$peek" '
         ($peek | fromjson) as $peek 
-            | with_entries(select([.key] 
-            | inside($peek) | not))' 
+            | with_entries(select(.key 
+            | IN($peek[]) | not))' 
     )
     log "Updated Stack:" "DEBUG"
     log "$updated_stack" "DEBUG"
@@ -378,14 +370,17 @@ trigger_sf() {
 
         log "Getting Stacks" "INFO"
         account_stacks=$(create_account_stacks "$approval_mapping")
-        exit 1
+        log "Account Stacks" "DEBUG"
+        log "$account_stacks" "DEBUG"
+
         log "Adding Stacks to PR Queue"  "INFO"
-        pr_queue=$( echo $pr_queue | jq \
-            --arg stack $stack \
-            --arg base_source_version $base_source_version \
-            --arg head_source_version $head_source_version '
-            .InProgress | . + {
-                "Stack": $stack,
+        pr_queue=$( echo "$pr_queue" | jq \
+            --arg account_stacks "$account_stacks" \
+            --arg base_source_version "$base_source_version" \
+            --arg head_source_version "$head_source_version" '
+            ($account_stacks | fromjson) as $account_stacks
+            | .InProgress | . + {
+                "Stack": $account_stacks,
                 "BaseSourceVersion": $base_source_version,
                 "HeadSourceVersion": $head_source_version
             }
@@ -395,13 +390,13 @@ trigger_sf() {
         log "Updated PR Stack:" "DEBUG"
         log "$pr_queue" "DEBUG"
     fi
-    exit 1
+
     log "Getting Deployment Stack" "INFO"
-    get_deploy_stack $commit_stack
+    get_deploy_stack $pr_queue
 
     log "Uploading Updated PR Queue" "INFO"
     upload_pr_queue $pr_queue
 
     log "Starting Executions" "INFO"
-
 }
+
