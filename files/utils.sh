@@ -142,6 +142,21 @@ get_parsed_stack() {
     echo "$parsed_stack"
 }
 
+filter_paths() {
+    local stack=$1
+
+    #input must be expanded bash array ("${x[*]}")
+    local filter=$2
+
+    echo $( echo "$stack" | jq \
+        --arg filter "$filter" '
+        (try ($filter | split(" ")) // []) as $filter
+            | with_entries(select(.key | IN($filter[])))
+            | map_values([.[] | select(. | IN($filter[])) ])
+        '
+    )
+}
+
 create_stack() {
     local terragrunt_working_dir=$1
     local git_root=$2
@@ -164,13 +179,7 @@ create_stack() {
     log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
 
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
-    stack=$( echo "$parsed_stack" | jq \
-        --arg diff_paths "${diff_paths[*]}" '
-        (try ($diff_paths | split(" ")) // []) as $diff_paths
-            | with_entries(select(.key | IN($diff_paths[])))
-            | map_values([.[] | select(. | IN($diff_paths[])) ])
-        '
-    )
+    stack=$( filter_paths "$parsed_stack" "${diff_paths[*]}" )
 
     echo "$stack"
 }
@@ -247,6 +256,8 @@ pop_stack() {
     )
     log "Updated Stack:" "DEBUG"
     log "$updated_stack" "DEBUG"
+
+    log ""
 }
 
 checkout_pr() {
@@ -312,7 +323,11 @@ check_stack_progress() {
     local pr_queue=$1
 
     # returns false if all account stacks and their associated path stacks are empty, true otherwise
-    in_progress=$( echo $pr_queue | jq '[.InProgress | .. | .Stack? // empty | length == 0 ] | all | not' )
+    if [[ "$( echo $pr_queue | jq '[.InProgress | .. | .Stack? // empty | length == 0 ] | all | not' )" = true ]]; then
+        return 1
+    else
+        return 0
+    fi
 }
 
 get_git_source_versions() {
@@ -322,16 +337,50 @@ get_git_source_versions() {
     head_source_version=refs/pull/$pull_request_id/head^{$( git rev-parse --verify HEAD )}
 }
 
+
 trigger_sf() {
     set -e
 
     log "Getting PR queue" "INFO"
     pr_queue=$(get_pr_queue)
 
-    log "Checking if there's a PR in progress" "INFO"
-    check_stack_progress "$pr_queue"
+    log "EVENTBRIDGE_RULE: $EVENTBRIDGE_RULE" "DEBUG"
+    
+    if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_RULE" ]; then
+        log "Triggered via Step Function Event" "INFO"
+        
+        sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
+        deployed_path=$( echo $sf_event | jq '.Path')
+        status=$( echo $sf_event | jq '.Status')
 
-    if [ "$in_progress"  == false ]; then
+        head_ref_prev_commit=$(git log --format="%H" -n 1 --skip 1)
+        pr_queue=$( echo $pr_queue | jq \
+            --arg commit_id $commit_id \
+            --arg deployed_path $deployed_path '.CommitStack 
+            | .["$commit"] 
+            | .Deployed
+            | . + [$deployed_path]
+        ')
+        log "Commit Stack:" "DEBUG"
+        log "$commit_stack" "DEBUG"
+
+        if [ "$status" == "SUCCESS" ]; then
+            pr_queue=$( echo $pr_queue | jq \
+                --arg commit_id $commit_id \
+                --arg deployed_path $deployed_path '
+                [$deployed_path] as $deployed_path
+                | .CommitStack
+                | .["$commit"] 
+                | .DeployStack
+                | map_values([.[] | select(. | IN($deployed_stack[] | not)) ])
+            ')
+        elif [ "$status" == "FAILED" ]; then
+
+        else
+            log "Handling for Step Function Status: $status is not defined" "ERROR"
+            exit 1
+
+    elif check_stack_progress "$pr_queue"; then
         create_new_artifact=true
 
         log "Pulling next Pull Request from queue" "INFO"

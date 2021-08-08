@@ -64,13 +64,18 @@ get_approval_mapping() {
 log "Setting up testing repo" "INFO"
 export SKIP_TERRAFORM_TESTING_STATE=true
 
-setup_test_env \
-  --clone-url "https://github.com/marshall7m/infrastructure-live-testing-template.git" \
-  --clone-destination "./tmp" \
-  --terragrunt-working-dir "directory_dependency" \
-  --modify "directory_dependency/dev-account/us-west-2/env-one/doo" \
-  --modify "directory_dependency/dev-account/us-west-2/env-one/foo"
+# setup_test_env \
+#   --clone-url "https://github.com/marshall7m/infrastructure-live-testing-template.git" \
+#   --clone-destination "./tmp" \
+#   --terragrunt-working-dir "directory_dependency" \
+#   --modify "directory_dependency/dev-account/us-west-2/env-one/doo" \
+#   --modify "directory_dependency/dev-account/us-west-2/env-one/foo"
 
 log "Testing repo is ready" "INFO"
 
+CODEBUILD_INITIATOR="rule/foo"
+EVENTBRIDGE_RULE="rule/foo"
 trigger_sf
+
+
+#TODO set up testing env for step function event

@@ -482,21 +482,46 @@ Pass next deploy stack to SF
 TODO:
 - Change Stack to use object:
     {
-        "commit_id": {
-            "BaseSourceVersion": "",
-            "HeadSourceVersion": "",
-            "Account: { 
-                "Dependencies": [] 
-                "Stack": {
-                    "Parent": {
+        "ID": 2,
+        "BaseRef": master,
+        "HeadRef": "feature-2",
+        "CommitStack": {
+            "commit_id": {
+                "BaseSourceVersion": "",
+                "HeadSourceVersion": "",
+                "DeployStack": {
+                    "Account: { 
                         "Dependencies": [] 
+                        "Stack": {
+                            "Parent": {
+                                "Dependencies": [] 
+                            }
+                        }
                     }
-                }
+                },
+                "RollbackStack": {
+                    "Account: { 
+                        "Dependencies": [] 
+                        "Stack": {
+                            "Parent": {
+                                "Dependencies": [] 
+                            }
+                        }
+                    }
+                } (created only if stack rollback is needed)
+                "ModifiedPaths": [],
+                "Deployed": []
             }
         }   
     }
 
-cases:
+if foo failed/succeeded:
+add to deployed list
+get current current commit stack
+filter commit stack to only include deployed list
+
+
+only need base version for rollback
 
 successful/failed deployments:
     - Get $.Input.Path from CW success/failure SF event
@@ -513,3 +538,11 @@ Rollback tasks:
     - else use `base_source_version` for Codebuild deployments to apply cfg's base version
 
 Loop throuhg every commit `pr_queue` with rollback process until head_source_version == base_source_version
+
+
+Create commit key for stack queue
+
+
+TODO:
+Create eventbridge rule for success/failed Step Function executions and put CB trigger SF env var:
+    - $EVENTBRIDGE_RULE=rule/...

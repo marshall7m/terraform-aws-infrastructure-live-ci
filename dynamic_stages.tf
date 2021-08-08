@@ -324,6 +324,11 @@ module "codebuild_trigger_sf" {
         name  = "SECONDARY_SOURCE_IDENTIFIER"
         type  = "PLAINTEXT"
         value = local.buildspec_scripts_key
+      },
+      {
+        name  = "EVENTBRIDGE_RULE"
+        type  = "PLAINTEXT"
+        value = aws_cloudwatch_event_rule.id
       }
     ]
   }
@@ -469,3 +474,45 @@ module "lambda_deployment_orchestrator" {
 
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
 }
+
+
+resource "aws_cloudwatch_event_rule" "sf_execution" {
+  name        = "${var.step_function_name}-execution"
+  description = "Triggers Codebuild project when Step Function execution is complete"
+  role_arn    = module.cw_event_role.role_arn
+
+  event_pattern = <<EOF
+{
+  "source": ["aws.states"],
+  "detail-type": ["Step Functions Execution Status Change"],
+  "detail": {
+    "status": ["RUNNING", "FAILED"],
+    "stateMachineArn": [${aws_sfn_state_machine.this.arn}]
+  }
+}
+EOF
+}
+
+resource "aws_cloudwatch_event_target" "sns" {
+  rule      = aws_cloudwatch_event_rule.sf_execution.name
+  target_id = "SendToCodebuildTriggerSF"
+  arn       = module.codebuild_trigger_sf.arn
+}
+
+
+module "cw_event_role" {
+  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+
+  role_name        = "agw-logs"
+  trusted_services = ["events.amazonaws.com"]
+  statements = [
+    {
+      effect = "Allow"
+      actions = [
+        "codebuild:StartBuild"
+      ]
+      resources = [module.codebuild_trigger_sf.arn]
+    }
+  ]
+}
+
