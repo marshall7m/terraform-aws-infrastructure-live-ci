@@ -544,5 +544,3 @@ Create commit key for stack queue
 
 
 TODO:
-Create eventbridge rule for success/failed Step Function executions and put CB trigger SF env var:
-    - $EVENTBRIDGE_RULE=rule/...

@@ -73,9 +73,5 @@ export SKIP_TERRAFORM_TESTING_STATE=true
 
 log "Testing repo is ready" "INFO"
 
-CODEBUILD_INITIATOR="rule/foo"
-EVENTBRIDGE_RULE="rule/foo"
+
 trigger_sf
-
-
-#TODO set up testing env for step function event

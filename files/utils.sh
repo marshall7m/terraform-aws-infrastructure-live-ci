@@ -81,20 +81,6 @@ get_diff_paths() {
     local tg_plan_out=$1
     local git_root=$2
 
-    # Get git repo root path relative path to the directories that terragrunt detected a difference between their tf state and their cfg
-    # use (\n|\s|\t)+ since output format may differ between terragrunt versions
-    # use grep for single line parsing to workaround lookbehind fixed width constraint
-    # diff_paths=($(echo "$tg_plan_out" \
-    #     | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' \
-    #     | grep -oP 'exit\s+status\s+2.+?prefix=\[\K(.+)?(?=\])' \
-    #     | get_rel_path "$rel_to"
-    # ))
-
-    # echo $( echo "$tg_plan_out" | grep -oP 'exit\s+status\s+2.+?prefix=\[\K(.+)?(?=\])')
-    # echo $( echo "$tg_plan_out" \
-    #     | pcregrep -M 'exit\s+status\s+2(\n|\s|\t)+prefix=\[(.+)?(?=\])' \
-    #     | grep -oP 'exit\s+status\s+2.+?prefix=\[\K(.+)?(?=\])'
-    # )
     # use pcregrep with -M multiline option to scan terragrunt plan output for
     # directories that exited plan with exit status 2 (diff in plan)
     # -N flag defines the convention for newline and CRLF defines any of the conventions
@@ -224,40 +210,24 @@ create_account_stacks() {
     echo "$account_stacks"
 }
 
-get_deploy_stack() {
-    local stack=$1
-    readarray -t approval_mapping < <( echo "$stack" | jq -c '.[] | .keys | .[]' )
-    account_stack=$(echo "$stack" | jq '.AccountStack')
-    pop_stack "$stack"
+get_deploy_paths() {
+    local deploy_stack=$1
 
-    account_peek=$peek
-    account_stack=$updated_stack
 
-    declare -A deploy_stack
-    for account in "${account_peek[@]}"; do
-        account_stack=$(echo $stack | jq '.AccountStack')
-        deploy_stack+=($)
-    done
-}
+    accounts=$( echo $deploy_stack | jq '
+        [to_entries[] | select(.value.Dependencies == []) | .key]
+    ')
 
-pop_stack() {
-    stack=$1
+    log "Getting Deployment Paths from Accounts:" "DEBUG"
+    log "$accounts" "DEBUG"
 
-    log "Getting peek" "DEBUG"
-    peek=$( echo $stack | jq '[to_entries[] | select(.value == []) | .key]')
-    log "Peek:" "DEBUG"
-    log "$peek" "DEBUG"
+    echo $( echo $deploy_stack | jq \
+        --arg accounts "$accounts" '
+        ($accounts | fromjson) as $accounts
+        | with_entries(select(.key | IN($accounts[])))
+        | [.[] | .Stack | to_entries[] | select(.value.Dependencies == []) | .key]
+    ')
 
-    log "Getting updated stack" "DEBUG"
-    updated_stack=$( echo $stack | jq --arg peek "$peek" '
-        ($peek | fromjson) as $peek 
-            | with_entries(select(.key 
-            | IN($peek[]) | not))' 
-    )
-    log "Updated Stack:" "DEBUG"
-    log "$updated_stack" "DEBUG"
-
-    log ""
 }
 
 checkout_pr() {
@@ -337,6 +307,34 @@ get_git_source_versions() {
     head_source_version=refs/pull/$pull_request_id/head^{$( git rev-parse --verify HEAD )}
 }
 
+update_pr_queue_with_deployed_path() {
+    local pr_queue=$1
+    local deployed_path=$2
+    local commit_order_id=$3
+
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    log "Removing: $deployed_path from Deploy Stack" "DEBUG"
+    pr_queue=$( echo $pr_queue | jq \
+        --arg deployed_path "$deployed_path" \
+        --arg commit_order_id $commit_order_id '
+        [($deployed_path | fromjson)] as $deployed_path
+        | (.InProgress.CommitStack[$commit_order_id].DeployStack[].Stack[].Dependencies) |= map_values(select(. | IN($deployed_path[]) | not))
+    ')
+
+    log "Updated PR Queue: $pr_queue" "DEBUG"
+    
+    log "Adding: $deployed_path to associated Deployed Array" "DEBUG"
+    pr_queue=$( echo $pr_queue | jq \
+        --arg commit_order_id $commit_order_id \
+        --arg deployed_path "$deployed_path" '
+        ($deployed_path | fromjson) as $deployed_path
+        | (.InProgress.CommitStack[$commit_order_id].RollbackPaths) |=  [$deployed_path]
+    ')
+
+    echo "$pr_queue"
+}
+
 
 trigger_sf() {
     set -e
@@ -352,33 +350,41 @@ trigger_sf() {
         sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
         deployed_path=$( echo $sf_event | jq '.Path')
         status=$( echo $sf_event | jq '.Status')
+        base_commit_id=$( echo $sf_event | jq '.BaseSourceVersion' | grep -oP '(?<=\{).+?(?=\})')
+        head_commit_id=$( echo $sf_event | jq '.HeadSourceVersion' | grep -oP '(?<=\{).+?(?=\})')
+        commit_order_id=$( echo $sf_event | jq '.CommitOrderID')
+        
+        log "Step Function Event:" "DEBUG"
+        log "$sf_event" "DEBUG"
 
-        head_ref_prev_commit=$(git log --format="%H" -n 1 --skip 1)
-        pr_queue=$( echo $pr_queue | jq \
-            --arg commit_id $commit_id \
-            --arg deployed_path $deployed_path '.CommitStack 
-            | .["$commit"] 
-            | .Deployed
-            | . + [$deployed_path]
-        ')
-        log "Commit Stack:" "DEBUG"
-        log "$commit_stack" "DEBUG"
+        log "Removing $deployed_path from Stack" "DEBUG"
+        pr_queue=$( update_pr_queue_with_deployed_path "$pr_queue" "$deployed_path" "$commit_order_id" )
+        log "Updated PR Queue:" "DEBUG"
+        log "$pr_queue" "DEBUG"
 
         if [ "$status" == "SUCCESS" ]; then
-            pr_queue=$( echo $pr_queue | jq \
-                --arg commit_id $commit_id \
-                --arg deployed_path $deployed_path '
-                [$deployed_path] as $deployed_path
-                | .CommitStack
-                | .["$commit"] 
-                | .DeployStack
-                | map_values([.[] | select(. | IN($deployed_stack[] | not)) ])
-            ')
+            log "" "DEBUG"
         elif [ "$status" == "FAILED" ]; then
+            deployment_type="RollbackStack"
+            
+            log "Rollback Type:" "INFO"
+            # head_ref_prev_commit=$(git log --format="%H" -n 1 --skip 1)
 
+            # TODO: get rollback paths
+            filter_paths=$()
+
+            #TODO: Get `parsed_stack`
+            parsed_stack=$()
+
+            log "Filtering out Terragrunt paths that don't need to be rolled back" "DEBUG"
+            rollback_stack=$( filter_paths "$parsed_stack" "${filter_paths[*]}" )
+
+            #TODO: Add rollback_stack to pr_queue[commit_stack]["RollbackStack"]
         else
             log "Handling for Step Function Status: $status is not defined" "ERROR"
-            exit 1
+        fi
+
+        log "PR Queue: $pr_queue" "DEBUG"
 
     elif check_stack_progress "$pr_queue"; then
         create_new_artifact=true
@@ -406,7 +412,7 @@ trigger_sf() {
         stop_running_sf_executions
     fi
 
-    if [ -n $create_new_artifact ]; then
+    if [ -n "$create_new_artifact" ]; then
         log "Creating new Deployment Stack" "INFO"
         
         get_git_source_versions $pull_request_id
@@ -440,12 +446,27 @@ trigger_sf() {
         log "$pr_queue" "DEBUG"
     fi
 
-    log "Getting Deployment Stack" "INFO"
-    get_deploy_stack $pr_queue
+    log "Deployment Type: $deployment_type"
+
+    log "Getting Deployment Stack" "DEBUG"
+    deploy_stack=$( echo $pr_queue | jq \
+        --arg commit_order_id $commit_order_id 
+        --arg deployment_type $deployment_type '
+        .InProgress.CommitStack[$commit_order_id][$deployment_type]
+    ')
+
+    log "Deployment Stack" "DEBUG"
+    log "$deploy_stack" "DEBUG"
+
+    deploy_paths=$(get_deploy_paths "$deploy_stack")
+    log "Deploy Paths:" "DEBUG"
+    log "$deploy_paths" "DEBUG"
+
+    log "Starting Step Function Deployment Flow" "INFO"
+    start_sf_executions $deploy_paths
 
     log "Uploading Updated PR Queue" "INFO"
     upload_pr_queue $pr_queue
 
-    log "Starting Executions" "INFO"
 }
 
