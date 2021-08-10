@@ -6,12 +6,12 @@ source ./utils.sh
 source ./testing_utils.sh
 
 
-
 export CODEBUILD_INITIATOR="rule/foo"
 export EVENTBRIDGE_RULE="rule/foo"
 export EVENTBRIDGE_EVENT=$(jq -n \
     '{
         "Path": "d", 
+        "DeploymentType": "Rollback",
         "Status": "SUCCESS",
         "BaseSourceVersion": "refs/pull/1/head^{2f4aa7782602b2b433f3ff6acb2984695d13e3fd}",
         "HeadSourceVersion": "refs/pull/1/head^{2f4aa7782602b2b433f3ff6acb2984695d13e3fd}",
@@ -64,5 +64,14 @@ get_pr_queue() {
     ')
 }
 
+#TODO: Add commit queue/inprogress structure
+# Add $RELEASE_CHANGES
+# As new commits come in for inprogress PR: add commit to PR commit queue
+# if $RELEASE_CHANGES or REFRESH_STACK_ON_COMMIT is true: grab latest commit
+# if 
+
 
 trigger_sf
+
+export DEPLOY_PULL_REQUEST_ID="2"
+

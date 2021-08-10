@@ -10,6 +10,6 @@ upload_pr_queue() {
     echo "MOCK: FUNCNAME=$FUNCNAME"
 }
 
-start_sf_execution() {
+start_sf_executions() {
     echo "MOCK: FUNCNAME=$FUNCNAME"
 }
