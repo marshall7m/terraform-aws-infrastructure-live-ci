@@ -1,3 +1,5 @@
+#!/bin/bash
+
 checkout_pr() {
     return
 }

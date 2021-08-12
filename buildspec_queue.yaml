@@ -2,44 +2,8 @@ version: 0.2
 env:
   shell: bash
 phases:
-  pre_build:
-      commands:
-        - pr_id=$(echo $CODEBUILD_SOURCE_VERSION | cut -d "/" -f 2)
-        - "echo Pull Request ID: ${pr_id}"
-        - base_ref=$(echo $CODEBUILD_WEBHOOK_BASE_REF | cut -d "/" -f 3)
-        - "echo Base Ref: ${base_ref}"
-        - head_ref=$(echo $CODEBUILD_WEBHOOK_HEAD_REF | cut -d "/" -f 3)
-        - "echo Head Ref: ${head_ref}"
-        - "echo Build Number: ${CODEBUILD_BUILD_NUMBER}"
-        - "echo Artifact Bucket: ${ARTIFACT_BUCKET_NAME}"
-        - "echo Bucket Key: ${ARTIFACT_BUCKET_PR_QUEUE_KEY}"
-      on-failure: ABORT
   build:
     commands:
       - |
-        echo "Getting Current PR Queue"
-        aws s3api get-object \
-          --bucket $ARTIFACT_BUCKET_NAME \
-          --key $ARTIFACT_BUCKET_PR_QUEUE_KEY \
-          pr_queue.json > /dev/null
-        
-        pr_queue=$(jq . pr_queue.json 
-          | jq \
-          --arg base_ref "$base_ref" \
-          --arg head_ref "$head_ref" \
-          --arg pr_id "$pr_id" '
-          .Queue
-              | . + {
-                "ID": $pr_id,
-                "BaseRef": $base_ref,
-                "HeadRef": $head_ref
-              }
-          ' 
-        )
-        
-        echo "$pr_queue" > $pr_queue.json
-        aws s3api put-object \
-          --acl private \
-          --body ./pr_queue.json \
-          --bucket $ARTIFACT_BUCKET_NAME \
-          --key $ARTIFACT_BUCKET_PR_QUEUE_KEY.json
+        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/trigger_sf_utils.sh"
+        trigger_sf

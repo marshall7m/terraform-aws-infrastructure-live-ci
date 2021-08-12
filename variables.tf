@@ -132,21 +132,12 @@ variable "repo_name" {
   type        = string
 }
 
-# variable "webhook_filter_groups" {
-#   description = "List of webhook filter groups for the Github repository. The GitHub webhook has to pass atleast one filter group in order to proceed to downstream actions"
-#   type = list(list(object({
-#     pattern                 = string
-#     type                    = string
-#     exclude_matched_pattern = optional(bool)
-#   })))
-#   default = []
-# }
-
 variable "file_path_pattern" {
   description = "Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension."
   type        = string
   default     = ".+\\.(hcl|tf)$"
 }
+
 variable "api_name" {
   description = "Name of AWS Rest API"
   type        = string

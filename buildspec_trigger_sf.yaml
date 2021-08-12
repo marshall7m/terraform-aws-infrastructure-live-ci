@@ -12,5 +12,5 @@ phases:
     on-failure: ABORT
     commands:
       - |
-        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/utils.sh"
+        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/trigger_sf_utils.sh"
         trigger_sf

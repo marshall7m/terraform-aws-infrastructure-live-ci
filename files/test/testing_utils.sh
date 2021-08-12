@@ -1,9 +1,11 @@
+#!/bin/bash
+
 if [ -n "$MOCK_GIT_CMDS" ]; then
-    source ../mock_git_cmds.sh
+    source mock_git_cmds.sh
 fi
 
 if [ -n "$MOCK_AWS_CMDS" ]; then
-    source ../mock_aws_cmds.sh
+    source mock_aws_cmds.sh
 fi
 
 parse_args() {

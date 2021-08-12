@@ -1,61 +1,6 @@
 #!/bin/bash
 
-log() {
-    declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
-    local log_message=$1
-    local log_priority=$2
-
-    #check if level exists
-    [[ ${levels[$log_priority]} ]] || return 1
-
-    #check if level is enough
-    # returns exit status 0 instead of 2 to prevent `set -e ` from exiting if log priority doesn't meet log level
-    (( ${levels[$log_priority]} < ${levels[$script_logging_level]} )) && return
-
-    # redirects log message to stderr (>&2) to prevent cases where sub-function
-    # uses log() and sub-function stdout results and log() stdout results are combined
-    echo "${log_priority} : ${log_message}" >&2
-}
-
-create_pr_codebuild_webhook() {
-
-    local build_name=$1
-    local base_ref=$2
-    local head_ref=$3
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-    log "Codebuild Project Name: ${build_name}" "DEBUG"
-    log "Base Ref: ${base_ref}" "DEBUG"
-    log "Head Ref: ${head_ref}" "DEBUG"
-
-    #TODO: Add filepath filter for .hcl|.tf files from account paths
-    filter_group=$(jq -n \
-        --arg base_ref $base_ref \
-        --arg head_ref $head_ref \
-        '[
-            [
-                {
-                    "type": "EVENT",
-                    "pattern": "PULL_REQUEST_UPDATED"
-                },
-                {
-                    "type": "BASE_REF",
-                    "pattern": "refs/heads/\($base_ref)"
-                },
-                {
-                    "type": "HEAD_REF",
-                    "pattern": "refs/heads/\($head_ref)"
-                }
-            ]
-        ]')
-
-    log "Filter Group:"  "DEBUG"
-    log "$filter_group" "DEBUG"
-
-    log "Updating Build Webhook" "DEBUG"
-    aws codebuild update-webhook \
-        --project-name $build_name \
-        --filter-groups $filter_group
-}
+source utils.sh
 
 get_tg_plan_out() {
     local terragrunt_working_dir=$1
@@ -314,7 +259,6 @@ upload_pr_queue() {
 pr_in_progress() {
     local pr_queue=$1
 
-    # returns false if all account stacks and their associated path stacks are empty, true otherwise
     if [[ "$( echo $pr_queue | jq '.InProgress | length > 0' )" = true ]]; then
         return 0
     else
@@ -552,3 +496,21 @@ trigger_sf() {
     upload_pr_queue $pr_queue
 }
 
+
+#TODO: 
+# - Add commit queue/inprogress structure
+# - Add $RELEASE_CHANGES feature and $REFRESH_STACK_ON_COMMIT
+
+#TODO: 
+# - Fix template repo dir structure for global/ - put outside us-west-2
+    
+# Once deploy/rollback stack is successful and commit queue is empty, then run next PR in Queue
+# Once account stack deps are sucessful, run account stack
+# Once path stack deps are successful, run path
+
+# Once all paths are done, allow rollback stack
+# Create rollback stack with paths that are successful/failed and add previous commit stack to queue
+# Once rollback stack is all successful, get next from queue
+# Once queue is done, get next PR
+
+# - Add SF execution ARN to Stack Path artifact for task status lookup

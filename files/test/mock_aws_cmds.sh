@@ -1,3 +1,5 @@
+#!/bin/bash
+
 create_pr_codebuild_webhook() {
     return
 }
@@ -11,5 +13,9 @@ upload_pr_queue() {
 }
 
 start_sf_executions() {
+    echo "MOCK: FUNCNAME=$FUNCNAME"
+}
+
+get_pr_queue() {
     echo "MOCK: FUNCNAME=$FUNCNAME"
 }

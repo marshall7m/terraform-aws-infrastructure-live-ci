@@ -8,8 +8,8 @@ export CODEBUILD_INITIATOR="user"
 setup() {
     load 'test_helper/bats-support/load'
     load 'test_helper/bats-assert/load'
-    load '../utils.sh'
-    load '../testing_utils.sh'
+    load '../helpers/utils.sh'
+    load 'testing_utils.sh'
 }
 
 @test "script is runnable" {
@@ -182,39 +182,87 @@ setup() {
     
     expected=$(jq -n '
         {
-            "Queue": [
+            "Queue":[
                 {
-                    "ID": "3",
-                    "BaseRef": "master",
-                    "HeadRef": "feature-3"
+                    "ID":"3",
+                    "BaseRef":"master",
+                    "HeadRef":"feature-3"
                 }
             ],
-            "InProgress": {
-                "ID": "2",
-                "BaseRef": "master",
-                "HeadRef": "feature-2",
-                "CommitStack": {
-                    "1": {
-                        "DeployStack": {
-                            "./tmp/directory_dependency/dev-account": {
-                                "Dependencies": [],
-                                "Stack": {
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo": [],
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo": []
+            "InProgress":{
+                "ID":"2",
+                "BaseRef":"master",
+                "HeadRef":"feature-2",
+                "CommitStack":{
+                    "1":{
+                        "DeployStack":{
+                            "./tmp/directory_dependency/dev-account":{
+                                "Dependencies":[
+                                    "./tmp/directory_dependency/security-account"
+                                ],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Dependencies":[]
+                                    }
+                                }
+                            },
+                            "./tmp/directory_dependency/security-account":{
+                                "Dependencies":[],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar":{
+                                        "Dependencies":[
+                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz"
+                                        ]
+                                    },
+                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz":{
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/foo":{
+                                        "Dependencies":[
+                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar"
+                                        ]
+                                    }
                                 }
                             }
                         },
-                        "InitialDeployStack": {
-                            "./tmp/directory_dependency/dev-account": {
-                                "Dependencies": [],
-                                "Stack": {
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo": [],
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo": []
+                        "InitialDeployStack":{
+                            "./tmp/directory_dependency/dev-account":{
+                                "Dependencies":[
+                                    "./tmp/directory_dependency/security-account"
+                                ],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Dependencies":[]
+                                    }
+                                }
+                            },
+                            "./tmp/directory_dependency/security-account":{
+                                "Dependencies":[],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar":{
+                                        "Dependencies":[
+                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz"
+                                        ]
+                                    },
+                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz":{
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/foo":{
+                                        "Dependencies":[
+                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar"
+                                        ]
+                                    }
                                 }
                             }
                         },
-                        "BaseSourceVersion": "MOCK: FUNCNAME=get_git_source_versions",
-                        "HeadSourceVersion": "MOCK: FUNCNAME=get_git_source_versions"
+                        "BaseSourceVersion":"MOCK: FUNCNAME=get_git_source_versions",
+                        "HeadSourceVersion":"MOCK: FUNCNAME=get_git_source_versions"
                     }
                 }
             }
@@ -227,29 +275,26 @@ setup() {
 }
 
 
-# @test "Get Deploy Paths" {
+@test "Get Deploy Paths" {
     
-#     deploy_stack=$(jq -n '
-#         {
+    deploy_stack=$(jq -n '
+        {
+            "foo": {
+                "Dependencies": [],
+                "Stack": {
+                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo": [],
+                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo": []
+                }
+            }
+        }
+    ')
 
-#         }
-#     ')
+    expected=$(jq -n '
+        {
 
-#     expected=$(jq -n '
-#         {
-
-#         }
-#     ')
-#     run get_deploy_paths $deploy_stack
+        }
+    ')
+    run get_deploy_paths $deploy_stack
     
-#     assert_output "$expected" 
-# }
-
-# #TODO: Add commit queue/inprogress structure
-# # Add $RELEASE_CHANGES
-# # As new commits come in for inprogress PR: add commit to PR commit queue
-# # if $RELEASE_CHANGES or REFRESH_STACK_ON_COMMIT is true: grab latest commit
-# # if 
-
-
-#TODO: Fix template repo dir structure for global/ - put outside us-west-2
+    assert_output "$expected" 
+}

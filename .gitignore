@@ -9,3 +9,4 @@ __pycache__
 .bash_history
 *.zip*
 *deps/
+*tmp*
