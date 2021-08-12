@@ -137,14 +137,14 @@ get_parsed_stack() {
 filter_paths() {
     local stack=$1
 
-    #input must be expanded bash array ("${x[*]}")
+    #input must be expanded bash array (e.g. "${x[*]}")
     local filter=$2
 
     echo $( echo "$stack" | jq \
         --arg filter "$filter" '
         (try ($filter | split(" ")) // []) as $filter
             | with_entries(select(.key | IN($filter[])))
-            | map_values([.[] | select(. | IN($filter[])) ])
+            | .[].Dependencies |= map_values(select(. | IN($filter[])))
         '
     )
 }
@@ -167,7 +167,7 @@ create_stack() {
     num_diff_paths="${#diff_paths[@]}"
     log "Count: $num_diff_paths" "DEBUG"
 
-    parsed_stack=$(get_parsed_stack "$tg_plan_out" "$git_root")
+    parsed_stack=$(get_parsed_stack "$tg_plan_out" "$git_root" | jq 'map_values({"Dependencies": .})')
     log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
 
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
@@ -182,20 +182,33 @@ create_account_stacks() {
     account_stacks=$(jq -n '{}')
     
     log "Converting Approval Mapping to Bash Array" "DEBUG"
-    readarray -t approval_mapping < <( echo "$approval_mapping" | jq -c '.[] | .Paths | .[]' )
-    log "Account Array: ${approval_mapping[*]}" "DEBUG"
+    
+    typeset -A accounts
+
+    while IFS== read -r key value; do
+        accounts["$key"]="$value"
+    done < <(echo $approval_mapping | jq -r '
+        to_entries[] 
+        | (.value.Dependencies | tostring) as $deps 
+        | .value.Paths | .[] | . + "=" + $deps'
+    )
+
+    log "Accounts: $( typeset -p accounts )" "DEBUG"
 
     # gets absolute path to the root of git repo
     git_root=$(get_git_root)
     log "Git Root: $git_root" "DEBUG"
     
-    for account in "${approval_mapping[@]}"; do
+    for account in "${!accounts[@]}"; do
         account=$( echo "${account}" | tr -d '"' )
-        
-        log "account: $account" "DEBUG"
+        log "Account: $account" "DEBUG"
+
+        deps="${accounts[$account]}"
+        log "Account-Level Dependencies:" "DEBUG"
+        log "$deps" "DEBUG"
 
         log "Getting account stack" "DEBUG"
-        stack=$(create_stack $account $git_root) || exit 1
+        stack="$(create_stack $account $git_root)" || exit 1
         
         log "Account stack:" "DEBUG"
         log "$stack" "DEBUG"
@@ -203,10 +216,13 @@ create_account_stacks() {
         log "Adding account artifact" "DEBUG"
         account_stacks=$( echo "$account_stacks" | jq \
             --arg account $account \
-            --arg stack "$stack" '
+            --arg stack "$stack" \
+            --arg deps "$deps" '
             ($stack | fromjson) as $stack
-            | . +  {
+            | ($deps | fromjson) as $deps
+            | . + {
                     ($account): {
+                        "Dependencies": $deps,
                         "Stack": $stack
                     }
                 }' 
@@ -385,6 +401,7 @@ update_pr_queue_with_next_pr() {
 }
 
 update_pr_queue_with_new_commit_stack() {
+    set -e
     local pull_request_id=$1
     local pr_queue=$2
     
@@ -398,25 +415,25 @@ update_pr_queue_with_new_commit_stack() {
     log "Approval Mapping:" "DEBUG"
     log "$approval_mapping" "DEBUG"
 
-    log "Commit Order ID" "INFO"
     commit_order_id=$( echo $pr_queue | jq '
-        .InProgress.CommitStack | keys | map(. | tonumber) | max + 1
+        .InProgress.CommitStack as $commit_stack
+        | if $commit_stack != null then $commit_stack | keys | map(. | tonumber) | max + 1 else 1 end
     ')
-    
+    log "Commit Order ID: $commit_order_id" "INFO"
+
     log "Getting Stacks" "INFO"
     account_stacks=$(create_account_stacks "$approval_mapping")
     log "Account Stacks" "DEBUG"
     log "$account_stacks" "DEBUG"
     log "Adding Stacks to PR Queue"  "INFO"
-    echo $( echo "$pr_queue" | jq \
+    echo "$( echo "$pr_queue" | jq \
         --arg commit_order_id "$commit_order_id" \
         --arg account_stacks "$account_stacks" \
         --arg base_source_version "$base_source_version" \
         --arg head_source_version "$head_source_version" '
         ($account_stacks | fromjson) as $account_stacks
-        | .InProgress.CommitStack
-        | . + {
-            "$commit_order_id": {
+        | (.InProgress.CommitStack) |= . + {
+            ($commit_order_id): {
                 "DeployStack": $account_stacks,
                 "InitialDeployStack": $account_stacks,
                 "BaseSourceVersion": $base_source_version,
@@ -424,8 +441,27 @@ update_pr_queue_with_new_commit_stack() {
             }
         }
         '
-    )
+    )"
 }
+
+update_pr_queue_with_rollback_stack() {
+    local pr_queue=$1
+    local commit_order_id=$2
+
+    readarray -t filter_paths < <( echo $pr_queue | jq -c \
+        --arg commit_order_id $commit_order_id '
+        .InProgress.CommitStack[$commit_order_id].RollbackPaths
+    ')
+
+    initial_stack=$( echo $pr_queue | jq \
+        --arg commit_order_id $commit_order_id '
+        .InProgress.CommitStack[$commit_order_id].InitialDeployStack
+    ')
+
+    log "Filtering out Terragrunt paths that don't need to be rolled back" "DEBUG"
+    deploy_stack=$( filter_paths "$initial_stack" "${filter_paths[*]}" )
+}
+
 trigger_sf() {
     set -e
     log "Getting PR queue" "INFO"
@@ -452,21 +488,11 @@ trigger_sf() {
         if [ "$status" == "FAILED" ]; then
             deployment_type="RollbackStack"
             
-            readarray -t filter_paths < <( echo $pr_queue | jq -c \
+            update_pr_queue_with_rollback_stack $pr_queue $commit_order_id
+            deploy_stack=$( echo $pr_queue | jq \
                 --arg commit_order_id $commit_order_id '
-                .InProgress.CommitStack[$commit_order_id].RollbackPaths
+                .InProgress.CommitStack[$commit_order_id].RollbackStack
             ')
-
-            initial_stack=$( echo $pr_queue | jq \
-                --arg commit_order_id $commit_order_id '
-                .InProgress.CommitStack[$commit_order_id].InitialDeployStack
-            ')
-
-            log "Filtering out Terragrunt paths that don't need to be rolled back" "DEBUG"
-            deploy_stack=$( filter_paths "$initial_stack" "${filter_paths[*]}" )
-
-            # add deploystack to pr_queue
-
         fi
 
     elif [ "$CODEBUILD_INITIATOR" == "user" ]; then  
@@ -503,8 +529,8 @@ trigger_sf() {
     fi
 
     if [ -n "$new_commit" ]; then
-        update_pr_queue_with_new_commit_stack $pull_request_id $pr_queue
-        log "Updated PR Stack:" "DEBUG"
+        pr_queue=$(update_pr_queue_with_new_commit_stack $pull_request_id $pr_queue)
+        log "Updated PR Queue:" "INFO"
         log "$pr_queue" "DEBUG"
         deploy_stack=$( echo $pr_queue | jq \
             --arg commit_order_id $commit_order_id '

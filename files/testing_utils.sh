@@ -1,41 +1,41 @@
-assertEquals() {
-    msg=$1 
-    expected=$2
-    actual=$3
-    echo "$msg: "
-    if [ "$expected" != "$actual" ]; then
-        log "ASSERTION:FAILED EXPECTED=$expected ACTUAL=$actual" "ERROR"
-    else
-        echo "PASSED"
-    fi
-}
+if [ -n "$MOCK_GIT_CMDS" ]; then
+    source ../mock_git_cmds.sh
+fi
+
+if [ -n "$MOCK_AWS_CMDS" ]; then
+    source ../mock_aws_cmds.sh
+fi
 
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	modify_paths=()
-	while [[ $# -gt 0 ]]; do
-		key="$1"
 
-		case $key in
+	while (( "$#" )); do
+		case "$1" in
 			--clone-url)
-				clone_url="$2"
-				shift 
-				shift
+				if [ -n "$2" ]; then
+					clone_url="$2"
+					shift 2
+				else
+					echo "Error: Argument for $1 is missing" >&2
+					exit 1
+				fi
 				;;
 			--clone-destination)
 				clone_destination="$2"
-				shift 
-				shift
+				shift 2
 				;;
 			--terragrunt-working-dir)
 				terragrunt_working_dir="$2"
-				shift 
+				shift 2
+				;;
+			--skip-terraform-state-setup)
+				skip_terraform_state_setup=true
 				shift
 				;;
 			--modify)
 				modify_paths+=("$2")
-				shift 
-				shift
+				shift 2
 				;;
 			*)
 				echo "Unknown Option: $1"
@@ -55,20 +55,16 @@ clone_testing_repo() {
 	if [ ! -d $local_clone_git ]; then
 		git clone "$clone_url" "$clone_destination"
 	fi
-
-	log "Changing Directory to test repo" "DEBUG"
-	cd "$clone_destination"
 }
 
 
 setup_test_env() {
-
 	parse_args "$@"
 
 	log "Modify list: ${modify_paths[*]}"  "DEBUG"
 	clone_testing_repo $clone_url $clone_destination
 
-	if [ -z "$SKIP_TERRAFORM_TESTING_STATE" ]; then
+	if [ -z "$skip_terraform_state_setup" ]; then
 		log "Applying all dirs" "DEBUG"
 
 		apply_out=$(terragrunt run-all apply \
@@ -98,11 +94,3 @@ setup_test_env() {
 	fi
 }
 
-
-if [ -n "$MOCK_GIT_CMDS" ]; then
-    source mock_git_cmds.sh
-fi
-
-if [ -n "$MOCK_AWS_CMDS" ]; then
-    source mock_aws_cmds.sh
-fi
