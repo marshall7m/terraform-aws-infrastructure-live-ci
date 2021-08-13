@@ -112,7 +112,7 @@ create_stack() {
     num_diff_paths="${#diff_paths[@]}"
     log "Count: $num_diff_paths" "DEBUG"
 
-    parsed_stack=$(get_parsed_stack "$tg_plan_out" "$git_root" | jq 'map_values({"Dependencies": .})')
+    parsed_stack=$(get_parsed_stack "$tg_plan_out" "$git_root" | jq 'map_values({"Status": "Waiting", "Dependencies": .})')
     log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
 
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
@@ -167,6 +167,7 @@ create_account_stacks() {
             | ($deps | fromjson) as $deps
             | . + {
                     ($account): {
+                        "Status": "Waiting",
                         "Dependencies": $deps,
                         "Stack": $stack
                     }
@@ -199,6 +200,7 @@ get_deploy_paths() {
 
 checkout_pr() {
     local pull_request_id=$1
+    local commit_id=$2
 
     git fetch origin pull/$pull_request_id/head:pr-${pull_request_id}
     git checkout pr-${pull_request_id}
@@ -276,25 +278,22 @@ get_git_source_versions() {
 update_pr_queue_with_deployed_path() {
     local pr_queue=$1
     local deployed_path=$2
-    local commit_order_id=$3
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     log "Removing: $deployed_path from Deploy Stack" "DEBUG"
     pr_queue=$( echo $pr_queue | jq \
-        --arg deployed_path "$deployed_path" \
-        --arg commit_order_id $commit_order_id '
+        --arg deployed_path "$deployed_path" '
         [($deployed_path | fromjson)] as $deployed_path
-        | (.InProgress.CommitStack[$commit_order_id].DeployStack[].Stack[].Dependencies) |= map_values(select(. | IN($deployed_path[]) | not))
+        | (.InProgress.CommitStack.InProgress.DeployStack[].Stack[].Dependencies) |= map_values(select(. | IN($deployed_path[]) | not))
     ')
 
     log "Updated PR Queue: $pr_queue" "DEBUG"
     
     log "Adding: $deployed_path to associated Deployed Array" "DEBUG"
     pr_queue=$( echo $pr_queue | jq \
-        --arg commit_order_id $commit_order_id \
         --arg deployed_path "$deployed_path" '
         ($deployed_path | fromjson) as $deployed_path
-        | (.InProgress.CommitStack[$commit_order_id].RollbackPaths) |=  [$deployed_path]
+        | (.InProgress.CommitStack.InProgress.RollbackPaths) |=  [$deployed_path]
     ')
 
     echo "$pr_queue"
@@ -304,9 +303,8 @@ is_commit_stack_empty() {
     local pr_queue=$1
     local commit_order_id=$2
     
-    bool=$( echo $pr_queue | jq \
-        --arg commit_order_id $commit_order_id '
-        if .InProgress.CommitStack[$commit_order_id].DeployStack == {} 
+    bool=$( echo $pr_queue | jq '
+        if .InProgress.CommitStack.InProgress.DeployStack == {} 
         then true
         else false
         end
@@ -344,6 +342,15 @@ update_pr_queue_with_next_pr() {
     fi
 }
 
+update_pr_queue_with_next_commit() {
+    local pr_queue=$1
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    echo "$( echo $pr_queue | jq '
+        .InProgress.CommitStack.InProgress = .InProgress.CommitStack.Queue[0] | del(.InProgress.CommitStack.Queue[0])
+    ')"
+}
+
 update_pr_queue_with_new_commit_stack() {
     set -e
     local pull_request_id=$1
@@ -358,12 +365,6 @@ update_pr_queue_with_new_commit_stack() {
     approval_mapping=$(get_approval_mapping)
     log "Approval Mapping:" "DEBUG"
     log "$approval_mapping" "DEBUG"
-
-    commit_order_id=$( echo $pr_queue | jq '
-        .InProgress.CommitStack as $commit_stack
-        | if $commit_stack != null then $commit_stack | keys | map(. | tonumber) | max + 1 else 1 end
-    ')
-    log "Commit Order ID: $commit_order_id" "INFO"
 
     log "Getting Stacks" "INFO"
     account_stacks=$(create_account_stacks "$approval_mapping")
@@ -390,20 +391,36 @@ update_pr_queue_with_new_commit_stack() {
 
 update_pr_queue_with_rollback_stack() {
     local pr_queue=$1
-    local commit_order_id=$2
 
-    readarray -t filter_paths < <( echo $pr_queue | jq -c \
-        --arg commit_order_id $commit_order_id '
-        .InProgress.CommitStack[$commit_order_id].RollbackPaths
-    ')
-
-    initial_stack=$( echo $pr_queue | jq \
-        --arg commit_order_id $commit_order_id '
-        .InProgress.CommitStack[$commit_order_id].InitialDeployStack
-    ')
-
+    #TODO Either pass filter_paths or create as jq var to replace bash array filter_paths
     log "Filtering out Terragrunt paths that don't need to be rolled back" "DEBUG"
     deploy_stack=$( filter_paths "$initial_stack" "${filter_paths[*]}" )
+}
+
+deploy_stack_in_progress() {
+    local pr_queue=$1
+    
+    echo "$( echo $pr_queue | jq '
+        (["SUCCESS", "FAILURE"]) as $finished_status
+        | .InProgress.CommitStack.InProgress.DeployStack | [.. | .Status? | strings] | unique | map(. | IN($finished_status[])) | all | not
+    ')"
+}
+
+needs_rollback() {
+    local pr_queue=$1
+    
+    echo "$( echo $pr_queue | jq '
+        (["FAILURE"]) as $failure_status
+        | .InProgress.CommitStack.InProgress.DeployStack | [.. | .Status? | strings] | unique | map(. | IN($failure_status[])) | any
+    ')"
+}
+
+commit_queue_is_empty() {
+    local pr_queue=$1
+    
+    echo "$( echo $pr_queue | jq '
+        .InProgress.CommitStack.Queue | length == 0
+    ')"
 }
 
 trigger_sf() {
@@ -417,69 +434,40 @@ trigger_sf() {
         sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
         deployed_path=$( echo $sf_event | jq '.Path')
         deployment_type=$( echo $sf_event | jq '.DeploymentType')
-        status=$( echo $sf_event | jq '.Status')
-        base_commit_id=$( echo $sf_event | jq '.BaseSourceVersion' | grep -oP '(?<=\{).+?(?=\})')
-        head_commit_id=$( echo $sf_event | jq '.HeadSourceVersion' | grep -oP '(?<=\{).+?(?=\})')
-        commit_order_id=$( echo $sf_event | jq '.CommitOrderID')
-        
+
         log "Step Function Event:" "DEBUG"
         log "$sf_event" "DEBUG"
 
-        pr_queue=$( update_pr_queue_with_deployed_path "$pr_queue" "$deployed_path" "$commit_order_id" )
+        pr_queue=$( update_pr_queue_with_deployed_path "$pr_queue" "$deployed_path")
         log "Updated PR Queue:" "DEBUG"
         log "$pr_queue" "DEBUG"
 
-        if [ "$status" == "FAILED" ]; then
-            deployment_type="RollbackStack"
-            
+    fi
+
+    if [ $(deploy_stack_in_progress "$pr_queue") == false ]; then
+        if [ $(needs_rollback) == true ]; then
             update_pr_queue_with_rollback_stack $pr_queue $commit_order_id
             deploy_stack=$( echo $pr_queue | jq \
                 --arg commit_order_id $commit_order_id '
-                .InProgress.CommitStack[$commit_order_id].RollbackStack
+                .InProgress.CommitStack.InProgress.RollbackStack
             ')
-        fi
-
-    elif [ "$CODEBUILD_INITIATOR" == "user" ]; then  
-        if pr_in_progress "$pr_queue"; then
-            log "Pull Request in Progress -- Deploying multiple PR concurrently is not advised" "INFO"
-            exit 1
         else
-            new_commit=true
-            pr_queue=$(update_pr_queue_with_next_pr "$pr_queue")
-            log "Updated PR Queue: $pr_queue" "DEBUG"
+            if [ $(commit_queue_is_empty) == true ]; then
+                pr_queue=$(update_pr_queue_with_next_pr "$pr_queue")
+                checkout_pr $pull_request_id
+            else
+                pr_queue=$(update_pr_queue_with_next_commit "$pr_queue")
+                git checkout "$commit_id"
+            fi
+
+            pr_queue=$(update_pr_queue_with_new_commit_stack $pull_request_id $pr_queue)
+            log "Updated PR Queue:" "INFO"
             log "$pr_queue" "DEBUG"
 
-            pull_request_id=$( echo $pr_queue | jq '.InProgress | .ID')
-            log "Pull Request Id: $pull_request_id" "INFO"
-            head_ref=$( echo $pr_queue | jq '.InProgress | .BaseRef' )
-
-            log "Locking Deployments only from PR" "INFO"
-            create_pr_codebuild_webhook $BUILD_NAME $BASE_REF $head_ref
-            
-            log "Checking out PR Head" "INFO"
-            checkout_pr $pull_request_id
+            deploy_stack=$( echo $pr_queue | jq '
+                .InProgress.CommitStack.InProgress.DeployStack
+            ')
         fi
-
-    elif [ -n  $CODEBUILD_WEBHOOK_TRIGGER ]; then
-        new_commit=true
-
-        log "New commits were added" "INFO"
-
-        pull_request_id=$( echo "${CODEBUILD_WEBHOOK_TRIGGER}" | cut -d '/' -f 2 )
-        log "Pull Request ID: $pull_request_id" "DEBUG"
-
-        #TODO: Add $RELEASE_CHANGES condition
-        stop_running_sf_executions
-    fi
-
-    if [ -n "$new_commit" ]; then
-        pr_queue=$(update_pr_queue_with_new_commit_stack $pull_request_id $pr_queue)
-        log "Updated PR Queue:" "INFO"
-        log "$pr_queue" "DEBUG"
-        deploy_stack=$( echo $pr_queue | jq \
-            --arg commit_order_id $commit_order_id '
-            .InProgress.CommitStack[$commit_order_id].DeployStack
-        ')
     fi
 
     log "Deployment Stack" "DEBUG"
@@ -514,3 +502,8 @@ trigger_sf() {
 # Once queue is done, get next PR
 
 # - Add SF execution ARN to Stack Path artifact for task status lookup
+
+
+# User:
+#     - Set PR
+#     - Release Changes

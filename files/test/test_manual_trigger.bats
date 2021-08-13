@@ -8,12 +8,12 @@ export CODEBUILD_INITIATOR="user"
 setup() {
     load 'test_helper/bats-support/load'
     load 'test_helper/bats-assert/load'
-    load '../helpers/utils.sh'
+    load '../helpers/trigger_sf_utils.sh'
     load 'testing_utils.sh'
 }
 
 @test "script is runnable" {
-    run utils.sh
+    run trigger_sf_utils.sh
 }
 
 @test "PR not in Progress" {
@@ -47,6 +47,84 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
+
+@test "Deployment in Progress Check" {
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "RUNNING",
+                                "Dependencies":[
+                                    "security-account"
+                                ],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Status": "RUNNING",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    run deploy_stack_in_progress "$pr_queue"
+
+    assert_output true
+}
+
+@test "Deployment NOT in Progress Check" {
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "FAILURE",
+                                "Dependencies":[
+                                    "security-account"
+                                ],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Status": "FAILURE",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    run deploy_stack_in_progress "$pr_queue"
+
+    assert_output false
+}
 
 @test "Override Pull Request Queue" {
     export CODEBUILD_INITIATOR="user"
@@ -140,138 +218,8 @@ setup() {
         --modify "./tmp/directory_dependency/dev-account/us-west-2/env-one/foo" \
         # --skip-terraform-state-setup
 
-    pr_queue=$(jq -n '
-        {
-            "Queue": [
-                {
-                    "ID": "3",
-                    "BaseRef": "master",
-                    "HeadRef": "feature-3"
-                }
-            ],
-            "InProgress": {
-                "ID": "2",
-                "BaseRef": "master",
-                "HeadRef": "feature-2"
-            }
-        }
-    ')
-
-    get_approval_mapping() {
-        echo $(jq -n '
-            {
-                "Dev-Env": {
-                    "Name": "Testing-Env",
-                    "Paths": ["./tmp/directory_dependency/dev-account"],
-                    "Dependencies": ["./tmp/directory_dependency/security-account"],
-                    "Voters": ["admin-testing-user"],
-                    "ApprovalCountRequired": 2,
-                    "RejectionCountRequired": 2
-                },
-                "Security-Env": {
-                    "Name": "Security-Env",
-                    "Paths": ["./tmp/directory_dependency/security-account"],
-                    "Dependencies": [],
-                    "Voters": ["admin-security-user"],
-                    "ApprovalCountRequired": 10,
-                    "RejectionCountRequired": 2
-                }
-            }
-        ')
-    }
-    
-    expected=$(jq -n '
-        {
-            "Queue":[
-                {
-                    "ID":"3",
-                    "BaseRef":"master",
-                    "HeadRef":"feature-3"
-                }
-            ],
-            "InProgress":{
-                "ID":"2",
-                "BaseRef":"master",
-                "HeadRef":"feature-2",
-                "CommitStack":{
-                    "1":{
-                        "DeployStack":{
-                            "./tmp/directory_dependency/dev-account":{
-                                "Dependencies":[
-                                    "./tmp/directory_dependency/security-account"
-                                ],
-                                "Stack":{
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
-                                        "Dependencies":[]
-                                    },
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
-                                        "Dependencies":[]
-                                    }
-                                }
-                            },
-                            "./tmp/directory_dependency/security-account":{
-                                "Dependencies":[],
-                                "Stack":{
-                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar":{
-                                        "Dependencies":[
-                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz"
-                                        ]
-                                    },
-                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz":{
-                                        "Dependencies":[]
-                                    },
-                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/foo":{
-                                        "Dependencies":[
-                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar"
-                                        ]
-                                    }
-                                }
-                            }
-                        },
-                        "InitialDeployStack":{
-                            "./tmp/directory_dependency/dev-account":{
-                                "Dependencies":[
-                                    "./tmp/directory_dependency/security-account"
-                                ],
-                                "Stack":{
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
-                                        "Dependencies":[]
-                                    },
-                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
-                                        "Dependencies":[]
-                                    }
-                                }
-                            },
-                            "./tmp/directory_dependency/security-account":{
-                                "Dependencies":[],
-                                "Stack":{
-                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar":{
-                                        "Dependencies":[
-                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz"
-                                        ]
-                                    },
-                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/baz":{
-                                        "Dependencies":[]
-                                    },
-                                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/foo":{
-                                        "Dependencies":[
-                                            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/bar"
-                                        ]
-                                    }
-                                }
-                            }
-                        },
-                        "BaseSourceVersion":"MOCK: FUNCNAME=get_git_source_versions",
-                        "HeadSourceVersion":"MOCK: FUNCNAME=get_git_source_versions"
-                    }
-                }
-            }
-        }
-    ')
 
     run update_pr_queue_with_new_commit_stack "2" "$pr_queue"
-
-    assert_output -p "$expected"
 }
 
 
@@ -297,4 +245,170 @@ setup() {
     run get_deploy_paths $deploy_stack
     
     assert_output "$expected" 
+}
+
+@test "Rollback Needed" {
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "FAILURE",
+                                "Dependencies":[
+                                    "security-account"
+                                ],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Status": "FAILURE",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    run needs_rollback "$pr_queue"
+
+    assert_output true
+}
+
+@test "Rollback NOT Needed" {
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "SUCCESS",
+                                "Dependencies":[
+                                    "security-account"
+                                ],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    run needs_rollback "$pr_queue"
+
+    assert_output false
+}
+
+@test "Commit Queue is Empty" {
+
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "Queue": [],
+                    "InProgress": {}
+                }
+            }
+        }
+    ')
+    run commit_queue_is_empty "$pr_queue"
+
+    assert_output true
+}
+
+@test "Commit Queue is NOT Empty" {
+
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "Queue": [
+                        {
+                            "ID": "test-commit-id"
+                        }
+                    ],
+                    "InProgress": {}
+                }
+            }
+        }
+    ')
+    run commit_queue_is_empty "$pr_queue"
+
+    assert_output false
+}
+
+@test "Dequeue Commit" {
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "Queue": [
+                        {
+                            "ID": "test-commit-id"
+                        }
+                    ],
+                    "InProgress": {}
+                }
+            }
+        }
+    ')
+
+    expected=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "Queue": [],
+                    "InProgress": {
+                        "ID": "test-commit-id"
+                    }
+                }
+            }
+        }
+    ')
+
+    run update_pr_queue_with_next_commit "$pr_queue"
+    assert_output -p "$expected"
 }
