@@ -533,7 +533,7 @@ trigger_sf() {
 # Once account stack deps are sucessful, run account stack
 # Once path stack deps are successful, run path
 
-# Once all paths are done, allow rollback stack
+# Once all paths are done (to make sure there are no in progress tf applies that fails are left unnoticed), allow rollback stack
 # Create rollback stack with paths that are successful/failed and add previous commit stack to queue
 # Once rollback stack is all successful, get next from queue
 # Once queue is done, get next PR
@@ -555,3 +555,18 @@ trigger_sf() {
 # if path fails/rejected, delete new providers or delete new file for commit 
 # apply all on base commit
 # doesn't allow for partial apply for commits
+
+
+
+#TOMORROW:
+#Process
+# - TF plan figure outs if new providers/file and adds to pr_queue
+# - If a path fails, tf destroy for all paths that have new providers/file
+# - Get previous commit from finished and repeat tf destroy process
+# - If previous commit == base, tf apply all on base
+
+#TODO:
+# - Change buildspec_ci to get new providers/new file
+# - Create new SF choice for rollback
+# - Change trigger_sf to have input for rollback choice 
+# - Run rollback paths with approval flow

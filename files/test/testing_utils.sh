@@ -8,6 +8,61 @@ if [ -n "$MOCK_AWS_CMDS" ]; then
     source mock_aws_cmds.sh
 fi
 
+log() {
+    declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
+    local log_message=$1
+    local log_priority=$2
+
+    #check if level exists
+    [[ ${levels[$log_priority]} ]] || return 1
+
+    #check if level is enough
+    # returns exit status 0 instead of 2 to prevent `set -e ` from exiting if log priority doesn't meet log level
+    (( ${levels[$log_priority]} < ${levels[$script_logging_level]} )) && return
+
+    # redirects log message to stderr (>&2) to prevent cases where sub-function
+    # uses log() and sub-function stdout results and log() stdout results are combined
+    echo "${log_priority} : ${log_message}" >&2
+}
+
+run_only_test() {
+  if [ "$BATS_TEST_NUMBER" -ne "$1" ]; then
+    skip
+  fi
+}
+
+setup_tg_env() {
+    export TESTING_TMP_DIR=$(mktemp -d)
+	chmod u+x "$TESTING_TMP_DIR"
+}
+
+teardown_tg_env() {
+  if [ $BATS_TEST_COMPLETED ]; then
+    rm -rf $TESTING_TMP_DIR
+  else
+    echo "Did not delete $TESTING_TMP_DIR, as test failed"
+  fi
+}
+
+setup_existing_provider() {
+	cat << EOF > $TESTING_TMP_DIR/main.tf
+
+provider "time" {}
+
+resource "time_static" "test" {}
+
+EOF
+    # 'EOF' to escape $
+    cat << 'EOF' > $TESTING_TMP_DIR/terragrunt.hcl
+
+terraform {
+    source = "${get_terragrunt_dir()}///"
+}
+EOF
+
+    terragrunt apply --terragrunt-working-dir "$TESTING_TMP_DIR" -auto-approve
+}
+
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	modify_paths=()
@@ -56,6 +111,8 @@ clone_testing_repo() {
 
 	if [ ! -d $local_clone_git ]; then
 		git clone "$clone_url" "$clone_destination"
+	else
+		log ".git already exists in clone destination" "INFO"
 	fi
 }
 

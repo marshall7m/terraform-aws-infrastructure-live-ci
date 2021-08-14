@@ -16,3 +16,12 @@ log() {
     # uses log() and sub-function stdout results and log() stdout results are combined
     echo "${log_priority} : ${log_message}" >&2
 }
+
+get_pr_queue() {
+    aws s3api get-object \
+    --bucket $ARTIFACT_BUCKET_NAME \
+    --key $ARTIFACT_BUCKET_PR_QUEUE_KEY \
+    pr_queue.json > /dev/null
+
+    echo $(jq . pr_queue.json)
+}

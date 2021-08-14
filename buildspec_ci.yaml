@@ -2,6 +2,22 @@ version: 0.2
 env:
   shell: bash
 phases:
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - "echo Terraform version: $(terraform --version)"
+      - "echo Terragrunt version: $(terragrunt --version)"
+      - "echo TERRAGRUNT_WORKING_DIR: ${TERRAGRUNT_WORKING_DIR}"
+      - "echo ARTIFACT_BUCKET_NAME: ${ARTIFACT_BUCKET_NAME}"
+      - "echo ARTIFACT_BUCKET_PR_QUEUE_KEY: ${ARTIFACT_BUCKET_PR_QUEUE_KEY}"
+      - |
+        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/rollback.sh"
+        pr_queue=$(get_pr_queue)
+        if [ "$COMMAND" == "plan"]; then
+          update_pr_queue_with_new_providers "$pr_queue"
+        elif [ "$COMMAND" == "apply"]; then
+          update_pr_queue_with_new_resources "$pr_queue"
+        fi
   build:
     commands:
       - git fetch origin pull/$PR_ID/head:$HEAD_REF
