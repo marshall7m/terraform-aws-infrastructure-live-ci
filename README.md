@@ -543,4 +543,36 @@ Loop throuhg every commit `pr_queue` with rollback process until head_source_ver
 Create commit key for stack queue
 
 
-TODO:
+# Task Token Idea
+
+- Each path has a `depedency_tokens` list that contains dependencies path token
+- If path is successful, send task sucess to all of the dependency paths
+
+If path fails:
+- dependencies are not runned
+- rollback new providers/new files for each commit
+- Revert back to base and tf apply all
+
+If path is rejected
+- dependencies are not runned
+- other paths can still be approved that aren't a dependency
+
+
+If path is success:
+- Dependencies are runned
+- Add to artifact if path contains new providers/new file relative to previous commit
+
+
+Pros:
+- Better high-level view of what paths are being deployed within one sf execution
+- Reduces amount of Sf executions
+- Decouples Deployment stack update and deployment path status update from parent Codebuild
+    - Codebuild would only have to create dependency stack for commit
+- Create API Gateway url with Step function query headers
+    - Commit
+    - Path
+    - Task Status
+
+Cons:
+- Complicated task token management
+

@@ -178,23 +178,25 @@ create_account_stacks() {
     echo "$account_stacks"
 }
 
-get_deploy_paths() {
-    local deploy_stack=$1
+get_target_paths() {
+    local target_stack=$1
 
-
-    accounts=$( echo $deploy_stack | jq '
-        [to_entries[] | select(.value.Dependencies == []) | .key]
+    log "Getting list of accounts that have no account dependencies or account dependencies that are not running" "DEBUG"
+    accounts=$( echo $target_stack | jq '
+        (.) as $target_stack
+        | ["RUNNING", "WAITING"] as $unfinished_status
+        | [to_entries[] | select(.value.Dependencies | map($target_stack[.].Status? | IN($unfinished_status[]) | not or . == null) | all) | .key ]
     ')
 
     log "Getting Deployment Paths from Accounts:" "DEBUG"
     log "$accounts" "DEBUG"
 
-    echo $( echo $deploy_stack | jq \
+    echo "$( echo $target_stack | jq \
         --arg accounts "$accounts" '
         ($accounts | fromjson) as $accounts
         | with_entries(select(.key | IN($accounts[])))
-        | [.[] | .Stack | to_entries[] | select(.value.Dependencies == []) | .key]
-    ')
+        | [.[] | (.Stack) as $stack | $stack | to_entries[] | select(.value.Status == "WAITING" and (.value.Dependencies | map($stack[.].Status == "SUCCESS" or . == null ) | all) ) | .key]
+    ')"
 
 }
 
@@ -216,16 +218,18 @@ get_pr_queue() {
 }
 
 stop_running_sf_executions() {
+    running_executions=$(aws stepfunctions list-executions \
+        --state-machine-arn $STATE_MACHINE_ARN \
+        --status-filter "RUNNING" | jq '.executions | map(.executionArn)'
+    )
 
-    current_execution_arn=$(aws stepfunctions list-executions \
-            --state-machine-arn $STATE_MACHINE_ARN \
-            --status-filter "RUNNING" | jq '.executions | .[] | .executionArn'
-        )
-
-    log "Stopping Step Function execution: $current_execution_arn" "INFO"
-    aws stepfunctions stop-execution \
-        --execution-arn $current_execution_arn \
-        --cause "New commits were added to pull request"
+    for execution in "${running_executions[@]}"; do
+        log "Stopping Step Function execution: $execution" "DEBUG"
+        aws stepfunctions stop-execution \
+            --execution-arn "$execution" \
+            --cause "Releasing most recent commit changes"
+    done
+    
 }
 
 get_approval_mapping() {
@@ -316,6 +320,19 @@ is_commit_stack_empty() {
         return 0
     fi
 }
+
+pr_to_front() {
+    local pr_queue=$1
+    local pull_request_id=$2
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
+    echo "$( echo $pr_queue | jq \
+        --arg pull_request_id "$pull_request_id" '
+        (.Queue | map(.ID == $pull_request_id) | index(true)) as $idx
+        | .Queue |= [.[$idx]] + (. | del(.[$idx]))
+    ')"
+}
+
 update_pr_queue_with_next_pr() {
     local pr_queue=$1
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -325,21 +342,11 @@ update_pr_queue_with_next_pr() {
         exit 1
     fi
 
-    if [ -n "$DEPLOY_PULL_REQUEST_ID" ]; then
-        log "Overriding Pull Request Queue" "INFO"
-        echo "$( echo $pr_queue | jq \
-            --arg ID "$DEPLOY_PULL_REQUEST_ID" '
-            (.Queue | map(.ID == $ID) | index(true)) as $idx
-            | .InProgress = .Queue[$idx] | del(.Queue[$idx])
-        ')"
-    else
-        log "Pulling next Pull Request in queue" "INFO"
-        echo "$( echo $pr_queue | jq \
-            --arg ID "$DEPLOY_PULL_REQUEST_ID" '
-            .InProgress = .Queue[0] | del(.Queue[0])
-            '
-        )"
-    fi
+    log "Moving finished PR to Finished category" "INFO"
+    pr_queue=$(echo $pr_queue | jq '.Finished += [.InProgress] | del(.InProgress)')
+
+    log "Moving next PR in Queue to InProgress" "INFO"
+    echo "$( echo $pr_queue | jq '.InProgress = .Queue[0] | del(.Queue[0])')"
 }
 
 update_pr_queue_with_next_commit() {
@@ -372,18 +379,14 @@ update_pr_queue_with_new_commit_stack() {
     log "$account_stacks" "DEBUG"
     log "Adding Stacks to PR Queue"  "INFO"
     echo "$( echo "$pr_queue" | jq \
-        --arg commit_order_id "$commit_order_id" \
         --arg account_stacks "$account_stacks" \
         --arg base_source_version "$base_source_version" \
         --arg head_source_version "$head_source_version" '
         ($account_stacks | fromjson) as $account_stacks
-        | (.InProgress.CommitStack) |= . + {
-            ($commit_order_id): {
-                "DeployStack": $account_stacks,
-                "InitialDeployStack": $account_stacks,
-                "BaseSourceVersion": $base_source_version,
-                "HeadSourceVersion": $head_source_version
-            }
+        | (.InProgress.CommitStack.InProgress) |= . + {
+            "DeployStack": $account_stacks,
+            "BaseSourceVersion": $base_source_version,
+            "HeadSourceVersion": $head_source_version
         }
         '
     )"
@@ -392,9 +395,12 @@ update_pr_queue_with_new_commit_stack() {
 update_pr_queue_with_rollback_stack() {
     local pr_queue=$1
 
-    #TODO Either pass filter_paths or create as jq var to replace bash array filter_paths
     log "Filtering out Terragrunt paths that don't need to be rolled back" "DEBUG"
-    deploy_stack=$( filter_paths "$initial_stack" "${filter_paths[*]}" )
+    #TODO: Select paths that are succed or failed and then convert to waiting phase
+    echo "$(echo $pr_queue | jq '
+        .InProgress.CommitStack.InProgress.RollbackStack = ((.InProgress.CommitStack.InProgress.DeployStack) 
+            | walk( if type == "object" and .Status? then .Status = "Waiting" else . end))
+    ')"
 }
 
 deploy_stack_in_progress() {
@@ -433,7 +439,6 @@ trigger_sf() {
         
         sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
         deployed_path=$( echo $sf_event | jq '.Path')
-        deployment_type=$( echo $sf_event | jq '.DeploymentType')
 
         log "Step Function Event:" "DEBUG"
         log "$sf_event" "DEBUG"
@@ -444,50 +449,82 @@ trigger_sf() {
 
     fi
 
-    if [ $(deploy_stack_in_progress "$pr_queue") == false ]; then
+    if [ "$CODEBUILD_INITIATOR" == "user" ]; then
+        if [ -n "$NEXT_PR_IN_QUEUE" ]; then
+            log "Moving PR: $NEXT_PR_IN_QUEUE to front of Pull Request Queue" "INFO"
+            pr_queue=$(pr_to_front "$NEXT_PR_IN_QUEUE")
+            log "Updated Pull Request Queue:" "INFO"
+            log "$(echo $pr_queue | jq '.Queue')" "INFO"
+            exit 0
+        else
+            log "Env Var: NEXT_PR_IN_QUEUE is not defined" "ERROR"
+            exit 1
+        fi
+
+        if [ -n "$RELEASE_CHANGE" ]; then
+            log "Updating Commit Queue to only include most recent commit" "INFO"
+            pr_queue=$(release_commit_change "$pr_queue")
+            log "Updated Commit Queue:" "DEBUG"
+            log "$(echo $pr_queue | jq '.InProgress.CommitStack.Queue')" "DEBUG"
+
+            if rollback_stack_in_progress "$pr_queue"; then
+                log "Release change is not available when rollback is in progress" "ERROR"
+                log "Once rollback is done, the current most recent commit will be next" "ERROR"
+                exit 1
+            else
+                log "Stopping Step Function executions that are running" "INFO"
+                stop_running_sf_executions
+                log "Removing all commits in queue except most recent commit" "INFO"
+        fi
+    fi
+    
+    
+    if [ $(deploy_stack_in_progress "$pr_queue") == false ] && if [ $(rollback_in_progress) == false ]; then
+        log "No Deployment or Rollback stack is in Progress" "DEBUG"
         if [ $(needs_rollback) == true ]; then
-            update_pr_queue_with_rollback_stack $pr_queue $commit_order_id
-            deploy_stack=$( echo $pr_queue | jq \
-                --arg commit_order_id $commit_order_id '
+            log "Adding Rollback Stack" "INFO"
+            pr_queue=$(update_pr_queue_with_rollback_stack $pr_queue)
+            target_stack=$( echo $pr_queue | jq '
                 .InProgress.CommitStack.InProgress.RollbackStack
             ')
         else
-            if [ $(commit_queue_is_empty) == true ]; then
+            if [ $(commit_queue_is_empty) == true ] ; then
+                log "Pulling next Pull Request from PR queue" "INFO"
                 pr_queue=$(update_pr_queue_with_next_pr "$pr_queue")
-                checkout_pr $pull_request_id
-            else
-                pr_queue=$(update_pr_queue_with_next_commit "$pr_queue")
-                git checkout "$commit_id"
             fi
 
-            pr_queue=$(update_pr_queue_with_new_commit_stack $pull_request_id $pr_queue)
+            log "Pulling next Commit from queue" "INFO"
+            pr_queue=$(update_pr_queue_with_next_commit "$pr_queue")
+
+            log "Checking out target commit" "INFO"
+            commit_id=$(echo $pr_queue | jq '.InProgress.CommitStack.InProgress.ID')
+            log "Commit ID: $commit_id" "DEBUG"
+            git checkout "$commit_id"
+
+            log "Creating commits deployment stack"
+            pr_queue=$(update_pr_queue_with_new_commit_stack "$pr_queue")
+
             log "Updated PR Queue:" "INFO"
             log "$pr_queue" "DEBUG"
 
-            deploy_stack=$( echo $pr_queue | jq '
-                .InProgress.CommitStack.InProgress.DeployStack
-            ')
+            target_stack=$( echo $pr_queue | jq '.InProgress.CommitStack.InProgress.DeployStack')
         fi
     fi
 
-    log "Deployment Stack" "DEBUG"
-    log "$deploy_stack" "DEBUG"
+    log "Target Stack" "DEBUG"
+    log "$target_stack" "DEBUG"
 
-    deploy_paths=$(get_deploy_paths "$deploy_stack")
-    log "Deploy Paths:" "DEBUG"
-    log "$deploy_paths" "DEBUG"
+    target_paths=$(get_target_paths "$target_stack")
+    log "Target Paths:" "DEBUG"
+    log "$target_paths" "DEBUG"
 
     log "Starting Step Function Deployment Flow" "INFO"
-    start_sf_executions $deploy_paths
+    start_sf_executions $target_paths
 
     log "Uploading Updated PR Queue" "INFO"
     upload_pr_queue $pr_queue
 }
 
-
-#TODO: 
-# - Add commit queue/inprogress structure
-# - Add $RELEASE_CHANGES feature and $REFRESH_STACK_ON_COMMIT
 
 #TODO: 
 # - Fix template repo dir structure for global/ - put outside us-west-2
@@ -507,3 +544,14 @@ trigger_sf() {
 # User:
 #     - Set PR
 #     - Release Changes
+
+
+# Idea #1
+# if path fails/rejected, delete new providers or delete new file for commit 
+# continue process for previous commit
+# when previous commit == base ref, apply all on base commit
+
+# Idea #2
+# if path fails/rejected, delete new providers or delete new file for commit 
+# apply all on base commit
+# doesn't allow for partial apply for commits

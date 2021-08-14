@@ -126,9 +126,10 @@ setup() {
     assert_output false
 }
 
-@test "Override Pull Request Queue" {
+@test "Move Pull Request to front of Queue" {
     export CODEBUILD_INITIATOR="user"
-    export DEPLOY_PULL_REQUEST_ID="3"
+    export NEXT_PR_IN_QUEUE="3"
+
     pr_queue=$(jq -n '
         {
             "Queue": [
@@ -151,19 +152,20 @@ setup() {
         {
             "Queue": [
                 {
+                    "ID": "3",
+                    "BaseRef": "master",
+                    "HeadRef": "feature-3"
+                },
+                {
                     "ID": "2",
                     "BaseRef": "master",
                     "HeadRef": "feature-2"
                 }
             ],
-            "InProgress": {
-                "ID": "3",
-                "BaseRef": "master",
-                "HeadRef": "feature-3"
-            }
+            "InProgress": {}
         }
     ')
-    run update_pr_queue_with_next_pr "$pr_queue" 2>/dev/null
+    run pr_to_front "$pr_queue" "3"
     assert_output -p "$expected"
 }
 
@@ -208,7 +210,7 @@ setup() {
 }
 
 @test "Create Pull Request Commit Stack" {
-
+    skip
     setup_test_env \
         --clone-url "https://github.com/marshall7m/infrastructure-live-testing-template.git" \
         --clone-destination "./tmp" \
@@ -223,28 +225,84 @@ setup() {
 }
 
 
-@test "Get Deploy Paths" {
+@test "Get Deploy Paths with initial multi-account stack" {
     
     deploy_stack=$(jq -n '
         {
-            "foo": {
-                "Dependencies": [],
-                "Stack": {
-                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo": [],
-                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo": []
+            "dev-account":{
+                "Status": "Waiting",
+                "Dependencies":[
+                    "security-account"
+                ],
+                "Stack":{
+                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                        "Status": "WAITING",
+                        "Dependencies":[]
+                    },
+                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                        "Status": "WAITING",
+                        "Dependencies":["files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo"]
+                    }
+                }
+            },
+            "security-account":{
+                "Status": "WAITING",
+                "Dependencies":[],
+                "Stack":{
+                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/doo":{
+                        "Status": "WAITING",
+                        "Dependencies":[]
+                    },
+                    "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/foo":{
+                        "Status": "WAITING",
+                        "Dependencies":["files/test/tmp/directory_dependency/security-account/us-west-2/env-one/doo"]
+                    }
                 }
             }
         }
     ')
 
     expected=$(jq -n '
-        {
+        [
+            "files/test/tmp/directory_dependency/security-account/us-west-2/env-one/doo"
+        ]
+    ')
 
+    run get_deploy_paths "$deploy_stack"
+    
+    assert_output -p "$expected"
+}
+
+@test "Get Deploy Paths with dependency path equals success" {
+    
+    deploy_stack=$(jq -n '
+        {
+            "dev-account":{
+                "Status": "RUNNING",
+                "Dependencies":[],
+                "Stack":{
+                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                        "Status": "SUCCESS",
+                        "Dependencies":[]
+                    },
+                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                        "Status": "WAITING",
+                        "Dependencies":["files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo"]
+                    }
+                }
+            }
         }
     ')
-    run get_deploy_paths $deploy_stack
+
+    expected=$(jq -n '
+        [
+            "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo"
+        ]
+    ')
     
-    assert_output "$expected" 
+    run get_deploy_paths "$deploy_stack"
+    
+    assert_output -p "$expected"
 }
 
 @test "Rollback Needed" {
@@ -260,9 +318,7 @@ setup() {
                         "DeployStack": {
                             "dev-account":{
                                 "Status": "FAILURE",
-                                "Dependencies":[
-                                    "security-account"
-                                ],
+                                "Dependencies":[],
                                 "Stack":{
                                     "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
                                         "Status": "SUCCESS",
@@ -410,5 +466,90 @@ setup() {
     ')
 
     run update_pr_queue_with_next_commit "$pr_queue"
+    assert_output -p "$expected"
+}
+
+@test "Create Rollback Stack" {
+    pr_queue=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "FAILED",
+                                "Dependencies":[],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Status": "FAILED",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    expected=$(jq -n '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "FAILED",
+                                "Dependencies":[],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Status": "FAILED",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        },
+                        "RollbackStack": {
+                            "dev-account":{
+                                "Status": "Waiting",
+                                "Dependencies":[],
+                                "Stack":{
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo":{
+                                        "Status": "Waiting",
+                                        "Dependencies":[]
+                                    },
+                                    "files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/foo":{
+                                        "Status": "Waiting",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+    
+    run update_pr_queue_with_rollback_stack "$pr_queue"
     assert_output -p "$expected"
 }
