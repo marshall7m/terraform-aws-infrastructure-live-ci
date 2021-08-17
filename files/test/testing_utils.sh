@@ -63,6 +63,17 @@ EOF
     terragrunt apply --terragrunt-working-dir "$TESTING_TMP_DIR" -auto-approve
 }
 
+setup_new_provider() {
+	cat << EOF > $TESTING_TMP_DIR/new_provider.tf
+
+provider "random" {}
+
+resource "random_id" "server" {
+    byte_length = 8
+}
+EOF
+}
+
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	modify_paths=()

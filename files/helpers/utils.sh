@@ -25,3 +25,14 @@ get_pr_queue() {
 
     echo $(jq . pr_queue.json)
 }
+
+upload_pr_queue() {
+    local pr_queue=$1
+
+    echo "$pr_queue" > $pr_queue.json
+    aws s3api put-object \
+        --acl private \
+        --body ./pr_queue.json \
+        --bucket $ARTIFACT_BUCKET_NAME \
+        --key $ARTIFACT_BUCKET_PR_QUEUE_KEY.json
+}

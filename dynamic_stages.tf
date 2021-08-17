@@ -37,7 +37,7 @@ resource "aws_sfn_state_machine" "this" {
                 SourceVersion = "$.HeadSourceVersion_version"
                 EnvironmentVariablesOverride = [
                   {
-                    Name      = "PATH"
+                    Name      = "TARGET_PATH"
                     Type      = "PLAINTEXT"
                     "Value.$" = "$.Deployment.Path"
                   }
@@ -53,7 +53,7 @@ resource "aws_sfn_state_machine" "this" {
                 SourceVersion = "$.HeadSourceVersion_version"
                 EnvironmentVariablesOverride = [
                   {
-                    Name      = "PATH"
+                    Name      = "TARGET_PATH"
                     Type      = "PLAINTEXT"
                     "Value.$" = "$.Deployment.Path"
                   },
@@ -104,7 +104,7 @@ resource "aws_sfn_state_machine" "this" {
                 SourceVersion = "$.HeadSourceVersion"
                 EnvironmentVariablesOverride = [
                   {
-                    Name      = "PATH"
+                    Name      = "TARGET_PATH"
                     Type      = "PLAINTEXT"
                     "Value.$" = "$.Deployment.Path"
                   },
@@ -156,7 +156,7 @@ resource "aws_sfn_state_machine" "this" {
                 SourceVersion = "$.HeadSourceVersion_version"
                 EnvironmentVariablesOverride = [
                   {
-                    Name      = "PATH"
+                    Name      = "TARGET_PATH"
                     Type      = "PLAINTEXT"
                     "Value.$" = "$.Deployment.Path"
                   },
@@ -182,7 +182,7 @@ resource "aws_sfn_state_machine" "this" {
                 SourceVersion = "$.BaseSourceVersion"
                 EnvironmentVariablesOverride = [
                   {
-                    Name      = "PATH"
+                    Name      = "TARGET_PATH"
                     Type      = "PLAINTEXT"
                     "Value.$" = "$.Deployment.Path"
                   },

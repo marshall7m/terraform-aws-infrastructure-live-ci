@@ -1,6 +1,8 @@
 #!/bin/bash
 
-source utils.sh
+DIR="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+source "$DIR/utils.sh"
 
 get_tg_plan_out() {
     local terragrunt_working_dir=$1
@@ -249,17 +251,6 @@ start_sf_executions() {
         --state-machine-arn $STATE_MACHINE_ARN \
         --name "${execution_name}" \
         --input $sf_input
-}
-
-upload_pr_queue() {
-    local pr_queue=$1
-
-    echo "$pr_queue" > $pr_queue.json
-    aws s3api put-object \
-        --acl private \
-        --body ./pr_queue.json \
-        --bucket $ARTIFACT_BUCKET_NAME \
-        --key $ARTIFACT_BUCKET_PR_QUEUE_KEY.json
 }
 
 pr_in_progress() {

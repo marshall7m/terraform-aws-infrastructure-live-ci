@@ -22,4 +22,4 @@ phases:
     commands:
       - git fetch origin pull/$PR_ID/head:$HEAD_REF
       - git checkout $HEAD_REF
-      - terragrunt $COMMAND --terragrunt-working-dir $PATH $EXTRA_ARGS
+      - terragrunt $COMMAND --terragrunt-working-dir $TARGET_PATH $EXTRA_ARGS

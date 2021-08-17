@@ -1,6 +1,8 @@
 #!/bin/bash
 
-source utils.sh
+DIR="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+source "$DIR/utils.sh"
 
 get_tg_providers() {
     local terragrunt_working_dir=$1
@@ -40,6 +42,27 @@ get_new_providers() {
     echo "$new_providers"
 }
 
+add_new_providers() {
+    local pr_queue=$1
+    local new_providers=$2
+
+    if [ -z "$ACCOUNT" ]; then
+        log "Env var: ACCOUNT is not set" "ERROR"
+        exit 1
+    elif [ -z "$TARGET_PATH" ]; then
+        log "Env var: ACCOUNT is not set" "ERROR"
+        exit 1
+    fi
+
+    echo "$( echo $pr_queue | jq \
+    --arg account $ACCOUNT \
+    --arg path $TARGET_PATH \
+    --arg new_providers "$new_providers" '
+        (try ($new_providers | split(" ")) // []) as $new_providers
+            | .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviders = $new_providers
+    ')"
+}
+
 update_pr_queue_with_new_providers() {
     local pr_queue=$1
     local terragrunt_working_dir=$2
@@ -53,15 +76,22 @@ update_pr_queue_with_new_providers() {
         exit 0
     fi
 
-    #TODO: Add new providers to path's object
+    pr_queue=$(add_new_providers "$pr_queue" "${new_providers[*]}")
+    log "Updated PR Queue:" "DEBUG"
+    log "$pr_queue" "DEBUG"
+
+    upload_pr_queue "$pr_queue"
 }
 
 update_pr_queue_with_new_resources() {
     local pr_queue=$1
     local terragrunt_working_dir=$2
 
-    #TODO: Retrieve new providers from path object
-    new_providers=$(echo $pr_queue)
+    new_providers=$(echo $pr_queue | jq
+        --arg account $ACCOUNT \
+        --arg path $TARGET_PATH '
+            .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviders
+    ')
 
     new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "${new_providers[*]}")
 
