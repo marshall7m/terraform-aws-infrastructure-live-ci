@@ -356,9 +356,6 @@ Codebuild: Get depedency order and run Step Function
         - reason: removes unnecessary tf plans that can be assumed to be not related to PR
 
 SF:
-    Lambda: 
-        - Create/Update s3 artifact run order
-        - Pass next cfg from depdency order to deployment
     -> Codebuild deployment
         Reject ->
         - Rollback upstream cfg
@@ -369,41 +366,6 @@ SF:
 If expire, then return expire action then rerun Lambda
 queue
 
-If new commit:
-    - mark approval expired for ses response 
-    - Fail execution once:
-        - Apply Deployments are done
-
-
-get parent directories with deps not in keys
-
-pass dir to deployment flow
-
-if deployment succeeds, pass dir to function
-
-pop dir from any parent dependency list with dir
-
-repeat process
-
-
-Rollback?
-
-Rollback parent dir
-
-rollback parent dir's dependencies
-
-once rollback succeeds, repeat process until parent dir's dependency doesn't exists in keys
-
-
-deployment flow must output the path and pass path to lambda
-
-CW event for SF success:
-GH webhook for new commits -> Codebuild generate order
-
-CW & GH webhook execution name via head_ref commit_id given source version is with PR
-
-if nothing left in queue, checkout next PR ID
-webhook deactivated if new PR (artifact queue is empty)
 
 Artifact bucket:
 - pr_queue.json:
@@ -479,49 +441,46 @@ Create/update commit artifact that the webpage will retrieve data from
 Pass next deploy stack to SF
 
 
+
+## Terragrunt Deployment Order
+
+
+
+
+First off the shallow dependency order would look like so: (basically it's just the stack Terragrunt outputs with every *-all command):
+
+{
+    "parent/": ["dep-c/", "dep-d"]
+    "dep-a/": ["dep-d"],
+    "dep-b/": ["dep-d/"],
+    "dep-c": ["dep-b/", "dep-a/"],
+    "dep-d": []
+}
+
+## FAILED Attempt: Deep Dependency Order
+
+My initial idea was to create a deep dependency order for terragrunt directories that reflect dependencies that could be runned in parallel.
+The dependency mapping would have the parent directory as the key and the dependencies as the values. The dependencies 
+would be within 2-level nested list. The first level would contain the chronological order the dependencies should be runned (front being most immediate dependency). The second level would contain the dependencies that could be runned in parallel. In practice this means the Step Function would be able to run an
+execution for each of the dependencies within this nested list. The dependency order would look like so:
+
+{
+    "parent/": [["dep-c/", "dep-d"], ["dep-b/", "dep-a/"]]
+    "dep-a/": ["dep-d"],
+    "dep-b/": ["dep-d/"],
+    "dep-c": ["dep-b/", "dep-a/"],
+    "dep-d": []
+}
+
+In order to get to this final output this requires:
+    - Recursively adding dependencies of dependencies
+    - Removing any duplicate dependencies within the parent dependencies AND within the entire dependency order
+    - Filter out empty depedencies
+
+Given the dependencies order for each parent directory would contain all of it's dependencies, it initially appealing since it creates a cleaner idea of how the dependecy flow would be compared to the shallow dependency order displayed above. Although with this advantage comes more disadvantages on the operational side of updating and managing the deployment order/statuses as the deployment flow is executed. This requires a lot of nested conditional updating and deleting that seems inefficient.
+
+
 TODO:
-- Change Stack to use object:
-    {
-        "ID": 2,
-        "BaseRef": master,
-        "HeadRef": "feature-2",
-        "CommitStack": {
-            "commit_id": {
-                "BaseSourceVersion": "",
-                "HeadSourceVersion": "",
-                "DeployStack": {
-                    "Account: { 
-                        "Dependencies": [] 
-                        "Stack": {
-                            "Parent": {
-                                "Dependencies": [] 
-                            }
-                        }
-                    }
-                },
-                "RollbackStack": {
-                    "Account: { 
-                        "Dependencies": [] 
-                        "Stack": {
-                            "Parent": {
-                                "Dependencies": [] 
-                            }
-                        }
-                    }
-                } (created only if stack rollback is needed)
-                "ModifiedPaths": [],
-                "Deployed": []
-            }
-        }   
-    }
-
-if foo failed/succeeded:
-add to deployed list
-get current current commit stack
-filter commit stack to only include deployed list
-
-
-only need base version for rollback
 
 successful/failed deployments:
     - Get $.Input.Path from CW success/failure SF event
@@ -576,9 +535,11 @@ Pros:
 Cons:
 - Complicated task token management
 - Not easy to integrate into Terraform Cloud
-    - No concept of task token
+    - No concept of task token (use webhook to AWS AGW?)
     - Terraform Cloud can't run/queue in parallel
 
 Figure out:
 - Task Token for Account Dependencies
     - Account Dependencies Task Token?
+
+

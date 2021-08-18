@@ -7,203 +7,84 @@ resource "aws_sfn_state_machine" "this" {
   name     = var.step_function_name
   role_arn = module.sf_role.role_arn
   definition = jsonencode({
-    StartAt = "Orchestrator"
+    StartAt = "Plan"
     States = {
-      "Orchestrator" = {
-        Resource = "arn:aws:states:::lambda:invoke"
-        Type     = "Task"
+      "Plan" = {
+        Next = "Request Approval"
         Parameters = {
-          FunctionName = module.lambda_deployment_orchestrator.function_arn
-          Payload = {
-            ExecutionName = "$$.Execution.Name"
-          }
-        }
-        Next = "Deploy"
-      },
-      "Deploy" = {
-        Type           = "Map"
-        MaxConcurrency = 1
-        Parameters = {
-          "Deployment.$" = "$$.Map.Item.Value"
-        }
-        Next = "Orchestrator"
-        Iterator = {
-          StartAt = "Get Rollback Providers"
-          States = {
-            "Get Rollback Providers" = {
-              Type     = "Task"
-              Resource = "arn:aws:states:::codebuild:startBuild.sync"
-              Parameters = {
-                SourceVersion = "$.HeadSourceVersion_version"
-                EnvironmentVariablesOverride = [
-                  {
-                    Name      = "TARGET_PATH"
-                    Type      = "PLAINTEXT"
-                    "Value.$" = "$.Deployment.Path"
-                  }
-                ]
-                ProjectName = var.get_rollback_providers_build_name
-              }
-              ResultPath = "$.rollback_provider_flags"
-              Next       = "Plan"
+          SourceVersion = "$.HeadSourceVersion"
+          EnvironmentVariablesOverride = [
+            {
+              Name      = "TARGET_PATH"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.DeploymentPath"
             },
-            "Plan" = {
-              Next = "Request Approval"
-              Parameters = {
-                SourceVersion = "$.HeadSourceVersion_version"
-                EnvironmentVariablesOverride = [
-                  {
-                    Name      = "TARGET_PATH"
-                    Type      = "PLAINTEXT"
-                    "Value.$" = "$.Deployment.Path"
-                  },
-                  {
-                    Name  = "COMMAND"
-                    Type  = "PLAINTEXT"
-                    Value = "plan"
-                  },
-                ]
-                ProjectName = var.build_name
-              }
-              Resource = "arn:aws:states:::codebuild:startBuild.sync"
-              Type     = "Task"
-            },
-            "Request Approval" = {
-              Next = "Approval Results"
-              Parameters = {
-                FunctionName = module.lambda_approval_request.function_arn
-                Payload = {
-                  StateMachine = "$$.StateMachine.Id"
-                  ExecutionId  = "$$.Execution.Name"
-                  TaskToken    = "$$.Task.Token"
-                  Account      = "$.Deployment.Account"
-                  Path         = "$.Deploymnet.Path"
-                }
-              }
-              Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
-              Type     = "Task"
-            },
-            "Approval Results" = {
-              Choices = [
-                {
-                  Next         = "Apply"
-                  StringEquals = "Approve"
-                  Variable     = "$.Status"
-                },
-                {
-                  Next         = "Reject"
-                  StringEquals = "Reject"
-                  Variable     = "$.Status"
-                }
-              ]
-              Type = "Choice"
-            },
-            "Apply" = {
-              Next = "Orchestrator"
-              Parameters = {
-                SourceVersion = "$.HeadSourceVersion"
-                EnvironmentVariablesOverride = [
-                  {
-                    Name      = "TARGET_PATH"
-                    Type      = "PLAINTEXT"
-                    "Value.$" = "$.Deployment.Path"
-                  },
-                  {
-                    Name  = "COMMAND"
-                    Type  = "PLAINTEXT"
-                    Value = "apply"
-                  },
-                  {
-                    Name  = "EXTRA_ARGS"
-                    Type  = "PLAINTEXT"
-                    Value = "-auto-approve"
-                  }
-                ]
-                ProjectName = var.build_name
-              }
-              Resource = "arn:aws:states:::codebuild:startBuild.sync"
-              Type     = "Task"
-              Catch = [
-                {
-                  ErrorEquals = ["States.TaskFailed"]
-                  Next        = "New Providers?"
-                }
-              ]
-            },
-            "Reject" = {
-              Cause = "Terraform plan was rejected"
-              Error = "RejectedPlan"
-              Type  = "Fail"
-            },
-            "New Providers?" = {
-              Choices = [
-                {
-                  Next     = "Rollback New Providers"
-                  IsNull   = false
-                  Variable = "$.rollback_provider_flags"
-                },
-                {
-                  Next     = "Apply Rollback"
-                  IsNull   = true
-                  Variable = "$.rollback_provider_flags"
-                }
-              ]
-              Type = "Choice"
-            },
-            "Rollback New Providers" = {
-              Next = "Apply Rollback"
-              Parameters = {
-                SourceVersion = "$.HeadSourceVersion_version"
-                EnvironmentVariablesOverride = [
-                  {
-                    Name      = "TARGET_PATH"
-                    Type      = "PLAINTEXT"
-                    "Value.$" = "$.Deployment.Path"
-                  },
-                  {
-                    Name  = "COMMAND"
-                    Type  = "PLAINTEXT"
-                    Value = "destroy -auto-approve"
-                  },
-                  {
-                    Name  = "EXTRA_ARGS"
-                    Type  = "PLAINTEXT"
-                    Value = "$.rollback_provider_flags"
-                  }
-                ]
-                ProjectName = var.get_rollback_providers_build_name
-              }
-              Resource = "arn:aws:states:::codebuild:startBuild.sync"
-              Type     = "Task"
-            },
-            "Apply Rollback" = {
-              End = true
-              Parameters = {
-                SourceVersion = "$.BaseSourceVersion"
-                EnvironmentVariablesOverride = [
-                  {
-                    Name      = "TARGET_PATH"
-                    Type      = "PLAINTEXT"
-                    "Value.$" = "$.Deployment.Path"
-                  },
-                  {
-                    Name  = "COMMAND"
-                    Type  = "PLAINTEXT"
-                    Value = "apply"
-                  },
-                  {
-                    Name  = "EXTRA_ARGS"
-                    Type  = "PLAINTEXT"
-                    Value = "-auto-approve"
-                  }
-                ]
-                ProjectName = var.build_name
-              }
-              Resource = "arn:aws:states:::codebuild:startBuild.sync"
-              Type     = "Task"
+            {
+              Name  = "PLAN_COMMAND"
+              Type  = "PLAINTEXT"
+              Value = "$.PlanCommand"
             }
+          ]
+          ProjectName = var.build_name
+        }
+        Resource = "arn:aws:states:::codebuild:startBuild.sync"
+        Type     = "Task"
+      },
+      "Request Approval" = {
+        Next = "Approval Results"
+        Parameters = {
+          FunctionName = module.lambda_approval_request.function_arn
+          Payload = {
+            StateMachine = "$$.StateMachine.Id"
+            ExecutionId  = "$$.Execution.Name"
+            TaskToken    = "$$.Task.Token"
+            Account      = "$.Account"
+            Path         = "$.DeploymentPath"
           }
         }
+        Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+        Type     = "Task"
+      },
+      "Approval Results" = {
+        Choices = [
+          {
+            Next         = "Apply"
+            StringEquals = "Approve"
+            Variable     = "$.Status"
+          },
+          {
+            Next         = "Reject"
+            StringEquals = "Reject"
+            Variable     = "$.Status"
+          }
+        ]
+        Type = "Choice"
+      },
+      "Apply" = {
+        End = true
+        Parameters = {
+          SourceVersion = "$.HeadSourceVersion"
+          EnvironmentVariablesOverride = [
+            {
+              Name      = "TARGET_PATH"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.DeploymentPath"
+            },
+            {
+              Name  = "APPLY_COMMAND"
+              Type  = "PLAINTEXT"
+              Value = "$.ApplyCommand"
+            }
+          ]
+          ProjectName = var.build_name
+        }
+        Resource = "arn:aws:states:::codebuild:startBuild.sync"
+        Type     = "Task"
+      },
+      "Reject" = {
+        Cause = "Terraform plan was rejected"
+        Error = "RejectedPlan"
+        Type  = "Fail"
       }
     }
   })

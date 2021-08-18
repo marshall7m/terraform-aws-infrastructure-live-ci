@@ -9,17 +9,32 @@ phases:
       - "echo Terragrunt version: $(terragrunt --version)"
       - "echo TERRAGRUNT_WORKING_DIR: ${TERRAGRUNT_WORKING_DIR}"
       - "echo ARTIFACT_BUCKET_NAME: ${ARTIFACT_BUCKET_NAME}"
-      - "echo ARTIFACT_BUCKET_PR_QUEUE_KEY: ${ARTIFACT_BUCKET_PR_QUEUE_KEY}"
-      - |
-        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/rollback.sh"
-        pr_queue=$(get_pr_queue)
-        if [ "$COMMAND" == "plan"]; then
-          update_pr_queue_with_new_providers "$pr_queue"
-        elif [ "$COMMAND" == "apply"]; then
-          update_pr_queue_with_new_resources "$pr_queue"
-        fi
+      - "echo ARTIFACT_BUCKET_PR_QUEUE_KEY: ${ARTIFACT_BUCKET_PR_QUEUE_KEY}"        
   build:
     commands:
       - git fetch origin pull/$PR_ID/head:$HEAD_REF
       - git checkout $HEAD_REF
-      - terragrunt $COMMAND --terragrunt-working-dir $TARGET_PATH $EXTRA_ARGS
+      - |
+        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/rollback.sh"
+        pr_queue=$(get_pr_queue)
+        
+        if [ -n "$PLAN_COMMAND" ]; then
+          update_pr_queue_with_new_providers "$pr_queue"
+          terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH
+
+        elif [ -n "$APPLY_COMMAND" ]; then
+          terragrunt "$APPLY_COMMAND" --terragrunt-working-dir $TARGET_PATH
+          update_pr_queue_with_new_resources "$pr_queue"
+
+        elif [ -n "$ROLLBACK_PLAN_COMMAND" ]; then
+          update_pr_queue_with_destroy_targets_flags "$pr_queue"
+          destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
+          terragrunt "$ROLLBACK_PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+
+        elif [ -n "$ROLLBACK_APPLY_COMMAND" ]; then
+          destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
+          terragrunt "$ROLLBACK_APPLY_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+
+        else
+          log "No Terragrunt Command was specified" "ERROR"
+          exit 1

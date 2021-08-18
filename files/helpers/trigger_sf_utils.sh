@@ -114,12 +114,12 @@ create_stack() {
     num_diff_paths="${#diff_paths[@]}"
     log "Count: $num_diff_paths" "DEBUG"
 
-    parsed_stack=$(get_parsed_stack "$tg_plan_out" "$git_root" | jq 'map_values({"Status": "Waiting", "Dependencies": .})')
-    log "JQ Parsed Terragrunt Stack: $parsed_stack" "DEBUG"
+    stack=$(get_parsed_stack "$tg_plan_out" "$git_root" | jq 'map_values({"Status": "Waiting", "Dependencies": .})')
+    log "Terragrunt Dependency Stack: $stack" "DEBUG"
 
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
-    stack=$( filter_paths "$parsed_stack" "${diff_paths[*]}" )
-
+    stack=$( filter_paths "$stack" "${diff_paths[*]}" )
+    
     echo "$stack"
 }
 
@@ -469,7 +469,6 @@ trigger_sf() {
         fi
     fi
     
-    
     if [ $(deploy_stack_in_progress "$pr_queue") == false ] && if [ $(rollback_in_progress) == false ]; then
         log "No Deployment or Rollback stack is in Progress" "DEBUG"
         if [ $(needs_rollback) == true ]; then
@@ -551,13 +550,10 @@ trigger_sf() {
 
 #TOMORROW:
 #Process
-# - TF plan figure outs if new providers/file and adds to pr_queue
 # - If a path fails, tf destroy for all paths that have new providers/file
 # - Get previous commit from finished and repeat tf destroy process
 # - If previous commit == base, tf apply all on base
 
 #TODO:
-# - Change buildspec_ci to get new providers/new file
-# - Create new SF choice for rollback
-# - Change trigger_sf to have input for rollback choice 
-# - Run rollback paths with approval flow
+# - Add tests for destroy flags
+# - apply sf definition

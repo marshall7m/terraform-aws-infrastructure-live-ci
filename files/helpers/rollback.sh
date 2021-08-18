@@ -46,13 +46,7 @@ add_new_providers() {
     local pr_queue=$1
     local new_providers=$2
 
-    if [ -z "$ACCOUNT" ]; then
-        log "Env var: ACCOUNT is not set" "ERROR"
-        exit 1
-    elif [ -z "$TARGET_PATH" ]; then
-        log "Env var: ACCOUNT is not set" "ERROR"
-        exit 1
-    fi
+    check_build_env_vars
 
     echo "$( echo $pr_queue | jq \
     --arg account $ACCOUNT \
@@ -60,6 +54,21 @@ add_new_providers() {
     --arg new_providers "$new_providers" '
         (try ($new_providers | split(" ")) // []) as $new_providers
             | .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviders = $new_providers
+    ')"
+}
+
+add_new_resources() {
+    local pr_queue=$1
+    local new_resources=$2
+
+    check_build_env_vars
+
+    echo "$( echo $pr_queue | jq \
+    --arg account $ACCOUNT \
+    --arg path $TARGET_PATH \
+    --arg new_resources "$new_resources" '
+        (try ($new_resources | split(" ")) // []) as $new_resources
+            | .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResources = $new_resources
     ')"
 }
 
@@ -87,7 +96,7 @@ update_pr_queue_with_new_resources() {
     local pr_queue=$1
     local terragrunt_working_dir=$2
 
-    new_providers=$(echo $pr_queue | jq
+    new_providers=$(echo $pr_queue | jq \
         --arg account $ACCOUNT \
         --arg path $TARGET_PATH '
             .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviders
@@ -102,6 +111,12 @@ update_pr_queue_with_new_resources() {
         log "No new resources from new providers were detected" "INFO"
         exit 0
     fi
+
+    pr_queue=$(add_new_resources "$pr_queue" "${new_resources[*]}")
+    log "Updated PR Queue:" "DEBUG"
+    log "$pr_queue" "DEBUG"
+
+    upload_pr_queue "$pr_queue"
 }
 
 get_tg_state() {
@@ -129,4 +144,43 @@ get_new_providers_resources() {
         '.resources | map(select( (.provider | test($NEW_PROVIDERS) == true) and .mode != "data" ) | {type, name} | join(".")) ')
     
     echo "$new_resources"
+}
+
+update_pr_queue_with_destroy_targets_flags() {
+    local pr_queue=$1
+
+    check_build_env_vars
+
+    new_resources=$(echo $pr_queue | jq \
+    --arg account $ACCOUNT \
+    --arg path $TARGET_PATH '
+        .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResources
+    ')
+
+    flags=$(create_destroy_target_flags "${new_resources[*]}")
+
+    pr_queue=$(echo $pr_queue | jq \
+        --arg account $ACCOUNT \
+        --arg path $TARGET_PATH \
+        --arg flags $flags '
+            .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResourcesTargetFlags = $flags
+    ')
+
+    log "Updated PR Queue:" "DEBUG"
+    log "$pr_queue" "DEBUG"
+
+    upload_pr_queue "$pr_queue"
+}
+
+read_destroy_targets_flags() {
+    local pr_queue=$1
+
+    check_build_env_vars
+
+    echo "$(echo $pr_queue | jq \
+        --arg account $ACCOUNT \
+        --arg path $TARGET_PATH \
+        --arg flags $flags '
+            .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResourcesTargetFlags
+    ')"
 }

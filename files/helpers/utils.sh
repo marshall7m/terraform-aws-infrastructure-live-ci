@@ -17,6 +17,21 @@ log() {
     echo "${log_priority} : ${log_message}" >&2
 }
 
+check_for_env_var() {
+  local env_var=
+  env_var=$(declare -p "$1")
+  if !  [[ -v $1 && $env_var =~ ^declare\ -x ]]; then
+    log "Environment Variable: $1 is not defined" "ERROR"
+    exit 1
+  fi
+}
+
+check_build_env_vars() {
+    set -e
+    check_for_env_var "$ACCOUNT"
+    check_for_env_var "$TARGET_PATH"
+}
+
 get_pr_queue() {
     aws s3api get-object \
     --bucket $ARTIFACT_BUCKET_NAME \
