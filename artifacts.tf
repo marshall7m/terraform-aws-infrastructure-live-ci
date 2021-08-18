@@ -69,9 +69,10 @@ data "aws_kms_key" "s3" {
 }
 
 resource "aws_s3_bucket_object" "build_scripts" {
-  bucket = aws_s3_bucket.artifacts.id
-  key    = local.buildspec_scripts_key
-  source = "${path.module}/files/utils.sh"
+  for_each = fileset("${path.module}", "files/helpers/*")
+  bucket   = aws_s3_bucket.artifacts.id
+  key      = "${local.buildspec_scripts_key}-${basename(each.value)}"
+  source   = each.value
 }
 
 resource "aws_s3_bucket_object" "approval_mapping" {
@@ -85,7 +86,7 @@ resource "aws_s3_bucket_object" "pr_queue" {
   key    = local.pr_queue_key
   content_base64 = base64encode(format("%v", {
     Queue      = []
-    InProgress = ""
+    InProgress = {}
   }))
 }
 

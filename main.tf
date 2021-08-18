@@ -1,106 +1,235 @@
-module "plan_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = var.plan_role_name
-  trusted_services        = ["codebuild.amazonaws.com"]
-  custom_role_policy_arns = var.plan_role_policy_arns
-  statements = length(var.plan_role_assumable_role_arns) > 0 ? [
-    {
-      effect    = "Allow"
-      actions   = ["sts:AssumeRole"]
-      resources = var.plan_role_assumable_role_arns
-    }
-  ] : []
+locals {
+  buildspec_scripts_source_identifier = "helpers"
+  buildspec_scripts_key               = "build-scripts"
+  pr_queue_key                        = "pr_queue.json"
 }
 
-module "apply_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = var.apply_role_name
-  trusted_services        = ["codebuild.amazonaws.com"]
-  custom_role_policy_arns = var.apply_role_policy_arns
-  statements = length(var.apply_role_assumable_role_arns) > 0 ? [
-    {
-      effect    = "Allow"
-      actions   = ["sts:AssumeRole"]
-      resources = var.apply_role_assumable_role_arns
-    }
-  ] : []
-}
-
-module "codebuild_terraform_deploy" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
-  name   = var.build_name
-  assumable_role_arns = [
-    module.plan_role.role_arn,
-    module.apply_role.role_arn
-  ]
-  environment = {
-    compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
-    type         = "LINUX_CONTAINER"
-    environment_variables = concat(var.build_env_vars, [
-      {
-        name  = "TF_IN_AUTOMATION"
-        value = "true"
-        type  = "PLAINTEXT"
+resource "aws_sfn_state_machine" "this" {
+  name     = var.step_function_name
+  role_arn = module.sf_role.role_arn
+  definition = jsonencode({
+    StartAt = "Plan"
+    States = {
+      "Plan" = {
+        Next = "Request Approval"
+        Parameters = {
+          SourceVersion = "$.HeadSourceVersion"
+          EnvironmentVariablesOverride = [
+            {
+              Name      = "DEPLOYMENT_TYPE"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.DeploymentType"
+            },
+            {
+              Name      = "TARGET_PATH"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.DeploymentPath"
+            },
+            {
+              Name  = "PLAN_COMMAND"
+              Type  = "PLAINTEXT"
+              Value = "$.PlanCommand"
+            }
+          ]
+          ProjectName = module.codebuild_terragrunt_deploy.name
+        }
+        Resource = "arn:aws:states:::codebuild:startBuild.sync"
+        Type     = "Task"
       },
-      {
-        name  = "TF_INPUT"
-        value = "false"
-        type  = "PLAINTEXT"
+      "Request Approval" = {
+        Next = "Approval Results"
+        Parameters = {
+          FunctionName = module.lambda_approval_request.function_arn
+          Payload = {
+            StateMachine = "$$.StateMachine.Id"
+            ExecutionId  = "$$.Execution.Name"
+            TaskToken    = "$$.Task.Token"
+            Account      = "$.Account"
+            Path         = "$.DeploymentPath"
+          }
+        }
+        Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+        Type     = "Task"
+      },
+      "Approval Results" = {
+        Choices = [
+          {
+            Next         = "Apply"
+            StringEquals = "Approve"
+            Variable     = "$.Status"
+          },
+          {
+            Next         = "Reject"
+            StringEquals = "Reject"
+            Variable     = "$.Status"
+          }
+        ]
+        Type = "Choice"
+      },
+      "Apply" = {
+        End = true
+        Parameters = {
+          SourceVersion = "$.HeadSourceVersion"
+          EnvironmentVariablesOverride = [
+            {
+              Name      = "DEPLOYMENT_TYPE"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.DeploymentType"
+            },
+            {
+              Name      = "TARGET_PATH"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.DeploymentPath"
+            },
+            {
+              Name  = "APPLY_COMMAND"
+              Type  = "PLAINTEXT"
+              Value = "$.ApplyCommand"
+            }
+          ]
+          ProjectName = module.codebuild_terragrunt_deploy.name
+        }
+        Resource = "arn:aws:states:::codebuild:startBuild.sync"
+        Type     = "Task"
+      },
+      "Reject" = {
+        Cause = "Terraform plan was rejected"
+        Error = "RejectedPlan"
+        Type  = "Fail"
       }
-    ])
-  }
-
-  artifacts = {
-    type = "NO_ARTIFACTS"
-  }
-  build_source = {
-    type                = "GITHUB"
-    buildspec           = file("${path.module}/buildspec_ci.yaml")
-    git_clone_depth     = 1
-    insecure_ssl        = false
-    location            = data.github_repository.this.http_clone_url
-    report_build_status = false
-  }
-
-  role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
-
+    }
+  })
 }
 
-data "github_repository" "this" {
-  name = var.repo_name
+data "aws_region" "current" {}
+
+resource "aws_cloudwatch_event_rule" "this" {
+  name        = var.cloudwatch_event_name
+  description = "Captures execution-level events for AWS Step Function: ${var.step_function_name}"
+
+  event_pattern = jsonencode(
+    {
+      source      = ["aws.states"]
+      detail-type = ["Step Functions Execution Status Change"]
+      detail = {
+        stateMachineArn = [aws_sfn_state_machine.this.arn]
+        state           = ["SUCCEEDED"]
+      }
+    }
+  )
 }
 
-module "codebuild_rollback_provider" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
-  name   = var.get_rollback_providers_build_name
-  assumable_role_arns = [
-    module.plan_role.role_arn
+module "cw_target_role" {
+  source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name        = "CodeBuildTriggerStepFunction"
+  trusted_services = ["events.amazonaws.com"]
+  statements = [
+    {
+      sid       = "CodeBuildInvokeAccess"
+      effect    = "Allow"
+      actions   = ["codebuild:StartBuild"]
+      resources = [module.codebuild_trigger_sf.arn]
+    }
   ]
-  environment = {
-    compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
-    type         = "LINUX_CONTAINER"
-    environment_variables = [
-      {
-        name  = "TERRAGRUNT_WORKING_DIR"
-        type  = "PLAINTEXT"
-        value = var.terragrunt_parent_dir
-      }
-    ]
-  }
-
-  artifacts = {
-    type = "NO_ARTIFACTS"
-  }
-  build_source = {
-    type                = "GITHUB"
-    buildspec           = file("${path.module}/buildspec_rollback_new_provider.yaml")
-    git_clone_depth     = 1
-    insecure_ssl        = false
-    location            = data.github_repository.this.http_clone_url
-    report_build_status = false
-  }
 }
 
-data "aws_caller_identity" "current" {}
+resource "aws_cloudwatch_event_target" "sf" {
+  rule      = aws_cloudwatch_event_rule.this.name
+  target_id = "CodeBuildTriggerStepFunction"
+  arn       = module.codebuild_trigger_sf.arn
+  role_arn  = module.cw_target_role.role_arn
+}
+
+module "sf_role" {
+  source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name        = var.step_function_name
+  trusted_services = ["states.amazonaws.com"]
+  statements = [
+    {
+      sid     = "CodeBuildInvokeAccess"
+      effect  = "Allow"
+      actions = ["codebuild:StartBuild"]
+      resources = [
+        module.codebuild_terragrunt_deploy.arn
+      ]
+    },
+    {
+      sid     = "LambdaInvokeAccess"
+      effect  = "Allow"
+      actions = ["lambda:Invoke"]
+      resources = [
+        module.lambda_approval_request.function_arn,
+        module.lambda_deployment_orchestrator.function_arn
+      ]
+    },
+    {
+      sid    = "CloudWatchEventsAccess"
+      effect = "Allow"
+      actions = [
+        "events:PutTargets",
+        "events:PutRule",
+        "events:DescribeRule"
+      ]
+      resources = ["*"]
+    }
+  ]
+}
+
+data "archive_file" "lambda_deployment_orchestrator" {
+  type        = "zip"
+  source_dir  = "${path.module}/functions/deployment_orchestrator"
+  output_path = "${path.module}/deployment_orchestrator.zip"
+}
+
+module "lambda_deployment_orchestrator" {
+  source           = "github.com/marshall7m/terraform-aws-lambda"
+  filename         = data.archive_file.lambda_deployment_orchestrator.output_path
+  source_code_hash = data.archive_file.lambda_deployment_orchestrator.output_base64sha256
+  function_name    = "${var.step_function_name}-deployment-orchestrator"
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.8"
+
+  env_vars = {
+    ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
+  }
+
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+}
+
+
+resource "aws_cloudwatch_event_rule" "sf_execution" {
+  name        = "${var.step_function_name}-finished-execution"
+  description = "Triggers Codebuild project when Step Function execution is complete"
+  role_arn    = module.cw_event_role.role_arn
+
+  event_pattern = jsonencode({
+    source      = ["aws.states"]
+    detail-type = ["Step Functions Execution Status Change"],
+    detail = {
+      status          = ["SUCCESS", "FAILED"],
+      stateMachineArn = [aws_sfn_state_machine.this.arn]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "sns" {
+  rule      = aws_cloudwatch_event_rule.sf_execution.name
+  target_id = "SendToCodebuildTriggerSF"
+  arn       = module.codebuild_trigger_sf.arn
+}
+
+module "cw_event_role" {
+  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+
+  role_name        = "${var.step_function_name}-finished-execution"
+  trusted_services = ["events.amazonaws.com"]
+  statements = [
+    {
+      effect = "Allow"
+      actions = [
+        "codebuild:StartBuild"
+      ]
+      resources = [module.codebuild_trigger_sf.arn]
+    }
+  ]
+}

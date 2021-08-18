@@ -18,23 +18,37 @@ phases:
         source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/rollback.sh"
         pr_queue=$(get_pr_queue)
         
-        if [ -n "$PLAN_COMMAND" ]; then
-          update_pr_queue_with_new_providers "$pr_queue"
-          terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH
+        if [ "$DEPLOYMENT_TYPE" == "Deploy" ]; then
+          if [ -n "$PLAN_COMMAND" ]; then
+            update_pr_queue_with_new_providers "$pr_queue"
+            terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH
 
-        elif [ -n "$APPLY_COMMAND" ]; then
-          terragrunt "$APPLY_COMMAND" --terragrunt-working-dir $TARGET_PATH
-          update_pr_queue_with_new_resources "$pr_queue"
+          elif [ -n "$APPLY_COMMAND" ]; then
+            terragrunt "$APPLY_COMMAND" --terragrunt-working-dir $TARGET_PATH
+            update_pr_queue_with_new_resources "$pr_queue"
 
-        elif [ -n "$ROLLBACK_PLAN_COMMAND" ]; then
-          update_pr_queue_with_destroy_targets_flags "$pr_queue"
-          destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
-          terragrunt "$ROLLBACK_PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+          else
+            log "No Terragrunt Command was specified" "ERROR"
+            exit 1
 
-        elif [ -n "$ROLLBACK_APPLY_COMMAND" ]; then
-          destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
-          terragrunt "$ROLLBACK_APPLY_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+        elif [ "$DEPLOYMENT_TYPE" == "Rollback" ]; then
+          if [ -n "$PLAN_COMMAND" ]; then
+            update_pr_queue_with_destroy_targets_flags "$pr_queue"
+            destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
+            terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+
+          elif [ -n "$APPLY_COMMAND" ]; then
+            destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
+            terragrunt "$APPLY_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+
+          else
+            log "No Terragrunt Command was specified" "ERROR"
+            exit 1
+          
+          fi
 
         else
-          log "No Terragrunt Command was specified" "ERROR"
+          log "No Deployment Type was specified - Set DEPLOYMENT_TYPE to ("Deploy" | "Rollback")" "ERROR"
           exit 1
+        
+        fi
