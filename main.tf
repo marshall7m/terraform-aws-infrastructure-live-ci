@@ -158,8 +158,7 @@ module "sf_role" {
       effect  = "Allow"
       actions = ["lambda:Invoke"]
       resources = [
-        module.lambda_approval_request.function_arn,
-        module.lambda_deployment_orchestrator.function_arn
+        module.lambda_approval_request.function_arn
       ]
     },
     {
@@ -173,27 +172,6 @@ module "sf_role" {
       resources = ["*"]
     }
   ]
-}
-
-data "archive_file" "lambda_deployment_orchestrator" {
-  type        = "zip"
-  source_dir  = "${path.module}/functions/deployment_orchestrator"
-  output_path = "${path.module}/deployment_orchestrator.zip"
-}
-
-module "lambda_deployment_orchestrator" {
-  source           = "github.com/marshall7m/terraform-aws-lambda"
-  filename         = data.archive_file.lambda_deployment_orchestrator.output_path
-  source_code_hash = data.archive_file.lambda_deployment_orchestrator.output_base64sha256
-  function_name    = "${var.step_function_name}-deployment-orchestrator"
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.8"
-
-  env_vars = {
-    ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
-  }
-
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
 }
 
 
