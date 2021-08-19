@@ -83,11 +83,14 @@ module "codebuild_terragrunt_deploy" {
   secondary_build_source = {
     source_identifier = local.buildspec_scripts_source_identifier
     type              = "S3"
-    location          = local.buildspec_scripts_key
+    location          = "${aws_s3_bucket.artifacts.id}/${local.buildspec_scripts_key}"
   }
 
   role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
 
+  depends_on = [
+    aws_s3_bucket_object.build_scripts
+  ]
 }
 
 module "codebuild_queue_pr" {
@@ -129,7 +132,7 @@ module "codebuild_queue_pr" {
   secondary_build_source = {
     source_identifier = local.buildspec_scripts_source_identifier
     type              = "S3"
-    location          = local.buildspec_scripts_key
+    location          = "${aws_s3_bucket.artifacts.id}/${local.buildspec_scripts_key}"
   }
 
   artifacts = {
@@ -160,6 +163,10 @@ module "codebuild_queue_pr" {
   }
 
   role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
+
+  depends_on = [
+    aws_s3_bucket_object.build_scripts
+  ]
 }
 
 module "codebuild_trigger_sf" {
@@ -184,7 +191,7 @@ module "codebuild_trigger_sf" {
   secondary_build_source = {
     source_identifier = local.buildspec_scripts_source_identifier
     type              = "S3"
-    location          = local.buildspec_scripts_key
+    location          = "${aws_s3_bucket.artifacts.id}/${local.buildspec_scripts_key}"
   }
 
   artifacts = {
@@ -231,6 +238,26 @@ module "codebuild_trigger_sf" {
         name  = "EVENTBRIDGE_RULE"
         type  = "PLAINTEXT"
         value = aws_cloudwatch_event_rule.this.id
+      },
+      {
+        name  = "ROLLOUT_PLAN_COMMAND"
+        type  = "PLAINTEXT"
+        value = var.rollout_plan_command
+      },
+      {
+        name  = "ROLLOUT_DEPLOY_COMMAND"
+        type  = "PLAINTEXT"
+        value = var.rollout_deploy_command
+      },
+      {
+        name  = "ROLLBACK_PLAN_COMMAND"
+        type  = "PLAINTEXT"
+        value = var.rollback_plan_command
+      },
+      {
+        name  = "ROLLBACK_DEPLOY_COMMAND"
+        type  = "PLAINTEXT"
+        value = var.rollback_deploy_command
       }
     ]
   }
@@ -243,6 +270,10 @@ module "codebuild_trigger_sf" {
       actions   = ["states:StartExecution"]
       resources = [aws_sfn_state_machine.this.arn]
     }
+  ]
+
+  depends_on = [
+    aws_s3_bucket_object.build_scripts
   ]
 
 }

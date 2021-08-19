@@ -16,6 +16,11 @@ resource "aws_sfn_state_machine" "this" {
           SourceVersion = "$.HeadSourceVersion"
           EnvironmentVariablesOverride = [
             {
+              Name    = "DEPLOYMENT_STAGE"
+              Type    = "PLAINTEXT"
+              "Value" = "Plan"
+            },
+            {
               Name      = "DEPLOYMENT_TYPE"
               Type      = "PLAINTEXT"
               "Value.$" = "$.DeploymentType"
@@ -26,9 +31,9 @@ resource "aws_sfn_state_machine" "this" {
               "Value.$" = "$.DeploymentPath"
             },
             {
-              Name  = "PLAN_COMMAND"
-              Type  = "PLAINTEXT"
-              Value = "$.PlanCommand"
+              Name      = "PLAN_COMMAND"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.PlanCommand"
             }
           ]
           ProjectName = module.codebuild_terragrunt_deploy.name
@@ -72,6 +77,11 @@ resource "aws_sfn_state_machine" "this" {
           SourceVersion = "$.HeadSourceVersion"
           EnvironmentVariablesOverride = [
             {
+              Name    = "DEPLOYMENT_STAGE"
+              Type    = "PLAINTEXT"
+              "Value" = "Deploy"
+            },
+            {
               Name      = "DEPLOYMENT_TYPE"
               Type      = "PLAINTEXT"
               "Value.$" = "$.DeploymentType"
@@ -82,9 +92,9 @@ resource "aws_sfn_state_machine" "this" {
               "Value.$" = "$.DeploymentPath"
             },
             {
-              Name  = "DEPLOY_COMMAND"
-              Type  = "PLAINTEXT"
-              Value = "$.ApplyCommand"
+              Name      = "DEPLOY_COMMAND"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.DeployCommand"
             }
           ]
           ProjectName = module.codebuild_terragrunt_deploy.name
@@ -193,6 +203,7 @@ resource "aws_cloudwatch_event_rule" "sf_execution" {
 resource "aws_cloudwatch_event_target" "sns" {
   rule      = aws_cloudwatch_event_rule.sf_execution.name
   target_id = "SendToCodebuildTriggerSF"
+  role_arn  = module.cw_event_role.role_arn
   arn       = module.codebuild_trigger_sf.arn
 }
 

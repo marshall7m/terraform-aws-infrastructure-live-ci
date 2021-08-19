@@ -212,10 +212,8 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| account\_id | AWS account id | `number` | n/a | yes |
 | account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    paths                    = list(string)<br>    voters                   = list(string)<br>    approval_count_required  = number<br>    rejection_count_required = number<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `"infrastructure-live"` | no |
-| apply\_cmd | Terragrunt/Terraform apply command to run on target paths | `string` | `"terragrunt run-all apply -auto-approve"` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
@@ -237,12 +235,15 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
-| plan\_cmd | Terragrunt/Terraform plan command to run on target paths | `string` | `"terragrunt run-all plan"` | no |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
 | queue\_pr\_build\_name | AWS CodeBuild project name for the build that queues PRs for the Step Function deployment | `string` | `"infrastructure-live-ci-queue-pr"` | no |
 | repo\_name | Name of the GitHub repository | `string` | n/a | yes |
+| rollback\_deploy\_command | Terragrunt rollback command to run on target path | `string` | `"apply -destroy -auto-approve"` | no |
+| rollback\_plan\_command | Terragrunt rollback command to run on target path | `string` | `"plan -destroy"` | no |
+| rollout\_deploy\_command | Terragrunt rollout command to run on target path | `string` | `"apply -auto-approve"` | no |
+| rollout\_plan\_command | Terragrunt rollout command to run on target path | `string` | `"plan"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_img | Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects | `string` | `null` | no |
 | terragrunt\_parent\_dir | Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on<br>to retrieve terragrunt child directories that contain differences within their respective plan. Defaults<br>to the root of `var.repo_name` | `string` | `"./"` | no |
@@ -584,3 +585,38 @@ Process
 - If a path fails, tf destroy for all paths that have new providers/file
 - Get previous commit from finished and repeat tf destroy process
 - If previous commit == base, tf apply all on base
+
+if tf cloud, then remove -auto-approve to allow TF cloud to manage approvals
+
+set extra arg env var for each rollout|rollback
+assume the commmand is set
+
+
+Rollout Account
+Rollback SUCCESS|FAILURE paths (destroy new providers/files)
+
+Allow Options:
+    - Rollout Account with run-all apply with accont as path 
+    - Run the base commit as a new commit within the PR Queue to allow tg plan-all to detect what paths to revert deployment
+
+If commit queue not empty
+    Pull commit from queue
+    If deployment type == Rollback: (defaults to rollout)
+        - Get paths with new providers/file
+        - Filter deploy stack with paths that have new providers/file
+        If Rollback Stack is empty:
+            - Pull next commit from queue
+    if deployment type == Rollout:
+        - Run dependency logic to get next deploy stack
+else
+    Pull next PR
+
+
+NewProvidersBool on commit level to allow for easy rollback queue
+DeploymentType set for each commit object
+
+For Delete Files:
+    - Within Trigger SF:
+        - Use git to get deleted .hcl files
+        - Set SourceVersion to be BaseVersion
+        - Set TG cmd as apply -destroy or plan -destroy

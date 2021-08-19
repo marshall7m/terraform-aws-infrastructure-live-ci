@@ -69,9 +69,9 @@ data "aws_kms_key" "s3" {
 }
 
 resource "aws_s3_bucket_object" "build_scripts" {
-  for_each = fileset("${path.module}", "files/helpers/*")
+  for_each = fileset("${path.module}", "${path.module}/files/buildspec-scripts/*")
   bucket   = aws_s3_bucket.artifacts.id
-  key      = "${local.buildspec_scripts_key}-${basename(each.value)}"
+  key      = "${local.buildspec_scripts_key}/${basename(each.value)}"
   source   = each.value
 }
 

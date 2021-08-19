@@ -25,8 +25,7 @@ data "aws_ssm_parameter" "testing_email" {
 data "aws_caller_identity" "current" {}
 
 module "mut_infrastructure_live_ci" {
-  source     = "..//"
-  account_id = data.aws_caller_identity.current.id
+  source = "../..//"
 
   plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
   apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]

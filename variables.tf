@@ -1,7 +1,3 @@
-variable "account_id" {
-  description = "AWS account id"
-  type        = number
-}
 
 variable "common_tags" {
   description = "Tags to add to all resources"
@@ -101,16 +97,28 @@ variable "build_env_vars" {
   default = []
 }
 
-variable "plan_cmd" {
-  description = "Terragrunt/Terraform plan command to run on target paths"
+variable "rollout_plan_command" {
+  description = "Terragrunt rollout command to run on target path"
   type        = string
-  default     = "terragrunt run-all plan"
+  default     = "plan"
 }
 
-variable "apply_cmd" {
-  description = "Terragrunt/Terraform apply command to run on target paths"
+variable "rollout_deploy_command" {
+  description = "Terragrunt rollout command to run on target path"
   type        = string
-  default     = "terragrunt run-all apply -auto-approve"
+  default     = "apply -auto-approve"
+}
+
+variable "rollback_plan_command" {
+  description = "Terragrunt rollback command to run on target path"
+  type        = string
+  default     = "plan -destroy"
+}
+
+variable "rollback_deploy_command" {
+  description = "Terragrunt rollback command to run on target path"
+  type        = string
+  default     = "apply -destroy -auto-approve"
 }
 
 variable "build_tags" {

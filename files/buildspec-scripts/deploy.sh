@@ -212,39 +212,41 @@ main() {
     exit 0
     # pr_queue=$(get_pr_queue)
         
-    if [ "$DEPLOYMENT_TYPE" == "Deploy" ]; then
-        if [ -n "$PLAN_COMMAND" ]; then
+    if [ "$DEPLOYMENT_TYPE" == "Rollout" ]; then
+        if [ "$DEPLOYMENT_STAGE" == "Plan" ]; then
             update_pr_queue_with_new_providers "$pr_queue"
             terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH
 
-        elif [ -n "$DEPLOY_COMMAND" ]; then
+        elif [ "$DEPLOYMENT_STAGE" == "Deploy" ]; then
+            # continue script if terragrunt cmd fails to allow pr_queue to be updated with new resources created with failed terragrunt cmd
+            set +e
             terragrunt "$DEPLOY_COMMAND" --terragrunt-working-dir $TARGET_PATH
             update_pr_queue_with_new_resources "$pr_queue"
 
         else
-            log "No Terragrunt Command was specified" "ERROR"
+            log "No Deployment Stage was specified - Set DEPLOYMENT_STAGE to ("Plan" | "Deploy")" "ERROR"
             exit 1
 
         fi
 
     elif [ "$DEPLOYMENT_TYPE" == "Rollback" ]; then
-        if [ -n "$PLAN_COMMAND" ]; then
+        if [ "$DEPLOYMENT_STAGE" == "Plan" ]; then
             update_pr_queue_with_destroy_targets_flags "$pr_queue"
             destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
             terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
 
-        elif [ -n "$DEPLOY_COMMAND" ]; then
+        elif [ "$DEPLOYMENT_STAGE" == "Deploy" ]; then
             destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
             terragrunt "$DEPLOY_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
 
         else
-            log "No Terragrunt Command was specified" "ERROR"
+            log "No Deployment Stage was specified - Set DEPLOYMENT_STAGE to ("Plan" | "Deploy")" "ERROR"
             exit 1
 
         fi
 
     else
-        log "No Deployment Type was specified - Set DEPLOYMENT_TYPE to ("Deploy" | "Rollback")" "ERROR"
+        log "No Deployment Type was specified - Set DEPLOYMENT_TYPE to ("Rollout" | "Rollback")" "ERROR"
         exit 1
 
     fi
