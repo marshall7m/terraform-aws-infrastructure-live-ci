@@ -4,17 +4,6 @@ DIR="${BASH_SOURCE%/*}"
 if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 source "$DIR/utils.sh"
 
-get_pr_queue() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    aws s3api get-object \
-    --bucket $ARTIFACT_BUCKET_NAME \
-    --key $ARTIFACT_BUCKET_PR_QUEUE_KEY \
-    pr_queue.json > /dev/null
-
-    echo "$(jq . pr_queue.json)"
-}
-
 pr_is_running() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 

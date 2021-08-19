@@ -210,15 +210,6 @@ checkout_pr() {
     git checkout pr-${pull_request_id}
 }
 
-get_pr_queue() {
-    aws s3api get-object \
-    --bucket $ARTIFACT_BUCKET_NAME \
-    --key $ARTIFACT_BUCKET_PR_QUEUE_KEY \
-    pr_queue.json > /dev/null
-
-    echo $(jq . pr_queue.json)
-}
-
 stop_running_sf_executions() {
     running_executions=$(aws stepfunctions list-executions \
         --state-machine-arn $STATE_MACHINE_ARN \
@@ -514,46 +505,3 @@ trigger_sf() {
     log "Uploading Updated PR Queue" "INFO"
     upload_pr_queue $pr_queue
 }
-
-
-#TODO: 
-# - Fix template repo dir structure for global/ - put outside us-west-2
-    
-# Once deploy/rollback stack is successful and commit queue is empty, then run next PR in Queue
-# Once account stack deps are sucessful, run account stack
-# Once path stack deps are successful, run path
-
-# Once all paths are done (to make sure there are no in progress tf applies that fails are left unnoticed), allow rollback stack
-# Create rollback stack with paths that are successful/failed and add previous commit stack to queue
-# Once rollback stack is all successful, get next from queue
-# Once queue is done, get next PR
-
-# - Add SF execution ARN to Stack Path artifact for task status lookup
-
-
-# User:
-#     - Set PR
-#     - Release Changes
-
-
-# Idea #1
-# if path fails/rejected, delete new providers or delete new file for commit 
-# continue process for previous commit
-# when previous commit == base ref, apply all on base commit
-
-# Idea #2
-# if path fails/rejected, delete new providers or delete new file for commit 
-# apply all on base commit
-# doesn't allow for partial apply for commits
-
-
-
-#TOMORROW:
-#Process
-# - If a path fails, tf destroy for all paths that have new providers/file
-# - Get previous commit from finished and repeat tf destroy process
-# - If previous commit == base, tf apply all on base
-
-#TODO:
-# - Add tests for destroy flags
-# - apply sf definition

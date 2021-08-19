@@ -2,15 +2,6 @@ version: 0.2
 env:
   shell: bash
 phases:
-  pre_build:
-    on-failure: ABORT
-    commands:
-      - "echo Terraform version: $(terraform --version)"
-      - "echo Terragrunt version: $(terragrunt --version)"
-      - "echo TERRAGRUNT_WORKING_DIR: ${TERRAGRUNT_WORKING_DIR}"
   build:
-    on-failure: ABORT
     commands:
-      - |
-        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/trigger_sf_utils.sh"
-        trigger_sf
+      - bash "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/trigger_sf.sh"

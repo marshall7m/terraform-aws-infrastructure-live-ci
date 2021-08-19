@@ -3,8 +3,6 @@ export MOCK_GIT_CMDS=true
 export MOCK_AWS_CMDS=true
 export script_logging_level="DEBUG"
 
-export CODEBUILD_INITIATOR="user"
-
 setup() {
     load 'test_helper/bats-support/load'
     load 'test_helper/bats-assert/load'

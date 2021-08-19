@@ -82,7 +82,7 @@ resource "aws_sfn_state_machine" "this" {
               "Value.$" = "$.DeploymentPath"
             },
             {
-              Name  = "APPLY_COMMAND"
+              Name  = "DEPLOY_COMMAND"
               Type  = "PLAINTEXT"
               Value = "$.ApplyCommand"
             }

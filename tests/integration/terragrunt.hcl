@@ -19,12 +19,11 @@ locals {
   fi
   %{endif}
   if [[ -z $SKIP_TFENV ]]; then 
-  echo Scanning Terraform files for Terraform binary version constraint 
-  tfenv use min-required || tfenv install min-required \
-  && tfenv use min-required
+    echo Scanning Terraform files for Terraform binary version constraint 
+    tfenv use min-required || (tfenv install min-required && tfenv use min-required)
   else 
-  echo Skip scanning Terraform files for Terraform binary version constraint
-  tfenv version-name
+    echo Skip scanning Terraform files for Terraform binary version constraint
+    tfenv version-name
   fi
   EOF
 }

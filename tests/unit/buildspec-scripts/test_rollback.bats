@@ -257,3 +257,122 @@ EOF
     run update_pr_queue_with_new_resources "$pr_queue" "$TESTING_TMP_DIR"
     assert_output -p "$expected"
 }
+
+@test "Add destroy target flags" {
+    source "./mock_aws_cmds.sh"
+
+    export ACCOUNT=dev-account
+    export TARGET_PATH="files/test/tmp/directory_dependency/dev-account/us-west-2/env-one/doo"
+
+    pr_queue=$(jq -n \
+        --arg account $ACCOUNT \
+        --arg path $TARGET_PATH '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            ($account):{
+                                "Status": "RUNNING",
+                                "Dependencies":[],
+                                "Stack":{
+                                    ($path): {
+                                        "Status": "RUNNING",
+                                        "Dependencies":[],
+                                        "NewProviders": ["registry.terraform.io/hashicorp/random"],
+                                        "NewResources": ["random_id.test"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+    expected=$(jq -n \
+        --arg account $ACCOUNT \
+        --arg path $TARGET_PATH '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            ($account):{
+                                "Status": "RUNNING",
+                                "Dependencies":[],
+                                "Stack":{
+                                    ($path): {
+                                        "Status": "RUNNING",
+                                        "Dependencies":[],
+                                        "NewProviders": ["registry.terraform.io/hashicorp/random"],
+                                        "NewResources": ["random_id.test"],
+                                        "NewProviderResourcesTargetFlags": "-target random_id.test"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+    run update_pr_queue_with_destroy_targets_flags
+    assert_output "$expected"
+}
+
+@test "Read destroy target flags" {
+    pr_queue=$(jq -n \
+        --arg account $ACCOUNT \
+        --arg path $TARGET_PATH '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            ($account):{
+                                "Status": "RUNNING",
+                                "Dependencies":[],
+                                "Stack":{
+                                    ($path): {
+                                        "Status": "RUNNING",
+                                        "Dependencies":[],
+                                        "NewProviders": ["registry.terraform.io/hashicorp/random"],
+                                        "NewResources": ["random_id.test"],
+                                        "NewProviderResourcesTargetFlags": "-target random_id.test"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    run read_destroy_targets_flags
+    assert_output "-target random_id.test"
+}
+
+
+#main() bash function should test if it has sub function calls
+# mock all sub function operations to just test what functions are being called
+# move buildspec logic to bash function
+# test buildspec logic with different inputs and see if sub function calls are correct
+# main tests:
+    #- all buildspecs

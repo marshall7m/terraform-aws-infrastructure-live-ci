@@ -5,6 +5,8 @@ if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 source "$DIR/utils.sh"
 
 get_tg_providers() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local terragrunt_working_dir=$1
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
@@ -13,6 +15,8 @@ get_tg_providers() {
 }
 
 get_new_providers() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local terragrunt_working_dir=$1
     log "Running Terragrunt Providers Command" "INFO"
     tg_providers_cmd_out=$(get_tg_providers "$terragrunt_working_dir")
@@ -43,6 +47,8 @@ get_new_providers() {
 }
 
 add_new_providers() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
     local pr_queue=$1
     local new_providers=$2
 
@@ -58,6 +64,8 @@ add_new_providers() {
 }
 
 add_new_resources() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local pr_queue=$1
     local new_resources=$2
 
@@ -73,6 +81,8 @@ add_new_resources() {
 }
 
 update_pr_queue_with_new_providers() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local pr_queue=$1
     local terragrunt_working_dir=$2
 
@@ -93,6 +103,8 @@ update_pr_queue_with_new_providers() {
 }
 
 update_pr_queue_with_new_resources() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local pr_queue=$1
     local terragrunt_working_dir=$2
 
@@ -120,14 +132,17 @@ update_pr_queue_with_new_resources() {
 }
 
 get_tg_state() {
-    local terragrunt_working_dir=$1
     log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
+    local terragrunt_working_dir=$1
 
     terragrunt state pull \
         --terragrunt-working-dir $terragrunt_working_dir 
 }
 
 get_new_providers_resources() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
     local terragrunt_working_dir=$1
 
     #input must be expanded bash array (e.g. "${x[*]}")
@@ -147,6 +162,8 @@ get_new_providers_resources() {
 }
 
 update_pr_queue_with_destroy_targets_flags() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local pr_queue=$1
 
     check_build_env_vars
@@ -173,6 +190,8 @@ update_pr_queue_with_destroy_targets_flags() {
 }
 
 read_destroy_targets_flags() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local pr_queue=$1
 
     check_build_env_vars
@@ -184,3 +203,53 @@ read_destroy_targets_flags() {
             .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResourcesTargetFlags
     ')"
 }
+
+main() {
+    set -e
+
+    get_pr_queue
+
+    exit 0
+    # pr_queue=$(get_pr_queue)
+        
+    if [ "$DEPLOYMENT_TYPE" == "Deploy" ]; then
+        if [ -n "$PLAN_COMMAND" ]; then
+            update_pr_queue_with_new_providers "$pr_queue"
+            terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH
+
+        elif [ -n "$DEPLOY_COMMAND" ]; then
+            terragrunt "$DEPLOY_COMMAND" --terragrunt-working-dir $TARGET_PATH
+            update_pr_queue_with_new_resources "$pr_queue"
+
+        else
+            log "No Terragrunt Command was specified" "ERROR"
+            exit 1
+
+        fi
+
+    elif [ "$DEPLOYMENT_TYPE" == "Rollback" ]; then
+        if [ -n "$PLAN_COMMAND" ]; then
+            update_pr_queue_with_destroy_targets_flags "$pr_queue"
+            destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
+            terragrunt "$PLAN_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+
+        elif [ -n "$DEPLOY_COMMAND" ]; then
+            destroy_targets_flags=$(read_destroy_targets_flags "$pr_queue")
+            terragrunt "$DEPLOY_COMMAND" --terragrunt-working-dir $TARGET_PATH $destroy_targets_flags
+
+        else
+            log "No Terragrunt Command was specified" "ERROR"
+            exit 1
+
+        fi
+
+    else
+        log "No Deployment Type was specified - Set DEPLOYMENT_TYPE to ("Deploy" | "Rollback")" "ERROR"
+        exit 1
+
+    fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

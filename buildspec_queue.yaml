@@ -4,6 +4,4 @@ env:
 phases:
   build:
     commands:
-      - |
-        source "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/trigger_sf_utils.sh"
-        trigger_sf
+      - bash "${CODEBUILD_SRC_DIR}_${SECONDARY_SOURCE_IDENTIFIER}/queue.sh"

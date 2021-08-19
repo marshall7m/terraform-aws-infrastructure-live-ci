@@ -33,6 +33,7 @@ run_only_test() {
 
 setup_tg_env() {
     export TESTING_TMP_DIR=$(mktemp -d)
+	log "TESTING_TMP_DIR: $TESTING_TMP_DIR" "DEBUG"
 	chmod u+x "$TESTING_TMP_DIR"
 }
 

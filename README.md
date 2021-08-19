@@ -197,6 +197,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 |------|---------|
 | terraform | >= 0.14.0 |
 | aws | >= 3.44 |
+| github | ~> 4.0 |
 
 ## Providers
 
@@ -204,7 +205,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 |------|---------|
 | archive | n/a |
 | aws | >= 3.44 |
-| github | n/a |
+| github | ~> 4.0 |
 | random | n/a |
 
 ## Inputs
@@ -543,3 +544,43 @@ Figure out:
     - Account Dependencies Task Token?
 
 
+
+
+
+
+TODO: 
+- Fix template repo dir structure for global/ - put outside us-west-2
+    
+Once deploy/rollback stack is successful and commit queue is empty, then run next PR in Queue
+Once account stack deps are sucessful, run account stack
+Once path stack deps are successful, run path
+
+Once all paths are done (to make sure there are no in progress tf applies that fails are left unnoticed), allow rollback stack
+Create rollback stack with paths that are successful/failed and add previous commit stack to queue
+Once rollback stack is all successful, get next from queue
+Once queue is done, get next PR
+
+- Add SF execution ARN to Stack Path artifact for task status lookup
+
+
+User:
+    - Set PR
+    - Release Changes
+
+Idea #1
+if path fails/rejected, delete new providers or delete new file for commit 
+continue process for previous commit
+when previous commit == base ref, apply all on base commit
+
+Idea #2
+if path fails/rejected, delete new providers or delete new file for commit 
+apply all on base commit
+doesn't allow for partial apply for commits
+
+
+
+TOMORROW:
+Process
+- If a path fails, tf destroy for all paths that have new providers/file
+- Get previous commit from finished and repeat tf destroy process
+- If previous commit == base, tf apply all on base
