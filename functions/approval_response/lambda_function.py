@@ -15,32 +15,29 @@ def lambda_handler(event, context):
     log.info(event)
 
     action = event['body']['action']
-    comments = event['body']['comments']
     recipient = event['body']['recipient']
 
     task_token = event['query']['taskToken']
-    state_machine = event['query']['sm']
     execution_name = event['query']['ex']
-    account = event['query']['account']
-    path = event['query']['path']
 
     execution = json.loads(s3.get_object(
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
         Key=f'{execution_name}.json',
     )['Body'].read().decode())
+
     log.debug(f'Current Execution Data: {execution}')
     
-    approval_voters = execution[account]['Deployments'][path]['Approval']['Voters']
-    rejection_voters = execution[account]['Deployments'][path]['Rejection']['Voters']
+    approval_voters = execution['Approval']['Voters']
+    rejection_voters = execution['Rejection']['Voters']
 
     if action == 'approve':
         while recipient in rejection_voters:
             log.info('Removing {recipient} from Rejection Voters')
-            execution[account]['Deployments'][path]['Rejection']['Voters'].remove(recipient)
-        if recipient not in execution[account]['Deployments'][path]['Approval']['Voters']:
+            execution['Rejection']['Voters'].remove(recipient)
+        if recipient not in execution['Approval']['Voters']:
             msg = {'Status': 'Approve'}
-            execution[account]['Deployments'][path]['Approval']['Count'] = execution[account]['Deployments'][path]['Approval']['Count'] + 1
-            execution[account]['Deployments'][path]['Approval']['Voters'].append(recipient)
+            execution['Approval']['Count'] = execution['Approval']['Count'] + 1
+            execution['Approval']['Voters'].append(recipient)
         else:
             log.info('Choice was resubmitted')
             response = {
@@ -51,11 +48,11 @@ def lambda_handler(event, context):
     elif action == 'reject':
         while recipient in approval_voters:
             log.info('Removing {recipient} from Approval Voters')
-            execution[account]['Deployments'][path]['Approval']['Voters'].remove(recipient)
-        if recipient not in execution[account]['Deployments'][path]['Rejection']['Voters']:
+            execution['Approval']['Voters'].remove(recipient)
+        if recipient not in execution['Rejection']['Voters']:
             msg = {'Status': 'Reject'}
-            execution[account]['Deployments'][path]['Rejection']['Count'] = execution[account]['Deployments'][path]['Rejection']['Count'] + 1
-            execution[account]['Deployments'][path]['Rejection']['Voters'].append(recipient)
+            execution['Rejection']['Count'] = execution['Rejection']['Count'] + 1
+            execution['Rejection']['Voters'].append(recipient)
         else:
             log.info('Choice was already resubmitted')
             response = {
@@ -69,14 +66,14 @@ def lambda_handler(event, context):
     
     log.debug(f'Updated Execution Data: {execution}')
 
-    approval_count = execution[account]['Deployments'][path]['Approval']['Count']
-    approval_count_required = execution[account]['Deployments'][path]['Approval']['Required']
+    approval_count = execution['Approval']['Count']
+    approval_count_required = execution['Approval']['Required']
 
     log.debug(f'Approval count: {approval_count}')
     log.debug(f'Approval count requirement: {approval_count_required}')
     
-    rejection_count = execution[account]['Deployments'][path]['Rejection']['Count']
-    rejection_count_required = execution[account]['Deployments'][path]['Rejection']['Required']
+    rejection_count = execution['Rejection']['Count']
+    rejection_count_required = execution['Rejection']['Required']
 
     log.debug(f'Rejection count: {rejection_count}')
     log.debug(f'Rejection count requirement: {rejection_count_required}')

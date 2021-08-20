@@ -1,6 +1,5 @@
 locals {
   approval_resources_name = "${var.step_function_name}-approval"
-  approval_mapping_s3_key = "approval-mapping.json"
 }
 resource "aws_api_gateway_rest_api" "approval" {
   name        = local.approval_resources_name
@@ -163,11 +162,9 @@ module "lambda_approval_request" {
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
   env_vars = {
-    ARTIFACT_BUCKET_NAME    = aws_s3_bucket.artifacts.id
-    APPROVAL_MAPPING_S3_KEY = local.approval_mapping_s3_key
-    APPROVAL_API            = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}"
-    SENDER_EMAIL_ADDRESS    = var.approval_request_sender_email
-    SES_TEMPLATE            = aws_ses_template.approval.name
+    ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
+    SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
+    SES_TEMPLATE         = aws_ses_template.approval.name
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",

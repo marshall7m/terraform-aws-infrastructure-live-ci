@@ -38,7 +38,7 @@ module "apply_role" {
   ] : []
 }
 
-module "codebuild_terragrunt_deploy" {
+module "codebuild_terra_run" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
   name   = var.build_name
   assumable_role_arns = [
@@ -215,19 +215,9 @@ module "codebuild_trigger_sf" {
         type  = "PLAINTEXT"
       },
       {
-        name  = "TERRAGRUNT_WORKING_DIR"
-        type  = "PLAINTEXT"
-        value = var.terragrunt_parent_dir
-      },
-      {
         name  = "ARTIFACT_BUCKET_NAME"
         type  = "PLAINTEXT"
         value = aws_s3_bucket.artifacts.id
-      },
-      {
-        name  = "APPROVAL_MAPPING_S3_KEY"
-        type  = "PLAINTEXT"
-        value = local.approval_mapping_s3_key
       },
       {
         name  = "SECONDARY_SOURCE_IDENTIFIER"

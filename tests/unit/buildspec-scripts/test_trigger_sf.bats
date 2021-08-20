@@ -1,19 +1,103 @@
-export MOCK_TG_CMDS=true
-export MOCK_GIT_CMDS=true
-export MOCK_AWS_CMDS=true
-export script_logging_level="DEBUG"
 
 setup() {
+    export MOCK_TG_CMDS=true
+    export MOCK_GIT_CMDS=true
+    export MOCK_AWS_CMDS=true
+    export script_logging_level="DEBUG"
+
     load 'test_helper/bats-support/load'
     load 'test_helper/bats-assert/load'
-    load '../helpers/trigger_sf_utils.sh'
     load 'testing_utils.sh'
+
+    DIR="$( cd "$( dirname "$BATS_TEST_FILENAME" )" >/dev/null 2>&1 && pwd )"
+    src_path="$DIR/../../../files/buildspec-scripts"
+    PATH="$src_path:$PATH"
+    
+    setup_tg_env
+
+    source shellmock
+
+    skipIfNot "$BATS_TEST_DESCRIPTION"
+
+    shellmock_clean
+
+    run_only_test "2"
 }
 
-@test "script is runnable" {
-    run trigger_sf_utils.sh
+teardown() {
+    teardown_tg_env
+
+    if [ -z "$TEST_FUNCTION" ]; then
+        shellmock_clean
+    fi
 }
 
+@test "Script is runnable" {
+    run trigger_sf.sh
+}
+
+@test "Update PR Queue with Deployed Path" {
+    deployed_path="test-path/"
+    pr_queue=$(jq -n \
+        --arg path $deployed_path '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "RUNNING",
+                                "Dependencies":[],
+                                "Stack":{
+                                    ($path): {
+                                        "Status": "RUNNING",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    pr_queue=$(jq -n \
+        --arg path $deployed_path '
+        {
+            "Queue": [],
+            "InProgress": {
+                "ID": "2",
+                "BaseRef": "master",
+                "HeadRef": "feature-2",
+                "CommitStack": {
+                    "InProgress": {
+                        "ID": "test-commit-id",
+                        "DeployStack": {
+                            "dev-account":{
+                                "Status": "RUNNING",
+                                "Dependencies":[],
+                                "Stack":{
+                                    ($path): {
+                                        "Status": "SUCCESS",
+                                        "Dependencies":[]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ')
+
+    update_pr_queue_with_deployed_path "$pr_queue" "$deployed_path"
+}
 @test "PR not in Progress" {
     pr_queue=$(jq -n '
         {
@@ -218,7 +302,14 @@ setup() {
         --modify "./tmp/directory_dependency/dev-account/us-west-2/env-one/foo" \
         # --skip-terraform-state-setup
 
-
+# {
+#     "Testing-Env": {
+#         "Name": "Testing-Env",
+#         "Paths": ["dev-account"],
+#         "Voters": ["test-user"],
+#         "ApprovalCountRequired": 2,
+#         "RejectionCountRequired": 2
+# }
     run update_pr_queue_with_new_commit_stack "2" "$pr_queue"
 }
 

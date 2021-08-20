@@ -1,35 +1,7 @@
 export script_logging_level="DEBUG"
 export MOCK_AWS_CMDS=true
 
-setup() {
-    load 'test_helper/bats-support/load'
-    load 'test_helper/bats-assert/load'
-    load 'testing_utils.sh'
-    DIR="$( cd "$( dirname "$BATS_TEST_FILENAME" )" >/dev/null 2>&1 && pwd )"
-    src_path="$DIR/../../../files/buildspec-scripts"
-    PATH="$src_path:$PATH"
 
-    setup_tg_env
-    TARGET_PATH="$TESTING_TMP_DIR"
-    source shellmock
-
-    skipIfNot "$BATS_TEST_DESCRIPTION"
-
-    shellmock_clean
-
-    #mocks all terragrunt commmands
-    shellmock_expect terragrunt --status 0 --type partial
-
-    run_only_test "2"
-}
-
-teardown() {
-    teardown_tg_env
-
-    if [ -z "$TEST_FUNCTION" ]; then
-        shellmock_clean
-    fi
-}
 
 
 @test "Script is runnable" {

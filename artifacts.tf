@@ -75,18 +75,14 @@ resource "aws_s3_bucket_object" "build_scripts" {
   source   = each.value
 }
 
-resource "aws_s3_bucket_object" "approval_mapping" {
-  bucket         = aws_s3_bucket.artifacts.id
-  key            = local.approval_mapping_s3_key
-  content_base64 = base64encode(format("%v", { for account in var.account_parent_cfg : account.name => account }))
-}
-
 resource "aws_s3_bucket_object" "pr_queue" {
   bucket = aws_s3_bucket.artifacts.id
   key    = local.pr_queue_key
   content_base64 = base64encode(format("%v", {
-    Queue      = []
-    InProgress = {}
+    ApprovalMapping = { for account in var.account_parent_cfg : account.name => account }
+    Queue           = []
+    InProgress      = {}
+    Finished        = []
   }))
 }
 

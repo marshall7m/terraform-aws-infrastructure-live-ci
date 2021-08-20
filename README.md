@@ -212,7 +212,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    paths                    = list(string)<br>    voters                   = list(string)<br>    approval_count_required  = number<br>    rejection_count_required = number<br>  }))</pre> | n/a | yes |
+| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    path                     = string<br>    voters                   = list(string)<br>    approval_count_required  = number<br>    rejection_count_required = number<br>    dependencies             = list(string)<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `"infrastructure-live"` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
@@ -223,7 +223,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | artifact\_bucket\_tags | Tags for AWS S3 bucket used to store step function artifacts | `map(string)` | `{}` | no |
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_env\_vars | Base environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
-| build\_name | CodeBuild project name | `string` | `"infrastructure-live-ci-build"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_name | Name of the CloudWatch event that will monitor the Step Function | `string` | `"infrastructure-live-execution-event"` | no |
 | cmk\_arn | AWS KMS CMK (Customer Master Key) ARN used to encrypt Step Function artifacts | `string` | `null` | no |
@@ -246,7 +245,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | rollout\_plan\_command | Terragrunt rollout command to run on target path | `string` | `"plan"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_img | Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects | `string` | `null` | no |
-| terragrunt\_parent\_dir | Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on<br>to retrieve terragrunt child directories that contain differences within their respective plan. Defaults<br>to the root of `var.repo_name` | `string` | `"./"` | no |
+| terra\_run\_build\_name | CodeBuild project name | `string` | `"infrastructure-live-ci-run"` | no |
 | trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `"infrastructure-live-ci-trigger-sf"` | no |
 
 ## Outputs
@@ -620,3 +619,20 @@ For Delete Files:
         - Use git to get deleted .hcl files
         - Set SourceVersion to be BaseVersion
         - Set TG cmd as apply -destroy or plan -destroy
+
+Remove approval mapping file completely
+Add approval mapping to pr_queue.json as separate object
+
+
+Have the approval email as SF input for one-off deployments
+
+SF Input:
+    - Entire Command
+    - Voters (for now email addresses)
+    - Required approvals
+    - Required Rejections
+
+Either put SF Input into each path object or use account level attributes and use path for command
+
+update SF input and stop current execution
+Run updated SF input

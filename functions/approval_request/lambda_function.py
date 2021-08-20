@@ -21,70 +21,36 @@ def lambda_handler(event, context):
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
 
-    log.info(f'Lambda Event: {event}')
+    log.debug(f'Lambda Event: {event}')
 
-    task_token = event['payload']['TaskToken']
-    state_machine = event['payload']['StateMachine']
     execution_name = event['payload']['ExecutionName']
-    account = event['payload']['Account']
-    path = event['payload']['Path']
-    
-    approval_mapping = json.loads(s3.get_object(
-        Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=os.environ['APPROVAL_MAPPING_S3_KEY']
-    )['Body'].read().decode())
+    email_voters = event['payload']['EmailVoters']
+    path_approval = event['payload']['PathApproval']
+    full_approval_api = event['payload']['ApprovalAPI']
 
-    log.debug(f'Approval Mapping: {approval_mapping}')
 
-    email_addresses = approval_mapping[account]['voters']
-    log.debug(f'Email Recipents: {email_addresses}')
-
-    path_item = {
-        'Approval': {
-            'Required': approval_mapping[account]['approval_count_required'],
-            'Count': 0,
-            'Voters': []
-        },
-        'Rejection': {
-            'Required': approval_mapping[account]['rejection_count_required'],
-            'Count': 0,
-            'Voters': []
-        },
-        'AwaitingApprovals': email_addresses,
-        'TaskToken': task_token
-    }
-    log.debug(f'Path Item: {path_item}')
-
-    execution = json.loads(s3.get_object(
-        Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=f'{execution_name}.json',
-    )['Body'].read().decode())
-    log.debug(f'Current Execution Data: {execution}')
-
-    execution[account]['Deployments'][path] = path_item
-    log.debug(f'Updated Execution Data: {execution}')
+    log.debug(f'Path Approval: {path_approval}')
 
     s3.put_object(
         ACL='private',
         Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
         Key=f'{execution_name}.json',
-        Body=json.dumps(execution)
+        Body=json.dumps(path_approval)
     )
 
-    full_approval_api = f'{os.environ["APPROVAL_API"]}?ex={execution_name}&sm={state_machine}&taskToken={task_token}&account={account}&path={path}'
     log.debug(f'API Full URL: {full_approval_api}')
 
     destinations = []
-    for email in email_addresses:
+    for address in email_voters:
         destinations.append(
             {
                 'Destination': {
                     'ToAddresses': [
-                        email
+                        address
                     ]
                 },
                 'ReplacementTemplateData': json.dumps({
-                    'email_address': email
+                    'email_address': address
                 })
             }
         )
@@ -94,8 +60,7 @@ def lambda_handler(event, context):
             Template=os.environ['SES_TEMPLATE'],
             Source=os.environ['SENDER_EMAIL_ADDRESS'],
             DefaultTemplateData=json.dumps({
-                "full_approval_api": full_approval_api, 
-                "path": path
+                "full_approval_api": full_approval_api
             }),
             Destinations=destinations
         )

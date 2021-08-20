@@ -9,26 +9,17 @@ variable "account_parent_cfg" {
   description = "Any modified child filepath of the parent path will be processed within the parent path associated Map task"
   type = list(object({
     name                     = string
-    paths                    = list(string)
+    path                     = string
     voters                   = list(string)
     approval_count_required  = number
     rejection_count_required = number
+    dependencies             = list(string)
   }))
 }
 
 variable "approval_request_sender_email" {
   description = "Email address to use for sending approval requests"
   type        = string
-}
-
-variable "terragrunt_parent_dir" {
-  description = <<EOF
-Parent directory within `var.repo_name` the `module.codebuild_trigger_sf` will run `terragrunt run-all plan` on
-to retrieve terragrunt child directories that contain differences within their respective plan. Defaults
-to the root of `var.repo_name`
-EOF
-  type        = string
-  default     = "./"
 }
 
 variable "base_branch" {
@@ -45,10 +36,10 @@ variable "terra_img" {
   default     = null
 }
 
-variable "build_name" {
+variable "terra_run_build_name" {
   description = "CodeBuild project name"
   type        = string
-  default     = "infrastructure-live-ci-build"
+  default     = "infrastructure-live-ci-run"
 }
 
 variable "plan_role_name" {

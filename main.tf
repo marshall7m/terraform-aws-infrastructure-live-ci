@@ -16,27 +16,12 @@ resource "aws_sfn_state_machine" "this" {
           SourceVersion = "$.HeadSourceVersion"
           EnvironmentVariablesOverride = [
             {
-              Name    = "DEPLOYMENT_STAGE"
-              Type    = "PLAINTEXT"
-              "Value" = "Plan"
-            },
-            {
-              Name      = "DEPLOYMENT_TYPE"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.DeploymentType"
-            },
-            {
-              Name      = "TARGET_PATH"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.DeploymentPath"
-            },
-            {
               Name      = "PLAN_COMMAND"
               Type      = "PLAINTEXT"
               "Value.$" = "$.PlanCommand"
             }
           ]
-          ProjectName = module.codebuild_terragrunt_deploy.name
+          ProjectName = module.codebuild_terra_run.name
         }
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Type     = "Task"
@@ -46,11 +31,23 @@ resource "aws_sfn_state_machine" "this" {
         Parameters = {
           FunctionName = module.lambda_approval_request.function_arn
           Payload = {
-            StateMachine = "$$.StateMachine.Id"
-            ExecutionId  = "$$.Execution.Name"
-            TaskToken    = "$$.Task.Token"
-            Account      = "$.Account"
-            Path         = "$.DeploymentPath"
+            PathApproval = {
+              "Approval" = {
+                Required = "$.ApprovalCountRequired"
+                Count    = 0
+                Voters   = []
+              },
+              "Rejection" = {
+                "Required" = "$.RejectionCountRequired"
+                "Count"    = 0
+                "Voters"   = []
+              },
+              "AwaitingApprovals" = "$.EmailVoters"
+              "TaskToken"         = "$$.Task.Token"
+            }
+            EmailVoters   = "$.EmailVoters"
+            ApprovalAPI   = "States.Format('${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}?ex={}&sm={}&taskToken={}, $$.Execution.Name, $$.StateMachine.Id, $$.Task.Token)"
+            ExecutionName = "$$.Execution.Name"
           }
         }
         Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
@@ -77,27 +74,12 @@ resource "aws_sfn_state_machine" "this" {
           SourceVersion = "$.HeadSourceVersion"
           EnvironmentVariablesOverride = [
             {
-              Name    = "DEPLOYMENT_STAGE"
-              Type    = "PLAINTEXT"
-              "Value" = "Deploy"
-            },
-            {
-              Name      = "DEPLOYMENT_TYPE"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.DeploymentType"
-            },
-            {
-              Name      = "TARGET_PATH"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.DeploymentPath"
-            },
-            {
               Name      = "DEPLOY_COMMAND"
               Type      = "PLAINTEXT"
               "Value.$" = "$.DeployCommand"
             }
           ]
-          ProjectName = module.codebuild_terragrunt_deploy.name
+          ProjectName = module.codebuild_terra_run.name
         }
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Type     = "Task"
@@ -160,7 +142,7 @@ module "sf_role" {
       effect  = "Allow"
       actions = ["codebuild:StartBuild"]
       resources = [
-        module.codebuild_terragrunt_deploy.arn
+        module.codebuild_terra_run.arn
       ]
     },
     {
