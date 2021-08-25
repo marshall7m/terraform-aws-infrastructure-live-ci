@@ -36,26 +36,39 @@ check_build_env_vars() {
   check_for_env_var "$TARGET_PATH"
 }
 
-get_pr_queue() {
-  log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-  aws s3api get-object \
-  --bucket $ARTIFACT_BUCKET_NAME \
-  --key $ARTIFACT_BUCKET_PR_QUEUE_KEY \
-  pr_queue.json > /dev/null || exit 1
-
-  echo $(jq . pr_queue.json)
-}
-
-upload_pr_queue() {
+get_artifact() {
   log "FUNCNAME=$FUNCNAME" "DEBUG"
   
-  local pr_queue=$1
+  local bucket=$1
+  local key=$2
 
-  echo "$pr_queue" > $pr_queue.json
+  tmp_file="$(mktemp -d)/artifact.json"
+  log "Uploading Artifact to tmp directory: $tmp_file" "DEBUG"
+
+  aws s3api get-object  \
+      --bucket $bucket \
+      --key $key.json \
+      $tmp_file > /dev/null || exit 1
+
+  log "Getting Artifact" "DEBUG"
+  echo $(jq . $tmp_file)
+}
+
+upload_artifact() {
+  log "FUNCNAME=$FUNCNAME" "DEBUG"
+  
+  local bucket=$1
+  local key=$2
+  local artifact=$3
+
+  tmp_file="$(mktemp -d)/artifact.json"
+  log "Writing Artifact to tmp directory: $tmp_file" "DEBUG"
+  echo "$artifact" > $tmp_file
+  
+  log "Uploading Artifact" "DEBUG"
   aws s3api put-object \
       --acl private \
-      --body ./pr_queue.json \
-      --bucket $ARTIFACT_BUCKET_NAME \
-      --key $ARTIFACT_BUCKET_PR_QUEUE_KEY.json
+      --body $tmp_file \
+      --bucket $bucket \
+      --key $key.json
 }

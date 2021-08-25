@@ -432,7 +432,9 @@ SF input:
     }
 
 FEATURES:
-- Create webpage for displaying pr_queue.json
+- Add "Release Change" featur to gracefully stop SF executions and run executions with most recent commit from PR (similar to AWS CP)
+- Add "Override Queue" feature to allow priveiledged users to override the next PR in queue
+- Create webpage for displaying executions.json
 
 Scope of Codebuild trigger_sf build:
 
@@ -545,27 +547,14 @@ Figure out:
 
 
 
-
+pre-commit runs:
+    - In queue build
+    - In TF plan task (preferred earlier)
 
 
 TODO: 
 - Fix template repo dir structure for global/ - put outside us-west-2
-    
-Once deploy/rollback stack is successful and commit queue is empty, then run next PR in Queue
-Once account stack deps are sucessful, run account stack
-Once path stack deps are successful, run path
-
-Once all paths are done (to make sure there are no in progress tf applies that fails are left unnoticed), allow rollback stack
-Create rollback stack with paths that are successful/failed and add previous commit stack to queue
-Once rollback stack is all successful, get next from queue
-Once queue is done, get next PR
-
 - Add SF execution ARN to Stack Path artifact for task status lookup
-
-
-User:
-    - Set PR
-    - Release Changes
 
 Idea #1
 if path fails/rejected, delete new providers or delete new file for commit 
@@ -624,8 +613,6 @@ Remove approval mapping file completely
 Add approval mapping to pr_queue.json as separate object
 
 
-Have the approval email as SF input for one-off deployments
-
 SF Input:
     - Entire Command
     - Voters (for now email addresses)
@@ -636,3 +623,57 @@ Either put SF Input into each path object or use account level attributes and us
 
 update SF input and stop current execution
 Run updated SF input
+
+
+foo -> bar
+
+foo is rollback
+
+bar is successful but no rollback 
+
+if depedencies is successful and no new resources, then change path to successful
+
+
+Lazy evaluation
+
+Change all success/failures to waiting
+
+While rollback stack is empty:
+    For every execution within commit-id that is waiting:
+        Run depedency check:
+            - If all depedencies are successful: 
+                - Path is canditate
+            - If Path has no new providers
+                - Path status change to successful
+
+
+Github webhook
+CW Failure event
+User release change/next in queue
+
+Move release change and user updated queue to queue build
+if any execution failure and all execution are finished:
+    update queue to include all previous commits that have new providers/files with type == "rollback" and with base commit for apply-all
+
+Get executions in waiting stage
+if waiting execution != null:
+    get next exuection
+else
+    Get next PR/commit from commit queue
+    if commit type == rollback:
+        get executions paths for commit
+        create reversed parsed stack
+        join execution with reversed stack parent path
+        update plan/deploy commmands
+        add executions
+        Get executions in waiting stage
+
+With waiting stage executions run dependency logic
+
+
+Update execution queue
+
+
+Repo queue with CW finsihed rule
+update repo queue commit status 
+

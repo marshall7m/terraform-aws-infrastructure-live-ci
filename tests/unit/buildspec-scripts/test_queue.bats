@@ -6,74 +6,46 @@ setup() {
     load 'test_helper/bats-assert/load'
     load '../helpers/queue_utils.sh'
     load 'testing_utils.sh'
-
-    pull_request_id="2"
-    export base_ref="master"
-    export head_ref="feature-1"
-    commit_id="test-commit-id"
-    CODEBUILD_RESOLVED_SOURCE_VERSION="test-commit-id"
 }
 
 @test "script is runnable" {
-    run queue_utils.sh
+    run queue.sh
 }
 
-@test "Main Function is runnable" {
-    get_event_vars() {
-        echo "MOCK: FUNCNAME=$FUNCNAME"
+@test "Add New Commit to Queue" {
+    export CODEBUILD_SOURCE_VERSION="pr/1"
+    export CODEBUILD_WEBHOOK_BASE_REF="master"
+    export CODEBUILD_WEBHOOK_HEAD_REF="feature-1"
+    export CODEBUILD_RESOLVED_SOURCE_VERSION="test-commit-id"
+
+    get_table() {
+        echo "$(jq -n '
+            [
+                {
+                    "pr_id": 1,
+                    "commit_id": "commit-id-1",
+                    "base_ref": "master",
+                    "head_ref": "feature-1"
+                }
+            ]
+        ')"
     }
-    run queue
-    assert_success
-}
-
-@test "Add Commit to Queue" {
-    pr_queue="$(jq -n \
-        --arg pull_request_id "$pull_request_id" \
-        --arg base_ref "$base_ref" \
-        --arg head_ref "$head_ref" '
-        {
-            "Queue": [],
-            "InProgress": {
-                "ID": "2",
-                "BaseRef": $base_ref,
-                "HeadRef": $head_ref,
-                "CommitStack": {
-                    "Queue": [],
-                    "InProgress": {
-                        "DeployStack": {}
-                    },
-                    "Finished": []
-                }
-            },
-            "Finished": []
-        }
-    ')"
     
-    expected="$(jq -n \
-        --arg pull_request_id "$pull_request_id" \
-        --arg base_ref "$base_ref" \
-        --arg head_ref "$head_ref" \
-        --arg commit_id "$commit_id" '
-        {
-            "Queue": [],
-            "InProgress": {
-                "ID": "2",
-                "BaseRef": $base_ref,
-                "HeadRef": $head_ref,
-                "CommitStack": {
-                    "Queue": [
-                        {
-                            "ID": $commit_id
-                        }
-                    ],
-                    "InProgress": {
-                        "DeployStack": {}
-                    },
-                    "Finished": []
-                }
+    expected="$(jq -n '
+        [
+            {
+                "pr_id": 1,
+                "commit_id": "commit-id-1",
+                "base_ref": "master",
+                "head_ref": "feature-1"
             },
-            "Finished": []
-        }
+            {
+                "pr_id": 2,
+                "commit_id": "commit-id-2",
+                "base_ref": "master",
+                "head_ref": "feature-2"
+            }
+        ]
     ')"
 
     run commit_to_queue "$pr_queue" "$commit_id"

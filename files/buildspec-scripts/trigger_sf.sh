@@ -54,7 +54,7 @@ get_parsed_stack() {
     log "Raw Stack:" "DEBUG"
     log "${raw_stack[*]}" "DEBUG"
     
-    parsed_stack=$(jq -n '{}')
+    parsed_stack=$(jq -n '[]')
     while read -r line; do
         log "" "DEBUG"
         log "Stack Layer: $(printf "\n\t%s\n" "$line")" "DEBUG"
@@ -74,7 +74,10 @@ get_parsed_stack() {
 
         parsed_stack=$( echo $parsed_stack \
             | jq --arg parent "$parent" --arg deps "$deps" '
-                .[$parent] += try ($deps | split("\n") | reverse) // []' 
+                . + [{
+                    "path": $parent,
+                    "dependencies": try ($deps | split("\n") | reverse) // []' 
+                }]
         )
     done <<< "$raw_stack"
 
@@ -90,8 +93,8 @@ filter_paths() {
     echo $( echo "$stack" | jq \
         --arg filter "$filter" '
         (try ($filter | split(" ")) // []) as $filter
-            | with_entries(select(.key | IN($filter[])))
-            | .[].Dependencies |= map_values(select(. | IN($filter[])))
+            | map(select(.path | IN($filter[])))
+            | map(.dependencies |= map_values(select(. | IN($filter[]))))
         '
     )
 }
@@ -108,7 +111,7 @@ update_stack_with_new_providers() {
         stack=$(echo $stack | jq \
         --arg dir $dir \
         --arg new_providers $new_providers '
-        .[$dir].NewProviders = $new_providers
+        map( if .path == $dir then new_providers == $new_providers else . end)
         ')
     done
     
@@ -118,7 +121,9 @@ update_stack_with_new_providers() {
 create_stack() {
     local terragrunt_working_dir=$1
     local git_root=$2
-
+    
+    #  --arg base_source_version "$base_source_version" \
+    #         --arg head_source_version "$head_source_version"
     tg_plan_out=$(get_tg_plan_out $terragrunt_working_dir)
     exitcode=$?
     if [ $exitcode -eq 1 ]; then
@@ -133,7 +138,7 @@ create_stack() {
     num_diff_paths="${#diff_paths[@]}"
     log "Count: $num_diff_paths" "DEBUG"
 
-    stack=$(get_parsed_stack "$tg_plan_out" "$git_root" | jq 'map_values({"Status": "Waiting", "Dependencies": .})')
+    stack=$(get_parsed_stack "$tg_plan_out" "$git_root")
     log "Terragrunt Dependency Stack: $stack" "DEBUG"
 
     log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
@@ -145,86 +150,29 @@ create_stack() {
     echo "$stack"
 }
 
-create_account_stacks() {   
-    local approval_mapping=$1
-
-    account_stacks=$(jq -n '{}')
-        
-    log "Converting Approval Mapping to Bash Array" "DEBUG"
-    
-    typeset -A accounts
-
-    while IFS== read -r key value; do
-        accounts["$key"]="$value"
-    done < <(echo $approval_mapping | jq -r '
-        to_entries[] 
-        | .value.Path as $path 
-        | .key + "=" + $path'
-    )
-
-    log "Accounts: $( typeset -p accounts )" "DEBUG"
-
-    # gets absolute path to the root of git repo
-    git_root=$(get_git_root)
-    log "Git Root: $git_root" "DEBUG"
-    
-    for name in "${!accounts[@]}"; do
-        name=$( echo "${name}" | tr -d '"' )
-        log "Name: $name" "DEBUG"
-
-        parent_path="${accounts[$name]}"
-        log "Parent Path:" "DEBUG"
-        log "$parent_path" "DEBUG"
-
-        log "Getting Stack for path: $parent_path" "DEBUG"
-        stack="$(create_stack $parent_path $git_root)" || exit 1
-        
-        log "Stack:" "DEBUG"
-        log "$stack" "DEBUG"
-
-        log "Adding account artifact" "DEBUG"
-        account_stacks=$( echo "$approval_mapping" | jq \
-            --arg name $name \
-            --arg stack "$stack" '
-            ($stack | fromjson) as $stack
-            | .[$name] |= . + {
-                "Status": "Waiting",
-                "Stack": $stack
-            }'
-        )
-    done
-
-    echo "$account_stacks"
-}
-
 get_target_stack() {
-    local stack=$1
+    local accounts=$1
+    local executions=$2
+    local commit_id=$2
 
-    log "Getting list of accounts that have no account dependencies or account dependencies that are not running" "DEBUG"
-    accounts=$( echo $target_stack | jq '
-        (.) as $target_stack
-        | ["RUNNING", "WAITING"] as $unfinished_status
-        | [to_entries[] | select(.value.Dependencies | map($target_stack[.].Status? | IN($unfinished_status[]) | not or . == null) | all) | .key ]
+    log "Getting list of accounts that have no account dependencies or no account dependencies that waiting or running" "DEBUG"
+    target_accounts=$( echo $accounts | jq '
+        | (map(select(.status | IN("SUCCESS")) | .account_name)) as $successful_accounts
+    | map(select([.account_dependencies | .[] | IN($successful_accounts[]) or . == null] | all )) | map(.account_name)
     ')
 
-    log "Getting Deployment Paths from Accounts:" "DEBUG"
+    log "Getting Deployment Paths from Accounts:" "INFO"
     log "$accounts" "DEBUG"
 
+    log "Getting executions that have their dependencies finished" "DEBUG"
     echo "$( echo $target_stack | jq \
-        --arg accounts "$accounts" '
+        --arg accounts "$accounts" \
+        --arg commit_id "$commit_id" '
         ($accounts | fromjson) as $accounts
-        | with_entries(select(.key | IN($accounts[])))
-        | [.[] | (.Stack) as $stack | $stack | to_entries[] | select(.value.Status == "WAITING" and (.value.Dependencies | map($stack[.].Status == "SUCCESS" or . == null ) | all) )]
+        | map(select(.account_name | IN($accounts[]) and .commit_id == $commit_id))
+        | (map(select(.status | IN("SUCCESS")) | .path)) as $successful_paths
+        | map(select(.status == "WAITING" and [.dependencies | .[] | IN($successful_paths[]) or . == null] | all ))
     ')"
-
-}
-
-checkout_in_progress_commit() {
-    local pr_queue=$1
-    
-    commit_id=$(echo $pr_queue | jq '.InProgress.CommitStack.InProgress.ID')
-    log "Commit ID: $commit_id" "DEBUG"
-    git checkout "$commit_id"
 }
 
 stop_running_sf_executions() {
@@ -261,93 +209,47 @@ start_sf_executions() {
     done
 }
 
-pr_in_progress() {
-    local pr_queue=$1
-
-    if [[ "$( echo $pr_queue | jq '.InProgress | length > 0' )" = true ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 get_git_source_versions() {
     local pull_request_id=$1
+    local base_ref=$2
+    local head_ref=$3
 
     base_source_version=refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}
-    head_source_version=refs/pull/$pull_request_id/head^{$( git rev-parse --verify HEAD )}
+    head_source_version=refs/pull/$pull_request_id/head^{$commit_id}
 }
 
-update_pr_queue_with_deployed_path() {
-    local pr_queue=$1
-    local deployed_path=$2
+update_execution_status() {
+    local executions=$1
+    local execution_id=$2
+    local status=$2
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    log "Removing: $deployed_path from Deploy Stack" "DEBUG"
-
-
-    echo "$pr_queue"
-}
-
-is_commit_stack_empty() {
-    local pr_queue=$1
-    local commit_order_id=$2
-    
-    bool=$( echo $pr_queue | jq '
-        if .InProgress.CommitStack.InProgress.DeployStack == {} 
-        then true
-        else false
-        end
-    ')
-    log "results: $bool" "DEBUG"
-    if [ "$bool" == true ]; then
-        return 1
-    else 
-        return 0
-    fi
+    echo "$(echo $executions | jq \
+        --arg execution_id $execution_id
+        --arg status $status '
+        map(if .execution_id == $execution_id then .status |= $status else . end)
+    ')"
 }
 
 pr_to_front() {
-    local pr_queue=$1
+    local executions=$1
     local pull_request_id=$2
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    echo "$( echo $pr_queue | jq \
+    echo "$( echo $executions | jq \
         --arg pull_request_id "$pull_request_id" '
         (.Queue | map(.ID == $pull_request_id) | index(true)) as $idx
         | .Queue |= [.[$idx]] + (. | del(.[$idx]))
     ')"
 }
 
-update_pr_queue_with_next_pr() {
-    local pr_queue=$1
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
-    if [ -z "$pr_queue" ]; then
-        log "pr_queue is not defined" "ERROR"
-        exit 1
-    fi
-
-    log "Moving finished PR to Finished category" "INFO"
-    pr_queue=$(echo $pr_queue | jq '.Finished += [.InProgress] | del(.InProgress)')
-
-    log "Moving next PR in Queue to InProgress" "INFO"
-    echo "$( echo $pr_queue | jq '.InProgress = .Queue[0] | del(.Queue[0])')"
-}
-
-update_pr_queue_with_next_commit() {
-    local pr_queue=$1
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    echo "$( echo $pr_queue | jq '
-        .InProgress.CommitStack.InProgress = .InProgress.CommitStack.Queue[0] | del(.InProgress.CommitStack.Queue[0])
-    ')"
-}
-
-update_pr_queue_with_new_commit_stack() {
+update_executions_with_new_commit_stack() {
     set -e
-    local pull_request_id=$1
-    local pr_queue=$2
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    local executions=$1
+    local account_queue=$2
+    local commit_item=$3
     
     log "Creating new Deployment Stack" "INFO"
     
@@ -355,71 +257,55 @@ update_pr_queue_with_new_commit_stack() {
     log "Base Ref Source Version: $base_source_version" "DEBUG"
     log "Head Ref Source Version: $head_source_version" "DEBUG"
 
-    approval_mapping=$(echo $pr_queue | .ApprovalMapping)
-    log "Approval Mapping:" "DEBUG"
-    log "$approval_mapping" "DEBUG"
-
     log "Getting Stacks" "INFO"
-    account_stacks=$(create_account_stacks "$approval_mapping")
-    log "Account Stacks" "DEBUG"
-    log "$account_stacks" "DEBUG"
-    log "Adding Stacks to PR Queue"  "INFO"
-    echo "$( echo "$pr_queue" | jq \
-        --arg account_stacks "$account_stacks" \
-        --arg base_source_version "$base_source_version" \
-        --arg head_source_version "$head_source_version" '
-        ($account_stacks | fromjson) as $account_stacks
-        | (.InProgress.CommitStack.InProgress) |= . + {
-            "DeployStack": $account_stacks,
-            "BaseSourceVersion": $base_source_version,
-            "HeadSourceVersion": $head_source_version
-        }
-        '
-    )"
-}
-
-update_pr_queue_with_rollback_stack() {
-    local pr_queue=$1
-
-    log "Filtering out Terragrunt paths that don't need to be rolled back" "DEBUG"
-    #TODO: Select paths that are succed or failed and then convert to waiting phase
-    echo "$(echo $pr_queue | jq '
-        .InProgress.CommitStack.InProgress.RollbackStack = ((.InProgress.CommitStack.InProgress.DeployStack) 
-            | walk( if type == "object" and .Status? then .Status = "Waiting" else . end))
-    ')"
-}
-
-deploy_stack_in_progress() {
-    local pr_queue=$1
+    # gets absolute path to the root of git repo
+    git_root=$(get_git_root)
+    log "Git Root: $git_root" "DEBUG"
     
-    echo "$( echo $pr_queue | jq '
-        (["SUCCESS", "FAILURE"]) as $finished_status
-        | .InProgress.CommitStack.InProgress.DeployStack | [.. | .Status? | strings] | unique | map(. | IN($finished_status[])) | all | not
-    ')"
+    readarray -t account_paths < <(echo $account_queue | jq 'map(.account_path)' | jq -c '.[]')
+    for account_path in "${account_paths[@]}"; do
+        log "Getting Stack for path: $account_path" "DEBUG"
+        stack="$(create_stack $account_path $git_root)" || exit 1
+        
+        log "Stack:" "DEBUG"
+        log "$stack" "DEBUG"
+
+        log "Adding account artifact" "DEBUG"
+        executions=$( echo "$executions" | jq \
+            --arg name $name \
+            --arg stack "$stack"
+            --arg account_queue "$account_queue" \
+            --arg account_path "$account_path" '
+            ($stack | fromjson) as $stack
+            | ($commit_item | fromjson) as $commit_item
+            | ($account_queue | fromjson | map(select(.account_path == $account_path))) as $account_queue
+            | . + [ ($stack | map($account_queue + $commit_item + .)) ]'
+        )
+    done
+
+    echo "$executions"
 }
 
-needs_rollback() {
-    local pr_queue=$1
+update_executions_with_new_rollback_stack() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    echo "$( echo $pr_queue | jq '
-        (["FAILURE"]) as $failure_status
-        | .InProgress.CommitStack.InProgress.DeployStack | [.. | .Status? | strings] | unique | map(. | IN($failure_status[])) | any
+    local executions=$1
+    local commit_id=$2
+
+    echo "$(echo "$executions" | jq \
+        --arg commit_id $commit_id '
+        (.) as executions
+        | map(select(.commit_id == $commit_id and .new_resources | length > 0 )) as $commit_executions
+        | $commit_executions 
+        | map( (.) as $item | $item.dependencies | map($item + {"path": (.), "dependencies": [$item.path]}))
+        | map((.new_resources | map("-target " + .) | join(" ")) as $destroy_flags 
+        | . + {
+            "status": "WAITING"
+            "plan_command": "destroy $target_flags",
+            "deploy_command": "destroy $target_flags -auto-approve"
+        })
     ')"
 }
-
-commit_queue_is_empty() {
-    local pr_queue=$1
-    
-    echo "$( echo $pr_queue | jq '
-        .InProgress.CommitStack.Queue | length == 0
-    ')"
-}
-
-#!/bin/bash
-
-DIR="${BASH_SOURCE%/*}"
-if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
-source "$DIR/utils.sh"
 
 get_tg_providers() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -463,34 +349,16 @@ get_new_providers() {
     echo "$new_providers"
 }
 
-add_new_resources() {
+update_execution_with_new_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    local pr_queue=$1
-    local new_resources=$2
-
-    check_build_env_vars
-
-    echo "$( echo $pr_queue | jq \
-    --arg account $ACCOUNT \
-    --arg path $TARGET_PATH \
-    --arg new_resources "$new_resources" '
-        (try ($new_resources | split(" ")) // []) as $new_resources
-            | .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResources = $new_resources
-    ')"
-}
-
-
-update_pr_queue_with_new_resources() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local pr_queue=$1
+    local executions=$1
+    local execution_id=$2
     local terragrunt_working_dir=$2
 
-    new_providers=$(echo $pr_queue | jq \
-        --arg account $ACCOUNT \
-        --arg path $TARGET_PATH '
-            .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviders
+    new_providers=$(echo $executions | jq \
+        --arg execution_id $execution_id '
+            map(select(.execution_id == $execution_id))
     ')
 
     new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "${new_providers[*]}")
@@ -503,11 +371,11 @@ update_pr_queue_with_new_resources() {
         exit 0
     fi
 
-    pr_queue=$(add_new_resources "$pr_queue" "${new_resources[*]}")
-    log "Updated PR Queue:" "DEBUG"
-    log "$pr_queue" "DEBUG"
-
-    upload_pr_queue "$pr_queue"
+    echo "$(echo $executions | jq \
+        --arg execution_id $execution_id
+        --arg new_resources $new_resources '
+        map(if .execution_id == $execution_id then .new_resources |= $new_resources else . end)
+    ')"
 }
 
 get_tg_state() {
@@ -540,141 +408,95 @@ get_new_providers_resources() {
     echo "$new_resources"
 }
 
-update_pr_queue_with_destroy_targets_flags() {
+executions_in_progress() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    local pr_queue=$1
+    local execution=$1
 
-    check_build_env_vars
-
-    new_resources=$(echo $pr_queue | jq \
-    --arg account $ACCOUNT \
-    --arg path $TARGET_PATH '
-        .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResources
-    ')
-
-    flags=$(create_destroy_target_flags "${new_resources[*]}")
-
-    pr_queue=$(echo $pr_queue | jq \
-        --arg account $ACCOUNT \
-        --arg path $TARGET_PATH \
-        --arg flags $flags '
-            .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResourcesTargetFlags = $flags
-    ')
-
-    log "Updated PR Queue:" "DEBUG"
-    log "$pr_queue" "DEBUG"
-
-    upload_pr_queue "$pr_queue"
+    if [[ "$(echo $executions | jq 'map(select(.status == "RUNNING")) | length > 0')" == true ]]; then
+        return 0
+    else
+        return 1
 }
 
-read_destroy_targets_flags() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
+execution_finished() {
+    local executions=$1
+    local repo_queue=$2
 
-    local pr_queue=$1
+    log "Triggered via Step Function Event" "INFO"
+        
+    sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
+    log "Step Function Event:" "DEBUG"
+    log "$sf_event" "DEBUG"
 
-    check_build_env_vars
+    deployed_path=$( echo $sf_event | jq '.path')
+    execution_id=$( echo $sf_event | jq '.execution_id')
+    status=$( echo $sf_event | jq '.status')
+    
+    log "Updating Execution Status" "INFO"
+    executions=$( update_execution_status "$executions" "$execution_id" "$status" )
 
-    echo "$(echo $pr_queue | jq \
-        --arg account $ACCOUNT \
-        --arg path $TARGET_PATH \
-        --arg flags $flags '
-            .InProgress.CommitStack.InProgress.DeployStack[$account].Stack[$path].NewProviderResourcesTargetFlags
-    ')"
+    if [ "$deployment_type" == "Deploy" ]; then
+        git checkout "$commit_id"
+        executions=$( update_execution_with_new_resources "$executions" "$deployed_path") 
+    fi
+
+    if [ "$status" == "Failed" ]; then
+        repo_queue=$(update_repo_queue_with_rollback_commits "$repo_queue" "$executions")
+        log "Updated Commit Queue:" "DEBUG"
+        log "$repo_queue" "DEBUG"
+    fi
+
+    log "Updated Executions Table:" "DEBUG"
+    log "$executions" "DEBUG"
+}
+
+create_executions() {
+    local executions=$1
+    local repo_queue=$2
+
+    log "No Deployment or Rollback stack is in Progress" "DEBUG"
+
+    repo_queue=$(dequeue_commit "$repo_queue")
+    commit_item=$(echo "$repo_queue" | jq 'map(select(.status == "Running")) | .type')
+    deployment_type=$(echo "$commit_item" | jq '.type')
+    commit_id=$(echo "$commit_item" | jq '.commit_id')
+
+    if ["$deployment_type" == "Deploy"]; then
+        executions=$(update_executions_with_new_commit_stack "$executions" "$account_queue" "$commit_item")
+    elif ["$deployment_type" == "Rollback"]; then
+        executions=$(update_executions_with_new_rollback_stack "$executions")
+    fi
 }
 
 main() {
     set -e
-    log "Getting PR queue" "INFO"
-    pr_queue=$(get_pr_queue)
+    #TODO: Add env vars for each *_S3_KEY
+    log "Getting S3 Artifacts" "INFO"
+    executions=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$EXECUTION_QUEUE_S3_KEY")
+    repo_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$REPO_QUEUE_S3_KEY")
+    account_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$ACCOUNT_QUEUE_S3_KEY")
     
-    if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_RULE" ]; then
-        log "Triggered via Step Function Event" "INFO"
-        
-        sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
-        deployed_path=$( echo $sf_event | jq '.Path')
-
-        log "Step Function Event:" "DEBUG"
-        log "$sf_event" "DEBUG"
-
-        checkout_in_progress_commit "$pr_queue"
-        pr_queue=$( update_pr_queue_with_deployed_path "$pr_queue" "$deployed_path" | update_pr_queue_with_new_resources "$pr_queue" "$deployed_path")
-
-        log "Updated PR Queue:" "DEBUG"
-        log "$pr_queue" "DEBUG"
-
-        stack=$( echo $pr_queue | jq '.InProgress.CommitStack.InProgress.DeployStack')
+    log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
+    if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then
+        execution_finished "$execution" "$repo_queue"
     fi
 
-    if [ "$CODEBUILD_INITIATOR" == "user" ]; then
-        if [ -n "$NEXT_PR_IN_QUEUE" ]; then
-            log "Moving PR: $NEXT_PR_IN_QUEUE to front of Pull Request Queue" "INFO"
-            pr_queue=$(pr_to_front "$NEXT_PR_IN_QUEUE")
-            log "Updated Pull Request Queue:" "INFO"
-            log "$(echo $pr_queue | jq '.Queue')" "INFO"
-            exit 0
-        else
-            log "Env Var: NEXT_PR_IN_QUEUE is not defined" "ERROR"
-            exit 1
-        fi
-
-        if [ -n "$RELEASE_CHANGE" ]; then
-            log "Updating Commit Queue to only include most recent commit" "INFO"
-            pr_queue=$(release_commit_change "$pr_queue")
-            log "Updated Commit Queue:" "DEBUG"
-            log "$(echo $pr_queue | jq '.InProgress.CommitStack.Queue')" "DEBUG"
-
-            if rollback_stack_in_progress "$pr_queue"; then
-                log "Release change is not available when rollback is in progress" "ERROR"
-                log "Once rollback is done, the current most recent commit will be next" "ERROR"
-                exit 1
-            else
-                log "Stopping Step Function executions that are running" "INFO"
-                stop_running_sf_executions
-                log "Removing all commits in queue except most recent commit" "INFO"
-        fi
+    log "Checking if any Step Function executions are running" "DEBUG"
+    if [ $(executions_in_progress "$executions") == false ] 
+        create_executions "$execution" "$repo_queue"
     fi
 
-    if [ $(deploy_stack_in_progress "$pr_queue") == true ] 
-        stack=$( echo $pr_queue | jq '.InProgress.CommitStack.InProgress.DeployStack')
-    elif [ $(rollback_in_progress) == true ]; then
-        stack=$( echo $pr_queue | jq '.InProgress.CommitStack.InProgress.RollbackStack')
-    elif [ $(needs_rollback) == true ]; then
-            log "No Deployment or Rollback stack is in Progress" "DEBUG"
-            log "Adding Rollback Stack" "INFO"
-
-            pr_queue=$(update_pr_queue_with_rollback_stack $pr_queue)
-            stack=$( echo $pr_queue | jq '.InProgress.CommitStack.InProgress.RollbackStack')
-    else
-        if [ $(commit_queue_is_empty) == true ] ; then
-            log "Pulling next Pull Request from PR queue" "INFO"
-            pr_queue=$(update_pr_queue_with_next_pr "$pr_queue")
-        fi
-
-        log "Pulling next Commit from queue" "INFO"
-        pr_queue=$(update_pr_queue_with_next_commit "$pr_queue")
-
-        log "Checking out target commit" "INFO"
-        checkout_in_progress_commit "$pr_queue"
-
-        log "Creating commits deployment stack"
-        pr_queue=$(update_pr_queue_with_new_commit_stack "$pr_queue")
-
-        log "Updated PR Queue:" "INFO"
-        log "$pr_queue" "DEBUG"
-
-        stack=$( echo $pr_queue | jq '.InProgress.CommitStack.InProgress.DeployStack')  
-    fi
-
-    target_stack=$(get_target_stack "$stack")
-    log "Target Stack" "DEBUG"
+    log "Getting Target Executions" "INFO"
+    target_stack=$(get_target_stack "$account_queue" "$repo_queue" "$commit_id")
+    log "Target Executions" "DEBUG"
     log "$target_stack" "DEBUG"
 
     log "Starting Step Function Deployment Flow" "INFO"
     start_sf_executions "$target_stack"
 
     log "Uploading Updated PR Queue" "INFO"
-    upload_pr_queue $pr_queue
+    upload_executions $executions
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
