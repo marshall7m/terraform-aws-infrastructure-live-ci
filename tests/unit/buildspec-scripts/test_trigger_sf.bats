@@ -43,6 +43,20 @@ teardown() {
     setup_new_provider
     setup_terragrunt_apply
     
+    get_build_artifacts() {
+        executions=$(jq -n '[
+            {
+                "path": "test-path/",
+                "execution_id": "test-id",
+                "deployment_type": "Deploy",
+                "status": "RUNNING"
+                "new_providers"
+            }
+        ]')
+        commit_queue=$()
+        accounts_dim=$()
+    }
+    
     export EVENTBRIDGE_EVENT=$(jq -n \
     --arg commit_id $(git rev-parse --verify HEAD) '
         {
@@ -53,16 +67,7 @@ teardown() {
             "commit_id": $commit_id
         }
     ')
-
-    executions=$(jq -n '[
-        {
-            "path": "test-path/",
-            "execution_id": "test-id",
-            "deployment_type": "Deploy",
-            "status": "RUNNING"
-            "new_providers"
-        }
-    ]')
+    
     expected=$(jq -n \
         '')
 

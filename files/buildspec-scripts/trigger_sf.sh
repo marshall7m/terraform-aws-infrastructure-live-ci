@@ -151,25 +151,27 @@ create_stack() {
 }
 
 get_target_stack() {
-    local accounts=$1
     local executions=$2
     local commit_id=$2
 
     log "Getting list of accounts that have no account dependencies or no account dependencies that waiting or running" "DEBUG"
-    target_accounts=$( echo $accounts | jq '
-        | (map(select(.status | IN("SUCCESS")) | .account_name)) as $successful_accounts
-    | map(select([.account_dependencies | .[] | IN($successful_accounts[]) or . == null] | all )) | map(.account_name)
+    target_accounts=$( echo $executions | jq \
+    --arg commit_id $commit_id '
+        map(select(.commit_id == $commit_id))
+        | group_by(.account_name) 
+        | map(select([.[] | .status == "SUCCESS"] | all) | .[] | .account_name) 
+        | unique
     ')
 
     log "Getting Deployment Paths from Accounts:" "INFO"
-    log "$accounts" "DEBUG"
+    log "$target_accounts" "DEBUG"
 
     log "Getting executions that have their dependencies finished" "DEBUG"
-    echo "$( echo $target_stack | jq \
-        --arg accounts "$accounts" \
+    echo "$( echo $executions | jq \
+        --arg target_accounts "$target_accounts" \
         --arg commit_id "$commit_id" '
-        ($accounts | fromjson) as $accounts
-        | map(select(.account_name | IN($accounts[]) and .commit_id == $commit_id))
+        ($target_accounts | fromjson) as $target_accounts
+        | map(select(.account_name | IN($target_accounts[]) and .commit_id == $commit_id))
         | (map(select(.status | IN("SUCCESS")) | .path)) as $successful_paths
         | map(select(.status == "WAITING" and [.dependencies | .[] | IN($successful_paths[]) or . == null] | all ))
     ')"
@@ -255,7 +257,7 @@ pr_to_front() {
     ')"
 }
 
-update_executions_with_new_commit_stack() {
+update_executions_with_new_deploy_stack() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
@@ -535,10 +537,18 @@ create_executions() {
     commit_id=$(echo "$commit_item" | jq '.commit_id')
 
     if ["$deployment_type" == "Deploy"]; then
-        executions=$(update_executions_with_new_commit_stack "$executions" "$account_queue" "$commit_item")
+        executions=$(update_executions_with_new_deploy_stack "$executions" "$account_queue" "$commit_item")
     elif ["$deployment_type" == "Rollback"]; then
         executions=$(update_executions_with_new_rollback_stack "$executions")
     fi
+}
+
+get_build_artifacts() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    executions=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$EXECUTION_QUEUE_S3_KEY")
+    commit_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$commit_queue_S3_KEY")
+    accounts_dim=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$ACCOUNT_QUEUE_S3_KEY")
 }
 
 main() {
@@ -553,9 +563,7 @@ main() {
 
     #TODO: Add env vars for each *_S3_KEY
     log "Getting S3 Artifacts" "INFO"
-    executions=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$EXECUTION_QUEUE_S3_KEY")
-    commit_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$commit_queue_S3_KEY")
-    account_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$ACCOUNT_QUEUE_S3_KEY")
+    get_build_artifacts
     
     log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
     if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then
@@ -582,3 +590,13 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
+
+"""
+
+Public Tests:
+    - trigger_sf.sh
+Private Tests:
+    - execution_finished
+    - create_executions
+    - get_target_stack
+"""
