@@ -111,7 +111,7 @@ update_stack_with_new_providers() {
         stack=$(echo $stack | jq \
         --arg dir $dir \
         --arg new_providers $new_providers '
-        map( if .path == $dir then new_providers == $new_providers else . end)
+        map( if .path == $dir then .new_providers == $new_providers else . end)
         ')
     done
     
@@ -514,14 +514,23 @@ update_commit_queue_with_rollback_commits() {
     ')"
 }
 
+dequeue_commit_from_commit_queue() {
+    local commit_queue=$1
+
+    echo "$commit_queue" | jq '
+        (map(select(.status == "Waiting"))[0].commit_id) as $target
+        | map(if .commit_id == $target then .status = "Running" else . end)
+    '
+}
+
 create_executions() {
     local executions=$1
     local commit_queue=$2
 
     log "No Deployment or Rollback stack is in Progress" "DEBUG"
 
-    commit_queue=$(dequeue_commit "$commit_queue")
-    commit_item=$(echo "$commit_queue" | jq 'map(select(.status == "Running")) | .type')
+    commit_queue=$(dequeue_commit_from_commit_queue "$commit_queue")
+    commit_item=$(echo "$commit_queue" | jq 'map(select(.status == "Running"))')
     deployment_type=$(echo "$commit_item" | jq '.type')
     commit_id=$(echo "$commit_item" | jq '.commit_id')
 

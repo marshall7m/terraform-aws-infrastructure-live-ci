@@ -41,7 +41,7 @@ teardown() {
     source "./mock_aws_cmds.sh"
     setup_existing_provider
     setup_new_provider
-    setup_apply_new_provider
+    setup_terragrunt_apply
     
     export EVENTBRIDGE_EVENT=$(jq -n \
     --arg commit_id $(git rev-parse --verify HEAD) '

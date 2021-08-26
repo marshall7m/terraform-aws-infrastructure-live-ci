@@ -63,22 +63,34 @@ terraform {
 }
 EOF
 
-    terragrunt apply --terragrunt-working-dir "$TESTING_TMP_DIR" -auto-approve
+    setup_terragrunt_apply
 }
 
 setup_new_provider() {
+	declare -a new_providers=("random" "null")
+    for provider in "${new_providers[@]}"; do
+        cat << EOF >> ./new_provider.tf
+
+provider "$provider" {}
+EOF
+    done
+}
+
+setup_new_provider_with_resource() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
+	declare -a new_providers=("random")
+	declare -a new_providers=("random_id.test")
 	cat << EOF > $TESTING_TMP_DIR/new_provider.tf
 
-provider "random" {}
+provider "$new_providers" {}
 
-resource "random_id" "server" {
+resource "random_id" "test" {
     byte_length = 8
 }
 EOF
 }
 
-setup_apply_new_provider() {
+setup_terragrunt_apply() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	# applies new providers and adds new provider resources to tfstate
     terragrunt init --terragrunt-working-dir "$TESTING_TMP_DIR" && terragrunt apply --terragrunt-working-dir "$TESTING_TMP_DIR" -auto-approve
