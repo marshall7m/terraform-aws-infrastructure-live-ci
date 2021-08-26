@@ -35,6 +35,8 @@ setup_tg_env() {
     export TESTING_TMP_DIR=$(mktemp -d)
 	log "TESTING_TMP_DIR: $TESTING_TMP_DIR" "DEBUG"
 	chmod u+x "$TESTING_TMP_DIR"
+	log "Changing directory to TESTING_TMP_DIR" "DEBUG"
+	cd $TESTING_TMP_DIR
 }
 
 teardown_tg_env() {
@@ -65,6 +67,7 @@ EOF
 }
 
 setup_new_provider() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	cat << EOF > $TESTING_TMP_DIR/new_provider.tf
 
 provider "random" {}
@@ -73,6 +76,12 @@ resource "random_id" "server" {
     byte_length = 8
 }
 EOF
+}
+
+setup_apply_new_provider() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+	# applies new providers and adds new provider resources to tfstate
+    terragrunt init --terragrunt-working-dir "$TESTING_TMP_DIR" && terragrunt apply --terragrunt-working-dir "$TESTING_TMP_DIR" -auto-approve
 }
 
 parse_args() {

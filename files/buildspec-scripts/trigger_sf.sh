@@ -105,7 +105,7 @@ update_stack_with_new_providers() {
     local stack=$1
     local -n target_paths=$2
 
-    for dir in "${target_paths[@]}":
+    for dir in "${target_paths[@]}"; do
         new_providers=$(get_new_providers "$dir")
 
         stack=$(echo $stack | jq \
@@ -217,15 +217,27 @@ get_git_source_versions() {
     base_source_version=refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}
     head_source_version=refs/pull/$pull_request_id/head^{$commit_id}
 }
+validate_execution() {
+    #types: numbers, strings, booleans, arrays, objects 
+    rules=$(jq -n '
+    {
+        "execution_id": {
+            "type": "strings"
+            "regex_value": ".+"
+        },
+    }
+    ')
+}
 
 update_execution_status() {
     local executions=$1
     local execution_id=$2
-    local status=$2
+    local status=$3
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-
+    
+    is_valid_status "$status"
     echo "$(echo $executions | jq \
-        --arg execution_id $execution_id
+        --arg execution_id "$execution_id" \
         --arg status $status '
         map(if .execution_id == $execution_id then .status |= $status else . end)
     ')"
@@ -358,8 +370,11 @@ update_execution_with_new_resources() {
 
     new_providers=$(echo $executions | jq \
         --arg execution_id $execution_id '
-            map(select(.execution_id == $execution_id))
+            map(select(.execution_id == $execution_id))[0] | .new_providers
     ')
+
+    log "Execution's New Providers:" "DEBUG"
+    log "${new_providers[*]}" "DEBUG"
 
     new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "${new_providers[*]}")
 
@@ -372,9 +387,10 @@ update_execution_with_new_resources() {
     fi
 
     echo "$(echo $executions | jq \
-        --arg execution_id $execution_id
-        --arg new_resources $new_resources '
-        map(if .execution_id == $execution_id then .new_resources |= $new_resources else . end)
+        --arg execution_id "$execution_id" \
+        --arg new_resources "$new_resources" '
+        ($new_resources | fromjson) as $new_resources
+        | map(if .execution_id == $execution_id then .new_resources |= $new_resources else . end)
     ')"
 }
 
@@ -408,29 +424,42 @@ get_new_providers_resources() {
     echo "$new_resources"
 }
 
+verify_param() {
+    if [ -z "$1" ]; then
+        log "No arguments supplied" "ERROR"
+        exit 1
+    else
+        echo "$1"
+    fi
+}
+
 executions_in_progress() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    local execution=$1
+    local executions=$1
 
     if [[ "$(echo $executions | jq 'map(select(.status == "RUNNING")) | length > 0')" == true ]]; then
         return 0
     else
         return 1
+    fi
 }
 
 execution_finished() {
+    set -e
     local executions=$1
-    local repo_queue=$2
+    local commit_queue=$2
 
     log "Triggered via Step Function Event" "INFO"
-        
+
+    check_for_env_var "$EVENTBRIDGE_EVENT"
     sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
     log "Step Function Event:" "DEBUG"
     log "$sf_event" "DEBUG"
 
     deployed_path=$( echo $sf_event | jq '.path')
     execution_id=$( echo $sf_event | jq '.execution_id')
+    deployment_type=$( echo $sf_event | jq '.deployment_type')
     status=$( echo $sf_event | jq '.status')
     
     log "Updating Execution Status" "INFO"
@@ -439,26 +468,60 @@ execution_finished() {
     if [ "$deployment_type" == "Deploy" ]; then
         git checkout "$commit_id"
         executions=$( update_execution_with_new_resources "$executions" "$deployed_path") 
-    fi
-
-    if [ "$status" == "Failed" ]; then
-        repo_queue=$(update_repo_queue_with_rollback_commits "$repo_queue" "$executions")
-        log "Updated Commit Queue:" "DEBUG"
-        log "$repo_queue" "DEBUG"
+        if [ "$status" == "Failed" ]; then
+            commit_queue=$(update_commit_queue_with_rollback_commits "$commit_queue" "$executions" "$commit_id")
+            log "Commit Queue:" "DEBUG"
+            log "$commit_queue" "DEBUG"
+        fi
     fi
 
     log "Updated Executions Table:" "DEBUG"
     log "$executions" "DEBUG"
 }
 
+update_commit_queue_with_rollback_commits() {
+    local commit_queue=$1
+    local executions=$2
+    local pr_id=$3
+
+    rollback_commit_items="$(echo "$executions" | jq \
+    --arg pr_id "$pr_id" \
+    --arg commit_queue "$commit_queue" '
+    ($commit_queue | fromjson) as $commit_queue
+    | ($pr_id | tonumber) as $pr_id
+    | (map(select(
+        .pr_id == $pr_id and 
+        .type == "Deploy" and
+        (.new_resources | length > 0)
+    ))
+    | map(.commit_id) | unique) as $rollback_commits
+    | $commit_queue 
+    | map(select(
+        (.type == "Deploy") and
+        (.commit_id | IN($rollback_commits[]))
+    ))
+    | map(.type = "Rollback" | .status = "Waiting")
+    ')"
+
+    log "Rollback commit items:" "DEBUG"
+    log "$rollback_commit_items" "DEBUG"
+
+    log "Adding rollback commit items to front of commit queue" "DEBUG"
+    echo "$(echo "$commit_queue" | jq \
+    --arg rollback_commit_items "$rollback_commit_items" '
+        ($rollback_commit_items | fromjson) as $rollback_commit_items
+        | $rollback_commit_items + .
+    ')"
+}
+
 create_executions() {
     local executions=$1
-    local repo_queue=$2
+    local commit_queue=$2
 
     log "No Deployment or Rollback stack is in Progress" "DEBUG"
 
-    repo_queue=$(dequeue_commit "$repo_queue")
-    commit_item=$(echo "$repo_queue" | jq 'map(select(.status == "Running")) | .type')
+    commit_queue=$(dequeue_commit "$commit_queue")
+    commit_item=$(echo "$commit_queue" | jq 'map(select(.status == "Running")) | .type')
     deployment_type=$(echo "$commit_item" | jq '.type')
     commit_id=$(echo "$commit_item" | jq '.commit_id')
 
@@ -471,24 +534,32 @@ create_executions() {
 
 main() {
     set -e
+    
+    check_for_env_var "$CODEBUILD_INITIATOR"
+    check_for_env_var "$EVENTBRIDGE_FINISHED_RULE"
+    check_for_env_var "$ARTIFACT_BUCKET_NAME"
+    check_for_env_var "$EXECUTION_QUEUE_S3_KEY"
+    check_for_env_var "$EXECUTION_QUEUE_S3_KEY"
+    check_for_env_var "$ACCOUNT_QUEUE_S3_KEY"
+
     #TODO: Add env vars for each *_S3_KEY
     log "Getting S3 Artifacts" "INFO"
     executions=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$EXECUTION_QUEUE_S3_KEY")
-    repo_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$REPO_QUEUE_S3_KEY")
+    commit_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$commit_queue_S3_KEY")
     account_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$ACCOUNT_QUEUE_S3_KEY")
     
     log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
     if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then
-        execution_finished "$execution" "$repo_queue"
+        execution_finished "$execution" "$commit_queue"
     fi
 
     log "Checking if any Step Function executions are running" "DEBUG"
-    if [ $(executions_in_progress "$executions") == false ] 
-        create_executions "$execution" "$repo_queue"
+    if [ $(executions_in_progress "$executions") == false ]; then
+        create_executions "$execution" "$commit_queue"
     fi
 
     log "Getting Target Executions" "INFO"
-    target_stack=$(get_target_stack "$account_queue" "$repo_queue" "$commit_id")
+    target_stack=$(get_target_stack "$account_queue" "$commit_queue" "$commit_id")
     log "Target Executions" "DEBUG"
     log "$target_stack" "DEBUG"
 

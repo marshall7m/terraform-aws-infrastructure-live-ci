@@ -28,14 +28,6 @@ check_for_env_var() {
   fi
 }
 
-check_build_env_vars() {
-  log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-  set -e
-  check_for_env_var "$ACCOUNT"
-  check_for_env_var "$TARGET_PATH"
-}
-
 get_artifact() {
   log "FUNCNAME=$FUNCNAME" "DEBUG"
   
