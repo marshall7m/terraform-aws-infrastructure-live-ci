@@ -262,7 +262,7 @@ update_executions_with_new_deploy_stack() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     local executions=$1
-    local account_queue=$2
+    local account_dim=$2
     local commit_item=$3
     
     log "Creating new Deployment Stack" "INFO"
@@ -276,7 +276,7 @@ update_executions_with_new_deploy_stack() {
     git_root=$(get_git_root)
     log "Git Root: $git_root" "DEBUG"
     
-    readarray -t account_paths < <(echo $account_queue | jq 'map(.account_path)' | jq -c '.[]')
+    readarray -t account_paths < <(echo $account_dim | jq 'map(.account_path)' | jq -c '.[]')
     for account_path in "${account_paths[@]}"; do
         log "Getting Stack for path: $account_path" "DEBUG"
         stack="$(create_stack $account_path $git_root)" || exit 1
@@ -288,12 +288,12 @@ update_executions_with_new_deploy_stack() {
         executions=$( echo "$executions" | jq \
             --arg name $name \
             --arg stack "$stack"
-            --arg account_queue "$account_queue" \
+            --arg account_dim "$account_dim" \
             --arg account_path "$account_path" '
             ($stack | fromjson) as $stack
             | ($commit_item | fromjson) as $commit_item
-            | ($account_queue | fromjson | map(select(.account_path == $account_path))) as $account_queue
-            | . + [ ($stack | map($account_queue + $commit_item + .)) ]'
+            | ($account_dim | fromjson | map(select(.account_path == $account_path))) as $account_dim
+            | . + [ ($stack | map($account_dim + $commit_item + .)) ]'
         )
     done
 
@@ -454,7 +454,7 @@ execution_finished() {
 
     log "Triggered via Step Function Event" "INFO"
 
-    check_for_env_var "$EVENTBRIDGE_EVENT"
+    var_exists "$EVENTBRIDGE_EVENT"
     sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
     log "Step Function Event:" "DEBUG"
     log "$sf_event" "DEBUG"
@@ -537,7 +537,7 @@ create_executions() {
     commit_id=$(echo "$commit_item" | jq '.commit_id')
 
     if ["$deployment_type" == "Deploy"]; then
-        executions=$(update_executions_with_new_deploy_stack "$executions" "$account_queue" "$commit_item")
+        executions=$(update_executions_with_new_deploy_stack "$executions" "$account_dim" "$commit_item")
     elif ["$deployment_type" == "Rollback"]; then
         executions=$(update_executions_with_new_rollback_stack "$executions")
     fi
@@ -548,12 +548,12 @@ get_build_artifacts() {
 
     executions=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$EXECUTION_QUEUE_S3_KEY")
     commit_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$commit_queue_S3_KEY")
-    accounts_dim=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$ACCOUNT_QUEUE_S3_KEY")
+    account_dim=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$ACCOUNT_DIM_S3_KEY")
 }
 
 main() {
     set -e
-    
+
     check_for_env_var "$CODEBUILD_INITIATOR"
     check_for_env_var "$EVENTBRIDGE_FINISHED_RULE"
     check_for_env_var "$ARTIFACT_BUCKET_NAME"
@@ -576,7 +576,7 @@ main() {
     fi
 
     log "Getting Target Executions" "INFO"
-    target_stack=$(get_target_stack "$account_queue" "$commit_queue" "$commit_id")
+    target_stack=$(get_target_stack "$account_dim" "$commit_queue" "$commit_id")
     log "Target Executions" "DEBUG"
     log "$target_stack" "DEBUG"
 
@@ -590,13 +590,3 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
-
-"""
-
-Public Tests:
-    - trigger_sf.sh
-Private Tests:
-    - execution_finished
-    - create_executions
-    - get_target_stack
-"""

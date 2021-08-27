@@ -7,55 +7,74 @@ setup() {
 
     load 'test_helper/bats-support/load'
     load 'test_helper/bats-assert/load'
+    load 'test_helper/bats-mock/stub'
     load 'testing_utils.sh'
+    load '../../../files/buildspec-scripts/trigger_sf.sh'
 
-    DIR="$( cd "$( dirname "$BATS_TEST_FILENAME" )" >/dev/null 2>&1 && pwd )"
-    src_path="$DIR/../../../files/buildspec-scripts"
-    PATH="$src_path:$PATH"
-    
-    setup_tg_env
-
-    source shellmock
-
-    skipIfNot "$BATS_TEST_DESCRIPTION"
-
-    shellmock_clean
-
-    run_only_test "1"
+    # setup_tg_env
+    run_only_test "2"
 }
 
 teardown() {
     teardown_tg_env
-
-    if [ -z "$TEST_FUNCTION" ]; then
-        shellmock_clean
-    fi
 }
 
 @test "Script is runnable" {
     run trigger_sf.sh
 }
 
-
-@test "Successful Deployment Event" {
-    source "./mock_aws_cmds.sh"
-    setup_existing_provider
-    setup_new_provider
-    setup_terragrunt_apply
-    
+@test "Successful deployment event without new provider resources" {
     get_build_artifacts() {
         executions=$(jq -n '[
             {
                 "path": "test-path/",
                 "execution_id": "test-id",
                 "deployment_type": "Deploy",
-                "status": "RUNNING"
+                "status": "RUNNING",
                 "new_providers"
             }
         ]')
-        commit_queue=$()
-        accounts_dim=$()
+
+        commit_queue=$(jq -n '
+        [
+            {
+                "commit_id": "commit-3",
+                "pr_id": 1,
+                "status": "Waiting",
+                "base_ref": "master",
+                "head_ref": "feature-1",
+                "type": "Deploy"
+            },
+            {
+                "commit_id": "commit-2",
+                "pr_id": 1,
+                "status": "Waiting",
+                "base_ref": "master",
+                "head_ref": "feature-1",
+                "type": "Deploy"
+            },
+            {
+                "commit_id": "commit-1",
+                "pr_id": 2,
+                "status": "Success",
+                "base_ref": "master",
+                "head_ref": "feature-2",
+                "type": "Deploy"
+            }
+        ]')
+
+        account_dim=$(jq -n '[
+            {
+                "account_name": "test-account",
+                "account_path": "test-path",
+                "min_approval_count": 3,
+                "min_rejection_count": 3,
+                "voters": ["test-voter"]
+            }
+        ]')
     }
+
+    export -f get_build_artifacts
     
     export EVENTBRIDGE_EVENT=$(jq -n \
     --arg commit_id $(git rev-parse --verify HEAD) '
@@ -65,12 +84,9 @@ teardown() {
             "deployment_type": "Deploy",
             "status": "SUCCESS",
             "commit_id": $commit_id
-        }
+        } | tostring
     ')
-    
-    expected=$(jq -n \
-        '')
 
-    run trigger_sf.sh "$executions" "$TESTING_TMP_DIR"
-    assert_output -p "$expected"
+    run main
+    assert_success
 }

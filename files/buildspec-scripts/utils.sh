@@ -28,6 +28,15 @@ check_for_env_var() {
   fi
 }
 
+var_exists() {
+  log "FUNCNAME=$FUNCNAME" "DEBUG"
+  if [ -n "$1" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 get_artifact() {
   log "FUNCNAME=$FUNCNAME" "DEBUG"
   
