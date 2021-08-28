@@ -1,5 +1,18 @@
-export MOCK_AWS_CMDS=true
 export script_logging_level="DEBUG"
+
+setup_file() {
+    load 'testing_utils.sh'
+
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    setup_metadb
+}
+
+teardown_file() {
+    load 'testing_utils.sh'
+
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    teardown_metadb
+}
 
 setup() {
     load 'test_helper/bats-support/load'
@@ -7,16 +20,18 @@ setup() {
     load '../../../files/buildspec-scripts/queue.sh'
     load 'testing_utils.sh'
 
-    run_only_test "2"
+    # run_only_test "1"
+}
+
+teardown() {
+    clear_metadb_tables
 }
 
 @test "script is runnable" {
     run queue.sh
 }
 
-@test "Add New Commit to Queue" {
-    # setup_metadb
-
+@test "Add PR initial commit to queue" {
     export CODEBUILD_SOURCE_VERSION="pr/1"
     export CODEBUILD_WEBHOOK_BASE_REF="master"
     export CODEBUILD_WEBHOOK_HEAD_REF="feature-1"
@@ -26,93 +41,39 @@ setup() {
     assert_success
 }
 
-@test "PR Already in Queue" {
-    pr_queue="$(jq -n \
-        --arg pull_request_id "$pull_request_id" \
-        --arg base_ref "$base_ref" \
-        --arg head_ref "$head_ref" '
-        {
-            "Queue": [
-                {
-                    "ID": "2",
-                    "BaseRef": $base_ref,
-                    "HeadRef": $head_ref
-                }
-            ],
-            "InProgress": {
-                "ID": "1",
-                "BaseRef": "master",
-                "HeadRef": "feature-1"
-            },
-            "Finished": []
-        }
-    ')"
+# @test "Update PR's commit in queue" {
+#     export CODEBUILD_SOURCE_VERSION="pr/1"
+#     export CODEBUILD_WEBHOOK_BASE_REF="master"
+#     export CODEBUILD_WEBHOOK_HEAD_REF="feature-1"
+#     export CODEBUILD_RESOLVED_SOURCE_VERSION="test-commit-id"
+#     sql="""
+#     INSERT INTO commit_queue (
+#         commit_id,
+#         pr_id,
+#         base_ref,
+#         head_ref
+#     )
 
-    run pr_in_queue "$pr_queue" "$pull_request_id"
-    assert_success
-}
+#     SELECT
+#         RANDOM_STRING(8),
+#         RANDOM() * 2,
+#         'master',
+#         'feature-' || seq AS head_ref
+#     FROM GENERATE_SERIES(1, 10) seq;
+#     """
 
-@test "PR not in Queue" {
-    pr_queue="$(jq -n \
-        --arg pull_request_id "$pull_request_id" \
-        --arg base_ref "$base_ref" \
-        --arg head_ref "$head_ref" '
-        {
-            "Queue": [
-                {
-                    "ID": "5",
-                    "BaseRef": $base_ref,
-                    "HeadRef": $head_ref
-                }
-            ],
-            "InProgress": {
-                "ID": "1",
-                "BaseRef": "master",
-                "HeadRef": "feature-1"
-            },
-            "Finished": []
-        }
-    ')"
+#     query "$sql"
 
-    run pr_in_queue "$pr_queue" "$pull_request_id"
-    assert_failure
-}
+#     run add_commit_to_queue
+#     assert_success
+# }
 
-@test "Add PR to Queue" {
-    
-    pr_queue="$(jq -n '
-        {
-            "Queue": [],
-            "InProgress": {
-                "ID": "1",
-                "BaseRef": "master",
-                "HeadRef": "feature-1"
-            },
-            "Finished": []
-        }
-    ')"
-    
-    expected="$(jq -n \
-        --arg pull_request_id "$pull_request_id" \
-        --arg base_ref "$base_ref" \
-        --arg head_ref "$head_ref" '
-        {
-            "Queue": [
-                {
-                    "ID": "2",
-                    "BaseRef": $base_ref,
-                    "HeadRef": $head_ref
-                }
-            ],
-            "InProgress": {
-                "ID": "1",
-                "BaseRef": "master",
-                "HeadRef": "feature-1"
-            },
-            "Finished": []
-        }
-    ')"
+# @test "Commit already in queue" {
+#     export CODEBUILD_SOURCE_VERSION="pr/1"
+#     export CODEBUILD_WEBHOOK_BASE_REF="master"
+#     export CODEBUILD_WEBHOOK_HEAD_REF="feature-1"
+#     export CODEBUILD_RESOLVED_SOURCE_VERSION="test-commit-id"
 
-    run pr_to_queue "$pr_queue" "$pull_request_id" "$base_ref" "$head_ref"
-    assert_output -p "$expected"
-}
+#     run add_commit_to_queue
+#     assert_failure
+# }

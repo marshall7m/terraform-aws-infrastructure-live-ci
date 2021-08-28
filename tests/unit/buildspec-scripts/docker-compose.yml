@@ -1,20 +1,32 @@
 version: "3.8"
 services:
+  dummy:
+    image: williamyeh/dummy:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    links:
+      - postgres
   postgres:
     image: postgres:9.6.23-alpine
-    container_name: metadb
+    container_name: $CONTAINER_NAME
     volumes:
       - "$PWD/docker_pgsql_init:/docker-entrypoint-initdb.d"
-      - "$PWD/docker_pgsql_volume:/var/lib/postgresql/data"
+      - "$PWD/$VOLUME_DATA_DIR:/var/lib/postgresql/data"
     ports:
       - 5432:5432
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
       - POSTGRES_DB
-      - PGUSER=$POSTGRES_USER
-      - PGDATABASE=$POSTGRES_DB
+      - TESTING_POSTGRES_USER
+      - TESTING_POSTGRES_DB
     deploy:
       restart_policy:
         condition: on-failure
         max_attempts: 3
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 15s
+      timeout: 5000s
+      retries: 50

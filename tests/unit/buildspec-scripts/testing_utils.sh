@@ -32,6 +32,8 @@ run_only_test() {
 }
 
 setup_tg_env() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     export TESTING_TMP_DIR=$(mktemp -d)
 	log "TESTING_TMP_DIR: $TESTING_TMP_DIR" "DEBUG"
 	chmod u+x "$TESTING_TMP_DIR"
@@ -39,10 +41,50 @@ setup_tg_env() {
 	cd $TESTING_TMP_DIR
 }
 
+setup_metadb() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+	export METADB_DOCKER_COMPOSE_PATH="$PWD/docker-compose.yml"
+	export VOLUME_DATA_DIR="./docker_pgsql_volume"
+	export CONTAINER_NAME="metadb"
+	export POSTGRES_USER="postgres"
+    export POSTGRES_PASSWORD="testing_password"
+    export POSTGRES_DB="postgres"
+	export TESTING_POSTGRES_USER="testing_user"
+	export TESTING_POSTGRES_DB="testing_metadb"
+
+	if [ -z "$METADB_TYPE" ]; then
+		log "METADB_TYPE is not set (local|aws)" "ERROR"
+		return 1
+	fi
+
+	if [ "$METADB_TYPE" == "local" ]; then
+		log "Hosting metadb on local postgres database" "INFO"
+
+		log "Removing local postgres data to allow postgres image to run *.sh | *.sql scripts within host" "DEBUG"
+		rm -rf "$VOLUME_DATA_DIR"
+
+		log "Running Docker Compose" "INFO"
+		docker-compose up -d
+		
+		log "Container Logs:" "DEBUG"
+		log "$(docker logs "$CONTAINER_NAME")" "DEBUG"
+	fi
+}
+
+clear_metadb_tables() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+	sql="""
+	TRUNCATE executions, account_dim, commit_queue;
+	"""
+	query "$sql"
+}
+
 teardown_metadb() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	if [ "$METADB_TYPE" == "local" ]; then
 		docker-compose down -v 
-		unalias query
 	fi
 }
 
@@ -156,34 +198,20 @@ clone_testing_repo() {
 	fi
 }
 
-setup_metadb() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-	export METADB_DOCKER_COMPOSE_PATH="$PWD/docker-compose.yml"
-	export POSTGRES_USER="testing_user"
-	export POSTGRES_PASSWORD="testing_password"
-	export POSTGRES_DB="testing_metadb"
-
-	if [ -z "$METADB_TYPE" ]; then
-		log "metadb type is not set" "ERROR"
-		return 1
-	fi
-
-	if [ "$METADB_TYPE" == "local" ]; then
-		log "Hosting metadb on local postgres database" "INFO"
-		docker-compose up -d
-	fi
-}
-
 query() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+	
+	# export PGUSER=$TESTING_POSTGRES_USER
+	# export PGDATABASE=$TESTING_POSTGRES_DB
+	
 	local arg=$1
 	if [ -z "$METADB_TYPE" ]; then
-		log "metadb type is not set" "ERROR"
+		log "METADB_TYPE is not set (local|aws)" "ERROR"
 		return 1
 	fi
 
 	if [ "$METADB_TYPE" == "local" ]; then
-		docker exec -it metadb psql -U $POSTGRES_USER -d $POSTGRES_DB -c "$arg"
+		docker exec -it "$CONTAINER_NAME" psql -U "$TESTING_POSTGRES_USER" -d "$TESTING_POSTGRES_DB" -c "$arg"
 	fi
 }
 
