@@ -1,0 +1,1 @@
+psql -U "$POSTGRES_USER" --variable=POSTGRES_USER="$POSTGRES_USER" --variable=POSTGRES_DB="$POSTGRES_DB" -f ./init.sql

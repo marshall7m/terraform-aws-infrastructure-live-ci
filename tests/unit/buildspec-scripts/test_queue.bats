@@ -4,8 +4,10 @@ export script_logging_level="DEBUG"
 setup() {
     load 'test_helper/bats-support/load'
     load 'test_helper/bats-assert/load'
-    load '../helpers/queue_utils.sh'
+    load '../../../files/buildspec-scripts/queue.sh'
     load 'testing_utils.sh'
+
+    run_only_test "2"
 }
 
 @test "script is runnable" {
@@ -13,44 +15,15 @@ setup() {
 }
 
 @test "Add New Commit to Queue" {
+    # setup_metadb
+
     export CODEBUILD_SOURCE_VERSION="pr/1"
     export CODEBUILD_WEBHOOK_BASE_REF="master"
     export CODEBUILD_WEBHOOK_HEAD_REF="feature-1"
     export CODEBUILD_RESOLVED_SOURCE_VERSION="test-commit-id"
 
-    get_table() {
-        echo "$(jq -n '
-            [
-                {
-                    "pr_id": 1,
-                    "commit_id": "commit-id-1",
-                    "base_ref": "master",
-                    "head_ref": "feature-1"
-                }
-            ]
-        ')"
-    }
-    
-    expected="$(jq -n '
-        [
-            {
-                "pr_id": 1,
-                "commit_id": "commit-id-1",
-                "base_ref": "master",
-                "head_ref": "feature-1"
-            },
-            {
-                "pr_id": 2,
-                "commit_id": "commit-id-2",
-                "base_ref": "master",
-                "head_ref": "feature-2"
-            }
-        ]
-    ')"
-
-    run commit_to_queue "$pr_queue" "$commit_id"
+    run add_commit_to_queue
     assert_success
-    assert_output -p "$expected"
 }
 
 @test "PR Already in Queue" {

@@ -677,3 +677,17 @@ Update execution queue
 Repo queue with CW finsihed rule
 update repo queue commit status 
 
+
+
+Changing from json meta-db to aurora db
+Reasons:
+    - Readability (simple postgres query syntax compared to complex jq statements)
+    - Portability
+        - easily migrate aurora metadb to another service if need be
+        - jq is constraint to file based storage
+    - Accessibility
+
+
+TODO:
+- change jq data to csv data for testing
+- Change jq statements to postgres queries

@@ -9,20 +9,20 @@ if [ -n "$MOCK_AWS_CMDS" ]; then
 fi
 
 log() {
-    declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
-    local log_message=$1
-    local log_priority=$2
+  declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
+  local log_message=$1
+  local log_priority=$2
 
-    #check if level exists
-    [[ ${levels[$log_priority]} ]] || return 1
+  #check if level exists
+  [[ ${levels[$log_priority]} ]] || return 1
 
-    #check if level is enough
-    # returns exit status 0 instead of 2 to prevent `set -e ` from exiting if log priority doesn't meet log level
-    (( ${levels[$log_priority]} < ${levels[$script_logging_level]} )) && return
+  #check if level is enough
+  # returns exit status 0 instead of 2 to prevent `set -e ` from exiting if log priority doesn't meet log level
+  (( ${levels[$log_priority]} < ${levels[$script_logging_level]} )) && return
 
-    # redirects log message to stderr (>&2) to prevent cases where sub-function
-    # uses log() and sub-function stdout results and log() stdout results are combined
-    echo "${log_priority} : ${log_message}" >&2
+  # redirects log message to stderr (>&2) to prevent cases where sub-function
+  # uses log() and sub-function stdout results and log() stdout results are combined
+  echo "${log_priority} : ${log_message}" >&2
 }
 
 run_only_test() {
@@ -37,6 +37,13 @@ setup_tg_env() {
 	chmod u+x "$TESTING_TMP_DIR"
 	log "Changing directory to TESTING_TMP_DIR" "DEBUG"
 	cd $TESTING_TMP_DIR
+}
+
+teardown_metadb() {
+	if [ "$METADB_TYPE" == "local" ]; then
+		docker-compose down -v 
+		unalias query
+	fi
 }
 
 teardown_tg_env() {
@@ -149,6 +156,36 @@ clone_testing_repo() {
 	fi
 }
 
+setup_metadb() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+	export METADB_DOCKER_COMPOSE_PATH="$PWD/docker-compose.yml"
+	export POSTGRES_USER="testing_user"
+	export POSTGRES_PASSWORD="testing_password"
+	export POSTGRES_DB="testing_metadb"
+
+	if [ -z "$METADB_TYPE" ]; then
+		log "metadb type is not set" "ERROR"
+		return 1
+	fi
+
+	if [ "$METADB_TYPE" == "local" ]; then
+		log "Hosting metadb on local postgres database" "INFO"
+		docker-compose up -d
+	fi
+}
+
+query() {
+	local arg=$1
+	if [ -z "$METADB_TYPE" ]; then
+		log "metadb type is not set" "ERROR"
+		return 1
+	fi
+
+	if [ "$METADB_TYPE" == "local" ]; then
+		docker exec -it metadb psql -U $POSTGRES_USER -d $POSTGRES_DB -c "$arg"
+	fi
+}
 
 setup_test_env() {
 	parse_args "$@"

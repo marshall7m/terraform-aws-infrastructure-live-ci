@@ -1,0 +1,20 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:9.6.23-alpine
+    container_name: metadb
+    volumes:
+      - "$PWD/docker_pgsql_init:/docker-entrypoint-initdb.d"
+      - "$PWD/docker_pgsql_volume:/var/lib/postgresql/data"
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+      - PGUSER=$POSTGRES_USER
+      - PGDATABASE=$POSTGRES_DB
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
