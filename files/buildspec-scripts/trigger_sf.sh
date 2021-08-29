@@ -132,7 +132,7 @@ create_stack() {
         log "$tg_plan_out" "ERROR"
         exit 1
     fi
-    diff_paths=($(get_diff_paths "$tg_plan_out" "$git_root"))
+    diff_paths=($(get_diff_paths "$tg_plan_out" "$gti_root"))
     log "Terragrunt Paths with Detected Difference: $(printf "\n\t%s" "${diff_paths[@]}")" "DEBUG"
 
     num_diff_paths="${#diff_paths[@]}"

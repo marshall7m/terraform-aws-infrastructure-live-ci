@@ -13,6 +13,8 @@ psql -v ON_ERROR_STOP=1 \
     \c :POSTGRES_DB 
     GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO :POSTGRES_USER;
     
+    set plpgsql.check_asserts to on;
+
     SET SESSION ROLE :POSTGRES_USER;
     CREATE TABLE IF NOT EXISTS executions (
         execution_id INT PRIMARY KEY,
