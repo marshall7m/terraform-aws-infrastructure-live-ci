@@ -1,35 +1,36 @@
 #!/bin/bash
 
-parse_args() {
+parse_create_mock_tables_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-	modify_paths=()
 
 	while (( "$#" )); do
 		case "$1" in
-			--clone-url)
+			--account-stack)
 				if [ -n "$2" ]; then
-					clone_url="$2"
+					account_stack=$( echo "$2" | jq '. | tojson')
 					shift 2
 				else
 					echo "Error: Argument for $1 is missing" >&2
 					exit 1
 				fi
 				;;
-			--clone-destination)
-				clone_destination="$2"
-				shift 2
+			--pr-count)
+				if [ -n "$2" ]; then
+					pr_count="$2"
+					shift 2
+				else
+					echo "Error: Argument for $1 is missing" >&2
+					exit 1
+				fi
 				;;
-			--terragrunt-working-dir)
-				terragrunt_working_dir="$2"
-				shift 2
-				;;
-			--skip-terraform-state-setup)
-				skip_terraform_state_setup=true
-				shift
-				;;
-			--modify)
-				modify_paths+=("$2")
-				shift 2
+			--commit-count)
+				if [ -n "$2" ]; then
+					commit_count="$2"
+					shift 2
+				else
+					echo "Error: Argument for $1 is missing" >&2
+					exit 1
+				fi
 				;;
 			*)
 				echo "Unknown Option: $1"
@@ -39,13 +40,24 @@ parse_args() {
 	done
 }
 
-setup_tg_env() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
+setup_testing_tpl_repo() {
+	local clone_url=$1
 
-    export TESTING_TMP_DIR=$(mktemp -d)
+	export TESTING_TMP_REPO_TPL_DIR=$(mktemp -d)
+	log "TESTING_TMP_REPO_TPL_DIR: $TESTING_TMP_REPO_TPL_DIR" "DEBUG"
+
+	log "Cloning template Github repository" "INFO"
+	clone_testing_repo $clone_url $TESTING_TMP_REPO_TPL_DIR
+}
+
+setup_testing_env() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+	
+	export TESTING_TMP_DIR=$(mktemp -d)
 	log "TESTING_TMP_DIR: $TESTING_TMP_DIR" "DEBUG"
+
 	chmod u+x "$TESTING_TMP_DIR"
-	log "Changing directory to TESTING_TMP_DIR" "DEBUG"
+	log "Changing directory to tmp dir: $TESTING_TMP_DIR" "DEBUG"
 	cd $TESTING_TMP_DIR
 }
 
@@ -120,10 +132,9 @@ clone_testing_repo() {
 }
 
 parse_tg_graph_deps() {
-	dir=$1
 	parsed_stack=$(jq -n '{}')
 
-    out=$(terragrunt graph-dependencies --terragrunt_working_dir "$TESTING_TMP_DIR")
+    out=$(terragrunt graph-deps --terragrunt_working_dir "$TESTING_TMP_DIR")
 
     log "Terragrunt graph-dep command out:" "DEBUG"
     log "$out" "DEBUG"
@@ -147,15 +158,134 @@ parse_tg_graph_deps() {
     echo "$parsed_stack"
 }
 
-clone_gh_tpl_repo() {
-	export TESTING_TMP_REPO_TPL_DIR=$(mktemp -d)
-	log "TESTING_TMP_REPO_TPL_DIR: $TESTING_TMP_REPO_TPL_DIR" "DEBUG"
-	clone_testing_repo $clone_url $TESTING_TMP_REPO_TPL_DIR
-}
+create_mock_tables() {
+	parse_create_mock_tables_args
+	
+	if [ -n "$tg_directory" ]; then
+		log ""
+		cfg_stack_sql="""
+		CREATE TEMP TABLE cfg_stack (
+			cfg_path VARCHAR,
+			cfg_deps VARCHAR
+		);
+		COPY cfg_stack (cfg_path, cfg_deps) FROM STDIN WITH (FORMAT CSV);
+		"""
+		parse_tg_graph_deps "$TESTING_TMP_DIR" | jq -r '. | @csv' | query "$cfg_stack_sql"
+	fi
 
-# create_executions() {}
-# create_account_dim() {}
-# create_commit_queue() {}
+	account_stack_sql="""
+	CREATE TEMP TABLE account_stack (
+		account_path,
+		account_deps
+	);
+
+	COPY account_stack (
+		account_path,
+		account_deps
+	) FROM STDIN WITH (FORMAT CSV);
+	"""
+
+	echo "$account_stack" | jq -r '. | @csv' | query "$account_stack_sql"
+	
+
+	sql="""
+
+	CREATE OR REPLACE FUNCTION random_between(low INT,  high INT) 
+		RETURNS INT AS
+	$$
+	BEGIN
+		RETURN floor(random()* (high-low + 1) + low);
+	END;
+
+	SELECT COUNT(*) FROM stack as stack_count;	
+
+	INSERT INTO commit_queue (
+		commit_id,
+		pr_id,
+		status,
+		base_ref,
+		head_ref,
+		type
+	)
+
+	SELECT 
+		GENERATE_UID(16) as commit_id
+		random_between(1, 10) as pr_id
+		(
+            CASE (RANDOM() * 1)::INT
+            WHEN 1 THEN 'success'
+            WHEN 2 THEN 'failed'
+            END
+        ) as status,
+		'master' as base_ref,
+		'feature' || seq as head_ref
+	OVER (PARTITION BY pr_id)
+	FROM GENERATE_SERIES(1, 30) seq;
+
+	
+	INSERT INTO executions (
+		execution_id,
+        pr_id,
+        commit_id,
+        is_rollback_cfg,
+        cfg_path,
+		cfg_deps,
+        account_deps,
+        execution_status,
+        plan_command,
+        deploy_command,
+        new_providers,
+        new_resources,
+        account_name,
+        account_path,
+        voters,
+        approval_count,
+        min_approval_count,
+        rejection_count,
+        min_rejection_count
+	)
+	SELECT
+        GENERATE_UUID(8) as execution_id,
+        RANDOM() * 2 as pr_id,
+        GENERATE_UID(16) as commit_id,
+        RANDOM() < 0.5 as is_rollback,
+        RANDOM_STRING(4) || '/' || RANDOM_STRING(4) as cfg_path,
+        (JOIN) as cfg_deps,
+        '[' || RANDOM_STRING(4) || '/' || RANDOM_STRING(4)
+        (
+            CASE (RANDOM() * 3)::INT
+            WHEN 0 THEN 'running'
+            WHEN 1 THEN 'waiting'
+            WHEN 2 THEN 'success'
+            WHEN 3 THEN 'failed'
+            END
+        ) as execution_status,
+        'terragrunt plan' || '--terragrunt-working-dir ' || cfg_path as plan_command,
+        'terragrunt apply' || '--terragrunt-working-dir ' || cfg_path || '-auto-approve' as deploy_command,
+        (
+            CASE is_rollback
+            WHEN 0 THEN '[]'
+            WHEN 1 THEN '[' || RANDOM_STRING(4) || ']'
+            END
+        ) as new_providers, 
+        (
+            CASE is_rollback
+            WHEN 0 THEN '[]'
+            WHEN 1 THEN '[' || RANDOM_STRING(4) || ']'
+            END
+        ) as new_resources,
+        RANDOM_STRING(4),
+        RANDOM_STRING(4),
+        '[' || RANDOM_STRING(4) || ']',
+        RANDOM() * 2,
+        RANDOM() * 2,
+        RANDOM() * 2,
+        RANDOM() * 2
+    FROM GENERATE_SERIES(1, 10) seq;
+
+	"""
+	query "$sql"
+}
 
 # TODO:
 # Setup execution/account dim based on repo structure
@@ -163,5 +293,5 @@ clone_gh_tpl_repo() {
 # create finished executions/commits in relation to account/commit tables
 # 	- set flags for global values that will effect test results
 # 		- account_paths
-# 		- account_dependencies
+# 		- account_deps
 # Create test records within test case for better visibility of what test is testing

@@ -18,7 +18,7 @@ services:
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
-      - POSTGRES_DB
+      # - POSTGRES_DB
       - TESTING_POSTGRES_USER
       - TESTING_POSTGRES_DB
     deploy:

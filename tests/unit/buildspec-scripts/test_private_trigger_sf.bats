@@ -7,7 +7,7 @@ setup() {
     load 'testing_utils.sh'
     export script_logging_level="DEBUG"
     
-    setup_tg_env
+    setup_testing_env
 
     run_only_test "12"
 }
@@ -364,15 +364,6 @@ teardown() {
 }
 
 @test "Update executions with deploy commit" {
-    
-    setup_test_env \
-        --clone-url "https://github.com/marshall7m/infrastructure-live-testing-template.git" \
-        --clone-destination "$TESTING_TMP_DIR" \
-        --terragrunt-working-dir "$TESTING_TMP_DIR/directory_dependency" \
-        --modify "$TESTING_TMP_DIR/directory_dependency/security-account/us-west-2/env-one/baz" \
-        --modify "$TESTING_TMP_DIR/directory_dependency/dev-account/us-west-2/env-one/doo" \
-        --modify "$TESTING_TMP_DIR/directory_dependency/dev-account/us-west-2/env-one/foo" \
-        # --skip-terraform-state-setup
     
     account_queue=$()
     executions=$(jq -n '

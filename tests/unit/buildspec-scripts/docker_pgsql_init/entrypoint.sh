@@ -4,23 +4,24 @@ set -e
 psql -v ON_ERROR_STOP=1 \
     --username "$POSTGRES_USER" \
     --dbname "$POSTGRES_DB"  \
-    --variable=POSTGRES_USER="$TESTING_POSTGRES_USER" \
-    --variable=POSTGRES_DB="$TESTING_POSTGRES_DB" <<-EOSQL
-    CREATE USER :POSTGRES_USER;
-    CREATE DATABASE :POSTGRES_DB;
-    GRANT ALL PRIVILEGES ON DATABASE :POSTGRES_DB TO :POSTGRES_USER;
-    
-    \c :POSTGRES_DB 
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO :POSTGRES_USER;
+    --variable=TESTING_POSTGRES_USER="$TESTING_POSTGRES_USER" \
+    --variable=TESTING_POSTGRES_DB="$TESTING_POSTGRES_DB" <<-EOSQL
+    CREATE USER :TESTING_POSTGRES_USER;
+    CREATE DATABASE :TESTING_POSTGRES_DB;
+    GRANT ALL PRIVILEGES ON DATABASE :TESTING_POSTGRES_DB TO :TESTING_POSTGRES_USER;
+
+    \c :TESTING_POSTGRES_DB
     
     set plpgsql.check_asserts to on;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO :TESTING_POSTGRES_USER;
 
-    SET SESSION ROLE :POSTGRES_USER;
+    SET ROLE :TESTING_POSTGRES_USER;
+    
     CREATE TABLE IF NOT EXISTS executions (
         execution_id INT PRIMARY KEY,
+        is_rollback BOOL,
         pr_id VARCHAR,
         commit_id VARCHAR,
-        execution_type VARCHAR,
         target_path VARCHAR,
         account_dependencies VARCHAR,
         path_dependencies VARCHAR,
@@ -40,12 +41,13 @@ psql -v ON_ERROR_STOP=1 \
 
 
     CREATE TABLE IF NOT EXISTS commit_queue (
-        commit_id VARCHAR PRIMARY KEY,
+        commit_id VARCHAR,
+        is_rollback BOOL,
         pr_id INT,
         commit_status VARCHAR,
         base_ref VARCHAR,
         head_ref VARCHAR,
-        execution_type VARCHAR
+        PRIMARY KEY (commit_id, is_rollback)
     );
 
     CREATE TABLE IF NOT EXISTS account_dim (

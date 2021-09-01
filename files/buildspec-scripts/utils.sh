@@ -37,6 +37,32 @@ var_exists() {
   fi
 }
 
+query() {
+	set -e
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+  local sql=$1
+  log "Query:" "DEBUG"
+  log "$sql" "DEBUG"
+	
+	# export PGUSER=$TESTING_POSTGRES_USER
+	# export PGDATABASE=$TESTING_POSTGRES_DB
+	
+	if [ "$METADB_TYPE" == "local" ]; then
+		docker exec "$CONTAINER_NAME" psql -U "$TESTING_POSTGRES_USER" -d "$TESTING_POSTGRES_DB" -c "$sql"
+
+  elif [ "$METADB_TYPE" == "aws" ]; then
+    aws rds-data execute-statement \
+      --database "$RDS_DB"
+      --resource-arn "$RDS_ARN"
+      --secret-arn "$RDS_SECRET_ARN"
+      --sql "$sql"
+
+	else
+		log "METADB_TYPE is not set (local|aws)" "ERROR"
+	fi
+}
+
 get_artifact() {
   log "FUNCNAME=$FUNCNAME" "DEBUG"
   

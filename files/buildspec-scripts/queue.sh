@@ -27,31 +27,26 @@ add_commit_to_queue() {
         commit_status,
         base_ref,
         head_ref,
-        execution_type
+        is_rollback
     )
     VALUES (
         '$CODEBUILD_RESOLVED_SOURCE_VERSION',
         '$pr_id',
         'Waiting',
         'master',
-        '$base_ref',
-        'deploy'
-    );
+        '$head_ref',
+        '0'
+    )
+    ON CONFLICT (commit_id, is_rollback) DO NOTHING;
     """
-    log "Running Query" "INFO"
+    log "Adding commit record to queue" "INFO"
     query "$sql"
 }
 
 main() {
-    set -e
-
     add_commit_to_queue
-
-    commit_queue=$(get_commit_queue)
-    log "Updated Commit Queue:" "DEBUG"
-    log "$commit_queue" "DEBUG"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
+    main
 fi

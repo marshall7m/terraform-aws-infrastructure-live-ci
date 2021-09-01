@@ -3,6 +3,8 @@ setup_file() {
 
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     setup_metadb
+
+    setup_testing_tpl_repo "https://github.com/marshall7m/infrastructure-live-testing-template.git"
 }
 
 teardown_file() {
@@ -24,16 +26,25 @@ setup() {
     load 'testing_utils.sh'
     load '../../../files/buildspec-scripts/trigger_sf.sh'
 
-    # setup_tg_env
-    run_only_test "2"
+    setup_testing_env
+    clone_testing_repo $TESTING_TMP_REPO_TPL_DIR $TESTING_TMP_DIR
+    
+    run_only_test "3"
 }
 
 teardown() {
-    teardown_tg_env
+    # clear_metadb_tables
 }
 
 @test "Script is runnable" {
     run trigger_sf.sh
+}
+
+
+@test "setup mock tables" {
+    create_mock_tables --account-stack "$account_stack" --pr-count 3 --commit-count 30
+
+    assert_success
 }
 
 @test "Successful deployment event without new provider resources" {
@@ -77,52 +88,6 @@ teardown() {
         rejection_count,
         min_rejection_count
     )
-
-    SELECT
-        RANDOM_STRING(8),
-        RANDOM() * 2,
-        RANDOM_STRING(16),
-        RANDOM() < 0.5,
-        RANDOM_STRING(4) || '/' || RANDOM_STRING(4) as cfg_path,
-        (
-            CASE (RANDOM() * 2)::INT
-            WHEN 0 THEN '[]'
-            WHEN 1 THEN '[' || RANDOM_STRING(4) || '/' || RANDOM_STRING(4) || ']'
-            WHEN 2 THEN '[' || REPEAT(RANDOM_STRING(4) || '/' || RANDOM_STRING(4), RANDOM() * 3) || ']'
-            END
-        ),
-        '[' || RANDOM_STRING(4) || '/' || RANDOM_STRING(4)
-        (
-            CASE (RANDOM() * 3)::INT
-            WHEN 0 THEN 'running'
-            WHEN 1 THEN 'waiting'
-            WHEN 2 THEN 'success'
-            WHEN 3 THEN 'failed'
-            END
-        ) as execution_status,
-        'terragrunt plan' || '--terragrunt-working-dir ' || cfg_path,
-        'terragrunt apply' || '--terragrunt-working-dir ' || cfg_path || '-auto-approve'
-        (
-            CASE is_rollback
-            WHEN 0 THEN '[]'
-            WHEN 1 THEN '[' || RANDOM_STRING(4) || ']'
-            END
-        ) as new_providers, 
-        (
-            CASE is_rollback
-            WHEN 0 THEN '[]'
-            WHEN 1 THEN '[' || RANDOM_STRING(4) || ']'
-            END
-        ) as new_resources,
-        RANDOM_STRING(4),
-        RANDOM_STRING(4),
-        '[' || RANDOM_STRING(4) || ']',
-        RANDOM() * 2,
-        RANDOM() * 2,
-        RANDOM() * 2,
-        RANDOM() * 2
-    FROM GENERATE_SERIES(1, 10) seq;
-
 
     INSERT INTO account_dim (
         account_name,

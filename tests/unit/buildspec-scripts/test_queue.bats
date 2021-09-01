@@ -2,9 +2,6 @@ export script_logging_level="DEBUG"
 # export KEEP_METADB_OPEN=true
 
 setup_file() {
-    load 'test_helper/bats-support/load'
-    load 'test_helper/bats-assert/load'
-    load '../../../files/buildspec-scripts/queue.sh'
     load 'testing_utils/utils.sh'
 
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -17,6 +14,17 @@ teardown_file() {
 }
 
 setup() {
+    dir="$( cd "$( dirname "$BATS_TEST_FILENAME" )" >/dev/null 2>&1 && pwd )"
+    src_path="$dir/../../../files/buildspec-scripts"
+    PATH="$src_path:$PATH"
+    chmod u+x "$src_path"
+    
+    load 'utils.sh'
+
+    load 'test_helper/bats-support/load'
+    load 'test_helper/bats-assert/load'
+    load 'testing_utils/utils.sh'
+
     run_only_test "1"
 }
 
@@ -24,65 +32,71 @@ teardown() {
     clear_metadb_tables
 }
 
-@test "script is runnable" {
+
+@test "Script is runnable" {
     run queue.sh
 }
+
 
 @test "Add new PR initial commit to queue" {
     export CODEBUILD_SOURCE_VERSION="pr/1"
     export CODEBUILD_WEBHOOK_BASE_REF="master"
     export CODEBUILD_WEBHOOK_HEAD_REF="feature-1"
-    export CODEBUILD_RESOLVED_SOURCE_VERSION="test-commit-id"
+    export CODEBUILD_RESOLVED_SOURCE_VERSION="commit-id-1"
 
-    run add_commit_to_queue
+    run queue.sh
     assert_success
 
     assert_sql="""
     do \$\$
-        begin
+        BEGIN
             ASSERT (
                 SELECT COUNT(*)
                 FROM commit_queue
                 WHERE
-                    commit_id = '$CODEBUILD_RESOLVED_SOURCE_VERSION' 
-            ) == 1
-        end;
-    \$\$
-            ;
+                    commit_id = '$CODEBUILD_RESOLVED_SOURCE_VERSION'
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
     """
+
     query "$assert_sql"
-    [ $? -eq 0 ]
+    assert_success
 }
 
 @test "Update PR's commit in queue" {
     export CODEBUILD_SOURCE_VERSION="pr/1"
     export CODEBUILD_WEBHOOK_BASE_REF="master"
     export CODEBUILD_WEBHOOK_HEAD_REF="feature-1"
-    export CODEBUILD_RESOLVED_SOURCE_VERSION="test-commit-id"
+    export CODEBUILD_RESOLVED_SOURCE_VERSION="commit-id-1"
     sql="""
     INSERT INTO commit_queue (
         commit_id,
         pr_id,
+        commit_status,
         base_ref,
-        head_ref
+        head_ref,
+        is_rollback
     )
 
     SELECT
         substr(md5(random()::text), 0, 25),
         RANDOM() * 2,
+        'Waiting',
         'master',
-        'feature-' || seq AS head_ref
+        'feature-' || seq,
+        false
     FROM GENERATE_SERIES(1, 10) seq;
     """
 
     query "$sql"
 
-    run add_commit_to_queue
+    run queue.sh
     assert_success
 
     assert_sql="""
     do \$\$
-        begin
+        BEGIN
             ASSERT (
                 SELECT COUNT(*)
                 FROM commit_queue 
@@ -94,10 +108,15 @@ teardown() {
                     base_ref = '$CODEBUILD_WEBHOOK_BASE_REF'
                 AND
                     head_ref = '$CODEBUILD_WEBHOOK_HEAD_REF'
-            ) == 1;
-        end;
-    \$\$
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
     """
-    query "$assert_sql"
-    [ $? -eq 0 ]
+
+    results=$(query "SELECT * FROM commit_queue WHERE commit_id = 'CODEBUILD_RESOLVED_SOURCE_VERSION';")
+    log "Commit records:" "DEBUG"
+    log "$results" "DEBUG"
+
+    run query "$assert_sql"
+    assert_success
 }
