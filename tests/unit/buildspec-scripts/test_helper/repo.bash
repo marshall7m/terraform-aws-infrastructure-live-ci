@@ -1,76 +1,116 @@
 #!/bin/bash
+setup_test_file_repo() {
+	local clone_url=$1
 
-parse_create_mock_tables_args() {
+	export TESTING_REPO_TMP_CACHE_DIR=$(mktemp -d)
+	log "TESTING_REPO_TMP_CACHE_DIR: $TESTING_REPO_TMP_CACHE_DIR" "DEBUG"
+
+	log "Cloning Github repo to tmp" "INFO"
+	clone_testing_repo $clone_url $TESTING_REPO_TMP_CACHE_DIR
+}
+
+setup_test_case_repo() {
+	export TEST_CASE_REPO_DIR="$BATS_TMPDIR/test-repo"
+	log "Cloning local template Github repo to test case tmp dir: $TEST_CASE_REPO_DIR" "INFO"
+	clone_testing_repo $TESTING_REPO_TMP_CACHE_DIR $TEST_CASE_REPO_DIR
+}
+
+create_testing_repo_mock_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
+	# create mock executions/accounts/commits tables with finished status
+}
 
+modify_tg_path() {
+	local tg_dir=$1
+
+	tf_dir=$(terragrunt terragrunt-info --terragrunt_working_dir "$tg_dir" \
+		| jq '.WorkingDir'
+	)
+	cat << EOF > $tf_dir/$(openssl rand -base64 12).tf
+
+	output "test_case_$BATS_TEST_NUMBER" {
+		value = "test"
+	}
+
+EOF
+}
+
+parse_tg_path_args() {
+	declare -a modify_paths=()
 	while (( "$#" )); do
 		case "$1" in
-			--account-stack)
+			--modify-path)
 				if [ -n "$2" ]; then
-					account_stack=$( echo "$2" | jq '. | tojson')
+					modify_paths+=$1
 					shift 2
 				else
 					echo "Error: Argument for $1 is missing" >&2
 					exit 1
 				fi
-				;;
-			--pr-count)
-				if [ -n "$2" ]; then
-					pr_count="$2"
-					shift 2
-				else
-					echo "Error: Argument for $1 is missing" >&2
-					exit 1
-				fi
-				;;
-			--commit-count)
-				if [ -n "$2" ]; then
-					commit_count="$2"
-					shift 2
-				else
-					echo "Error: Argument for $1 is missing" >&2
-					exit 1
-				fi
-				;;
-			*)
-				echo "Unknown Option: $1"
-				exit 1
 				;;
 		esac
 	done
 }
 
-setup_testing_tpl_repo() {
-	local clone_url=$1
-
-	export TESTING_TMP_REPO_TPL_DIR=$(mktemp -d)
-	log "TESTING_TMP_REPO_TPL_DIR: $TESTING_TMP_REPO_TPL_DIR" "DEBUG"
-
-	log "Cloning template Github repository" "INFO"
-	clone_testing_repo $clone_url $TESTING_TMP_REPO_TPL_DIR
-}
-
-setup_testing_env() {
+create_testing_repo_tg_env() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-	
-	export TESTING_TMP_DIR=$(mktemp -d)
-	log "TESTING_TMP_DIR: $TESTING_TMP_DIR" "DEBUG"
 
-	chmod u+x "$TESTING_TMP_DIR"
-	log "Changing directory to tmp dir: $TESTING_TMP_DIR" "DEBUG"
-	cd $TESTING_TMP_DIR
+	parse_tg_path_args
+
+	export TESTING_HEAD_REF="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 6)"
+	
+	log "Creating testing branch: $TESTING_HEAD_REF" "INFO"
+	git checkout -B "$TESTING_HEAD_REF"
+
+
+	for dir in "${modify_paths[@]}"; do
+		log "Directory: $dir" "INFO"
+
+		log "Modifying configuration" "INFO"
+		modify_tg_path "$dir"
+	done
+
+	log "Adding testing changes" "INFO"
+	git add "$(git rev-parse --show-toplevel)/"
+	
+	git commit -m '$TESTING_HEAD_REF'
+	export TESTING_COMMIT_ID=$(git log --pretty=format:'%h' -n 1)
+
+	log "Adding testing commit to queue"
+	sql="""
+	INSERT INTO commit_queue (
+		commit_id,
+        pr_id,
+        commit_status,
+        base_ref,
+        head_ref,
+        is_rollback
+	)
+	VALUES (
+		'$commit_id',
+		1,
+		'Waiting',
+		'master',
+		'$TESTING_HEAD_REF',
+		'0'
+	)
+	"""
+	query "$sql"
+
+	log "Checking out commit before testing commit" "INFO"
+	git checkout $(git rev-parse `git branch -r --sort=committerdate | tail -1`)
 }
 
-teardown_tg_env() {
+teardown_tmp_dir() {
   if [ $BATS_TEST_COMPLETED ]; then
-    rm -rf $TESTING_TMP_DIR
+    rm -rf $BATS_TMPDIR
   else
-    echo "Did not delete $TESTING_TMP_DIR, as test failed"
+    echo "Did not delete $BATS_TMPDIR, as test failed"
   fi
 }
 
 setup_existing_provider() {
-	cat << EOF > $TESTING_TMP_DIR/main.tf
+	cat << EOF > $BATS_TMPDIR/main.tf
 
 provider "time" {}
 
@@ -78,7 +118,7 @@ resource "time_static" "test" {}
 
 EOF
     # 'EOF' to escape $
-    cat << 'EOF' > $TESTING_TMP_DIR/terragrunt.hcl
+    cat << 'EOF' > $BATS_TMPDIR/terragrunt.hcl
 
 terraform {
     source = "${get_terragrunt_dir()}///"
@@ -102,7 +142,7 @@ setup_new_provider_with_resource() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	declare -a new_providers=("random")
 	declare -a new_providers=("random_id.test")
-	cat << EOF > $TESTING_TMP_DIR/new_provider.tf
+	cat << EOF > $BATS_TMPDIR/new_provider.tf
 
 provider "$new_providers" {}
 
@@ -114,7 +154,7 @@ EOF
 
 setup_terragrunt_apply() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-    terragrunt init --terragrunt-working-dir "$TESTING_TMP_DIR" && terragrunt apply --terragrunt-working-dir "$TESTING_TMP_DIR" -auto-approve
+    terragrunt init --terragrunt-working-dir "$BATS_TMPDIR" && terragrunt apply --terragrunt-working-dir "$BATS_TMPDIR" -auto-approve
 }
 
 clone_testing_repo() {
@@ -134,7 +174,7 @@ clone_testing_repo() {
 parse_tg_graph_deps() {
 	parsed_stack=$(jq -n '{}')
 
-    out=$(terragrunt graph-deps --terragrunt_working_dir "$TESTING_TMP_DIR")
+    out=$(terragrunt graph-deps --terragrunt_working_dir "$BATS_TMPDIR")
 
     log "Terragrunt graph-dep command out:" "DEBUG"
     log "$out" "DEBUG"
@@ -170,7 +210,7 @@ create_mock_tables() {
 		);
 		COPY cfg_stack (cfg_path, cfg_deps) FROM STDIN WITH (FORMAT CSV);
 		"""
-		parse_tg_graph_deps "$TESTING_TMP_DIR" | jq -r '. | @csv' | query "$cfg_stack_sql"
+		parse_tg_graph_deps "$BATS_TMPDIR" | jq -r '. | @csv' | query "$cfg_stack_sql"
 	fi
 
 	account_stack_sql="""

@@ -1,50 +1,46 @@
-setup_file() {
-    load 'testing_utils.sh'
+export script_logging_level="DEBUG"
+export MOCK_AWS_CMDS=true
+export KEEP_METADB_OPEN=true
 
+setup_file() {
+    load 'test_helper/common-setup'
+    load 'test_helper/repo'
+    load 'test_helper/metadb'
+    load 'test_helper/mock-tables'
+    
+    _common_setup
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     setup_metadb
 
-    setup_testing_tpl_repo "https://github.com/marshall7m/infrastructure-live-testing-template.git"
+    setup_test_file_repo "https://github.com/marshall7m/infrastructure-live-testing-template.git"
 }
 
 teardown_file() {
-    load 'testing_utils.sh'
-
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     teardown_metadb
+    teardown_tmp_dir
 }
 
 setup() {
-    export MOCK_TG_CMDS=true
-    export MOCK_GIT_CMDS=true
-    export MOCK_AWS_CMDS=true
-    export script_logging_level="DEBUG"
+    load 'test_helper/common-setup'
+    load 'test_helper/repo'
+    load 'test_helper/metadb'
+    load 'test_helper/mock-tables'
+    setup_test_case_repo
 
-    load 'test_helper/bats-support/load'
-    load 'test_helper/bats-assert/load'
-    load 'test_helper/bats-mock/stub'
-    load 'testing_utils.sh'
-    load '../../../files/buildspec-scripts/trigger_sf.sh'
+    create_testing_repo_tg_env \
+        --modify-path "$TEST_CASE_REPO_DIR/directory_dependency/dev-account/us-west-2/env-one/bar"
 
-    setup_testing_env
-    clone_testing_repo $TESTING_TMP_REPO_TPL_DIR $TESTING_TMP_DIR
-    
-    run_only_test "3"
+    run_only_test "1"
 }
 
 teardown() {
-    # clear_metadb_tables
+
+    clear_metadb_tables
 }
 
 @test "Script is runnable" {
     run trigger_sf.sh
-}
-
-
-@test "setup mock tables" {
-    create_mock_tables --account-stack "$account_stack" --pr-count 3 --commit-count 30
-
-    assert_success
 }
 
 @test "Successful deployment event without new provider resources" {

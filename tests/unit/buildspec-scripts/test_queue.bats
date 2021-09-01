@@ -2,7 +2,8 @@ export script_logging_level="DEBUG"
 # export KEEP_METADB_OPEN=true
 
 setup_file() {
-    load 'testing_utils/utils.sh'
+    load 'test_helper/common-setup'
+    _common_setup
 
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     setup_metadb
@@ -14,17 +15,6 @@ teardown_file() {
 }
 
 setup() {
-    dir="$( cd "$( dirname "$BATS_TEST_FILENAME" )" >/dev/null 2>&1 && pwd )"
-    src_path="$dir/../../../files/buildspec-scripts"
-    PATH="$src_path:$PATH"
-    chmod u+x "$src_path"
-    
-    load 'utils.sh'
-
-    load 'test_helper/bats-support/load'
-    load 'test_helper/bats-assert/load'
-    load 'testing_utils/utils.sh'
-
     run_only_test "1"
 }
 
