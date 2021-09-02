@@ -222,7 +222,7 @@ teardown() {
     setup_existing_provider
     setup_new_provider
 
-    run get_new_providers "$BATS_TMPDIR"
+    run get_new_providers "$BATS_TEST_TMPDIR"
     assert_failure
     assert_output -p "registry.terraform.io/hashicorp/random"
 }
@@ -230,7 +230,7 @@ teardown() {
 @test "No New Providers" {
     setup_existing_provider
 
-    run get_new_providers "$BATS_TMPDIR"
+    run get_new_providers "$BATS_TEST_TMPDIR"
     assert_output -p ''
 }
 
@@ -240,7 +240,7 @@ teardown() {
     setup_terragrunt_apply
 
     expected="$(jq -n --arg new_resources $new_resources 'try ($new_resources | split(" ")) // []')"
-    run get_new_providers_resources "$BATS_TMPDIR" "${new_providers[*]}"
+    run get_new_providers_resources "$BATS_TEST_TMPDIR" "${new_providers[*]}"
     assert_output -p "$expected"
 }
 
@@ -250,7 +250,7 @@ teardown() {
     setup_terragrunt_apply
     
     expected="$(jq -n '[]')"
-    run get_new_providers_resources "$BATS_TMPDIR" "${new_providers[*]}"
+    run get_new_providers_resources "$BATS_TEST_TMPDIR" "${new_providers[*]}"
     assert_output -p "$expected"
 }
 
@@ -259,7 +259,7 @@ teardown() {
     setup_new_provider
 
     stack=$(jq -n \
-    --arg testing_dir $BATS_TMPDIR '
+    --arg testing_dir $BATS_TEST_TMPDIR '
     [
         {
             "path": $testing_dir,
@@ -267,9 +267,9 @@ teardown() {
         }
     ]')
 
-    declare -a target_paths=("$BATS_TMPDIR")
+    declare -a target_paths=("$BATS_TEST_TMPDIR")
     expected=$(jq -n \
-    --arg testing_dir $BATS_TMPDIR \
+    --arg testing_dir $BATS_TEST_TMPDIR \
     --arg new_providers $new_providers '
     (try ($new_providers | split(" ")) // []) as $new_providers
     [
@@ -287,7 +287,7 @@ teardown() {
 @test "Add No New Providers" {
     setup_existing_provider
     stack=$(jq -n \
-    --arg testing_dir $BATS_TMPDIR '
+    --arg testing_dir $BATS_TEST_TMPDIR '
     [
         {
             "path": $testing_dir,
@@ -295,7 +295,7 @@ teardown() {
         }
     ]')
 
-    declare -a target_paths=("$BATS_TMPDIR")
+    declare -a target_paths=("$BATS_TEST_TMPDIR")
     expected="$stack"
 
     run update_stack_with_new_providers "$stack" "$target_paths"

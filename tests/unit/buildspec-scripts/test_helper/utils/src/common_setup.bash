@@ -1,5 +1,18 @@
 #!/bin/bash
 
+_common_setup() {
+  src_path="$( cd "$( dirname "$BATS_TEST_FILENAME" )/../../../files/buildspec-scripts" >/dev/null 2>&1 && pwd )"
+  PATH="$src_path:$PATH"
+  chmod u+x "$src_path"
+  
+  load "$src_path/utils.sh"
+  load 'test_helper/bats-support/load'
+  load 'test_helper/bats-assert/load'
+
+  #use src query() function within testing
+  export -f query
+}
+
 log() {
   declare -A levels=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
   local log_message=$1
