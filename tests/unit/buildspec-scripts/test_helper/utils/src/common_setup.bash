@@ -6,8 +6,6 @@ _common_setup() {
   chmod u+x "$src_path"
   
   load "$src_path/utils.sh"
-  load 'test_helper/bats-support/load'
-  load 'test_helper/bats-assert/load'
 
   #use src query() function within testing
   export -f query

@@ -23,8 +23,8 @@ psql -v ON_ERROR_STOP=1 \
         pr_id VARCHAR,
         commit_id VARCHAR,
         target_path VARCHAR,
-        account_dependencies VARCHAR,
-        path_dependencies VARCHAR,
+        account_deps VARCHAR,
+        path_deps VARCHAR,
         execution_status VARCHAR,
         plan_command VARCHAR,
         deploy_command VARCHAR,
@@ -40,20 +40,25 @@ psql -v ON_ERROR_STOP=1 \
     );
 
 
+    CREATE TABLE IF NOT EXISTS pr_queue (
+        pr_id INT PRIMARY KEY,
+        status VARCHAR,
+        base_ref VARCHAR,
+        head_ref VARCHAR,
+    );
+
     CREATE TABLE IF NOT EXISTS commit_queue (
         commit_id VARCHAR,
         is_rollback BOOL,
         pr_id INT,
-        commit_status VARCHAR,
-        base_ref VARCHAR,
-        head_ref VARCHAR,
+        status VARCHAR,
         PRIMARY KEY (commit_id, is_rollback)
     );
 
     CREATE TABLE IF NOT EXISTS account_dim (
         account_name VARCHAR PRIMARY KEY,
         account_path VARCHAR,
-        account_dependencies VARCHAR,
+        account_deps VARCHAR,
         min_approval_count INT,
         min_rejection_count INT,
         voters VARCHAR

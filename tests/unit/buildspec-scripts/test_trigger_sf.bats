@@ -1,6 +1,10 @@
 export script_logging_level="DEBUG"
 export MOCK_AWS_CMDS=true
 # export KEEP_METADB_OPEN=true
+export METADB_TYPE=local
+
+load 'test_helper/bats-support/load'
+load 'test_helper/bats-assert/load'
 
 setup_file() {
     load 'test_helper/utils/load.bash'
@@ -24,35 +28,49 @@ setup() {
     setup_test_case_repo
     setup_test_case_branch
 
-    run_only_test 2
+    run_only_test 1
 }
 
 teardown() {
     load 'test_helper/utils/load.bash'
 
     clear_metadb_tables
+    drop_mock_temp_tables
 }
 
 @test "Script is runnable" {
     run trigger_sf.sh
 }
 
+@test "setup" {
+    account_stack=$(jq -n '
+    {
+        "directory_dependency/dev-account": ["directory_dependency/security-account"]
+    }
+    ')
+    run setup_mock_tables --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" --account-stack "$account_stack"
+    assert_success
+}
+
 @test "Successful deployment event, dequeue deploy commit with no new providers" {
+    execution_id="test-exec-id"
+
+    setup_mock_tables
 
     modify_tg_path \
         --path "$TEST_CASE_REPO_DIR/directory_dependency/dev-account/us-west-2/env-one/bar"
 
     setup_test_case_commit
     
+    #create mock eventbridge event, the only attributes that matter are the execution_id to find the record and status to update the status
     export EVENTBRIDGE_EVENT=$(jq -n \
-    --arg commit_id $(git rev-parse --verify HEAD) \
     --arg execution_id "$execution_id" '
         {
             "path": "test-path/",
             "execution_id": $execution_id,
-            "deployment_type": "Deploy",
+            "is_rollback": false,
             "status": "SUCCESS",
-            "commit_id": $commit_id
+            "commit_id": "test-commit-id"
         } | tostring
     ')
 

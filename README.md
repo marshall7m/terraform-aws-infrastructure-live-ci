@@ -691,3 +691,28 @@ Reasons:
 TODO:
 - change jq data to csv data for testing
 - Change jq statements to postgres queries
+
+
+Create separate sf executions with wait task token:
+
+Create task token table
+
+
+
+[['security'], ['dev, 'staging', 'prod']] -> Workspace mapping:
+    - run tg plan-all on workspace parent dir
+    - gets diff paths
+    - for each path, get task token within lambda, and add to path mapping
+    {
+        "path/" : "token"
+    }
+    - convert path mapping to dependency token mapping
+    {
+        "path/" : ["token"]
+    }
+    - for initial run, if dependency mapping token list is empty then send path's task token as success
+    - pass running path to next sf
+
+{path_input} -> Cfg mapping
+
+path -> deployment flow mapping

@@ -49,7 +49,7 @@ query() {
 	# export PGDATABASE=$TESTING_POSTGRES_DB
 	
 	if [ "$METADB_TYPE" == "local" ]; then
-		docker exec "$CONTAINER_NAME" psql -U "$TESTING_POSTGRES_USER" -d "$TESTING_POSTGRES_DB" -c "$sql"
+		docker exec --interactive "$CONTAINER_NAME" psql -U "$TESTING_POSTGRES_USER" -d "$TESTING_POSTGRES_DB" -c "$sql"
 
   elif [ "$METADB_TYPE" == "aws" ]; then
     aws rds-data execute-statement \
