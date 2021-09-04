@@ -1,6 +1,6 @@
 export script_logging_level="DEBUG"
 export MOCK_AWS_CMDS=true
-# export KEEP_METADB_OPEN=true
+export KEEP_METADB_OPEN=true
 export METADB_TYPE=local
 
 load 'test_helper/bats-support/load'
@@ -28,7 +28,7 @@ setup() {
     setup_test_case_repo
     setup_test_case_branch
 
-    run_only_test 1
+    run_only_test 2
 }
 
 teardown() {
@@ -49,8 +49,7 @@ teardown() {
     }
     ')
     run setup_mock_tables --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" --account-stack "$account_stack"
-    echo "output = ${output}"
-    assert_success
+    assert_failure
 }
 
 @test "Successful deployment event, dequeue deploy commit with no new providers" {

@@ -81,10 +81,7 @@ parse_tg_graph_deps() {
 	parsed_stack=$(jq -n '{}')
     while read -r line; do
 		parent=$( echo "$line" | grep -Po '"\K.+?(?="\s+\->)')
-		log "Parent: $(printf "\n\t%s" "${parent}")" "DEBUG"
-
 		dep=$( echo "$line" | grep -Po '\->\s+"\K.+(?=";)')
-		log "Dependency: $(printf "\n\t%s" "$dep")" "DEBUG"
 
         if [ "$parent" != "" ]; then
             parsed_stack=$( echo $parsed_stack \
@@ -104,11 +101,10 @@ jq_map_to_psql_table() {
 	local value_column=$3
 	local table=$4
 
-	echo "$jq_map" | jq -r \
+	jq_table=$( echo "$jq_map" | jq -r \
 	--arg key_column $key_column \
 	--arg value_column $value_column '
-		fromjson 
-		| to_entries
+		to_entries
 		| map(
 			with_entries(
 				(if .key == "key" then .key |= $key_column
@@ -116,7 +112,12 @@ jq_map_to_psql_table() {
 				(if .value | type == "array" then .value |= "{" + join(", ") + "}" else . end)
 			)
 		) | .[] | [.[$key_column], .[$value_column]] | @csv
-	' | query """
+	')
+
+	log "JQ mapping transformed to CSV strings" "DEBUG"
+	log "$jq_table" "DEBUG"
+	
+	echo "$jq_table" | query """
 	COPY $table ($key_column, $value_column) FROM STDIN DELIMITER ',' CSV
 	"""
 }
@@ -135,7 +136,10 @@ setup_mock_tables() {
 
 		log "Creating execution table based on local Terragrunt directory configurations" "INFO"
 		query "CREATE TABLE staging_cfg_stack (cfg_path VARCHAR, cfg_deps text[]);"
-		jq_map_to_psql_table "$(parse_tg_graph_deps "$tf_dir")" "cfg_path" "cfg_deps" "staging_cfg_stack"
+		tg_deps_mapping=$(parse_tg_graph_deps "$tf_dir")
+		log "Terragrunt Dependency Mapping:" "DEBUG"
+		log "$tg_deps_mapping" "DEBUG"
+		jq_map_to_psql_table "$tg_deps_mapping" "cfg_path" "cfg_deps" "staging_cfg_stack"
 		log "Staging config stack table:" "DEBUG"
 		log "$(query "SELECT * FROM staging_cfg_stack;")" "DEBUG"
 
@@ -173,7 +177,7 @@ setup_mock_tables() {
 		account_deps,
 		random_between(1, 5),
 		random_between(1, 5),
-		'[' || 'voter-' || substr(md5(random()::text), 0, 5) || ']'
+		'{voter-' || substr(md5(random()::text), 0, 5) || '}'
 	FROM
 		staging_account_stack;
 	;
