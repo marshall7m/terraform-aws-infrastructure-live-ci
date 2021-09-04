@@ -41,6 +41,8 @@ add_commit_to_queue() {
     """
     log "Adding commit record to queue" "INFO"
     query "$sql"
+    
+    set +e
 }
 
 main() {

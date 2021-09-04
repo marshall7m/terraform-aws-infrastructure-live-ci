@@ -3,15 +3,13 @@
 is_local_db_running() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	
-	query "SELECT 1" || return 1
+	query "SELECT 1" 2>/dev/null || return 1
 }
 
 setup_metadb() {
-	set -e
 
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-	export METADB_DOCKER_COMPOSE_PATH="$PWD/docker-compose.yml"
 	export VOLUME_DATA_DIR="./docker_pgsql_volume"
 	export CONTAINER_NAME="metadb"
 	export POSTGRES_USER="postgres"
@@ -20,13 +18,24 @@ setup_metadb() {
 	export TESTING_POSTGRES_DB="testing_metadb"
 
 	if [ "$METADB_TYPE" == "local" ]; then
+
 		if is_local_db_running; then
 			log "Local postgres database container is already running" "INFO"
 		else
 			log "Hosting metadb on local postgres database" "INFO"
 			log "Running Docker Compose" "INFO"
-			docker-compose up -d
-			
+			docker-compose up -d || exit 1
+
+			#TODO: Figure why set +e is needed even though scripts that source func don't have set -e
+			set +e
+			is_local_db_running
+			while [ $? -ne 0 ]; do
+				log "Metadb is not ready yet -- sleeping" "INFO"
+				sleep 30
+				is_local_db_running
+			done
+
+			log "Metadb is ready" "INFO"
 			log "Container Logs:" "DEBUG"
 			log "$(docker logs "$CONTAINER_NAME")" "DEBUG"
 		fi
@@ -78,7 +87,6 @@ clear_metadb_tables() {
 }
 
 teardown_metadb() {
-	set -e
 
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 

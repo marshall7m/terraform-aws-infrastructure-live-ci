@@ -1,17 +1,9 @@
 #!/bin/bash
-set -e
 
 psql_db_is_running() {
     find -name .s.PGSQL.5432 | grep .
     return $?
 } 
-
-psql_db_is_running
-while [ $? -ne 0 ]; do
-    echo "PSQL metadb is not ready yet"
-    sleep 30
-    psql_db_is_running
-done 
 
 psql -v ON_ERROR_STOP=1 \
     --username "$POSTGRES_USER" \
@@ -35,8 +27,8 @@ psql -v ON_ERROR_STOP=1 \
         pr_id VARCHAR,
         commit_id VARCHAR,
         target_path VARCHAR,
-        account_deps VARCHAR,
-        path_deps VARCHAR,
+        account_deps TEXT[],
+        path_deps TEXT[],
         execution_status VARCHAR,
         plan_command VARCHAR,
         deploy_command VARCHAR,
@@ -44,25 +36,25 @@ psql -v ON_ERROR_STOP=1 \
         new_resources VARCHAR,
         account_name VARCHAR,
         account_path VARCHAR,
-        voters VARCHAR,
-        approval_count INTEGER CHECK (approval_count >= 0),
-        min_approval_count INTEGER CHECK (min_approval_count >= 0),
-        rejection_count INTEGER CHECK (rejection_count >= 0),
-        min_rejection_count INTEGER CHECK (min_rejection_count >= 0)
+        voters TEXT[],
+        approval_count INT CHECK (approval_count >= 0),
+        min_approval_count INT CHECK (min_approval_count >= 0),
+        rejection_count INT CHECK (rejection_count >= 0),
+        min_rejection_count INT CHECK (min_rejection_count >= 0)
     );
 
 
     CREATE TABLE IF NOT EXISTS pr_queue (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS INDENTITY,
-        pr_id INT PRIMARY KEY,
+        id INT GENERATED ALWAYS AS IDENTITY,
+        pr_id INT,
         status VARCHAR,
         base_ref VARCHAR,
-        head_ref VARCHAR
+        head_ref VARCHAR,
         PRIMARY KEY (id, pr_id)
     );
 
     CREATE TABLE IF NOT EXISTS commit_queue (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS INDENTITY,
+        id INT GENERATED ALWAYS AS IDENTITY,
         commit_id VARCHAR,
         is_rollback BOOL,
         pr_id INT,
@@ -73,9 +65,9 @@ psql -v ON_ERROR_STOP=1 \
     CREATE TABLE IF NOT EXISTS account_dim (
         account_name VARCHAR PRIMARY KEY,
         account_path VARCHAR,
-        account_deps VARCHAR,
+        account_deps TEXT[],
         min_approval_count INT,
         min_rejection_count INT,
-        voters VARCHAR
+        voters TEXT[]
     );
 EOSQL

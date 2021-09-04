@@ -38,7 +38,6 @@ var_exists() {
 }
 
 query() {
-	set -e
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
   local sql=$1

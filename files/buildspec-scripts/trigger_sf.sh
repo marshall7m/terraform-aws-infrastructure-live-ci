@@ -298,6 +298,7 @@ update_executions_with_new_deploy_stack() {
     done
 
     echo "$executions"
+    set +e
 }
 
 update_executions_with_new_rollback_stack() {
@@ -479,6 +480,7 @@ execution_finished() {
 
     log "Updated Executions Table:" "DEBUG"
     log "$executions" "DEBUG"
+    set +e
 }
 
 update_commit_queue_with_rollback_commits() {
@@ -585,6 +587,7 @@ main() {
 
     log "Uploading Updated PR Queue" "INFO"
     upload_executions $executions
+    set +e
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
