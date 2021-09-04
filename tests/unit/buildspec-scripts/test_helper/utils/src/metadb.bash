@@ -71,6 +71,7 @@ clear_metadb_tables() {
 	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'executions');
 	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'commit_queue');
 	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'account_dim');
+	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'pr_queue');
 
 	"""
 	query "$sql"

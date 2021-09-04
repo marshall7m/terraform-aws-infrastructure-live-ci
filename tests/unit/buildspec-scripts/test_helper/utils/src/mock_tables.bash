@@ -168,18 +168,16 @@ setup_mock_tables() {
 	)
 
 	SELECT
-		RANDOM_STRING(4),
+		'account-' || substr(md5(random()::text), 0, 5),
 		account_path,
 		account_deps,
 		random_between(1, 5),
 		random_between(1, 5),
-		'[' || RANDOM_STRING(4) || ']'
+		'[' || 'voter-' || substr(md5(random()::text), 0, 5) || ']'
 	FROM
 		staging_account_stack;
+	;
 
-	"""
-	foo="""
-	
 	INSERT INTO pr_queue (
 		pr_id,
 		status,
@@ -188,23 +186,26 @@ setup_mock_tables() {
 	)
 
 	SELECT
-		DISTINCT ON (sub.pr_id) sub.pr_id,
-		sub.status,
-		sub.base_ref,
-		sub.head_ref
+		DISTINCT ON (pr_id) pr_id,
+		status,
+		base_ref,
+		head_ref
 	FROM (
 		SELECT 
 			random_between(1, 10) as pr_id,
 			(
-				CASE (RANDOM() * 1)::INT
+				CASE (RANDOM() < .5)::INT
+				WHEN 0 THEN 'failed'
 				WHEN 1 THEN 'success'
-				WHEN 2 THEN 'failed'
 				END
 			) as status,
 			'master' as base_ref,
-			'feature' || seq as head_ref
+			'feature-' || seq as head_ref
 		FROM GENERATE_SERIES(1, 10) seq
-	) AS sub;
+	) AS sub
+	ORDER BY 
+		pr_id
+	;
 
 	INSERT INTO commit_queue (
 		commit_id,
@@ -214,17 +215,21 @@ setup_mock_tables() {
 	)
 
 	SELECT 
-		GENERATE_UID(16) as commit_id,
-		random_between(1, 10) as pr_id,
+		substr(md5(random()::text), 0, 16) as commit_id,
+		(SELECT pr.pr_id FROM pr_queue pr ORDER BY RANDOM()+id LIMIT 1),
 		(
-            CASE (RANDOM() * 1)::INT
-            WHEN 1 THEN 'success'
-            WHEN 2 THEN 'failed'
+            CASE (RANDOM() < .05)::INT
+            WHEN 0 THEN 'failed'
+			WHEN 1 THEN 'success'
             END
         ) as status,
 		random() < 0.5 as is_rollback
-	OVER (PARTITION BY pr_id)
 	FROM GENERATE_SERIES(1, 30) seq;
+	"""
+
+	foo="""	
+	
+	
 	
 	INSERT INTO executions (
 		execution_id,
@@ -287,13 +292,18 @@ setup_mock_tables() {
         RANDOM() * 2
     FROM GENERATE_SERIES(1, 10) seq;
 	"""
-	query """
 
-	SELECT IF EXISTS * FROM commit_queue;
-	SELECT IF EXISTS * FROM pr_queue;
-	SELELCT IF EXISTS * FROM executions;
-	SELECT IF EXISTS * FROM accounts_dim;
-	"""
+	log "pr_queue:" "DEBUG"
+	log "$(query "SELECT * FROM pr_queue;")" "DEBUG"
+
+	log "commit_queue:" "DEBUG"
+	log "$(query "SELECT * FROM commit_queue;")" "DEBUG"
+
+	log "account_dim:" "DEBUG"
+	log "$(query "SELECT * FROM account_dim;")" "DEBUG"
+
+	log "executions:" "DEBUG"
+	log "$(query "SELECT * FROM executions;")" "DEBUG"
 }
 
 drop_mock_temp_tables() {

@@ -1,12 +1,12 @@
 version: "3.8"
 services:
-  dummy:
-    image: williamyeh/dummy:latest
-    depends_on:
-      postgres:
-        condition: service_healthy
-    links:
-      - postgres
+  # dummy:
+  #   image: williamyeh/dummy:latest
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   links:
+  #     - postgres
   postgres:
     image: postgres:9.6.23-alpine
     container_name: $CONTAINER_NAME

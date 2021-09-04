@@ -1,6 +1,18 @@
 #!/bin/bash
 set -e
 
+psql_db_is_running() {
+    find -name .s.PGSQL.5432 | grep .
+    return $?
+} 
+
+psql_db_is_running
+while [ $? -ne 0 ]; do
+    echo "PSQL metadb is not ready yet"
+    sleep 30
+    psql_db_is_running
+done 
+
 psql -v ON_ERROR_STOP=1 \
     --username "$POSTGRES_USER" \
     --dbname "$POSTGRES_DB"  \
@@ -41,18 +53,21 @@ psql -v ON_ERROR_STOP=1 \
 
 
     CREATE TABLE IF NOT EXISTS pr_queue (
+        id INTEGER PRIMARY KEY GENERATED ALWAYS AS INDENTITY,
         pr_id INT PRIMARY KEY,
         status VARCHAR,
         base_ref VARCHAR,
-        head_ref VARCHAR,
+        head_ref VARCHAR
+        PRIMARY KEY (id, pr_id)
     );
 
     CREATE TABLE IF NOT EXISTS commit_queue (
+        id INTEGER PRIMARY KEY GENERATED ALWAYS AS INDENTITY,
         commit_id VARCHAR,
         is_rollback BOOL,
         pr_id INT,
         status VARCHAR,
-        PRIMARY KEY (commit_id, is_rollback)
+        PRIMARY KEY (id, commit_id)
     );
 
     CREATE TABLE IF NOT EXISTS account_dim (
@@ -64,5 +79,3 @@ psql -v ON_ERROR_STOP=1 \
         voters VARCHAR
     );
 EOSQL
-
-

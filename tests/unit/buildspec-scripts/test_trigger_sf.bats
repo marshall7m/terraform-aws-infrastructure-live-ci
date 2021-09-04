@@ -49,6 +49,7 @@ teardown() {
     }
     ')
     run setup_mock_tables --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" --account-stack "$account_stack"
+    echo "output = ${output}"
     assert_success
 }
 
