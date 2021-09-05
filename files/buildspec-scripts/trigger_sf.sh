@@ -159,7 +159,7 @@ get_target_stack() {
     --arg commit_id $commit_id '
         map(select(.commit_id == $commit_id))
         | group_by(.account_name) 
-        | map(select([.[] | .status == "SUCCESS"] | all) | .[] | .account_name) 
+        | map(select([.[] | .status == "success"] | all) | .[] | .account_name) 
         | unique
     ')
 
@@ -172,15 +172,15 @@ get_target_stack() {
         --arg commit_id "$commit_id" '
         ($target_accounts | fromjson) as $target_accounts
         | map(select(.account_name | IN($target_accounts[]) and .commit_id == $commit_id))
-        | (map(select(.status | IN("SUCCESS")) | .path)) as $successful_paths
-        | map(select(.status == "WAITING" and [.dependencies | .[] | IN($successful_paths[]) or . == null] | all ))
+        | (map(select(.status | IN("success")) | .path)) as $successful_paths
+        | map(select(.status == "waiting" and [.dependencies | .[] | IN($successful_paths[]) or . == null] | all ))
     ')"
 }
 
 stop_running_sf_executions() {
     running_executions=$(aws stepfunctions list-executions \
         --state-machine-arn $STATE_MACHINE_ARN \
-        --status-filter "RUNNING" | jq '.executions | map(.executionArn)'
+        --status-filter "running" | jq '.executions | map(.executionArn)'
     )
 
     for execution in "${running_executions[@]}"; do
@@ -229,20 +229,6 @@ validate_execution() {
         },
     }
     ')
-}
-
-update_execution_status() {
-    local executions=$1
-    local execution_id=$2
-    local status=$3
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
-    is_valid_status "$status"
-    echo "$(echo $executions | jq \
-        --arg execution_id "$execution_id" \
-        --arg status $status '
-        map(if .execution_id == $execution_id then .status |= $status else . end)
-    ')"
 }
 
 pr_to_front() {
@@ -315,7 +301,7 @@ update_executions_with_new_rollback_stack() {
         | map( (.) as $item | $item.dependencies | map($item + {"path": (.), "dependencies": [$item.path]}))
         | map((.new_resources | map("-target " + .) | join(" ")) as $destroy_flags 
         | . + {
-            "status": "WAITING"
+            "status": "waiting"
             "plan_command": "destroy $target_flags",
             "deploy_command": "destroy $target_flags -auto-approve"
         })
@@ -367,20 +353,26 @@ get_new_providers() {
 update_execution_with_new_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    local executions=$1
-    local execution_id=$2
+    local execution_id=$1
     local terragrunt_working_dir=$2
 
-    new_providers=$(echo $executions | jq \
-        --arg execution_id $execution_id '
-            map(select(.execution_id == $execution_id))[0] | .new_providers
-    ')
+    new_providers=$(query """
+
+    SELECT
+        new_providers
+    FROM
+        executions
+    WHERE
+        execution_id = '$execution_id'
+    ;
+    """)
 
     log "Execution's New Providers:" "DEBUG"
     log "${new_providers[*]}" "DEBUG"
 
     new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "${new_providers[*]}")
 
+    psql_new_resources=$(bash_arr_to_psql_arr "$new_providers")
     if [ "${#new_resources}" != 0 ]; then
         log "Resources from new providers:" "INFO"
         echo "${new_resources[*]}" "INFO"
@@ -389,12 +381,16 @@ update_execution_with_new_resources() {
         exit 0
     fi
 
-    echo "$(echo $executions | jq \
-        --arg execution_id "$execution_id" \
-        --arg new_resources "$new_resources" '
-        ($new_resources | fromjson) as $new_resources
-        | map(if .execution_id == $execution_id then .new_resources |= $new_resources else . end)
-    ')"
+    log "Adding new resources to execution record" "INFO"
+    query """
+    UPDATE
+        executions
+    SET
+        new_resources = ARRAY[$psql_new_resources]
+    WHERE
+        execution_id = '$execution_id'
+    ;
+    """
 }
 
 get_tg_state() {
@@ -441,7 +437,7 @@ executions_in_progress() {
 
     local executions=$1
 
-    if [[ "$(echo $executions | jq 'map(select(.status == "RUNNING")) | length > 0')" == true ]]; then
+    if [[ "$(echo $executions | jq 'map(select(.status == "running")) | length > 0')" == true ]]; then
         return 0
     else
         return 1
@@ -466,15 +462,26 @@ execution_finished() {
     status=$( echo $sf_event | jq '.status')
     
     log "Updating Execution Status" "INFO"
-    executions=$( update_execution_status "$executions" "$execution_id" "$status" )
+    results=$(query """
+
+    UPDATE
+        executions
+    SET
+        status = '$status'
+    WHERE 
+        execution_id = '$execution_id'
+    RETURNING *;
+    """)
+
+    log "Update:" "DEBUG"
+    log "$results"
 
     if [ "$deployment_type" == "Deploy" ]; then
         git checkout "$commit_id"
-        executions=$( update_execution_with_new_resources "$executions" "$deployed_path") 
-        if [ "$status" == "Failed" ]; then
-            commit_queue=$(update_commit_queue_with_rollback_commits "$commit_queue" "$executions" "$commit_id")
-            log "Commit Queue:" "DEBUG"
-            log "$commit_queue" "DEBUG"
+        log "Updating execution record with new resources" "INFO"
+        update_execution_with_new_resources "$executions" "$deployed_path"
+        if [ "$status" == "failed" ]; then
+            update_commit_queue_with_rollback_commits "$commit_queue" "$executions" "$commit_id"
         fi
     fi
 
@@ -488,69 +495,66 @@ update_commit_queue_with_rollback_commits() {
     local executions=$2
     local pr_id=$3
 
-    rollback_commit_items="$(echo "$executions" | jq \
-    --arg pr_id "$pr_id" \
-    --arg commit_queue "$commit_queue" '
-    ($commit_queue | fromjson) as $commit_queue
-    | ($pr_id | tonumber) as $pr_id
-    | (map(select(
-        .pr_id == $pr_id and 
-        .type == "Deploy" and
-        (.new_resources | length > 0)
-    ))
-    | map(.commit_id) | unique) as $rollback_commits
-    | $commit_queue 
-    | map(select(
-        (.type == "Deploy") and
-        (.commit_id | IN($rollback_commits[]))
-    ))
-    | map(.type = "Rollback" | .status = "Waiting")
-    ')"
+    query """
+    INSERT INTO commit_queue (
+        commit_id,
+        is_rollback,
+        pr_id,
+        status
+    )
 
-    log "Rollback commit items:" "DEBUG"
-    log "$rollback_commit_items" "DEBUG"
-
-    log "Adding rollback commit items to front of commit queue" "DEBUG"
-    echo "$(echo "$commit_queue" | jq \
-    --arg rollback_commit_items "$rollback_commit_items" '
-        ($rollback_commit_items | fromjson) as $rollback_commit_items
-        | $rollback_commit_items + .
-    ')"
-}
-
-dequeue_commit_from_commit_queue() {
-    local commit_queue=$1
-
-    echo "$commit_queue" | jq '
-        (map(select(.status == "Waiting"))[0].commit_id) as $target
-        | map(if .commit_id == $target then .status = "Running" else . end)
-    '
+    SELECT
+        commit_id,
+        true as is_rollback,
+        pr_id,
+        'waiting' as status
+    FROM (
+        SELECT
+            *
+        FROM
+            commit_queue
+        WHERE 
+            commit_id = ANY(
+                            SELECT
+                                commit_id
+                            FROM
+                                executions
+                            WHERE
+                                pr_id = '$pr_id' AND
+                                is_rolback = false AND
+                                new_resources > 0
+                        )
+    )
+    ;
+    ALTER TABLE commit_queue ALTER COLUMN id RESTART WITH max(id) + 1;
+    
+    """
 }
 
 create_executions() {
-    local executions=$1
     local commit_queue=$2
 
     log "No Deployment or Rollback stack is in Progress" "DEBUG"
 
-    commit_queue=$(dequeue_commit_from_commit_queue "$commit_queue")
-    commit_item=$(echo "$commit_queue" | jq 'map(select(.status == "Running"))')
-    deployment_type=$(echo "$commit_item" | jq '.type')
-    commit_id=$(echo "$commit_item" | jq '.commit_id')
+    log "Dequeuing next commit that is waiting" "INFO"
+    is_rollback=$(query """
+    UPDATE
+        commit_queue
+    SET
+        status = 'running'
+    WHERE
+        status = 'waiting'
+    LIMIT 1
 
-    if ["$deployment_type" == "Deploy"]; then
-        executions=$(update_executions_with_new_deploy_stack "$executions" "$account_dim" "$commit_item")
-    elif ["$deployment_type" == "Rollback"]; then
-        executions=$(update_executions_with_new_rollback_stack "$executions")
+    RETURN is_rollback
+    ;
+    """)
+
+    if [ "$is_rollback" == true ]; then
+        update_executions_with_new_rollback_stack
+    else
+        update_executions_with_new_deploy_stack
     fi
-}
-
-get_build_artifacts() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    executions=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$EXECUTION_QUEUE_S3_KEY")
-    commit_queue=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$commit_queue_S3_KEY")
-    account_dim=$(get_artifact "$ARTIFACT_BUCKET_NAME" "$ACCOUNT_DIM_S3_KEY")
 }
 
 main() {
@@ -562,10 +566,6 @@ main() {
     check_for_env_var "$EXECUTION_QUEUE_S3_KEY"
     check_for_env_var "$EXECUTION_QUEUE_S3_KEY"
     check_for_env_var "$ACCOUNT_QUEUE_S3_KEY"
-
-    #TODO: Add env vars for each *_S3_KEY
-    log "Getting S3 Artifacts" "INFO"
-    get_build_artifacts
     
     log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
     if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then
@@ -573,12 +573,12 @@ main() {
     fi
 
     log "Checking if any Step Function executions are running" "DEBUG"
-    if [ $(executions_in_progress "$executions") == false ]; then
-        create_executions "$execution" "$commit_queue"
+    if [ $(executions_in_progress) == false ]; then
+        create_executions
     fi
 
     log "Getting Target Executions" "INFO"
-    target_stack=$(get_target_stack "$account_dim" "$commit_queue" "$commit_id")
+    target_stack=$(get_target_stack)
     log "Target Executions" "DEBUG"
     log "$target_stack" "DEBUG"
 

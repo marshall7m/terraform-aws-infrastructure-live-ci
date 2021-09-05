@@ -98,3 +98,12 @@ upload_artifact() {
       --bucket $bucket \
       --key $key.json
 }
+
+bash_arr_to_psql_arr() {
+  local arr=$1
+  printf -v psql_array "'%s'," "${arr[@]//\'/\'\'}"
+  # remove the trailing ,
+  psql_array=${psql_array%,}
+
+  echo "$psql_array"
+}

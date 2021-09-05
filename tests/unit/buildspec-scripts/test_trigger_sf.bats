@@ -1,6 +1,6 @@
 export script_logging_level="DEBUG"
 export MOCK_AWS_CMDS=true
-export KEEP_METADB_OPEN=true
+# export KEEP_METADB_OPEN=true
 export METADB_TYPE=local
 
 load 'test_helper/bats-support/load'
@@ -28,7 +28,7 @@ setup() {
     setup_test_case_repo
     setup_test_case_branch
 
-    run_only_test 2
+    run_only_test 1
 }
 
 teardown() {
@@ -42,34 +42,46 @@ teardown() {
     run trigger_sf.sh
 }
 
-@test "setup" {
+@test "setup mock tables" {
     account_stack=$(jq -n '
     {
         "directory_dependency/dev-account": ["directory_dependency/security-account"]
     }
     ')
-    run setup_mock_tables --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" --account-stack "$account_stack"
-    assert_failure
+
+    run setup_mock_finished_status_tables \
+        --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" \
+        --account-stack "$account_stack"
+    
+    assert_success
 }
 
 @test "Successful deployment event, dequeue deploy commit with no new providers" {
     execution_id="test-exec-id"
 
-    setup_mock_tables
+    account_stack=$(jq -n '
+    {
+        "directory_dependency/dev-account": ["directory_dependency/security-account"]
+    }
+    ')
+
+    setup_mock_finished_status_tables \
+        --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" \
+        --account-stack "$account_stack"
 
     modify_tg_path \
         --path "$TEST_CASE_REPO_DIR/directory_dependency/dev-account/us-west-2/env-one/bar"
 
     setup_test_case_commit
     
-    #create mock eventbridge event, the only attributes that matter are the execution_id to find the record and status to update the status
+    #create mock eventbridge event, the only attributes that matter are the execution_id to find the record to update the status
     export EVENTBRIDGE_EVENT=$(jq -n \
     --arg execution_id "$execution_id" '
         {
             "path": "test-path/",
             "execution_id": $execution_id,
             "is_rollback": false,
-            "status": "SUCCESS",
+            "status": "success",
             "commit_id": "test-commit-id"
         } | tostring
     ')
@@ -78,23 +90,23 @@ teardown() {
     assert_success
 }
 
-@test "Successful deployment event, dequeue deploy commit with new providers" {
-}
+# @test "Successful deployment event, dequeue deploy commit with new providers" {
+# }
 
-@test "Successful deployment event, deployment stack is finished and rollback is needed" {
-}
+# @test "Successful deployment event, deployment stack is finished and rollback is needed" {
+# }
 
-@test "Successful deployment event, deployment stack is not finished, and rollback is needed" {
-}
+# @test "Successful deployment event, deployment stack is not finished, and rollback is needed" {
+# }
 
-@test "Failed deployment event and deployment stack is finished" {
-}
+# @test "Failed deployment event and deployment stack is finished" {
+# }
 
-@test "Failed deployment event and deployment stack is not finished" {
-}
+# @test "Failed deployment event and deployment stack is not finished" {
+# }
 
-@test "Successful rollback deployment event and dequeue next rollback stack" {
-}
+# @test "Successful rollback deployment event and dequeue next rollback stack" {
+# }
 
-@test "Successful rollback deployment event and dequeue next commit" {
-}
+# @test "Successful rollback deployment event and dequeue next commit" {
+# }

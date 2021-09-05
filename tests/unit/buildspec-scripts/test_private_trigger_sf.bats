@@ -23,13 +23,13 @@ teardown() {
             "path": "test-path/",
             "execution_id": "test-id",
             "deployment_type": "Deploy",
-            "status": "SUCCESS"
+            "status": "success"
         },
         {
             "path": "test-path-2/",
             "execution_id": "test-id-2",
             "deployment_type": "Deploy",
-            "status": "SUCCESS"
+            "status": "success"
         }
     ]')
 
@@ -43,13 +43,13 @@ teardown() {
             "path": "test-path/",
             "execution_id": "test-id",
             "deployment_type": "Deploy",
-            "status": "RUNNING"
+            "status": "running"
         },
         {
             "path": "test-path-2/",
             "execution_id": "test-id-2",
             "deployment_type": "Deploy",
-            "status": "SUCCESS"
+            "status": "success"
         }
     ]')
     run executions_in_progress "$executions"
@@ -65,7 +65,7 @@ teardown() {
             "path": "test-path",
             "execution_id": $execution_id,
             "deployment_type": "Deploy",
-            "status": "RUNNING"
+            "status": "running"
         }
     ]')
 
@@ -75,11 +75,11 @@ teardown() {
             "path": "test-path",
             "execution_id": $execution_id,
             "deployment_type": "Deploy",
-            "status": "SUCCESS"
+            "status": "success"
         }
     ]')
 
-    run update_execution_status "$executions" "$execution_id" "SUCCESS"
+    run update_execution_status "$executions" "$execution_id" "success"
     assert_output -p "$expected"
 }
 
@@ -99,14 +99,14 @@ teardown() {
             "path": $deployed_path,
             "execution_id": $execution_id,
             "deployment_type": "Deploy",
-            "status": "RUNNING",
+            "status": "running",
             "new_providers": ["test/provider"]
         },
         {
             "path": $deployed_path,
             "execution_id": "test-id-B",
             "deployment_type": "Deploy",
-            "status": "RUNNING"
+            "status": "running"
         }
     ]')
 
@@ -120,7 +120,7 @@ teardown() {
             "path": $deployed_path,
             "execution_id": $execution_id,
             "deployment_type": "Deploy",
-            "status": "RUNNING",
+            "status": "running",
             "new_providers": ["test/provider"],
             "new_resources": ["test_resource.this"]
         },
@@ -128,7 +128,7 @@ teardown() {
             "path": $deployed_path,
             "execution_id": "test-id-B",
             "deployment_type": "Deploy",
-            "status": "RUNNING"
+            "status": "running"
         }
     ]')
 
@@ -143,20 +143,20 @@ teardown() {
             "path": "test-path/",
             "execution_id": "test-id",
             "deployment_type": "Deploy",
-            "status": "RUNNING",
+            "status": "running",
             "commit_id": "commit-1",
             "pr_id": 1,
-            "status": "RUNNING",
+            "status": "running",
             "type": "Deploy"
         },
         {
             "path": "test-path-2/",
             "execution_id": "test-id-2",
             "deployment_type": "Deploy",
-            "status": "SUCCESS",
+            "status": "success",
             "commit_id": "commit-1",
             "pr_id": 1,
-            "status": "FAILED",
+            "status": "failed",
             "type": "Deploy",
             "new_resources": ["test_resource.this"]
         }
@@ -167,7 +167,7 @@ teardown() {
         {
             "commit_id": "commit-1",
             "pr_id": 1,
-            "status": "RUNNING",
+            "status": "running",
             "base_ref": "master",
             "head_ref": "feature-1",
             "type": "Deploy"
@@ -175,7 +175,7 @@ teardown() {
         {
             "commit_id": "commit-2",
             "pr_id": 2,
-            "status": "Waiting",
+            "status": "waiting",
             "base_ref": "master",
             "head_ref": "feature-2",
             "type": "Deploy"
@@ -189,7 +189,7 @@ teardown() {
         {
             "commit_id": "commit-1",
             "pr_id": 1,
-            "status": "Waiting",
+            "status": "waiting",
             "base_ref": "master",
             "head_ref": "feature-1",
             "type": "Rollback"
@@ -197,7 +197,7 @@ teardown() {
         {
             "commit_id": "commit-1",
             "pr_id": 1,
-            "status": "RUNNING",
+            "status": "running",
             "base_ref": "master",
             "head_ref": "feature-1",
             "type": "Deploy"
@@ -205,7 +205,7 @@ teardown() {
         {
             "commit_id": "commit-2",
             "pr_id": 2,
-            "status": "Waiting",
+            "status": "waiting",
             "base_ref": "master",
             "head_ref": "feature-2",
             "type": "Deploy"
@@ -309,7 +309,7 @@ teardown() {
         {
             "commit_id": "commit-3",
             "pr_id": 1,
-            "status": "Waiting",
+            "status": "waiting",
             "base_ref": "master",
             "head_ref": "feature-1",
             "type": "Deploy"
@@ -317,7 +317,7 @@ teardown() {
         {
             "commit_id": "commit-2",
             "pr_id": 1,
-            "status": "Waiting",
+            "status": "waiting",
             "base_ref": "master",
             "head_ref": "feature-1",
             "type": "Deploy"
@@ -325,7 +325,7 @@ teardown() {
         {
             "commit_id": "commit-1",
             "pr_id": 2,
-            "status": "Success",
+            "status": "success",
             "base_ref": "master",
             "head_ref": "feature-2",
             "type": "Deploy"
@@ -337,7 +337,7 @@ teardown() {
         {
             "commit_id": "commit-3",
             "pr_id": 1,
-            "status": "Running",
+            "status": "running",
             "base_ref": "master",
             "head_ref": "feature-1",
             "type": "Deploy"
@@ -345,7 +345,7 @@ teardown() {
         {
             "commit_id": "commit-2",
             "pr_id": 1,
-            "status": "Waiting",
+            "status": "waiting",
             "base_ref": "master",
             "head_ref": "feature-1",
             "type": "Deploy"
@@ -353,7 +353,7 @@ teardown() {
         {
             "commit_id": "commit-1",
             "pr_id": 2,
-            "status": "Success",
+            "status": "success",
             "base_ref": "master",
             "head_ref": "feature-2",
             "type": "Deploy"
@@ -372,10 +372,10 @@ teardown() {
             "path": "test-path/",
             "execution_id": "test-id",
             "deployment_type": "Deploy",
-            "status": "RUNNING",
+            "status": "running",
             "commit_id": "commit-1",
             "pr_id": 1,
-            "status": "RUNNING",
+            "status": "running",
             "type": "Deploy"
         }
     ]')

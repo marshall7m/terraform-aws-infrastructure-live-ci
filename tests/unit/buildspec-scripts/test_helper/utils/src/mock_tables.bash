@@ -14,7 +14,9 @@ parse_args() {
 				;;
 			--account-stack)
 				if [ -n "$2" ]; then
-					account_stack=$( echo "$2" | jq '. | tojson')
+					account_stack=$( echo "$2" | jq '. | tojson | fromjson') || \
+					(log "account stack should be a jq mapping with account paths relative to git repo root (e.g. {\"dev-account/\": [\"security-account/\"})" "ERROR" \
+					&& exit 1)
 					shift 2
 				else
 					echo "Error: Argument for $1 is missing" >&2
@@ -123,7 +125,7 @@ jq_map_to_psql_table() {
 }
 
 
-setup_mock_tables() {
+setup_mock_finished_status_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	parse_args "$@"
@@ -177,7 +179,7 @@ setup_mock_tables() {
 		account_deps,
 		random_between(1, 5),
 		random_between(1, 5),
-		'{voter-' || substr(md5(random()::text), 0, 5) || '}'
+		ARRAY['voter-' || substr(md5(random()::text), 0, 5)]
 	FROM
 		staging_account_stack;
 	;
@@ -198,7 +200,7 @@ setup_mock_tables() {
 		SELECT 
 			random_between(1, 10) as pr_id,
 			(
-				CASE (RANDOM() < .5)::INT
+				CASE (RANDOM() < 0.5)::INT
 				WHEN 0 THEN 'failed'
 				WHEN 1 THEN 'success'
 				END
@@ -207,8 +209,6 @@ setup_mock_tables() {
 			'feature-' || seq as head_ref
 		FROM GENERATE_SERIES(1, 10) seq
 	) AS sub
-	ORDER BY 
-		pr_id
 	;
 
 	INSERT INTO commit_queue (
@@ -219,27 +219,45 @@ setup_mock_tables() {
 	)
 
 	SELECT 
-		substr(md5(random()::text), 0, 16) as commit_id,
-		(SELECT pr.pr_id FROM pr_queue pr ORDER BY RANDOM()+id LIMIT 1),
-		(
-            CASE (RANDOM() < .05)::INT
-            WHEN 0 THEN 'failed'
-			WHEN 1 THEN 'success'
-            END
-        ) as status,
-		random() < 0.5 as is_rollback
-	FROM GENERATE_SERIES(1, 30) seq;
-	"""
+		commit_id,
+		pr_id,
+		status,
+		is_rollback
+	FROM   (
+		SELECT 
+			substr(md5(random()::text), 0, 16) as commit_id,
+			(
+				CASE (RANDOM() < 0.5)::INT
+				WHEN 
+					0 THEN 'failed'
+				WHEN 
+					1 THEN 'success'
+				END
+			) as status,
+			random() < 0.5 as is_rollback,
+			row_number() OVER () AS rn
+		FROM 
+			GENERATE_SERIES(1, 30) seq
+	) commit
 
-	foo="""	
-	
-	
-	
+	JOIN   (
+		SELECT 
+			pr_id, 
+			row_number() OVER () AS rn
+		FROM 
+			pr_queue
+		ORDER BY 
+			RANDOM()
+		LIMIT 
+			30
+	) pr USING (rn)
+	;
+
 	INSERT INTO executions (
 		execution_id,
         pr_id,
         commit_id,
-        is_rollback_cfg,
+        is_rollback,
         cfg_path,
 		cfg_deps,
         account_deps,
@@ -258,43 +276,100 @@ setup_mock_tables() {
 	)
 
 	SELECT
-        GENERATE_UUID(8) as execution_id,
-        RANDOM() * 2 as pr_id,
-        GENERATE_UID(16) as commit_id,
-        RANDOM() < 0.5 as is_rollback,
-        RANDOM_STRING(4) || '/' || RANDOM_STRING(4) as cfg_path,
-        (JOIN) as cfg_deps,
-        '[' || RANDOM_STRING(4) || '/' || RANDOM_STRING(4)
+        execution_id,
+        pr_id,
+        commit_id,
+        is_rollback,
+        cfg_path,
+		cfg_deps,
+        account_deps,
+        execution_status,
+        'terragrunt plan ' || '--terragrunt-working-dir ' || cfg_path as plan_command,
+		'terragrunt apply ' || '--terragrunt-working-dir ' || cfg_path || ' -auto-approve' as deploy_command,
         (
-            CASE (RANDOM() * 3)::INT
-            WHEN 0 THEN 'running'
-            WHEN 1 THEN 'waiting'
-            WHEN 2 THEN 'success'
-            WHEN 3 THEN 'failed'
-            END
-        ) as execution_status,
-        'terragrunt plan' || '--terragrunt-working-dir ' || cfg_path as plan_command,
-        'terragrunt apply' || '--terragrunt-working-dir ' || cfg_path || '-auto-approve' as deploy_command,
-        (
-            CASE is_rollback
-            WHEN 0 THEN '[]'
-            WHEN 1 THEN '[' || RANDOM_STRING(4) || ']'
-            END
-        ) as new_providers, 
-        (
-            CASE is_rollback
-            WHEN 0 THEN '[]'
-            WHEN 1 THEN '[' || RANDOM_STRING(4) || ']'
-            END
-        ) as new_resources,
-        RANDOM_STRING(4),
-        RANDOM_STRING(4),
-        '[' || RANDOM_STRING(4) || ']',
-        RANDOM() * 2,
-        RANDOM() * 2,
-        RANDOM() * 2,
-        RANDOM() * 2
-    FROM GENERATE_SERIES(1, 10) seq;
+			CASE
+				WHEN 
+					is_rollback = false THEN ARRAY[NULL]
+				WHEN 
+					is_rollback = true THEN ARRAY['provider/' || substr(md5(random()::text), 0, 5)]
+			END
+		) as new_providers, 
+		(
+			CASE
+				WHEN 
+					is_rollback = false THEN ARRAY[NULL]
+				WHEN 
+					is_rollback = true THEN ARRAY['resource.' || substr(md5(random()::text), 0, 5)]
+			END
+		) as new_resources,
+        account_name,
+        account_path,
+        voters,
+        approval_count,
+        min_approval_count,
+        rejection_count,
+        min_rejection_count
+        
+	FROM  (
+		SELECT
+			'run-' || substr(md5(random()::text), 0, 8) as execution_id,
+			RANDOM() < 0.5 as is_rollback,
+			(
+				CASE (RANDOM() * .5)::INT
+				WHEN 0 THEN 'success'
+				WHEN 1 THEN 'failed'
+				END
+			) as execution_status,
+			row_number() OVER () AS rn
+		FROM
+			GENERATE_SERIES(1, 50) seq
+	) random_executions
+
+	JOIN (
+		SELECT 
+			cfg_path as cfg_path,
+			cfg_deps as cfg_deps,
+			row_number() OVER () AS rn
+		FROM 
+			staging_cfg_stack
+		ORDER BY 
+			RANDOM()
+		LIMIT 50
+	) deps USING (rn)
+
+	JOIN (
+		SELECT
+			account_name,
+			account_path,
+			account_deps,
+			voters,
+			random_between(0, min_approval_count) as approval_count,
+			min_approval_count,
+			random_between(0, min_approval_count) as rejection_count,
+			min_rejection_count,
+			row_number() OVER () AS rn
+		FROM
+			account_dim
+		ORDER BY 
+			RANDOM()
+		LIMIT 50
+	) accounts USING (rn)
+
+	JOIN   (
+		SELECT 
+			pr_id,
+			commit_id,
+			row_number() OVER () AS rn
+		FROM 
+			commit_queue
+		ORDER BY 
+			RANDOM()
+		LIMIT 
+			50
+	) commit USING (rn);
+
+	ALTER TABLE commit_queue ADD id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY;
+	ALTER TABLE pr_queue ADD id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY;
 	"""
 
 	log "pr_queue:" "DEBUG"
