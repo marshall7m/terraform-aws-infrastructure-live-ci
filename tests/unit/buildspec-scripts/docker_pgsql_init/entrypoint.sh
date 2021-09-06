@@ -47,6 +47,7 @@ psql -v ON_ERROR_STOP=1 \
 
 
     CREATE TABLE IF NOT EXISTS pr_queue (
+        id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         pr_id INT,
         status VARCHAR,
         base_ref VARCHAR,
@@ -54,10 +55,11 @@ psql -v ON_ERROR_STOP=1 \
     );
 
     CREATE TABLE IF NOT EXISTS commit_queue (
+        id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         commit_id VARCHAR,
         is_rollback BOOL,
         pr_id INT,
-        status VARCHAR    
+        status VARCHAR
     );
 
     CREATE TABLE IF NOT EXISTS account_dim (

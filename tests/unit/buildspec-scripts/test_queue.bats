@@ -63,7 +63,7 @@ teardown() {
     INSERT INTO commit_queue (
         commit_id,
         pr_id,
-        commit_status,
+        status,
         base_ref,
         head_ref,
         is_rollback

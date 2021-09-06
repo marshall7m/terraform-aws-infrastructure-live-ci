@@ -560,12 +560,13 @@ create_executions() {
 main() {
     set -e
 
-    check_for_env_var "$CODEBUILD_INITIATOR"
-    check_for_env_var "$EVENTBRIDGE_FINISHED_RULE"
-    check_for_env_var "$ARTIFACT_BUCKET_NAME"
-    check_for_env_var "$EXECUTION_QUEUE_S3_KEY"
-    check_for_env_var "$EXECUTION_QUEUE_S3_KEY"
-    check_for_env_var "$ACCOUNT_QUEUE_S3_KEY"
+    if [ -z "$CODEBUILD_INITIATOR" ]; then
+        log "CODEBUILD_INITIATOR is not set" "ERROR"
+        exit 1
+    elif [ -z "$EVENTBRIDGE_FINISHED_RULE" ]; then
+        log "EVENTBRIDGE_FINISHED_RULE is not set" "ERROR"
+        exit 1
+    fi
     
     log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
     if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then

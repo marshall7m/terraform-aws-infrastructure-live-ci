@@ -42,19 +42,19 @@ teardown() {
     run trigger_sf.sh
 }
 
-@test "setup mock tables" {
-    account_stack=$(jq -n '
-    {
-        "directory_dependency/dev-account": ["directory_dependency/security-account"]
-    }
-    ')
+# @test "setup mock tables" {
+#     account_stack=$(jq -n '
+#     {
+#         "directory_dependency/dev-account": ["directory_dependency/security-account"]
+#     }
+#     ')
 
-    run setup_mock_finished_status_tables \
-        --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" \
-        --account-stack "$account_stack"
+#     run setup_mock_finished_status_tables \
+#         --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" \
+#         --account-stack "$account_stack"
     
-    assert_success
-}
+#     assert_success
+# }
 
 @test "Successful deployment event, dequeue deploy commit with no new providers" {
     execution_id="test-exec-id"
@@ -74,7 +74,6 @@ teardown() {
 
     setup_test_case_commit
     
-    #create mock eventbridge event, the only attributes that matter are the execution_id to find the record to update the status
     export EVENTBRIDGE_EVENT=$(jq -n \
     --arg execution_id "$execution_id" '
         {
