@@ -103,7 +103,7 @@ teardown() {
     \$\$ LANGUAGE plpgsql;
     """
 
-    results=$(query "SELECT * FROM commit_queue WHERE commit_id = 'CODEBUILD_RESOLVED_SOURCE_VERSION';")
+    results=$(query --psql-extra-args "-x" "SELECT * FROM commit_queue WHERE commit_id = 'CODEBUILD_RESOLVED_SOURCE_VERSION';")
     log "Commit records:" "DEBUG"
     log "$results" "DEBUG"
 

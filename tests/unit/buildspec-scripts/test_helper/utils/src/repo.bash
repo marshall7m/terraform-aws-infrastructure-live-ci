@@ -44,7 +44,7 @@ parse_tg_path_args() {
 	done
 }
 
-setup_test_case_branch() {
+checkout_test_case_branch() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	export TESTING_HEAD_REF="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
@@ -72,7 +72,7 @@ modify_tg_path() {
 	fi
 }
 
-setup_test_case_commit() {
+add_test_case_head_commit_to_queue() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	if [ -z "$TEST_CASE_REPO_DIR" ]; then
@@ -98,12 +98,14 @@ setup_test_case_commit() {
 
 	results=$(query """
 	INSERT INTO commit_queue (
+		id,
 		commit_id,
         pr_id,
         status,
         is_rollback
 	)
 	VALUES (
+		DEFAULT,
 		'$TESTING_COMMIT_ID',
 		55,
 		'waiting',
@@ -176,11 +178,6 @@ output "test_case_$BATS_TEST_NUMBER" {
 	value = "test"
 }
 EOF
-}
-
-setup_terragrunt_apply() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-    terragrunt init --terragrunt-working-dir "$BATS_TEST_TMPDIR" && terragrunt apply --terragrunt-working-dir "$BATS_TEST_TMPDIR" -auto-approve
 }
 
 clone_testing_repo() {

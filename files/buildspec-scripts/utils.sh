@@ -39,8 +39,19 @@ var_exists() {
 
 query() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
+  while (( "$#" )); do
+		case "$1" in
+			--psql-extra-args)
+        psql_extra_args=$2
+        shift 2
+      ;;
+      *)
+        sql=$1
+        shift 1
+      ;;
+    esac
+  done
 
-  local sql=$1
   log "Query:" "DEBUG"
   log "$sql" "DEBUG"
 	
@@ -48,7 +59,12 @@ query() {
 	# export PGDATABASE=$TESTING_POSTGRES_DB
 	
 	if [ "$METADB_TYPE" == "local" ]; then
-		docker exec --interactive "$CONTAINER_NAME" psql -U "$TESTING_POSTGRES_USER" -d "$TESTING_POSTGRES_DB" -h /run/postgresql -c "$sql"
+		docker exec --interactive "$CONTAINER_NAME" psql \
+      -U "$TESTING_POSTGRES_USER" \
+      -d "$TESTING_POSTGRES_DB" \
+      -h /run/postgresql \
+      $psql_extra_args \
+      -c "$sql"
 
   elif [ "$METADB_TYPE" == "aws" ]; then
     aws rds-data execute-statement \
@@ -106,4 +122,21 @@ bash_arr_to_psql_arr() {
   psql_array=${psql_array%,}
 
   echo "$psql_array"
+}
+
+jq_to_psql_records() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+	local jq_in=$1
+	local table=$2
+
+	csv_table=$( echo "$jq_in" | jq -r '
+	if . | type == "array" then .[] else . end
+	| map(if values | type == "array" then values |= "{" + join(", ") + "}" else . end) | @csv')
+	log "JQ mapping transformed to CSV strings" "DEBUG"
+	log "$csv_table" "DEBUG"
+	
+	echo "$csv_table" | query """
+	COPY $table FROM STDIN DELIMITER ',' CSV
+	"""
 }

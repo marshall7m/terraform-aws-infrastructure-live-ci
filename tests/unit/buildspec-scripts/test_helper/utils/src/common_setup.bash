@@ -7,8 +7,8 @@ _common_setup() {
   
   load "$src_path/utils.sh"
 
-  #use src query() function within testing
   export -f query
+  export -f jq_to_psql_records
 }
 
 log() {

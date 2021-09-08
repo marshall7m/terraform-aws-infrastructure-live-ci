@@ -26,7 +26,6 @@ setup() {
     load 'test_helper/utils/load.bash'
     
     setup_test_case_repo
-    setup_test_case_branch
 
     run_only_test 1
 }
@@ -57,7 +56,46 @@ teardown() {
 # }
 
 @test "Successful deployment event, dequeue deploy commit with no new providers" {
-    execution_id="test-exec-id"
+    export CODEBUILD_INITIATOR=rule/test
+    export EVENTBRIDGE_FINISHED_RULE=rule/test
+
+    log "Applying default branch Terragrunt configurations" "INFO"
+    testing_dir="$TEST_CASE_REPO_DIR/directory_dependency/dev-account/us-west-2/env-one/bar"
+    log "Terragrunt directory: $testing_dir" "DEBUG"
+	terragrunt apply --terragrunt-working-dir "$testing_dir" -auto-approve > /dev/null || exit 1
+    
+    execution_id=run-0000001
+    commit_id=$(git log --pretty=format:'%H' -n 1)
+
+    before_execution=$(jq -n \
+    --arg execution_id "$execution_id" \
+    --arg commit_id "$commit_id" '
+        {
+            "execution_id": $execution_id,
+            "is_rollback": false,
+            "pr_id": "1",
+            "commit_id": $commit_id,
+            "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo",
+            "cfg_deps": [],            
+            "status": "running",
+            "plan_command": "terragrunt plan --terragrunt-working-dir directory_dependency/dev-account/us-west-2/env-one/foo",
+            "deploy_command": "terragrunt apply --terragrunt-working-dir directory_dependency/dev-account/us-west-2/env-one/foo",
+            "new_providers": [],
+            "new_resources": [],
+            "account_name": "dev",
+            "account_deps": [],
+            "account_path": "directory_dependency/dev-account",
+            "voters": ["voter-001"],
+            "approval_count": 1,
+            "min_approval_count": 1,
+            "rejection_count": 1,
+            "min_rejection_count": 1    
+        }
+    ')
+    jq_to_psql_records "$before_execution" "executions"
+
+    log "Using default branch head commit as previous Step Function deployment" "INFO"
+    export EVENTBRIDGE_EVENT=$( echo "$before_execution" | jq '.status = "success" | tostring')
 
     account_stack=$(jq -n '
     {
@@ -69,24 +107,56 @@ teardown() {
         --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" \
         --account-stack "$account_stack"
 
-    modify_tg_path \
-        --path "$TEST_CASE_REPO_DIR/directory_dependency/dev-account/us-west-2/env-one/bar"
+    checkout_test_case_branch
 
-    setup_test_case_commit
+    log "Modifying Terragrunt directories within test repo" "DEBUG"
+    modify_tg_path \
+        --path "$testing_dir"
     
-    export EVENTBRIDGE_EVENT=$(jq -n \
-    --arg execution_id "$execution_id" '
-        {
-            "path": "test-path/",
-            "execution_id": $execution_id,
-            "is_rollback": false,
-            "status": "success",
-            "commit_id": "test-commit-id"
-        } | tostring
-    ')
+    log "Committing modifications and adding commit to commit queue" "DEBUG"
+    add_test_case_head_commit_to_queue
+    
+    log "Switching back to default branch" "DEBUG"
+    git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p'
 
     run trigger_sf.sh
-    assert_success
+    assert_failure
+
+    # run query """
+    # do \$\$
+    #     BEGIN
+    #         ASSERT (
+    #             SELECT 
+    #                 COUNT(*)
+    #             FROM 
+    #                 executions
+    #             WHERE
+    #                 execution_id = '$execution_id' AND
+    #                 status = 'success'
+    #         ) = 1;
+    #     END;
+    # \$\$ LANGUAGE plpgsql;
+    # """
+    # assert_success
+
+    # run query """
+    # do \$\$
+    #     BEGIN
+    #         ASSERT (
+    #             SELECT
+    #                 COUNT(*)
+    #             FROM
+    #                 executions
+    #             WHERE
+    #                 commit_id = '$TESTING_COMMIT_ID' AND
+    #                 cfg_path = '$("$testing_dir" | tr -d '"')' AND
+    #                 is_rollback = false AND
+    #                 status = 'running'
+    #         ) = 1;
+    #     END;
+    # \$\$ LANGUAGE plpgsql;
+    # """
+    # assert_success
 }
 
 # @test "Successful deployment event, dequeue deploy commit with new providers" {

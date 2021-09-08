@@ -98,12 +98,14 @@ parse_tg_graph_deps() {
 }
 
 jq_map_to_psql_table() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
 	local jq_map=$1
 	local key_column=$2
 	local value_column=$3
 	local table=$4
 
-	jq_table=$( echo "$jq_map" | jq -r \
+	csv_table=$( echo "$jq_map" | jq -r \
 	--arg key_column $key_column \
 	--arg value_column $value_column '
 		to_entries
@@ -117,9 +119,9 @@ jq_map_to_psql_table() {
 	')
 
 	log "JQ mapping transformed to CSV strings" "DEBUG"
-	log "$jq_table" "DEBUG"
+	log "$csv_table" "DEBUG"
 	
-	echo "$jq_table" | query """
+	echo "$csv_table" | query """
 	COPY $table ($key_column, $value_column) FROM STDIN DELIMITER ',' CSV
 	"""
 }
@@ -137,19 +139,19 @@ setup_mock_finished_status_tables() {
 		fi
 
 		log "Creating execution table based on local Terragrunt directory configurations" "INFO"
-		query "CREATE TABLE staging_cfg_stack (cfg_path VARCHAR, cfg_deps text[]);"
+		query "CREATE TABLE mock_staging_cfg_stack (cfg_path VARCHAR, cfg_deps text[]);"
 		tg_deps_mapping=$(parse_tg_graph_deps "$tf_dir")
 		log "Terragrunt Dependency Mapping:" "DEBUG"
 		log "$tg_deps_mapping" "DEBUG"
-		jq_map_to_psql_table "$tg_deps_mapping" "cfg_path" "cfg_deps" "staging_cfg_stack"
+		jq_map_to_psql_table "$tg_deps_mapping" "cfg_path" "cfg_deps" "mock_staging_cfg_stack"
 		log "Staging config stack table:" "DEBUG"
-		log "$(query "SELECT * FROM staging_cfg_stack;")" "DEBUG"
+		log "$(query --psql-extra-args "-x" "SELECT * FROM mock_staging_cfg_stack;")" "DEBUG"
 
 		log "Using user-defined account stack for account_dim table" "INFO"
-		query "CREATE TABLE staging_account_stack (account_path VARCHAR, account_deps text[]);"
-		jq_map_to_psql_table "$account_stack" "account_path" "account_deps" "staging_account_stack"
+		query "CREATE TABLE mock_staging_account_stack (account_path VARCHAR, account_deps text[]);"
+		jq_map_to_psql_table "$account_stack" "account_path" "account_deps" "mock_staging_account_stack"
 		log "Staging account stack table:" "DEBUG"
-		log "$(query "SELECT * FROM staging_account_stack;")" "DEBUG"
+		log "$(query --psql-extra-args "-x" "SELECT * FROM mock_staging_account_stack;")" "DEBUG"
 	fi
 
 	
@@ -181,7 +183,7 @@ setup_mock_finished_status_tables() {
 		random_between(1, 5),
 		ARRAY['voter-' || substr(md5(random()::text), 0, 5)]
 	FROM
-		staging_account_stack;
+		mock_staging_account_stack;
 	;
 
 	INSERT INTO pr_queue (
@@ -261,7 +263,7 @@ setup_mock_finished_status_tables() {
         cfg_path,
 		cfg_deps,
         account_deps,
-        execution_status,
+        status,
         plan_command,
         deploy_command,
         new_providers,
@@ -283,7 +285,7 @@ setup_mock_finished_status_tables() {
         cfg_path,
 		cfg_deps,
         account_deps,
-        execution_status,
+        status,
         'terragrunt plan ' || '--terragrunt-working-dir ' || cfg_path as plan_command,
 		'terragrunt apply ' || '--terragrunt-working-dir ' || cfg_path || ' -auto-approve' as deploy_command,
         (
@@ -319,7 +321,7 @@ setup_mock_finished_status_tables() {
 				WHEN 0 THEN 'success'
 				WHEN 1 THEN 'failed'
 				END
-			) as execution_status,
+			) as status,
 			row_number() OVER () AS rn
 		FROM
 			GENERATE_SERIES(1, 50) seq
@@ -331,7 +333,7 @@ setup_mock_finished_status_tables() {
 			cfg_deps as cfg_deps,
 			row_number() OVER () AS rn
 		FROM 
-			staging_cfg_stack
+			mock_staging_cfg_stack
 		ORDER BY 
 			RANDOM()
 		LIMIT 50
@@ -373,18 +375,18 @@ setup_mock_finished_status_tables() {
 	"""
 
 	log "pr_queue:" "DEBUG"
-	log "$(query "SELECT * FROM pr_queue;")" "DEBUG"
+	log "$(query --psql-extra-args "-x" "SELECT * FROM pr_queue;")" "DEBUG"
 
 	log "commit_queue:" "DEBUG"
-	log "$(query "SELECT * FROM commit_queue;")" "DEBUG"
+	log "$(query --psql-extra-args "-x" "SELECT * FROM commit_queue;")" "DEBUG"
 
 	log "account_dim:" "DEBUG"
-	log "$(query "SELECT * FROM account_dim;")" "DEBUG"
+	log "$(query --psql-extra-args "-x" "SELECT * FROM account_dim;")" "DEBUG"
 
 	log "executions:" "DEBUG"
-	log "$(query "SELECT * FROM executions;")" "DEBUG"
+	log "$(query --psql-extra-args "-x" "SELECT * FROM executions;")" "DEBUG"
 }
 
 drop_mock_temp_tables() {
-	query "DROP TABLE IF EXISTS staging_account_stack, staging_cfg_stack;"
+	query "DROP TABLE IF EXISTS mock_staging_account_stack, mock_staging_cfg_stack;"
 }

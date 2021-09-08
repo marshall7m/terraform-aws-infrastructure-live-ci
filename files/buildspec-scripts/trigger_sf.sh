@@ -15,12 +15,6 @@ get_tg_plan_out() {
         -detailed-exitcode 2>&1
 }
 
-get_git_root() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    echo $(git rev-parse --show-toplevel)
-}
-
 get_rel_path() {
     local rel_to=$1
     local path=$2
@@ -32,6 +26,7 @@ get_rel_path() {
 get_diff_paths() {
     local tg_plan_out=$1
     local git_root=$2
+    
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     # use pcregrep with -M multiline option to scan terragrunt plan output for
@@ -39,8 +34,7 @@ get_diff_paths() {
     # -N flag defines the convention for newline and CRLF defines any of the conventions
     echo $( echo "$tg_plan_out" \
         | pcregrep -Mo -N CRLF '(?<=exit\sstatus\s2\n).+?(?=\])' \
-        | grep -oP 'prefix=\[\K.+' \
-        | get_rel_path "$git_root"
+        | grep -oP 'prefix=\[\K.+' && get_rel_path "$git_root"
     )
 }
 
@@ -60,23 +54,21 @@ get_parsed_stack() {
         log "Stack Layer: $(printf "\n\t%s\n" "$line")" "DEBUG"
 
         parent=$( echo "$line" \
-            | grep -Po '.+?(?=\s\(excluded:)' \
-            | get_rel_path "$git_root" 
+            | grep -Po '.+?(?=\s\(excluded:)' && get_rel_path "$git_root" 
         )
         log "Parent: $(printf "\n\t%s" "${parent}")" "DEBUG"
 
         deps=($( echo "$line" \
             | grep -Po 'dependencies:\s+\[\K.+?(?=\])' \
-            | grep -Po '\/.+?(?=,|$)' \
-            | get_rel_path "$git_root"
+            | grep -Po '\/.+?(?=,|$)' && get_rel_path "$git_root"
         ))
         log "Dependencies: $(printf "\n\t%s" "${deps[@]}")" "DEBUG"
 
         parsed_stack=$( echo $parsed_stack \
             | jq --arg parent "$parent" --arg deps "$deps" '
                 . + [{
-                    "path": $parent,
-                    "dependencies": try ($deps | split("\n") | reverse) // []' 
+                    "cfg_path": $parent,
+                    "cfg_deps": try ($deps | split("\n") | reverse) // []' 
                 }]
         )
     done <<< "$raw_stack"
@@ -93,8 +85,8 @@ filter_paths() {
     echo $( echo "$stack" | jq \
         --arg filter "$filter" '
         (try ($filter | split(" ")) // []) as $filter
-            | map(select(.path | IN($filter[])))
-            | map(.dependencies |= map_values(select(. | IN($filter[]))))
+            | map(select(.cfg_path | IN($filter[])))
+            | map(.cfg_deps |= map_values(select(. | IN($filter[]))))
         '
     )
 }
@@ -132,18 +124,22 @@ create_stack() {
         log "$tg_plan_out" "ERROR"
         exit 1
     fi
-    diff_paths=($(get_diff_paths "$tg_plan_out" "$gti_root"))
-    log "Terragrunt Paths with Detected Difference: $(printf "\n\t%s" "${diff_paths[@]}")" "DEBUG"
 
-    num_diff_paths="${#diff_paths[@]}"
+    diff_paths=($(get_diff_paths "$tg_plan_out" "$git_root"))
+    if [ ${#diff_paths[@]} -eq 0 ]; then
+        log "Detected no Terragrunt paths with difference" "INFO"
+        exit 0
+    fi
+    
+    log "Terragrunt paths with detected difference: $(printf "\n\t%s" "${diff_paths[@]}")" "DEBUG"
     log "Count: $num_diff_paths" "DEBUG"
 
     stack=$(get_parsed_stack "$tg_plan_out" "$git_root")
     log "Terragrunt Dependency Stack: $stack" "DEBUG"
 
-    log "Filtering out Terragrunt paths with no difference in plan" "DEBUG"
+    log "Filtering out Terragrunt paths with no difference in plan" "INFO"
     stack=$( filter_paths "$stack" "${diff_paths[*]}" )
-    
+
     log "Getting New Providers within Stack" "DEBUG"
     stack=$(update_stack_with_new_providers "$stack" "$diff_paths")
 
@@ -211,14 +207,6 @@ start_sf_executions() {
     done
 }
 
-get_git_source_versions() {
-    local pull_request_id=$1
-    local base_ref=$2
-    local head_ref=$3
-
-    base_source_version=refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}
-    head_source_version=refs/pull/$pull_request_id/head^{$commit_id}
-}
 validate_execution() {
     #types: numbers, strings, booleans, arrays, objects 
     rules=$(jq -n '
@@ -246,44 +234,142 @@ pr_to_front() {
 update_executions_with_new_deploy_stack() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local executions=$1
-    local account_dim=$2
-    local commit_item=$3
     
     log "Creating new Deployment Stack" "INFO"
+    local commit_id=$1
     
-    get_git_source_versions $pull_request_id
-    log "Base Ref Source Version: $base_source_version" "DEBUG"
-    log "Head Ref Source Version: $head_source_version" "DEBUG"
+    IFS='|' account_paths=($(query --psql-extra-args "-qtA" """
+    SELECT
+        account_path
+    FROM
+        account_dim;
+    """))
 
     log "Getting Stacks" "INFO"
+
     # gets absolute path to the root of git repo
-    git_root=$(get_git_root)
+    git_root=$(git rev-parse --show-toplevel)
     log "Git Root: $git_root" "DEBUG"
-    
-    readarray -t account_paths < <(echo $account_dim | jq 'map(.account_path)' | jq -c '.[]')
+
     for account_path in "${account_paths[@]}"; do
         log "Getting Stack for path: $account_path" "DEBUG"
-        stack="$(create_stack $account_path $git_root)" || exit 1
+
+        stack=$(create_stack $account_path $git_root) || exit 1
+
+        echo "stacKK: $stack"
+        if [ "$stack" == "" ]; then
+            continue
+        fi
+
+        jq_to_psql_records "$stack" "staging_cfg_stack"
+
+        log "staging_cfg_stack table:" "DEBUG"
+        log "$(query "-x" "SELECT * FROM staging_cfg_stack")" "DEBUG"
+
+        query """
+        UPDATE
+            staging_cfg_stack
+        SET
+            pr_id = pr_id,
+            commit_id = commit_id,
+            account_path = '$account_path',
+            base_source_version = 'refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}',
+            head_source_version = 'refs/pull/' || pr_id || '/head^{' || commit_id || }'
+        FROM (
+            SELECT
+                pr_id,
+                commit_id,
+                base_ref,
+                head_ref
+            FROM
+                commit_queue
+            WHERE
+                commit_id = '$commit_id'
+            JOIN (
+                SELECT
+                    pr_id,
+                    base_ref,
+                    head_ref
+                FROM
+                    pr_queue
+            )
+            ON
+                (commit_queue.pr_id = pr_queue.pr_id)
+        ) AS sub_commit
+        WHERE
+            staging_cfg_stack.commit_id = sub_commit.commit_id
+        ;
         
-        log "Stack:" "DEBUG"
-        log "$stack" "DEBUG"
+        INSERT INTO
+            executions
+        SELECT
+            execution_id,
+            false as is_rollback,
+            pr_id,
+            commit_id,
+            cfg_path,
+            cfg_deps,
+            status,
+            plan_command,
+            deploy_command,
+            new_providers,
+            new_resources,
+            account_name,
+            account_deps,
+            account_path,
+            voters,
+            approval_count,
+            min_approval_count,
+            rejection_count,
+            min_rejection_count
+        FROM (
+            SELECT
+                'run-' || substr(md5(random()::text), 0, 8) as execution_id,
+                pr_id,
+                commit_id,
+                is_rollback,
+                cfg_path,
+                cfg_deps,
+                account_deps,
+                status,
+                'terragrunt plan ' || '--terragrunt-working-dir ' || cfg_path as plan_command,
+                'terragrunt apply ' || '--terragrunt-working-dir ' || cfg_path || ' -auto-approve' as deploy_command,
+                new_providers, 
+                ARRAY[NULL] as new_resources,
+                account_name,
+                account_path,
+                voters,
+                approval_count,
+                min_approval_count,
+                rejection_count,
+                min_rejection_count
+                
+            FROM (
+                SELECT 
+                    *
+                FROM 
+                    staging_cfg_stack
+            ) AS stack
 
-        log "Adding account artifact" "DEBUG"
-        executions=$( echo "$executions" | jq \
-            --arg name $name \
-            --arg stack "$stack"
-            --arg account_dim "$account_dim" \
-            --arg account_path "$account_path" '
-            ($stack | fromjson) as $stack
-            | ($commit_item | fromjson) as $commit_item
-            | ($account_dim | fromjson | map(select(.account_path == $account_path))) as $account_dim
-            | . + [ ($stack | map($account_dim + $commit_item + .)) ]'
+            LEFT INNER JOIN (
+                SELECT
+                    account_name,
+                    account_path,
+                    account_deps,
+                    voters,
+                    0 as approval_count,
+                    min_approval_count,
+                    0 as rejection_count,
+                    min_rejection_count,
+                FROM
+                    account_dim
+            )
+            ON 
+                (stack.account_path = account_dim.account_path)
+
         )
+        """
     done
-
-    echo "$executions"
     set +e
 }
 
@@ -352,34 +438,19 @@ get_new_providers() {
 
 update_execution_with_new_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local execution_id=$1
-    local terragrunt_working_dir=$2
-
-    new_providers=$(query """
-
-    SELECT
-        new_providers
-    FROM
-        executions
-    WHERE
-        execution_id = '$execution_id'
-    ;
-    """)
-
-    log "Execution's New Providers:" "DEBUG"
-    log "${new_providers[*]}" "DEBUG"
+    local terragrunt_working_dir=$(echo $1 | tr -d '"')
 
     new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "${new_providers[*]}")
 
-    psql_new_resources=$(bash_arr_to_psql_arr "$new_providers")
-    if [ "${#new_resources}" != 0 ]; then
-        log "Resources from new providers:" "INFO"
-        echo "${new_resources[*]}" "INFO"
-    else
+    if [ "${#new_resources}" == 0 ]; then
         log "No new resources from new providers were detected" "INFO"
         exit 0
     fi
+
+    log "Resources from new providers:" "INFO"
+    log "${new_resources[*]}" "INFO"
+    
+    psql_new_resources=$(bash_arr_to_psql_arr "$new_providers")
 
     log "Adding new resources to execution record" "INFO"
     query """
@@ -393,34 +464,40 @@ update_execution_with_new_resources() {
     """
 }
 
-get_tg_state() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
-    local terragrunt_working_dir=$1
+update_execution_status() {
+    local execution_id=$(echo $1 | tr -d '"')
+    local status=$(echo $2 | tr -d '"')
 
-    terragrunt state pull \
-        --terragrunt-working-dir $terragrunt_working_dir 
+    query """
+    UPDATE
+        executions
+    SET
+        status = '$status'
+    WHERE 
+        execution_id = '$execution_id'
+    """
 }
 
 get_new_providers_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    local terragrunt_working_dir=$1
+    local terragrunt_working_dir=$(echo $1 | tr -d '"')
 
     #input must be expanded bash array (e.g. "${x[*]}")
     local new_providers=$2
 
-    tg_state_cmd_out=$(get_tg_state "$terragrunt_working_dir")
+    tg_state_cmd_out=$(terragrunt state pull --terragrunt-working-dir $terragrunt_working_dir )
     log "Terragrunt State Output:" "DEBUG"
     log "$tg_state_cmd_out" "DEBUG"
 
     #TODO: Create jq filter to remove external jq_regex with test()
     jq_regex=$(echo $new_providers | tr '\n(?!$)' '|' | sed '$s/|$//')
-    new_resources=$(echo $tg_state_cmd_out | jq -r \
-        --arg NEW_PROVIDERS "$jq_regex" \
-        '.resources | map(select( (.provider | test($NEW_PROVIDERS) == true) and .mode != "data" ) | {type, name} | join(".")) ')
-    
-    echo "$new_resources"
+    echo $tg_state_cmd_out | jq -r \
+        --arg NEW_PROVIDERS "$jq_regex" '
+        .resources 
+        | map(select( (.provider | test($NEW_PROVIDERS) == true) and .mode != "data" ) 
+        | {type, name} | join(".")) 
+    '
 }
 
 verify_param() {
@@ -435,13 +512,15 @@ verify_param() {
 executions_in_progress() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    local executions=$1
-
-    if [[ "$(echo $executions | jq 'map(select(.status == "running")) | length > 0')" == true ]]; then
-        return 0
-    else
-        return 1
-    fi
+    query --psql-extra-args "-qtAX" """
+    SELECT 
+        count(*)
+    FROM
+        executions
+    WHERE
+        status = 'running'
+    FETCH FIRST ROW ONLY;
+    """
 }
 
 execution_finished() {
@@ -456,44 +535,35 @@ execution_finished() {
     log "Step Function Event:" "DEBUG"
     log "$sf_event" "DEBUG"
 
-    deployed_path=$( echo $sf_event | jq '.path')
+    deployed_path=$( echo $sf_event | jq '.cfg_path')
     execution_id=$( echo $sf_event | jq '.execution_id')
-    deployment_type=$( echo $sf_event | jq '.deployment_type')
+    is_rollback=$( echo $sf_event | jq '.is_rollback')
     status=$( echo $sf_event | jq '.status')
-    
+    pr_id=$( echo $sf_event | jq '.pr_id')
+    commit_id=$( echo $sf_event | jq '.commit_id' | tr -d '"')
+    new_providers_count=$( echo $sf_event | jq '.new_providers | length')
+
     log "Updating Execution Status" "INFO"
-    results=$(query """
+    update_execution_status "$execution_id" "$status"
 
-    UPDATE
-        executions
-    SET
-        status = '$status'
-    WHERE 
-        execution_id = '$execution_id'
-    RETURNING *;
-    """)
-
-    log "Update:" "DEBUG"
-    log "$results"
-
-    if [ "$deployment_type" == "Deploy" ]; then
-        git checkout "$commit_id"
+    if [ "$is_rollback" == false ]; then
+        git checkout "$commit_id" > /dev/null
         log "Updating execution record with new resources" "INFO"
-        update_execution_with_new_resources "$executions" "$deployed_path"
+        if [ "$new_providers_count" -gt 0 ]; then
+            log "Config contains new providers" "INFO"
+            log "Adding new provider resources to config execution record" "INFO"
+            update_execution_with_new_resources "$execution_id" "$deployed_path"
+        fi
+
         if [ "$status" == "failed" ]; then
-            update_commit_queue_with_rollback_commits "$commit_queue" "$executions" "$commit_id"
+            update_commit_queue_with_rollback_commits "$pr_id"
         fi
     fi
-
-    log "Updated Executions Table:" "DEBUG"
-    log "$executions" "DEBUG"
     set +e
 }
 
 update_commit_queue_with_rollback_commits() {
-    local commit_queue=$1
-    local executions=$2
-    local pr_id=$3
+    local pr_id=$(echo $1 | tr -d '"')
 
     query """
     INSERT INTO commit_queue (
@@ -506,11 +576,11 @@ update_commit_queue_with_rollback_commits() {
     SELECT
         commit_id,
         true as is_rollback,
-        pr_id,
+        '$pr_id',
         'waiting' as status
     FROM (
         SELECT
-            *
+            commit_id
         FROM
             commit_queue
         WHERE 
@@ -524,7 +594,7 @@ update_commit_queue_with_rollback_commits() {
                                 is_rolback = false AND
                                 new_resources > 0
                         )
-    )
+    ) AS sub
     ;
     ALTER TABLE commit_queue ALTER COLUMN id RESTART WITH max(id) + 1;
     
@@ -535,31 +605,38 @@ create_executions() {
     local commit_queue=$2
 
     log "No Deployment or Rollback stack is in Progress" "DEBUG"
-
+ 
     log "Dequeuing next commit that is waiting" "INFO"
-    is_rollback=$(query """
+    IFS='|' commit_items=$(query --psql-extra-args "-qtA" """
     UPDATE
         commit_queue
     SET
         status = 'running'
-    WHERE
-        status = 'waiting'
-    LIMIT 1
+    WHERE 
+        id = (
+            SELECT
+                id
+            FROM
+                commit_queue
+            WHERE
+                status = 'waiting'
+            FETCH FIRST ROW ONLY
+        )
 
-    RETURN is_rollback
+    RETURNING is_rollback, commit_id
     ;
     """)
 
-    if [ "$is_rollback" == true ]; then
+    if [ "$commit_items[0]" == true ]; then
         update_executions_with_new_rollback_stack
     else
-        update_executions_with_new_deploy_stack
+        update_executions_with_new_deploy_stack "$commit_items[1]"
     fi
 }
 
 main() {
     set -e
-
+    echo "first step"
     if [ -z "$CODEBUILD_INITIATOR" ]; then
         log "CODEBUILD_INITIATOR is not set" "ERROR"
         exit 1
@@ -574,10 +651,10 @@ main() {
     fi
 
     log "Checking if any Step Function executions are running" "DEBUG"
-    if [ $(executions_in_progress) == false ]; then
+    if [ $(executions_in_progress) -eq 0 ]; then
         create_executions
     fi
-
+    exit 0
     log "Getting Target Executions" "INFO"
     target_stack=$(get_target_stack)
     log "Target Executions" "DEBUG"

@@ -30,7 +30,7 @@ psql -v ON_ERROR_STOP=1 \
         commit_id VARCHAR,
         cfg_path VARCHAR,
         cfg_deps TEXT[],
-        execution_status VARCHAR,
+        status VARCHAR,
         plan_command VARCHAR,
         deploy_command VARCHAR,
         new_providers TEXT[],
