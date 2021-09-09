@@ -28,6 +28,8 @@ psql -v ON_ERROR_STOP=1 \
         is_rollback BOOL,
         pr_id VARCHAR,
         commit_id VARCHAR,
+        base_source_version VARCHAR,
+        head_source_version VARCHAR,
         cfg_path VARCHAR,
         cfg_deps TEXT[],
         status VARCHAR,

@@ -7,6 +7,8 @@ load 'test_helper/bats-support/load'
 load 'test_helper/bats-assert/load'
 
 setup_file() {
+    export BASE_REF=master
+
     load 'test_helper/utils/load.bash'
 
     _common_setup
@@ -22,7 +24,7 @@ teardown_file() {
     teardown_tmp_dir
 }
 
-setup() {    
+setup() {
     load 'test_helper/utils/load.bash'
     
     setup_test_case_repo

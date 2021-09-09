@@ -111,23 +111,19 @@ update_stack_with_new_providers() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
     local stack=$1
-    echo "$stack" | jq 'map(.cfg_path)' | jq -c '.[]' | while read dir; do
+    
+    while read dir; do
         dir=$(echo "$dir" | tr -d '"')
         log "Directory: $dir" "DEBUG"
         get_new_providers "$dir"
 
-        stack=$(echo $stack | jq \
+        stack=$(echo "$stack" | jq \
         --arg dir "$dir" \
         --arg new_providers "${new_providers[*]}" '
-        (if $new_providers == null or $new_provders == "" then [] else ($new_providers | split(" ")) end) as $new_providers
-        | map( if .cfg_path == $dir then .new_prioviders = $new_providers else . end)
+        (if $new_providers == null or $new_providers == "" then [] else ($new_providers | split(" ")) end) as $new_providers
+        | map(if .cfg_path == $dir then .new_providers |= $new_providers else . end)
         ')
-        # stack=$(echo $stack | jq \
-        # --arg dir "$dir" \
-        # --arg new_providers "${new_providers[*]}" '
-        # map( if .cfg_path == $dir then .new_prioviders = ["doo"] else . end)
-        # ')
-    done
+    done <<< "$(echo "$stack" | jq 'map(.cfg_path)' | jq -c '.[]')"
     
     echo "$stack"
 }
@@ -257,6 +253,11 @@ update_executions_with_new_deploy_stack() {
     
     local commit_id=$1
     
+    if [ -z "$BASE_REF" ]; then
+        log "BASE_REF is not set" "ERROR"
+        exit 1
+    fi
+
     log "Getting Account Paths" "INFO"
     IFS=$'\n' account_paths=($(query --psql-extra-args "-tA" "SELECT account_path FROM account_dim;"))
 
@@ -291,114 +292,76 @@ update_executions_with_new_deploy_stack() {
         jq_to_psql_records "$stack" "staging_cfg_stack"
 
         log "staging_cfg_stack table:" "DEBUG"
-        log "$(query "-x" "SELECT * FROM staging_cfg_stack")" "DEBUG"
+        log "$(query --psql-extra-args "-x" "SELECT * FROM staging_cfg_stack")" "DEBUG"
 
         query """
-        UPDATE
-            staging_cfg_stack
-        SET
-            pr_id = pr_id,
-            commit_id = commit_id,
-            account_path = '$account_path',
-            base_source_version = 'refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}',
-            head_source_version = 'refs/pull/' || pr_id || '/head^{' || commit_id || }'
+        INSERT INTO
+            executions
+        SELECT
+            'run-' || substr(md5(random()::text), 0, 8) as execution_id,
+            commit.pr_id as pr_id,
+            commit.commit_id as commit_id,
+            'refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}' as base_source_version,
+            'refs/pull/' || commit.pr_id || '/head^{' || commit.commit_id || '}' as head_source_version,
+            is_rollback,
+            cfg_path as cfg_path,
+            cfg_deps as cfg_deps,
+            account_deps as account_deps,
+            status as status,
+            'terragrunt plan ' || '--terragrunt-working-dir ' || stack.cfg_path as plan_command,
+            'terragrunt apply ' || '--terragrunt-working-dir ' || stack.cfg_path || ' -auto-approve' as deploy_command,
+            new_providers as new_providers, 
+            ARRAY[NULL] as new_resources,
+            account.account_name as account_name,
+            account.account_path as account_path,
+            account.account_deps as account_deps,
+            account.voters as voters,
+            0 as approval_count,
+            account.min_approval_count as min_approval_count,
+            0 as rejection_account,
+            account.min_rejection_count as min_rejection_count
         FROM (
             SELECT
                 pr_id,
-                commit_id,
-                base_ref,
-                head_ref
+                commit_id
             FROM
                 commit_queue
             WHERE
                 commit_id = '$commit_id'
-            JOIN (
-                SELECT
-                    pr_id,
-                    base_ref,
-                    head_ref
-                FROM
-                    pr_queue
-            )
-            ON
-                (commit_queue.pr_id = pr_queue.pr_id)
-        ) AS sub_commit
-        WHERE
-            staging_cfg_stack.commit_id = sub_commit.commit_id
-        ;
-        
-        INSERT INTO
-            executions
-        SELECT
-            execution_id,
-            false as is_rollback,
-            pr_id,
-            commit_id,
-            cfg_path,
-            cfg_deps,
-            status,
-            plan_command,
-            deploy_command,
-            new_providers,
-            new_resources,
-            account_name,
-            account_deps,
-            account_path,
-            voters,
-            approval_count,
-            min_approval_count,
-            rejection_count,
-            min_rejection_count
-        FROM (
+        ) commit
+        JOIN (
             SELECT
-                'run-' || substr(md5(random()::text), 0, 8) as execution_id,
                 pr_id,
-                commit_id,
-                is_rollback,
-                cfg_path,
-                cfg_deps,
-                account_deps,
-                status,
-                'terragrunt plan ' || '--terragrunt-working-dir ' || cfg_path as plan_command,
-                'terragrunt apply ' || '--terragrunt-working-dir ' || cfg_path || ' -auto-approve' as deploy_command,
-                new_providers, 
-                ARRAY[NULL] as new_resources,
+                base_ref,
+                head_ref
+            FROM
+                pr_queue
+        ) pr
+        ON
+            (commit.pr_id = pr.pr_id),
+        (
+            SELECT
                 account_name,
                 account_path,
+                account_deps,
                 voters,
-                approval_count,
                 min_approval_count,
-                rejection_count,
                 min_rejection_count
-                
-            FROM (
-                SELECT 
-                    *
-                FROM 
-                    staging_cfg_stack
-            ) AS stack
-
-            LEFT INNER JOIN (
-                SELECT
-                    account_name,
-                    account_path,
-                    account_deps,
-                    voters,
-                    0 as approval_count,
-                    min_approval_count,
-                    0 as rejection_count,
-                    min_rejection_count,
-                FROM
-                    account_dim
-            )
-            ON 
-                (stack.account_path = account_dim.account_path)
-
-        )
+            FROM
+                account_dim
+            WHERE
+                account_path = '$account_path'
+        ) account,
+        (
+            SELECT
+                *
+            FROM
+                staging_cfg_stack
+        ) stack;
         """
 
         log "Execution table items for account:" "DEBUG"
-        log "$(query "-x" """SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'""")" "DEBUG"
+        log "$(query --psql-extra-args "-x" "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
 
         log "Removing staging_cfg_stack table" "DEBUG"
     done

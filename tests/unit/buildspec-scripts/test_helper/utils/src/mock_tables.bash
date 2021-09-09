@@ -227,7 +227,7 @@ setup_mock_finished_status_tables() {
 		is_rollback
 	FROM   (
 		SELECT 
-			substr(md5(random()::text), 0, 16) as commit_id,
+			substr(md5(random()::text), 0, 40) as commit_id,
 			(
 				CASE (RANDOM() < 0.5)::INT
 				WHEN 
@@ -259,6 +259,8 @@ setup_mock_finished_status_tables() {
 		execution_id,
         pr_id,
         commit_id,
+		base_source_version,
+		head_source_version,
         is_rollback,
         cfg_path,
 		cfg_deps,
@@ -281,6 +283,8 @@ setup_mock_finished_status_tables() {
         execution_id,
         pr_id,
         commit_id,
+		'refs/heads/master^{' || substr(md5(random()::text), 0, 40) || '}' as base_source_version,
+		'refs/pull/' || pr_id || '/head^{' || commit_id || '}' as head_source_version,
         is_rollback,
         cfg_path,
 		cfg_deps,
