@@ -72,6 +72,27 @@ modify_tg_path() {
 	fi
 }
 
+add_test_case_pr_to_queue() {
+	results=$(query """
+	INSERT INTO pr_queue (
+        pr_id,
+        status,
+        base_ref,
+		head_ref
+	)
+	VALUES (
+		11,
+		'waiting',
+		'$TESTING_BASE_REF',
+		'$TESTING_HEAD_REF'
+	)
+	RETURNING *;
+	""")
+	
+	log "Results:" "DEBUG"
+	log "$results" "DEBUG"
+}
+
 add_test_case_head_commit_to_queue() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
@@ -105,7 +126,7 @@ add_test_case_head_commit_to_queue() {
 	)
 	VALUES (
 		'$TESTING_COMMIT_ID',
-		55,
+		11,
 		'waiting',
 		false
 	)

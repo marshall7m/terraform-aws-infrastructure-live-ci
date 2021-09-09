@@ -1,6 +1,6 @@
 export script_logging_level="DEBUG"
 export MOCK_AWS_CMDS=true
-# export KEEP_METADB_OPEN=true
+export KEEP_METADB_OPEN=true
 export METADB_TYPE=local
 
 load 'test_helper/bats-support/load'
@@ -29,14 +29,14 @@ setup() {
     
     setup_test_case_repo
 
-    run_only_test 1
+    run_only_test 2
 }
 
 teardown() {
     load 'test_helper/utils/load.bash'
 
-    clear_metadb_tables
-    drop_mock_temp_tables
+    # clear_metadb_tables
+    # drop_mock_temp_tables
 }
 
 @test "Script is runnable" {
@@ -66,17 +66,19 @@ teardown() {
     log "Terragrunt directory: $testing_dir" "DEBUG"
 	terragrunt apply --terragrunt-working-dir "$testing_dir" -auto-approve > /dev/null || exit 1
     
-    execution_id=run-0000001
-    commit_id=$(git log --pretty=format:'%H' -n 1)
-
     before_execution=$(jq -n \
-    --arg execution_id "$execution_id" \
-    --arg commit_id "$commit_id" '
+    --arg execution_id "run-0000001" \
+    --arg pr_id 1 \
+    --arg base_ref "$BASE_REF" \
+    --arg base_commit_id "$( git log --pretty=format:'%H' -n 1 --skip 1 )" \
+    --arg commit_id "$( git log --pretty=format:'%H' -n 1 )" '
         {
             "execution_id": $execution_id,
             "is_rollback": false,
-            "pr_id": "1",
+            "pr_id": $pr_id,
             "commit_id": $commit_id,
+            "base_source_version": "refs/heads/\($base_ref)^{\($base_commit_id)}",
+            "head_source_version": "refs/pull/\($pr_id)/head^{\($commit_id)}",
             "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo",
             "cfg_deps": [],            
             "status": "running",
@@ -85,8 +87,8 @@ teardown() {
             "new_providers": [],
             "new_resources": [],
             "account_name": "dev",
-            "account_deps": [],
             "account_path": "directory_dependency/dev-account",
+            "account_deps": [],
             "voters": ["voter-001"],
             "approval_count": 1,
             "min_approval_count": 1,
@@ -94,6 +96,7 @@ teardown() {
             "min_rejection_count": 1    
         }
     ')
+
     jq_to_psql_records "$before_execution" "executions"
 
     log "Using default branch head commit as previous Step Function deployment" "INFO"
@@ -121,7 +124,7 @@ teardown() {
     git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p'
 
     run trigger_sf.sh
-    assert_success
+    assert_failure
 
     # run query """
     # do \$\$

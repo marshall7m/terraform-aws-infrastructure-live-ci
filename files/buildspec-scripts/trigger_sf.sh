@@ -4,18 +4,6 @@ DIR="${BASH_SOURCE%/*}"
 if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 source "$DIR/utils.sh"
 
-get_tg_plan_out() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local terragrunt_working_dir=$1
-    
-    # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)
-    terragrunt run-all plan \
-        --terragrunt-working-dir $terragrunt_working_dir \
-        --terragrunt-non-interactive \
-        -detailed-exitcode 2>&1
-}
-
 get_diff_paths() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
@@ -133,8 +121,13 @@ create_stack() {
 
     local terragrunt_working_dir=$1
     local git_root=$2
-    
-    tg_plan_out=$(get_tg_plan_out $terragrunt_working_dir)
+
+    # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)
+    tg_plan_out=$(terragrunt run-all plan \
+        --terragrunt-working-dir $terragrunt_working_dir \
+        --terragrunt-non-interactive \
+        -detailed-exitcode 2>&1
+    )
 
     exitcode=$?
     if [ $exitcode -eq 1 ]; then
@@ -180,30 +173,54 @@ get_target_stack() {
     log "Getting list of accounts that have no account dependencies or no account dependencies that waiting or running" "DEBUG"
 
     query """
+    
+    CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS $$
+        DECLARE
+            total int := 0;
+            i text;
+        BEGIN
+            FOREACH i IN ARRAY $1
+            LOOP
+                RAISE NOTICE 'value: %', i;
+                RAISE NOTICE 'in arr: %', (SELECT i = ANY ($2)::BOOL);
+                
+                PERFORM 
+                    CASE (SELECT i = ANY ($2))::BOOL
+                        when 't' then 1
+                        else 0
+                    END;
+            END LOOP;
+            RETURN total;
+        END;
+    $$ LANGUAGE plpgsql;
+    
     SELECT
-        account_name
-    FROM 
+        *
+    FROM
         executions
     WHERE
-        account_name NOT IN (
+        execution_id IN (
             SELECT
-                DISTINCT ON (account_name)
+                execution_id
             FROM
                 executions
             WHERE
-                commit_id = '$commit_id' AND
-                status != 'success'
+                array_length(account_deps) = arr_in_arr_count(account_deps, successful_accounts)
         )
+    (
+        SELECT
+            account_name
+        FROM
+            executions
+        WHERE 
+            commit_id = '56a49ef276cd45e8c7500af0c5ff7b2f9bbd08a2'
+        GROUP BY
+            account_name
+        HAVING
+            COUNT(*) FILTER (WHERE status = 'success') = COUNT(*)
+    ) successful_accounts
     ;
     """
-    # target_accounts=$( echo $executions | jq \
-    # --arg commit_id $commit_id '
-    #     map(select(.commit_id == $commit_id))
-    #     | group_by(.account_name) 
-    #     | map(select([.[] | .status == "success"] | all) | .[] | .account_name) 
-    #     | unique
-    # ')
-
 #     log "Getting Deployment Paths from Accounts:" "INFO"
 #     log "$target_accounts" "DEBUG"
 
@@ -299,15 +316,14 @@ update_executions_with_new_deploy_stack() {
             executions
         SELECT
             'run-' || substr(md5(random()::text), 0, 8) as execution_id,
+            false as is_rollback,
             commit.pr_id as pr_id,
             commit.commit_id as commit_id,
             'refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}' as base_source_version,
             'refs/pull/' || commit.pr_id || '/head^{' || commit.commit_id || '}' as head_source_version,
-            is_rollback,
             cfg_path as cfg_path,
             cfg_deps as cfg_deps,
-            account_deps as account_deps,
-            status as status,
+            'waiting' as status,
             'terragrunt plan ' || '--terragrunt-working-dir ' || stack.cfg_path as plan_command,
             'terragrunt apply ' || '--terragrunt-working-dir ' || stack.cfg_path || ' -auto-approve' as deploy_command,
             new_providers as new_providers, 
@@ -328,17 +344,7 @@ update_executions_with_new_deploy_stack() {
                 commit_queue
             WHERE
                 commit_id = '$commit_id'
-        ) commit
-        JOIN (
-            SELECT
-                pr_id,
-                base_ref,
-                head_ref
-            FROM
-                pr_queue
-        ) pr
-        ON
-            (commit.pr_id = pr.pr_id),
+        ) commit,
         (
             SELECT
                 account_name,
@@ -362,8 +368,6 @@ update_executions_with_new_deploy_stack() {
 
         log "Execution table items for account:" "DEBUG"
         log "$(query --psql-extra-args "-x" "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
-
-        log "Removing staging_cfg_stack table" "DEBUG"
     done
     set +e
 }
@@ -371,32 +375,52 @@ update_executions_with_new_deploy_stack() {
 update_executions_with_new_rollback_stack() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    local executions=$1
-    local commit_id=$2
+    local commit_id=$1
 
-    echo "$(echo "$executions" | jq \
-        --arg commit_id $commit_id '
-        (.) as executions
-        | map(select(.commit_id == $commit_id and .new_resources | length > 0 )) as $commit_executions
-        | $commit_executions 
-        | map( (.) as $item | $item.dependencies | map($item + {"path": (.), "dependencies": [$item.path]}))
-        | map((.new_resources | map("-target " + .) | join(" ")) as $destroy_flags 
-        | . + {
-            "status": "waiting"
-            "plan_command": "destroy $target_flags",
-            "deploy_command": "destroy $target_flags -auto-approve"
-        })
-    ')"
-}
+    query """
+    CREATE OR REPLACE FUNCTION target_resources(text[]) RETURNS text AS \$\$
+    DECLARE
+        flags text := '';
+        resource text;
+    BEGIN
+        FOREACH resource IN ARRAY \$1
+        LOOP
+            flags := flags || ' -target ' || resource;
+        END LOOP;
+        RETURN flags;
+    END;
+    \$\$ LANGUAGE plpgsql;
 
-get_tg_providers() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local terragrunt_working_dir=$1
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    terragrunt providers \
-        --terragrunt-working-dir $terragrunt_working_dir 
+    INSERT INTO
+        executions
+    SELECT
+        'run-' || substr(md5(random()::text), 0, 8) as execution_id,
+        true as is_rollback,
+        pr_id,
+        commit_id,
+        base_source_version,
+        head_source_version,
+        cfg_path,
+        cfg_deps,
+        'waiting' as status,
+        'terragrunt destroy' || target_resources(new_resources) as plan_command,
+        'terragrunt destroy' || target_resources(new_resources) || ' -auto-approve' as deploy_commmand,
+        new_providers,
+        new_resources,
+        account_name,
+        account_deps,
+        account_path,
+        voters,
+        0 as approval_count,
+        min_approval_count,
+        0 as rejection_count,
+        min_rejection_count
+    FROM
+        executions
+    WHERE
+        commit_id = '$commit_id' AND
+        array_length(new_resources, 1) > 0
+    """
 }
 
 get_new_providers() {
@@ -405,7 +429,7 @@ get_new_providers() {
     local terragrunt_working_dir=$1
 
     log "Running Terragrunt Providers Command" "INFO"
-    tg_providers_cmd_out=$(get_tg_providers "$terragrunt_working_dir")
+    tg_providers_cmd_out=$( terragrunt providers --terragrunt-working-dir $terragrunt_working_dir )
     log "Terragrunt Command Output" "DEBUG"
     log "$tg_providers_cmd_out" "DEBUG"
 
@@ -620,7 +644,7 @@ create_executions() {
                 commit_queue
             WHERE
                 status = 'waiting'
-            FETCH FIRST ROW ONLY
+            LIMIT 1
         )
 
     RETURNING commit_id, is_rollback
@@ -632,7 +656,7 @@ create_executions() {
     log "commit_id: ${commit_items[0]}" "DEBUG"
     log "rollback: ${commit_items[1]}" "DEBUG"
 
-    if [ "${commit_items[1]}" == true ]; then
+    if [ "${commit_items[1]}" == "t" ]; then
         update_executions_with_new_rollback_stack
     else
         update_executions_with_new_deploy_stack "${commit_items[0]}"
