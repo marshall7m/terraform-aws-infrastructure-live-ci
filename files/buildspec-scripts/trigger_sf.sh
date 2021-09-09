@@ -5,9 +5,10 @@ if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
 source "$DIR/utils.sh"
 
 get_tg_plan_out() {
-    local terragrunt_working_dir=$1
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
+    local terragrunt_working_dir=$1
+    
     # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)
     terragrunt run-all plan \
         --terragrunt-working-dir $terragrunt_working_dir \
@@ -15,33 +16,33 @@ get_tg_plan_out() {
         -detailed-exitcode 2>&1
 }
 
-get_rel_path() {
-    local rel_to=$1
-    local path=$2
+get_diff_paths() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    echo "$(realpath -e --relative-to=$rel_to $path)"
-}
-
-get_diff_paths() {
     local tg_plan_out=$1
     local git_root=$2
     
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     # use pcregrep with -M multiline option to scan terragrunt plan output for
     # directories that exited plan with exit status 2 (diff in plan)
-    # -N flag defines the convention for newline and CRLF defines any of the conventions
-    echo $( echo "$tg_plan_out" \
+    # -N flag defines the convention for newline and CRLF allows for all of the conventions
+    abs_paths=$( echo "$tg_plan_out" \
         | pcregrep -Mo -N CRLF '(?<=exit\sstatus\s2\n).+?(?=\])' \
-        | grep -oP 'prefix=\[\K.+' && get_rel_path "$git_root"
+        | grep -oP 'prefix=\[\K.+'
     )
+    log "Absolute paths: $(printf '\n\t%s\n' "${abs_paths[@]}")" "DEBUG"
+
+    diff_paths=()
+    while read -r dir; do
+        diff_paths+=($(realpath -e --relative-to="$git_root" "$dir"))
+    done <<< "$abs_paths"
 }
 
 get_parsed_stack() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local tg_plan_out=$1
     local git_root=$2
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     raw_stack=$( echo $tg_plan_out | grep -oP '=>\sModule\K.+?(?=\))' )
 
@@ -53,23 +54,37 @@ get_parsed_stack() {
         log "" "DEBUG"
         log "Stack Layer: $(printf "\n\t%s\n" "$line")" "DEBUG"
 
-        parent=$( echo "$line" \
-            | grep -Po '.+?(?=\s\(excluded:)' && get_rel_path "$git_root" 
-        )
-        log "Parent: $(printf "\n\t%s" "${parent}")" "DEBUG"
+        abs_parent=$( echo "$line" | grep -Po '\s?\K.+?(?=\s\(excluded:)')
+        log "Absolute path to parent $(printf "\n\t%s\n" "${abs_parent[@]}")" "DEBUG"
 
-        deps=($( echo "$line" \
-            | grep -Po 'dependencies:\s+\[\K.+?(?=\])' \
-            | grep -Po '\/.+?(?=,|$)' && get_rel_path "$git_root"
-        ))
+        while read -r dir; do
+            parent=$(realpath -e --relative-to="$git_root" "$dir")
+        done <<< "$abs_parent"
+
+        log "Parent: $(printf "\n\t%s\n" "${parent}")" "DEBUG"
+
+        if [ -z "$parent" ]; then
+            log "Parent directory was not properly detected -- Terragrunt stack output for current Terragrunt version is not supported" "ERROR"
+            exit 1
+        fi
+
+        abs_deps=$(echo "$line" | grep -Po 'dependencies:\s+\[\K.+?(?=\])' | grep -Po '\/.+?(?=,|$)')
+        log "Absolute paths to dependencies $(printf "\n\t%s\n" "${abs_deps[@]}")" "DEBUG"
+        deps=()
+        while read -r dir; do
+            if [ "$dir" != "" ]; then
+                deps+=($( echo "$dir" | realpath -e --relative-to="$git_root" "$dir"))
+            fi
+        done <<< "$abs_deps"
+
         log "Dependencies: $(printf "\n\t%s" "${deps[@]}")" "DEBUG"
-
+        
         parsed_stack=$( echo $parsed_stack \
             | jq --arg parent "$parent" --arg deps "$deps" '
                 . + [{
                     "cfg_path": $parent,
-                    "cfg_deps": try ($deps | split("\n") | reverse) // []' 
-                }]
+                    "cfg_deps": $deps | split("\n") | reverse
+                }]'
         )
     done <<< "$raw_stack"
 
@@ -77,46 +92,54 @@ get_parsed_stack() {
 }
 
 filter_paths() {
-    local stack=$1
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
 
+    local stack=$1
     #input must be expanded bash array (e.g. "${x[*]}")
     local filter=$2
 
-    echo $( echo "$stack" | jq \
+    echo "$( echo "$stack" | jq \
         --arg filter "$filter" '
-        (try ($filter | split(" ")) // []) as $filter
+        ($filter | split("\n")) as $filter
             | map(select(.cfg_path | IN($filter[])))
             | map(.cfg_deps |= map_values(select(. | IN($filter[]))))
         '
-    )
+    )"
 }
 
 update_stack_with_new_providers() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
     local stack=$1
-    local -n target_paths=$2
-
-    for dir in "${target_paths[@]}"; do
-        new_providers=$(get_new_providers "$dir")
+    echo "$stack" | jq 'map(.cfg_path)' | jq -c '.[]' | while read dir; do
+        dir=$(echo "$dir" | tr -d '"')
+        log "Directory: $dir" "DEBUG"
+        get_new_providers "$dir"
 
         stack=$(echo $stack | jq \
-        --arg dir $dir \
-        --arg new_providers $new_providers '
-        map( if .path == $dir then .new_providers == $new_providers else . end)
+        --arg dir "$dir" \
+        --arg new_providers "${new_providers[*]}" '
+        (if $new_providers == null or $new_provders == "" then [] else ($new_providers | split(" ")) end) as $new_providers
+        | map( if .cfg_path == $dir then .new_prioviders = $new_providers else . end)
         ')
+        # stack=$(echo $stack | jq \
+        # --arg dir "$dir" \
+        # --arg new_providers "${new_providers[*]}" '
+        # map( if .cfg_path == $dir then .new_prioviders = ["doo"] else . end)
+        # ')
     done
     
     echo "$stack"
 }
 
 create_stack() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local terragrunt_working_dir=$1
     local git_root=$2
     
-    #  --arg base_source_version "$base_source_version" \
-    #         --arg head_source_version "$head_source_version"
     tg_plan_out=$(get_tg_plan_out $terragrunt_working_dir)
+
     exitcode=$?
     if [ $exitcode -eq 1 ]; then
         log "Error running terragrunt commmand" "ERROR"
@@ -125,55 +148,83 @@ create_stack() {
         exit 1
     fi
 
-    diff_paths=($(get_diff_paths "$tg_plan_out" "$git_root"))
-    if [ ${#diff_paths[@]} -eq 0 ]; then
+    get_diff_paths "$tg_plan_out" "$git_root"
+
+    num_diff_paths=${#diff_paths[@]}
+
+    log "Terragrunt paths with detected difference: $(printf '\n\t%s' "${diff_paths[@]}")" "DEBUG"
+    log "Count: $num_diff_paths" "DEBUG"
+    
+    if [ $num_diff_paths -eq 0 ]; then
         log "Detected no Terragrunt paths with difference" "INFO"
         exit 0
     fi
-    
-    log "Terragrunt paths with detected difference: $(printf "\n\t%s" "${diff_paths[@]}")" "DEBUG"
-    log "Count: $num_diff_paths" "DEBUG"
 
-    stack=$(get_parsed_stack "$tg_plan_out" "$git_root")
-    log "Terragrunt Dependency Stack: $stack" "DEBUG"
+    stack="$(get_parsed_stack "$tg_plan_out" "$git_root")" || exit 1
+    log "Terragrunt Dependency Stack:" "DEBUG"
+    log "$stack" "DEBUG"
 
     log "Filtering out Terragrunt paths with no difference in plan" "INFO"
     stack=$( filter_paths "$stack" "${diff_paths[*]}" )
+    log "Filtered out:" "DEBUG"
+    log "$stack" "DEBUG"
 
-    log "Getting New Providers within Stack" "DEBUG"
-    stack=$(update_stack_with_new_providers "$stack" "$diff_paths")
+    log "Getting New Providers within Stack" "INFO"
+    stack=$(update_stack_with_new_providers "$stack")
 
     echo "$stack"
 }
 
 get_target_stack() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
     local executions=$2
     local commit_id=$2
 
     log "Getting list of accounts that have no account dependencies or no account dependencies that waiting or running" "DEBUG"
-    target_accounts=$( echo $executions | jq \
-    --arg commit_id $commit_id '
-        map(select(.commit_id == $commit_id))
-        | group_by(.account_name) 
-        | map(select([.[] | .status == "success"] | all) | .[] | .account_name) 
-        | unique
-    ')
 
-    log "Getting Deployment Paths from Accounts:" "INFO"
-    log "$target_accounts" "DEBUG"
+    query """
+    SELECT
+        account_name
+    FROM 
+        executions
+    WHERE
+        account_name NOT IN (
+            SELECT
+                DISTINCT ON (account_name)
+            FROM
+                executions
+            WHERE
+                commit_id = '$commit_id' AND
+                status != 'success'
+        )
+    ;
+    """
+    # target_accounts=$( echo $executions | jq \
+    # --arg commit_id $commit_id '
+    #     map(select(.commit_id == $commit_id))
+    #     | group_by(.account_name) 
+    #     | map(select([.[] | .status == "success"] | all) | .[] | .account_name) 
+    #     | unique
+    # ')
 
-    log "Getting executions that have their dependencies finished" "DEBUG"
-    echo "$( echo $executions | jq \
-        --arg target_accounts "$target_accounts" \
-        --arg commit_id "$commit_id" '
-        ($target_accounts | fromjson) as $target_accounts
-        | map(select(.account_name | IN($target_accounts[]) and .commit_id == $commit_id))
-        | (map(select(.status | IN("success")) | .path)) as $successful_paths
-        | map(select(.status == "waiting" and [.dependencies | .[] | IN($successful_paths[]) or . == null] | all ))
-    ')"
+#     log "Getting Deployment Paths from Accounts:" "INFO"
+#     log "$target_accounts" "DEBUG"
+
+#     log "Getting executions that have their dependencies finished" "DEBUG"
+#     echo "$( echo $executions | jq \
+#         --arg target_accounts "$target_accounts" \
+#         --arg commit_id "$commit_id" '
+#         ($target_accounts | fromjson) as $target_accounts
+#         | map(select(.account_name | IN($target_accounts[]) and .commit_id == $commit_id))
+#         | (map(select(.status | IN("success")) | .path)) as $successful_paths
+#         | map(select(.status == "waiting" and [.dependencies | .[] | IN($successful_paths[]) or . == null] | all ))
+#     ')"
 }
 
 stop_running_sf_executions() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     running_executions=$(aws stepfunctions list-executions \
         --state-machine-arn $STATE_MACHINE_ARN \
         --status-filter "running" | jq '.executions | map(.executionArn)'
@@ -189,77 +240,53 @@ stop_running_sf_executions() {
 }
 
 start_sf_executions() {
-    local target_stack=$1
-    readarray -t target_paths < <(echo $target_stack | jq -c '[keys]')
-
-    for dir in "${target_paths[@]}"; do
-        sf_input=$(echo $target_stack | jq \
-        --arg dir $dir '
-            .[$dir] | tojson
-        ')
-
-        execution_name="run-$(uuidgen)"
-        
-        aws stepfunctions start-execution \
-            --state-machine-arn $STATE_MACHINE_ARN \
-            --name "$execution_name" \
-            --input "$sf_input"
-    done
-}
-
-validate_execution() {
-    #types: numbers, strings, booleans, arrays, objects 
-    rules=$(jq -n '
-    {
-        "execution_id": {
-            "type": "strings"
-            "regex_value": ".+"
-        },
-    }
-    ')
-}
-
-pr_to_front() {
-    local executions=$1
-    local pull_request_id=$2
     log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    local target_stack=$1
+    execution_name="run-$(uuidgen)"
     
-    echo "$( echo $executions | jq \
-        --arg pull_request_id "$pull_request_id" '
-        (.Queue | map(.ID == $pull_request_id) | index(true)) as $idx
-        | .Queue |= [.[$idx]] + (. | del(.[$idx]))
-    ')"
+    aws stepfunctions start-execution \
+        --state-machine-arn $STATE_MACHINE_ARN \
+        --name "$execution_name" \
+        --input "$sf_input"
 }
 
 update_executions_with_new_deploy_stack() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    log "Creating new Deployment Stack" "INFO"
     local commit_id=$1
     
-    IFS='|' account_paths=($(query --psql-extra-args "-qtA" """
-    SELECT
-        account_path
-    FROM
-        account_dim;
-    """))
+    log "Getting Account Paths" "INFO"
+    IFS=$'\n' account_paths=($(query --psql-extra-args "-tA" "SELECT account_path FROM account_dim;"))
 
-    log "Getting Stacks" "INFO"
-
-    # gets absolute path to the root of git repo
+    log "Checking out target commit ID: $commit_id" "INFO"
+    git checkout "$commit_id"
+    # getting tg dirs relative path to git repo absolute path given tg dir's absolute path will be invalid in other envs
     git_root=$(git rev-parse --show-toplevel)
     log "Git Root: $git_root" "DEBUG"
 
+    log "Getting Account Stacks" "INFO"
     for account_path in "${account_paths[@]}"; do
-        log "Getting Stack for path: $account_path" "DEBUG"
+        log "Account Path: $account_path" "DEBUG"
 
         stack=$(create_stack $account_path $git_root) || exit 1
+        log "Stack: $(printf '\n%s' "$stack")" "DEBUG"
 
-        echo "stacKK: $stack"
         if [ "$stack" == "" ]; then
+            log "Stack is empty -- skipping" "DEBUG"
             continue
         fi
+        
+        query """
+        DROP TABLE IF EXISTS staging_cfg_stack;
+
+        CREATE TABLE staging_cfg_stack (
+            cfg_path VARCHAR,
+            cfg_deps TEXT[],
+            new_providers TEXT[]
+        );
+        """
 
         jq_to_psql_records "$stack" "staging_cfg_stack"
 
@@ -369,6 +396,11 @@ update_executions_with_new_deploy_stack() {
 
         )
         """
+
+        log "Execution table items for account:" "DEBUG"
+        log "$(query "-x" """SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'""")" "DEBUG"
+
+        log "Removing staging_cfg_stack table" "DEBUG"
     done
     set +e
 }
@@ -408,6 +440,7 @@ get_new_providers() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     local terragrunt_working_dir=$1
+
     log "Running Terragrunt Providers Command" "INFO"
     tg_providers_cmd_out=$(get_tg_providers "$terragrunt_working_dir")
     log "Terragrunt Command Output" "DEBUG"
@@ -427,13 +460,11 @@ get_new_providers() {
         log "Provider: $provider" "DEBUG"
         if [[ ! " ${state_providers[@]} " =~ " ${provider} " ]]; then
             log "Status: NEW" "DEBUG"
-            new_providers+="${provider}"
+            new_providers+=("${provider}")
         else
             log "Status: ALREADY EXISTS" "DEBUG"
         fi
     done <<< "$cfg_providers"
-
-    echo "$new_providers"
 }
 
 update_execution_with_new_resources() {
@@ -465,6 +496,8 @@ update_execution_with_new_resources() {
 }
 
 update_execution_status() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local execution_id=$(echo $1 | tr -d '"')
     local status=$(echo $2 | tr -d '"')
 
@@ -525,6 +558,8 @@ executions_in_progress() {
 
 execution_finished() {
     set -e
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local executions=$1
     local commit_queue=$2
 
@@ -563,6 +598,8 @@ execution_finished() {
 }
 
 update_commit_queue_with_rollback_commits() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     local pr_id=$(echo $1 | tr -d '"')
 
     query """
@@ -602,12 +639,12 @@ update_commit_queue_with_rollback_commits() {
 }
 
 create_executions() {
-    local commit_queue=$2
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
+    local commit_queue=$2 
 
-    log "No Deployment or Rollback stack is in Progress" "DEBUG"
- 
     log "Dequeuing next commit that is waiting" "INFO"
-    IFS='|' commit_items=$(query --psql-extra-args "-qtA" """
+    commit_items=$(query --psql-extra-args "-qtA" """
     UPDATE
         commit_queue
     SET
@@ -623,20 +660,26 @@ create_executions() {
             FETCH FIRST ROW ONLY
         )
 
-    RETURNING is_rollback, commit_id
+    RETURNING commit_id, is_rollback
     ;
     """)
+    commit_items=(${commit_items//|/ })
 
-    if [ "$commit_items[0]" == true ]; then
+    log "Dequeued commit items:" "DEBUG"
+    log "commit_id: ${commit_items[0]}" "DEBUG"
+    log "rollback: ${commit_items[1]}" "DEBUG"
+
+    if [ "${commit_items[1]}" == true ]; then
         update_executions_with_new_rollback_stack
     else
-        update_executions_with_new_deploy_stack "$commit_items[1]"
+        update_executions_with_new_deploy_stack "${commit_items[0]}"
     fi
 }
 
 main() {
     set -e
-    echo "first step"
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     if [ -z "$CODEBUILD_INITIATOR" ]; then
         log "CODEBUILD_INITIATOR is not set" "ERROR"
         exit 1
@@ -652,6 +695,7 @@ main() {
 
     log "Checking if any Step Function executions are running" "DEBUG"
     if [ $(executions_in_progress) -eq 0 ]; then
+        log "No deployment or rollback executions in progress" "DEBUG"
         create_executions
     fi
     exit 0

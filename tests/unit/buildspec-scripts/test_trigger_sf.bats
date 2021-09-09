@@ -110,8 +110,7 @@ teardown() {
     checkout_test_case_branch
 
     log "Modifying Terragrunt directories within test repo" "DEBUG"
-    modify_tg_path \
-        --path "$testing_dir"
+    modify_tg_path --path "$testing_dir"
     
     log "Committing modifications and adding commit to commit queue" "DEBUG"
     add_test_case_head_commit_to_queue
@@ -120,7 +119,7 @@ teardown() {
     git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p'
 
     run trigger_sf.sh
-    assert_failure
+    assert_success
 
     # run query """
     # do \$\$

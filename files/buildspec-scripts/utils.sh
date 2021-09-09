@@ -124,18 +124,29 @@ bash_arr_to_psql_arr() {
   echo "$psql_array"
 }
 
+
 jq_to_psql_records() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	local jq_in=$1
 	local table=$2
 
-	csv_table=$( echo "$jq_in" | jq -r '
-	if . | type == "array" then .[] else . end
-	| map(if values | type == "array" then values |= "{" + join(", ") + "}" else . end) | @csv')
-	log "JQ mapping transformed to CSV strings" "DEBUG"
+  if [ -z "$jq_in" ]; then
+    log "jq_in is not set" "ERROR"
+    exit 1
+  elif [ -z "$table" ]; then
+    log "table is not set" "ERROR"
+    exit 1
+  fi
+  
+  csv_table=$(echo "$jq_in" | jq -r '
+    if . | type == "array" then .[] else . end
+    | map(if values | type == "array" then values |= "{" + join(", ") + "}" else . end) | @csv')
+
+  log "JQ transformed to CSV strings" "DEBUG"
 	log "$csv_table" "DEBUG"
-	
+
+  log "Loading to table" "INFO"
 	echo "$csv_table" | query """
 	COPY $table FROM STDIN DELIMITER ',' CSV
 	"""

@@ -98,14 +98,12 @@ add_test_case_head_commit_to_queue() {
 
 	results=$(query """
 	INSERT INTO commit_queue (
-		id,
 		commit_id,
         pr_id,
         status,
         is_rollback
 	)
 	VALUES (
-		DEFAULT,
 		'$TESTING_COMMIT_ID',
 		55,
 		'waiting',
