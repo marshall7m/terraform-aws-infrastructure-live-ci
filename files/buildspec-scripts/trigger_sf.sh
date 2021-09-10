@@ -164,106 +164,6 @@ create_stack() {
     echo "$stack"
 }
 
-get_target_stack() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
-    local executions=$2
-    local commit_id=$2
-
-    log "Getting list of accounts that have no account dependencies or no account dependencies that waiting or running" "DEBUG"
-
-    query """
-    
-    CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS $$
-        DECLARE
-            total int := 0;
-            i text;
-        BEGIN
-            FOREACH i IN ARRAY $1
-            LOOP
-                RAISE NOTICE 'value: %', i;
-                RAISE NOTICE 'in arr: %', (SELECT i = ANY ($2)::BOOL);
-                
-                PERFORM 
-                    CASE (SELECT i = ANY ($2))::BOOL
-                        when 't' then 1
-                        else 0
-                    END;
-            END LOOP;
-            RETURN total;
-        END;
-    $$ LANGUAGE plpgsql;
-    
-    SELECT
-        *
-    FROM
-        executions
-    WHERE
-        execution_id IN (
-            SELECT
-                execution_id
-            FROM
-                executions
-            WHERE
-                array_length(account_deps) = arr_in_arr_count(account_deps, successful_accounts)
-        )
-    (
-        SELECT
-            account_name
-        FROM
-            executions
-        WHERE 
-            commit_id = '56a49ef276cd45e8c7500af0c5ff7b2f9bbd08a2'
-        GROUP BY
-            account_name
-        HAVING
-            COUNT(*) FILTER (WHERE status = 'success') = COUNT(*)
-    ) successful_accounts
-    ;
-    """
-#     log "Getting Deployment Paths from Accounts:" "INFO"
-#     log "$target_accounts" "DEBUG"
-
-#     log "Getting executions that have their dependencies finished" "DEBUG"
-#     echo "$( echo $executions | jq \
-#         --arg target_accounts "$target_accounts" \
-#         --arg commit_id "$commit_id" '
-#         ($target_accounts | fromjson) as $target_accounts
-#         | map(select(.account_name | IN($target_accounts[]) and .commit_id == $commit_id))
-#         | (map(select(.status | IN("success")) | .path)) as $successful_paths
-#         | map(select(.status == "waiting" and [.dependencies | .[] | IN($successful_paths[]) or . == null] | all ))
-#     ')"
-}
-
-stop_running_sf_executions() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    running_executions=$(aws stepfunctions list-executions \
-        --state-machine-arn $STATE_MACHINE_ARN \
-        --status-filter "running" | jq '.executions | map(.executionArn)'
-    )
-
-    for execution in "${running_executions[@]}"; do
-        log "Stopping Step Function execution: $execution" "DEBUG"
-        aws stepfunctions stop-execution \
-            --execution-arn "$execution" \
-            --cause "Releasing most recent commit changes"
-    done
-    
-}
-
-start_sf_executions() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local target_stack=$1
-    execution_name="run-$(uuidgen)"
-    
-    aws stepfunctions start-execution \
-        --state-machine-arn $STATE_MACHINE_ARN \
-        --name "$execution_name" \
-        --input "$sf_input"
-}
-
 update_executions_with_new_deploy_stack() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -663,6 +563,106 @@ create_executions() {
     fi
 }
 
+start_sf_executions() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
+
+    query """
+    
+    DROP TABLE queued_executions, successful_accounts, successful_cfgs;
+    CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS $$
+    DECLARE
+        total int := 0;
+        i text;
+    BEGIN
+        FOREACH i IN ARRAY $1 LOOP
+            RAISE NOTICE 'value: %', i;
+            IF (SELECT i = ANY ($2)::BOOL) or i IS NULL THEN
+                total := total + 1;
+                RAISE NOTICE 'total: %', total;
+            END IF;
+        END LOOP;
+        RETURN total;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    SELECT
+        *
+    INTO
+        TEMP queued_executions
+    FROM
+        executions
+    WHERE
+        status = 'waiting'
+    ;
+
+    SELECT
+        account_name
+    INTO
+        TEMP successful_accounts
+    FROM
+        queued_executions
+    GROUP BY
+        account_name
+    HAVING
+        COUNT(*) FILTER (WHERE status = 'success') = COUNT(*)
+    ;
+
+    SELECT
+        cfg_path
+    INTO
+        TEMP successful_cfgs
+    FROM
+        queued_executions
+    WHERE
+        status = 'success'
+    ;
+
+
+    SELECT
+        *
+    FROM
+        queued_executions
+    WHERE
+        array_length(account_deps, 1) = arr_in_arr_count(account_deps, (
+            SELECT ARRAY(
+                SELECT
+                    account_name
+                FROM
+                    queued_executions
+                GROUP BY
+                    account_name
+                HAVING
+                    COUNT(*) FILTER (WHERE status = 'success') = COUNT(*)
+            )
+        ))
+    ;
+    """
+
+    # aws stepfunctions start-execution \
+    #     --state-machine-arn $STATE_MACHINE_ARN \
+    #     --name "$execution_name" \
+    #     --input "$sf_input"
+}
+
+stop_running_sf_executions() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    running_executions=$(aws stepfunctions list-executions \
+        --state-machine-arn $STATE_MACHINE_ARN \
+        --status-filter "running" | jq '.executions | map(.executionArn)'
+    )
+
+    for execution in "${running_executions[@]}"; do
+        log "Stopping Step Function execution: $execution" "DEBUG"
+        aws stepfunctions stop-execution \
+            --execution-arn "$execution" \
+            --cause "Releasing most recent commit changes"
+    done
+    
+}
+
 main() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -685,17 +685,10 @@ main() {
         log "No deployment or rollback executions in progress" "DEBUG"
         create_executions
     fi
-    exit 0
-    log "Getting Target Executions" "INFO"
-    target_stack=$(get_target_stack)
-    log "Target Executions" "DEBUG"
-    log "$target_stack" "DEBUG"
 
     log "Starting Step Function Deployment Flow" "INFO"
-    start_sf_executions "$target_stack"
+    start_sf_executions
 
-    log "Uploading Updated PR Queue" "INFO"
-    upload_executions $executions
     set +e
 }
 

@@ -1,6 +1,6 @@
 export script_logging_level="DEBUG"
 export MOCK_AWS_CMDS=true
-export KEEP_METADB_OPEN=true
+# export KEEP_METADB_OPEN=true
 export METADB_TYPE=local
 
 load 'test_helper/bats-support/load'
@@ -29,7 +29,7 @@ setup() {
     
     setup_test_case_repo
 
-    run_only_test 2
+    run_only_test 1
 }
 
 teardown() {
