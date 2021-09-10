@@ -197,8 +197,6 @@ update_executions_with_new_deploy_stack() {
         fi
         
         query """
-        DROP TABLE IF EXISTS staging_cfg_stack;
-
         CREATE TABLE staging_cfg_stack (
             cfg_path VARCHAR,
             cfg_deps TEXT[],
@@ -567,83 +565,118 @@ start_sf_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
-
-    query """
     
-    DROP TABLE queued_executions, successful_accounts, successful_cfgs;
-    CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS $$
+    IFS=$'\n' target_execution_ids=$(query --psql-extra-args "-tA" """
+    CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS \$\$
+    
+    -- Returns the total number of array values in the first array that's in the second array
+
     DECLARE
         total int := 0;
         i text;
     BEGIN
-        FOREACH i IN ARRAY $1 LOOP
-            RAISE NOTICE 'value: %', i;
-            IF (SELECT i = ANY ($2)::BOOL) or i IS NULL THEN
+        FOREACH i IN ARRAY \$1 LOOP
+            RAISE NOTICE 'Checking if: i: % is in: ', i, \$2;
+            IF (SELECT i = ANY (\$2)::BOOL) or i IS NULL THEN
                 total := total + 1;
                 RAISE NOTICE 'total: %', total;
             END IF;
         END LOOP;
         RETURN total;
     END;
-    $$ LANGUAGE plpgsql;
+    \$\$ LANGUAGE plpgsql;
 
     SELECT
         *
     INTO
-        TEMP queued_executions
+        TEMP commit_executions
     FROM
         executions
+    WHERE
+        commit_id = (
+            SELECT
+                commit_id
+            FROM
+                commit_queue
+            WHERE
+                status = 'running'
+        )
+    AND
+        is_rollback = (
+            SELECT
+                is_rollback
+            FROM
+                commit_queue
+            WHERE
+                status = 'running'
+        )
+    ;
+
+    SELECT
+        *
+    INTO
+        queued_executions
+    FROM
+        commit_executions
     WHERE
         status = 'waiting'
     ;
 
+    -- selects executions where all account/terragrunt config dependencies are successful
     SELECT
-        account_name
-    INTO
-        TEMP successful_accounts
-    FROM
-        queued_executions
-    GROUP BY
-        account_name
-    HAVING
-        COUNT(*) FILTER (WHERE status = 'success') = COUNT(*)
-    ;
-
-    SELECT
-        cfg_path
-    INTO
-        TEMP successful_cfgs
+        execution_id
     FROM
         queued_executions
     WHERE
-        status = 'success'
-    ;
-
-
-    SELECT
-        *
-    FROM
-        queued_executions
-    WHERE
-        array_length(account_deps, 1) = arr_in_arr_count(account_deps, (
+        array_length(account_deps, 1) = arr_in_arr_count(account_deps, ( -- if count of dependency array == the count of successful dependencies
+            -- gets accounts that have all successful executions
             SELECT ARRAY(
                 SELECT
-                    account_name
+                    DISTINCT account_name
                 FROM
-                    queued_executions
+                    commit_executions
                 GROUP BY
                     account_name
                 HAVING
-                    COUNT(*) FILTER (WHERE status = 'success') = COUNT(*)
+                    COUNT(*) FILTER (WHERE status = 'success') = COUNT(*) --
+            )
+        ))
+    AND
+        array_length(cfg_deps, 1) = arr_in_arr_count(cfg_deps, (
+            -- gets terragrunt config paths that have successful executions
+            SELECT ARRAY(
+                SELECT
+                    DISTINCT commit_executions.cfg_path
+                FROM
+                    commit_executions
+                WHERE 
+                    status = 'success'
             )
         ))
     ;
-    """
+    """)
 
-    # aws stepfunctions start-execution \
-    #     --state-machine-arn $STATE_MACHINE_ARN \
-    #     --name "$execution_name" \
-    #     --input "$sf_input"
+    log "Target execution IDs: $(printf '\n\t%s' "${target_execution_ids[@]}")" "INFO"
+    log "Count: ${#target_execution_ids}"
+    for id in "${target_execution[@]}"; do
+        sf_input=$(query --psql-extra-args "-t" """
+        SELECT 
+            row_to_json(sub) 
+        FROM (
+            SELECT 
+                *
+            FROM 
+                queued_executions 
+            WHERE execution_id = '$id'
+        ) sub
+        """ | jq -r '. | tojson')
+        log "SF input: $(printf '\n\t%s' "$sf_input")" "DEBUG"
+        continue
+        aws stepfunctions start-execution \
+            --state-machine-arn $STATE_MACHINE_ARN \
+            --name "$id" \
+            --input "$sf_input"
+    done
 }
 
 stop_running_sf_executions() {

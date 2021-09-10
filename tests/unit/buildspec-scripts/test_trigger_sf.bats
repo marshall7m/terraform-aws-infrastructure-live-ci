@@ -35,8 +35,9 @@ setup() {
 teardown() {
     load 'test_helper/utils/load.bash'
 
-    # clear_metadb_tables
-    # drop_mock_temp_tables
+    clear_metadb_tables
+    drop_mock_temp_tables
+    drop_temp_tables
 }
 
 @test "Script is runnable" {
@@ -104,7 +105,7 @@ teardown() {
 
     account_stack=$(jq -n '
     {
-        "directory_dependency/dev-account": ["directory_dependency/security-account"]
+        "directory_dependency/dev-account": []
     }
     ')
 
@@ -124,43 +125,43 @@ teardown() {
     git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p'
 
     run trigger_sf.sh
-    assert_failure
+    assert_success
 
-    # run query """
-    # do \$\$
-    #     BEGIN
-    #         ASSERT (
-    #             SELECT 
-    #                 COUNT(*)
-    #             FROM 
-    #                 executions
-    #             WHERE
-    #                 execution_id = '$execution_id' AND
-    #                 status = 'success'
-    #         ) = 1;
-    #     END;
-    # \$\$ LANGUAGE plpgsql;
-    # """
-    # assert_success
+    run query """
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT 
+                    COUNT(*)
+                FROM 
+                    executions
+                WHERE
+                    execution_id = '$execution_id' AND
+                    status = 'success'
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
 
-    # run query """
-    # do \$\$
-    #     BEGIN
-    #         ASSERT (
-    #             SELECT
-    #                 COUNT(*)
-    #             FROM
-    #                 executions
-    #             WHERE
-    #                 commit_id = '$TESTING_COMMIT_ID' AND
-    #                 cfg_path = '$("$testing_dir" | tr -d '"')' AND
-    #                 is_rollback = false AND
-    #                 status = 'running'
-    #         ) = 1;
-    #     END;
-    # \$\$ LANGUAGE plpgsql;
-    # """
-    # assert_success
+    run query """
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT
+                    COUNT(*)
+                FROM
+                    executions
+                WHERE
+                    commit_id = '$TESTING_COMMIT_ID' AND
+                    cfg_path = '$("$testing_dir" | tr -d '"')' AND
+                    is_rollback = false AND
+                    status = 'running'
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
 }
 
 # @test "Successful deployment event, dequeue deploy commit with new providers" {

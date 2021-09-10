@@ -10,14 +10,13 @@ setup_metadb() {
 
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-	export VOLUME_DATA_DIR="./docker_pgsql_volume"
-	export CONTAINER_NAME="metadb"
-	export POSTGRES_USER="postgres"
-    export POSTGRES_PASSWORD="testing_password"
-	export TESTING_POSTGRES_USER="testing_user"
-	export TESTING_POSTGRES_DB="testing_metadb"
-
 	if [ "$METADB_TYPE" == "local" ]; then
+		export VOLUME_DATA_DIR="./docker_pgsql_volume"
+		export CONTAINER_NAME="metadb"
+		export POSTGRES_USER="postgres"
+		export POSTGRES_PASSWORD="testing_password"
+		export TESTING_POSTGRES_USER="testing_user"
+		export TESTING_POSTGRES_DB="testing_metadb"
 
 		if is_local_db_running; then
 			log "Local postgres database container is already running" "INFO"
@@ -41,6 +40,7 @@ setup_metadb() {
 		fi
 	elif [ "$METADB_TYPE" == "aws" ]; then
 		log "Using AWS RDS metadb" "INFO"
+		#TODO: export RDS credentials for psql query
 	else
 		log "METADB_TYPE is not set (local|aws)" "ERROR"
 	fi
@@ -85,6 +85,12 @@ clear_metadb_tables() {
 	"""
 	query "$sql"
 }
+
+drop_temp_tables() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+	query "DROP TABLE IF EXISTS staging_cfg_stack, queued_executions;"
+}
+
 
 teardown_metadb() {
 

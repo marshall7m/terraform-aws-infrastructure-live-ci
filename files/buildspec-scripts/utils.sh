@@ -67,12 +67,14 @@ query() {
       -c "$sql"
 
   elif [ "$METADB_TYPE" == "aws" ]; then
-    aws rds-data execute-statement \
-      --database "$RDS_DB"
-      --resource-arn "$RDS_ARN"
-      --secret-arn "$RDS_SECRET_ARN"
-      --sql "$sql"
-
+    psql \
+    --host="$RDS_ENDPOINT" \
+    --port="$RDS_PORT" \
+    --username="$RDS_USERNAME" \
+    --password \
+    --dbname="$RDS_DB" \
+    $psql_extra_args \
+    -c "$sql"
 	else
 		log "METADB_TYPE is not set (local|aws)" "ERROR"
 	fi

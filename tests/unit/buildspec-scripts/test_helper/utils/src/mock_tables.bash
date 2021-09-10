@@ -391,5 +391,6 @@ setup_mock_finished_status_tables() {
 }
 
 drop_mock_temp_tables() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	query "DROP TABLE IF EXISTS mock_staging_account_stack, mock_staging_cfg_stack;"
 }
