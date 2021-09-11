@@ -1,4 +1,4 @@
-export script_logging_level="DEBUG"
+export script_logging_level="INFO"
 export MOCK_AWS_CMDS=true
 # export KEEP_METADB_OPEN=true
 export METADB_TYPE=local
@@ -21,7 +21,7 @@ setup_file() {
 teardown_file() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     teardown_metadb
-    teardown_tmp_dir
+    teardown_test_file_tmp_dir
 }
 
 setup() {
@@ -34,41 +34,31 @@ setup() {
 
 teardown() {
     load 'test_helper/utils/load.bash'
-
     clear_metadb_tables
     drop_mock_temp_tables
     drop_temp_tables
+    teardown_test_case_tmp_dir
 }
 
 @test "Script is runnable" {
     run trigger_sf.sh
 }
 
-# @test "setup mock tables" {
-#     account_stack=$(jq -n '
-#     {
-#         "directory_dependency/dev-account": ["directory_dependency/security-account"]
-#     }
-#     ')
-
-#     run setup_mock_finished_status_tables \
-#         --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" \
-#         --account-stack "$account_stack"
-    
-#     assert_success
-# }
-
 @test "Successful deployment event, dequeue deploy commit with no new providers" {
     export CODEBUILD_INITIATOR=rule/test
     export EVENTBRIDGE_FINISHED_RULE=rule/test
+    #creates persistent local tf state for test case repo even when test repo commits are checked out (see test repo's parent terragrunt file generate backend block)
+    export TESTING_LOCAL_PARENT_TF_STATE_DIR="$BATS_TEST_TMPDIR/test-repo-tf-state"
 
+    execution_id="run-0000001"
     log "Applying default branch Terragrunt configurations" "INFO"
-    testing_dir="$TEST_CASE_REPO_DIR/directory_dependency/dev-account/us-west-2/env-one/bar"
-    log "Terragrunt directory: $testing_dir" "DEBUG"
-	terragrunt apply --terragrunt-working-dir "$testing_dir" -auto-approve > /dev/null || exit 1
+    testing_dir="directory_dependency/dev-account/us-west-2/env-one/baz"
+    abs_testing_dir="$TEST_CASE_REPO_DIR/$testing_dir"
+    log "Terragrunt directory: $abs_testing_dir" "DEBUG"
+	terragrunt apply --terragrunt-working-dir "$abs_testing_dir" -auto-approve > /dev/null || exit 1
     
     before_execution=$(jq -n \
-    --arg execution_id "run-0000001" \
+    --arg execution_id "$execution_id" \
     --arg pr_id 1 \
     --arg base_ref "$BASE_REF" \
     --arg base_commit_id "$( git log --pretty=format:'%H' -n 1 --skip 1 )" \
@@ -116,7 +106,7 @@ teardown() {
     checkout_test_case_branch
 
     log "Modifying Terragrunt directories within test repo" "DEBUG"
-    modify_tg_path --path "$testing_dir"
+    modify_tg_path --path "$abs_testing_dir"
     
     log "Committing modifications and adding commit to commit queue" "DEBUG"
     add_test_case_head_commit_to_queue
@@ -154,7 +144,7 @@ teardown() {
                     executions
                 WHERE
                     commit_id = '$TESTING_COMMIT_ID' AND
-                    cfg_path = '$("$testing_dir" | tr -d '"')' AND
+                    cfg_path = '$testing_dir' AND
                     is_rollback = false AND
                     status = 'running'
             ) = 1;
@@ -164,8 +154,9 @@ teardown() {
     assert_success
 }
 
-# @test "Successful deployment event, dequeue deploy commit with new providers" {
-# }
+@test "Successful deployment event, dequeue deploy commit with new providers" {
+    
+}
 
 # @test "Successful deployment event, deployment stack is finished and rollback is needed" {
 # }

@@ -317,7 +317,7 @@ update_executions_with_new_rollback_stack() {
         executions
     WHERE
         commit_id = '$commit_id' AND
-        array_length(new_resources, 1) > 0
+        cardinality(new_resources) > 0
     """
 }
 
@@ -576,7 +576,6 @@ start_sf_executions() {
         i text;
     BEGIN
         FOREACH i IN ARRAY \$1 LOOP
-            RAISE NOTICE 'Checking if: i: % is in: ', i, \$2;
             IF (SELECT i = ANY (\$2)::BOOL) or i IS NULL THEN
                 total := total + 1;
                 RAISE NOTICE 'total: %', total;
@@ -628,7 +627,7 @@ start_sf_executions() {
     FROM
         queued_executions
     WHERE
-        array_length(account_deps, 1) = arr_in_arr_count(account_deps, ( -- if count of dependency array == the count of successful dependencies
+        cardinality(account_deps) = arr_in_arr_count(account_deps, ( -- if count of dependency array == the count of successful dependencies
             -- gets accounts that have all successful executions
             SELECT ARRAY(
                 SELECT
@@ -642,7 +641,7 @@ start_sf_executions() {
             )
         ))
     AND
-        array_length(cfg_deps, 1) = arr_in_arr_count(cfg_deps, (
+        cardinality(cfg_deps) = arr_in_arr_count(cfg_deps, (
             -- gets terragrunt config paths that have successful executions
             SELECT ARRAY(
                 SELECT
@@ -671,11 +670,21 @@ start_sf_executions() {
         ) sub
         """ | jq -r '. | tojson')
         log "SF input: $(printf '\n\t%s' "$sf_input")" "DEBUG"
-        continue
-        aws stepfunctions start-execution \
-            --state-machine-arn $STATE_MACHINE_ARN \
-            --name "$id" \
-            --input "$sf_input"
+        
+
+        # aws stepfunctions start-execution \
+        #     --state-machine-arn $STATE_MACHINE_ARN \
+        #     --name "$id" \
+        #     --input "$sf_input"
+
+        query """
+        UPDATE
+            executions
+        SET
+            status = 'running'
+        WHERE 
+            execution_id = '$id'   
+        """ 
     done
 }
 

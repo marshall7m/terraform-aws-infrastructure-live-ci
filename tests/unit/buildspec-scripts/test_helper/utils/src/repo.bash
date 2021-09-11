@@ -88,7 +88,7 @@ add_test_case_pr_to_queue() {
 	)
 	RETURNING *;
 	""")
-	
+
 	log "Results:" "DEBUG"
 	log "$results" "DEBUG"
 }
@@ -111,9 +111,10 @@ add_test_case_head_commit_to_queue() {
 	fi
 
 	git add "$(git rev-parse --show-toplevel)/"
-	
 	git commit -m $TESTING_HEAD_REF
+
 	export TESTING_COMMIT_ID=$(git log --pretty=format:'%H' -n 1)
+	log "Expected next commit in queue: $TESTING_COMMIT_ID" "DEBUG"
 
 	log "Adding testing commit to queue" "INFO"
 
@@ -137,12 +138,16 @@ add_test_case_head_commit_to_queue() {
 	log "$results" "DEBUG"
 }
 
-teardown_tmp_dir() {
+teardown_test_case_tmp_dir() {
   if [ $BATS_TEST_COMPLETED ]; then
     rm -rf $BATS_TEST_TMPDIR
   else
     echo "Did not delete $BATS_TEST_TMPDIR, as test failed"
   fi
+}
+
+teardown_test_file_tmp_dir() {
+	rm -rf "$BATS_FILE_TMPDIR"
 }
 
 create_new_provider_resource() {
