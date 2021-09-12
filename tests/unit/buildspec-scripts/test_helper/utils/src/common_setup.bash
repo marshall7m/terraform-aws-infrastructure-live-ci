@@ -33,3 +33,15 @@ run_only_test() {
     skip
   fi
 }
+
+teardown_test_case_tmp_dir() {
+  if [ $BATS_TEST_COMPLETED ]; then
+    rm -rf $BATS_TEST_TMPDIR
+  else
+    echo "Did not delete $BATS_TEST_TMPDIR, as test failed"
+  fi
+}
+
+teardown_test_file_tmp_dir() {
+	rm -rf "$BATS_FILE_TMPDIR"
+}

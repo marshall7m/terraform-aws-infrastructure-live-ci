@@ -178,6 +178,11 @@ update_executions_with_new_deploy_stack() {
     log "Getting Account Paths" "INFO"
     IFS=$'\n' account_paths=($(query --psql-extra-args "-tA" "SELECT account_path FROM account_dim;"))
 
+    if [ ${#account_paths} -eq 0 ]; then
+        log "No account paths are defined in account_dim" "ERROR"
+        exit 1
+    fi
+    
     log "Checking out target commit ID: $commit_id" "INFO"
     git checkout "$commit_id"
     # getting tg dirs relative path to git repo absolute path given tg dir's absolute path will be invalid in other envs
@@ -526,10 +531,67 @@ update_commit_queue_with_rollback_commits() {
 create_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    local commit_queue=$2 
+    log "Dequeuing next PR if commit queue is empty" "INFO"
+    pr_items=$(query --psql-extra-args "-qtA" """
+    IF (SELECT count(*) FROM commit_queue WHERE status = 'waiting') = 0 THEN
+        RAISE NOTICE 'Pulling next PR from queue';
+        UPDATE
+            pr_queue
+        SET
+            status = 'running'
+        WHERE 
+            id = (
+                SELECT
+                    id
+                FROM
+                    pr_queue
+                WHERE
+                    status = 'waiting'
+                LIMIT 1
+            )
+        RETURNING pr_id, head_ref;
+    END IF;
+    """)
+
+    pr_items=(${pr_items//|/ })
+
+    if [ ${#pr_items} -ne 0 ]; then
+        log "Updating commit queue with dequeued PR's most recent commit" "INFO"
+
+        pr_id="${pr_items[0]}"
+        head_ref="${pr_items[1]}"
+        log "Dequeued pr items:" "DEBUG"
+        log "pr_id: $pr_id" "DEBUG"
+        log "head_ref: $head_ref" "DEBUG"
+        
+        log "Checking out PR" "DEBUG"
+        git fetch origin "pull/$pr_id/head:$head_ref"
+        git checkout "$head_ref" || exit 1
+
+        head_commit_id=$(git log --pretty=format:'%H' -n 1)
+        
+        query """
+        INSERT INTO commit_queue (
+            commit_id,
+            is_rollback,
+            pr_id,
+            status
+        )
+        VALUES (
+            '$head_commit_id'
+            'f'
+            '$pr_id'
+            'waiting'
+        );
+        """
+
+        log "Switching back to default branch" "DEBUG"
+        git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" || exit 1
+    fi
 
     log "Dequeuing next commit that is waiting" "INFO"
     commit_items=$(query --psql-extra-args "-qtA" """
+
     UPDATE
         commit_queue
     SET
@@ -545,19 +607,29 @@ create_executions() {
             LIMIT 1
         )
 
-    RETURNING commit_id, is_rollback
-    ;
+    RETURNING commit_id, is_rollback;
     """)
-    commit_items=(${commit_items//|/ })
 
+    commit_items=(${commit_items//|/ })
+    
+    if [ ${#commit_items} -eq 0 ]; then
+        log "No commits to dequeue -- skipping execution creation" "INFO"
+        exit 0
+    fi
+
+    commit_id="${commit_items[0]}"
+    is_rollback="${commit_items[1]}"
     log "Dequeued commit items:" "DEBUG"
-    log "commit_id: ${commit_items[0]}" "DEBUG"
+    log "commit_id: $commit_id" "DEBUG"
     log "rollback: ${commit_items[1]}" "DEBUG"
 
-    if [ "${commit_items[1]}" == "t" ]; then
+    if [ "$is_rollback" == "t" ]; then
         update_executions_with_new_rollback_stack
-    else
+    elif [ "$is_rollback" == "f" ]; then
         update_executions_with_new_deploy_stack "${commit_items[0]}"
+    else
+        log "is_rollback value is invalid" "ERROR"
+        exit 1
     fi
 }
 
@@ -569,20 +641,20 @@ start_sf_executions() {
     IFS=$'\n' target_execution_ids=$(query --psql-extra-args "-tA" """
     CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS \$\$
     
-    -- Returns the total number of array values in the first array that's in the second array
+        -- Returns the total number of array values in the first array that's in the second array
 
-    DECLARE
-        total int := 0;
-        i text;
-    BEGIN
-        FOREACH i IN ARRAY \$1 LOOP
-            IF (SELECT i = ANY (\$2)::BOOL) or i IS NULL THEN
-                total := total + 1;
-                RAISE NOTICE 'total: %', total;
-            END IF;
-        END LOOP;
-        RETURN total;
-    END;
+        DECLARE
+            total int := 0;
+            i text;
+        BEGIN
+            FOREACH i IN ARRAY \$1 LOOP
+                IF (SELECT i = ANY (\$2)::BOOL) or i IS NULL THEN
+                    total := total + 1;
+                    RAISE NOTICE 'total: %', total;
+                END IF;
+            END LOOP;
+            RETURN total;
+        END;
     \$\$ LANGUAGE plpgsql;
 
     SELECT
@@ -656,8 +728,11 @@ start_sf_executions() {
     """)
 
     log "Target execution IDs: $(printf '\n\t%s' "${target_execution_ids[@]}")" "INFO"
-    log "Count: ${#target_execution_ids}"
-    for id in "${target_execution[@]}"; do
+    log "Count: ${#target_execution_ids}" "INFO"
+    
+    for id in "${target_execution_ids[@]}"; do
+        log "Starting SF execution for execution ID: $id" "INFO"
+
         sf_input=$(query --psql-extra-args "-t" """
         SELECT 
             row_to_json(sub) 
