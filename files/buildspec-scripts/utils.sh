@@ -123,7 +123,7 @@ bash_arr_to_psql_arr() {
   # remove the trailing ,
   psql_array=${psql_array%,}
 
-  echo "$psql_array"
+  echo "($psql_array)"
 }
 
 

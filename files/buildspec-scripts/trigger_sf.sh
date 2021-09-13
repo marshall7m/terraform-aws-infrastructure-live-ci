@@ -359,26 +359,23 @@ get_new_providers() {
 
 update_execution_with_new_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    local terragrunt_working_dir=$(echo $1 | tr -d '"')
+    local execution_id=$1
+    local terragrunt_working_dir=$2
+    local new_providers=$3
 
-    new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "${new_providers[*]}")
-
-    if [ "${#new_resources}" == 0 ]; then
-        log "No new resources from new providers were detected" "INFO"
-        exit 0
-    fi
+    new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "$new_providers")
 
     log "Resources from new providers:" "INFO"
-    log "${new_resources[*]}" "INFO"
+    log "$new_resources" "INFO"
     
-    psql_new_resources=$(bash_arr_to_psql_arr "$new_providers")
+    psql_new_resources=$(echo "$new_resources" | jq '. | join(" ")' | tr -d '"')
 
     log "Adding new resources to execution record" "INFO"
     query """
     UPDATE
         executions
     SET
-        new_resources = ARRAY[$psql_new_resources]
+        new_resources = string_to_array('$psql_new_resources', ' ')
     WHERE
         execution_id = '$execution_id'
     ;
@@ -404,23 +401,23 @@ update_execution_status() {
 get_new_providers_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    local terragrunt_working_dir=$(echo $1 | tr -d '"')
-
-    #input must be expanded bash array (e.g. "${x[*]}")
+    local terragrunt_working_dir=$1
     local new_providers=$2
 
     tg_state_cmd_out=$(terragrunt state pull --terragrunt-working-dir $terragrunt_working_dir )
     log "Terragrunt State Output:" "DEBUG"
     log "$tg_state_cmd_out" "DEBUG"
 
-    #TODO: Create jq filter to remove external jq_regex with test()
-    jq_regex=$(echo $new_providers | tr '\n(?!$)' '|' | sed '$s/|$//')
-    echo $tg_state_cmd_out | jq -r \
-        --arg NEW_PROVIDERS "$jq_regex" '
-        .resources 
-        | map(select( (.provider | test($NEW_PROVIDERS) == true) and .mode != "data" ) 
-        | {type, name} | join(".")) 
-    '
+    echo "$(echo "$tg_state_cmd_out" | jq -r \
+    --arg new_providers "$new_providers" '
+        ($new_providers | fromjson) as $new_providers
+        | .resources | map(
+            select(
+                (((.provider | match("(?<=\").+(?=\")").string) | IN($new_providers[]))
+                and .mode != "data")
+            )
+        | {type, name} | join("."))
+    ')"
 }
 
 verify_param() {
@@ -460,24 +457,23 @@ execution_finished() {
     log "Step Function Event:" "DEBUG"
     log "$sf_event" "DEBUG"
 
-    deployed_path=$( echo $sf_event | jq '.cfg_path')
-    execution_id=$( echo $sf_event | jq '.execution_id')
-    is_rollback=$( echo $sf_event | jq '.is_rollback')
-    status=$( echo $sf_event | jq '.status')
-    pr_id=$( echo $sf_event | jq '.pr_id')
+    deployed_path=$( echo $sf_event | jq '.cfg_path' | tr -d '"')
+    execution_id=$( echo $sf_event | jq '.execution_id' | tr -d '"')
+    is_rollback=$( echo $sf_event | jq '.is_rollback' | tr -d '"')
+    status=$( echo $sf_event | jq '.status' | tr -d '"')
+    pr_id=$( echo $sf_event | jq '.pr_id' | tr -d '"')
     commit_id=$( echo $sf_event | jq '.commit_id' | tr -d '"')
-    new_providers_count=$( echo $sf_event | jq '.new_providers | length')
+    new_providers=$( echo $sf_event | jq '.new_providers')
 
     log "Updating Execution Status" "INFO"
     update_execution_status "$execution_id" "$status"
 
     if [ "$is_rollback" == false ]; then
         git checkout "$commit_id" > /dev/null
-        log "Updating execution record with new resources" "INFO"
-        if [ "$new_providers_count" -gt 0 ]; then
+        if [ "$(echo "$new_providers" | jq '. | length')" -gt 0 ]; then
             log "Config contains new providers" "INFO"
             log "Adding new provider resources to config execution record" "INFO"
-            update_execution_with_new_resources "$execution_id" "$deployed_path"
+            update_execution_with_new_resources "$execution_id" "$deployed_path" "$new_providers"
         fi
 
         if [ "$status" == "failed" ]; then
@@ -728,7 +724,6 @@ start_sf_executions() {
     """)
 
     log "Target execution IDs: $(printf '\n\t%s' "${target_execution_ids[@]}")" "INFO"
-    log "Count: ${#target_execution_ids}" "INFO"
     
     for id in "${target_execution_ids[@]}"; do
         log "Starting SF execution for execution ID: $id" "INFO"

@@ -1,5 +1,4 @@
 #!/bin/bash
-
 _common_setup() {
   src_path="$( cd "$( dirname "$BATS_TEST_FILENAME" )/../../../files/buildspec-scripts" >/dev/null 2>&1 && pwd )"
   PATH="$src_path:$PATH"
