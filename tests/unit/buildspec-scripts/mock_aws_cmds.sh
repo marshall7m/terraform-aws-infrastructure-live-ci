@@ -1,5 +1,7 @@
 #!/bin/bash
 
-start_sf_executions() {
+aws() {
     echo "MOCK: FUNCNAME=$FUNCNAME"
 }
+
+export -f aws

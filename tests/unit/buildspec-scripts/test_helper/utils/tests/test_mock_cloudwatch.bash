@@ -1,9 +1,15 @@
 load '../../bats-support/load'
 load '../../bats-assert/load'
 export script_logging_level="DEBUG"
+set -a
+load "../load.bash"
+set +a
 
 setup_file() {
-    load '../load.bash'
+    src_path="$( cd "$( dirname "$BATS_TEST_FILENAME" )/../src" >/dev/null 2>&1 && pwd )"
+    PATH="$src_path:$PATH"
+    chmod u+x "$src_path"
+
     export TESTING_LOCAL_PARENT_TF_STATE_DIR="$BATS_TEST_TMPDIR/test-repo-tf-state"
     
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -16,33 +22,31 @@ teardown_file() {
 }
 
 setup() {
-    load '../load.bash'
+    load './load.bash'
     
     setup_test_case_repo
+
+    run_only_test 2
 }
 
 teardown() {
-    load '../load.bash'
+    load './load.bash'
     teardown_test_case_tmp_dir
 }
 
 @test "Script is runnable" {
-    run mock_commit.bash
+    run mock_cloudwatch_execution
 }
 
 @test "setup terragrunt mock config" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
-
+    
     testing_dir="directory_dependency/dev-account/global"
     abs_testing_dir="$TEST_CASE_REPO_DIR/$testing_dir"
 
-    res=$(modify_tg_path --path "$abs_testing_dir" --new-provider-resource)
-    
-    log "Assert provider results" "INFO"
-    run echo "$res"
-    assert_output --regexp '.+'
-
-    log "Assert resource results" "INFO"
-    run echo "$res" | jq 'map(.resource)[0]'
-    assert_output --regexp '.+\..+'
+    run mock_cloudwatch_execution \
+        --cfg-path "$testing_dir" \
+        --approval-count 1
+    assert_output -p '"approval_count": 1'
+    assert_output -p "\"cfg_path\": \"$testing_dir\""
 }

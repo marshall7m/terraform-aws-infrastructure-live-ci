@@ -332,7 +332,7 @@ get_new_providers() {
     local terragrunt_working_dir=$1
 
     log "Running Terragrunt Providers Command" "INFO"
-    tg_providers_cmd_out=$( terragrunt providers --terragrunt-working-dir $terragrunt_working_dir )
+    tg_providers_cmd_out=$( terragrunt providers --terragrunt-working-dir $terragrunt_working_dir 2>&1)
     log "Terragrunt Command Output" "DEBUG"
     log "$tg_providers_cmd_out" "DEBUG"
 
@@ -653,6 +653,7 @@ start_sf_executions() {
         END;
     \$\$ LANGUAGE plpgsql;
 
+    -- gets all executions from running commit
     SELECT
         *
     INTO
@@ -679,6 +680,7 @@ start_sf_executions() {
         )
     ;
 
+    -- get all executions that are waiting within commit
     SELECT
         *
     INTO
@@ -726,7 +728,7 @@ start_sf_executions() {
     log "Target execution IDs: $(printf '\n\t%s' "${target_execution_ids[@]}")" "INFO"
     
     for id in "${target_execution_ids[@]}"; do
-        log "Starting SF execution for execution ID: $id" "INFO"
+        log "Execution ID: $id" "INFO"
 
         sf_input=$(query --psql-extra-args "-t" """
         SELECT 
@@ -741,20 +743,24 @@ start_sf_executions() {
         """ | jq -r '. | tojson')
         log "SF input: $(printf '\n\t%s' "$sf_input")" "DEBUG"
         
-
-        # aws stepfunctions start-execution \
-        #     --state-machine-arn $STATE_MACHINE_ARN \
-        #     --name "$id" \
-        #     --input "$sf_input"
-
-        query """
-        UPDATE
-            executions
-        SET
-            status = 'running'
-        WHERE 
-            execution_id = '$id'   
-        """ 
+        if [ -z "$DRY_RUN" ]; then
+            log "DRY_RUN is not set -- starting sf executions" "INFO"
+            aws stepfunctions start-execution \
+                --state-machine-arn "$STATE_MACHINE_ARN" \
+                --name "$id" \
+                --input "$sf_input"
+                
+            query """
+            UPDATE
+                executions
+            SET
+                status = 'running'
+            WHERE 
+                execution_id = '$id'   
+            """
+        else
+            log "DRY_RUN was set -- skip starting sf executions" "INFO"
+        fi
     done
 }
 

@@ -154,7 +154,7 @@ EOM
 	')
 
 	log "Getting Terragrunt file providers" "INFO"
-	cfg_providers=$(terragrunt providers --terragrunt-working-dir $tf_dir 2>/dev/null | grep -oP '─\sprovider\[\K.+(?=\])' | sort -u)
+	cfg_providers=$(terragrunt providers --terragrunt-working-dir $tf_dir 2> /dev/null | grep -oP '─\sprovider\[\K.+(?=\])' | sort -u)
 	log "Providers: $(printf "\n%s" "${cfg_providers[@]}")" "DEBUG"
 
 	log "Getting testing providers that are not in terraform directory" "INFO"

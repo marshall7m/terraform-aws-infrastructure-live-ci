@@ -1,3 +1,26 @@
+: '
+TODO:
+
+Create general mock table function
+- Input:
+	- fixed attributes
+	- row count
+	- based-on-tg-dir
+	- if mocking execution:
+		- account_dim
+	- 
+- Mock order:
+	- account dim
+	- pr queue
+	- commit queue
+	- executions
+- For each mock table:
+	- use fixed values
+	- if fixed value is not defined create random value based on column type
+- if parent table in mock order is not being mocked, still use actual table for reference
+- if row count is not defined for pr, commit or execution skip mocking the table
+'
+
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
@@ -126,11 +149,8 @@ jq_map_to_psql_table() {
 	"""
 }
 
-
 setup_mock_finished_status_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-	parse_args "$@"
 	
 	if [ -n "$tg_dir" ]; then
 		if [ -z "$account_stack" ]; then
@@ -139,17 +159,22 @@ setup_mock_finished_status_tables() {
 		fi
 
 		log "Creating execution table based on local Terragrunt directory configurations" "INFO"
+
 		query "CREATE TABLE mock_staging_cfg_stack (cfg_path VARCHAR, cfg_deps text[]);"
+		
 		tg_deps_mapping=$(parse_tg_graph_deps "$tf_dir")
 		log "Terragrunt Dependency Mapping:" "DEBUG"
 		log "$tg_deps_mapping" "DEBUG"
 		jq_map_to_psql_table "$tg_deps_mapping" "cfg_path" "cfg_deps" "mock_staging_cfg_stack"
+
 		log "Staging config stack table:" "DEBUG"
 		log "$(query --psql-extra-args "-x" "SELECT * FROM mock_staging_cfg_stack;")" "DEBUG"
 
 		log "Using user-defined account stack for account_dim table" "INFO"
+
 		query "CREATE TABLE mock_staging_account_stack (account_path VARCHAR, account_deps text[]);"
 		jq_map_to_psql_table "$account_stack" "account_path" "account_deps" "mock_staging_account_stack"
+
 		log "Staging account stack table:" "DEBUG"
 		log "$(query --psql-extra-args "-x" "SELECT * FROM mock_staging_account_stack;")" "DEBUG"
 	fi
@@ -393,4 +418,9 @@ setup_mock_finished_status_tables() {
 drop_mock_temp_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	query "DROP TABLE IF EXISTS mock_staging_account_stack, mock_staging_cfg_stack;"
+}
+
+
+main() {
+	parse_args "$@"
 }

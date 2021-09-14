@@ -3,8 +3,7 @@ _common_setup() {
   PATH="$src_path:$PATH"
   chmod u+x "$src_path"
 
-  #load common setup from src
-  load '../load.bash'
-  _common_setup 
-
+  load "../../../../../../files/buildspec-scripts/utils.sh"
+  export -f query
+  export -f jq_to_psql_records
 }
