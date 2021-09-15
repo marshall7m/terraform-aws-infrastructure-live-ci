@@ -1,5 +1,5 @@
 export script_logging_level="DEBUG"
-export KEEP_METADB_OPEN=true
+# export KEEP_METADB_OPEN=true
 export METADB_TYPE=local
 
 load 'test_helper/bats-support/load'
@@ -62,37 +62,22 @@ teardown() {
     res=$(modify_tg_path --path "$abs_testing_dir" --new-provider-resource)
     mock_provider=$(echo "$res" | jq 'keys')
     mock_resource=$(echo "$res" | jq 'map(.resource) | join(", ")' | tr -d '"')
-    
-    running_execution=$(jq -n \
-    --arg execution_id "$execution_id" \
-    --arg cfg_path "$testing_dir" \
-    --arg commit_id "$commit_id" \
-    --arg new_providers "$mock_provider" '
-    {
-        "execution_id": $execution_id,
-        "cfg_path": $cfg_path,
-        "commit_id": $commit_id,
-        "new_providers": ($new_providers | fromjson)
-    }
-    ')
 
-    mock_cloudwatch_execution "$running_execution" "success"
+    log "Exporting execution cloudwatch event to env var: EVENTBRIDGE_EVENT" "INFO"
+    export EVENTBRIDGE_EVENT=$( echo "$execution" | jq --arg status "$finished_status" '.status = $status | tostring')
+    log "EVENTBRIDGE_EVENT: $(printf '\n\t' "$EVENTBRIDGE_EVENT")" "DEBUG"
 
     log "Creating mock account_dim" "INFO"
+
     account_dim=$(jq -n '
     [
         {
-            "account_name": "dev",
             "account_path": "directory_dependency/dev-account",
             "account_deps": [],
-            "min_approval_count": 1,
-            "min_rejection_count": 1,
-            "voters": ["voter-1"]
         }
     ]
     ')
 
-    jq_to_psql_records "$account_dim" "account_dim"
 
     log "Creating test commit execution" "INFO"
     checkout_test_case_branch
@@ -100,8 +85,10 @@ teardown() {
     log "Modifying Terragrunt directories within test repo" "DEBUG"
     modify_tg_path --path "$abs_testing_dir"
     
-    log "Committing modifications and adding commit to commit queue" "DEBUG"
-    add_test_case_head_commit_to_queue
+    git add "$(git rev-parse --show-toplevel)/"
+	git commit -m "modify $testing_dir"
+
+	commit_id=$(git log --pretty=format:'%H' -n 1)
     
     log "Switching back to default branch" "DEBUG"
     git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')"

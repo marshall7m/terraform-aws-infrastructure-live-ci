@@ -4,8 +4,8 @@ services:
     image: postgres:10.18-alpine
     container_name: $CONTAINER_NAME
     volumes:
-      - "$PWD/docker_pgsql_init:/docker-entrypoint-initdb.d"
-      - "$PWD/$VOLUME_DATA_DIR:/var/lib/postgresql/data"
+      - "$VOLUME_ENTRYPOINT_DIR:/docker-entrypoint-initdb.d"
+      - "$VOLUME_DATA_DIR:/var/lib/postgresql/data"
     ports:
       - 5432:5432
     environment:

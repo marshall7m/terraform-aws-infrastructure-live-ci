@@ -49,7 +49,7 @@ setup_test_file_tf_state() {
 	log "Absolute path to Terragrunt parent directory: $abs_terragrunt_root_dir"
 
 	log "Applying all terragrunt repo configurations" "INFO"
-	terragrunt run-all apply --terragrunt-working-dir "$abs_terragrunt_root_dir" -auto-approve || exit 1
+	terragrunt run-all apply --terragrunt-non-interactive --terragrunt-working-dir "$abs_terragrunt_root_dir" -auto-approve || exit 1
 }
 
 setup_test_case_repo() {

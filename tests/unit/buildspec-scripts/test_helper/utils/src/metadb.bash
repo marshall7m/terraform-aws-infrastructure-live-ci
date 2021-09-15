@@ -11,7 +11,10 @@ setup_metadb() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	if [ "$METADB_TYPE" == "local" ]; then
-		export VOLUME_DATA_DIR="./docker_pgsql_volume"
+		DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+		export DOCKER_COMPOSE_DIR="$DIR/../../../"
+		export VOLUME_DATA_DIR="$DOCKER_COMPOSE_DIR/docker_pgsql_volume"
+		export VOLUME_ENTRYPOINT_DIR="$DOCKER_COMPOSE_DIR/docker_pgsql_init"
 		export CONTAINER_NAME="metadb"
 		export POSTGRES_USER="postgres"
 		export POSTGRES_PASSWORD="testing_password"
@@ -23,14 +26,28 @@ setup_metadb() {
 		else
 			log "Hosting metadb on local postgres database" "INFO"
 			log "Running Docker Compose" "INFO"
-			docker-compose up -d || exit 1
+			docker-compose --file "$DOCKER_COMPOSE_DIR/docker-compose.yml" up --detach || exit 1
 
 			#TODO: Figure why set +e is needed even though scripts that source func don't have set -e
 			set +e
+			
+			count=0
+			timeout_sec=300
+			sleep_sec=30
+
+			log "Timeout (sec): $timeout_sec" "DEBUG"
+			log "Sleep (sec): $sleep_sec" "DEBUG"
 			is_local_db_running
 			while [ $? -ne 0 ]; do
-				log "Metadb is not ready yet -- sleeping" "INFO"
-				sleep 30
+				if (( $count < $timeout_sec )); then
+					log "Timeout has been reached -- exiting" "ERROR"
+					exit 1
+				fi
+				
+				log "Metadb is not ready yet -- sleeping $sleep_sec seconds" "INFO"
+				sleep "$sleep_sec"
+				count=$(( count + "$sleep_sec" ))
+				log "Total wait time: $count" "DEBUG"
 				is_local_db_running
 			done
 

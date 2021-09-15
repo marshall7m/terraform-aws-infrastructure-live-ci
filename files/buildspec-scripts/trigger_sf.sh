@@ -447,9 +447,6 @@ execution_finished() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    local executions=$1
-    local commit_queue=$2
-
     log "Triggered via Step Function Event" "INFO"
 
     var_exists "$EVENTBRIDGE_EVENT"
@@ -795,7 +792,7 @@ main() {
     
     log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
     if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then
-        execution_finished "$execution" "$commit_queue"
+        execution_finished
     fi
 
     log "Checking if any Step Function executions are running" "DEBUG"

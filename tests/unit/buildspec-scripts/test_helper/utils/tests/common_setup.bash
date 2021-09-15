@@ -1,9 +1,9 @@
 _common_setup() {
-  src_path="$( cd "$( dirname "$BATS_TEST_FILENAME" )/../src" >/dev/null 2>&1 && pwd )"
-  PATH="$src_path:$PATH"
-  chmod u+x "$src_path"
+  load "../src/common_setup.bash"
+  _common_setup
+  export -f log
 
-  load "../../../../../../files/buildspec-scripts/utils.sh"
-  export -f query
-  export -f jq_to_psql_records
+  src_path="$( cd "$( dirname "$BASH_SOURCE" )/../src" >/dev/null 2>&1 && pwd )"
+  PATH="$src_path:$PATH"
+  chmod u+x "$src_path/"  
 }
