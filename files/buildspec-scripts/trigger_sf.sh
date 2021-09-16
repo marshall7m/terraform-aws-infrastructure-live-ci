@@ -176,7 +176,7 @@ update_executions_with_new_deploy_stack() {
     fi
 
     log "Getting Account Paths" "INFO"
-    IFS=$'\n' account_paths=($(query --psql-extra-args "-tA" "SELECT account_path FROM account_dim;"))
+    IFS=$'\n' account_paths=($(query -tA "SELECT account_path FROM account_dim;"))
 
     if [ ${#account_paths} -eq 0 ]; then
         log "No account paths are defined in account_dim" "ERROR"
@@ -201,7 +201,7 @@ update_executions_with_new_deploy_stack() {
             continue
         fi
         
-        query """
+        query -c """
         CREATE TABLE staging_cfg_stack (
             cfg_path VARCHAR,
             cfg_deps TEXT[],
@@ -212,9 +212,9 @@ update_executions_with_new_deploy_stack() {
         jq_to_psql_records "$stack" "staging_cfg_stack"
 
         log "staging_cfg_stack table:" "DEBUG"
-        log "$(query --psql-extra-args "-x" "SELECT * FROM staging_cfg_stack")" "DEBUG"
+        log "$(query -x "SELECT * FROM staging_cfg_stack")" "DEBUG"
 
-        query """
+        query -c """
         INSERT INTO
             executions
         SELECT
@@ -270,7 +270,7 @@ update_executions_with_new_deploy_stack() {
         """
 
         log "Execution table items for account:" "DEBUG"
-        log "$(query --psql-extra-args "-x" "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
+        log "$(query -x "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
     done
     set +e
 }
@@ -280,7 +280,7 @@ update_executions_with_new_rollback_stack() {
     
     local commit_id=$1
 
-    query """
+    query -c """
     CREATE OR REPLACE FUNCTION target_resources(text[]) RETURNS text AS \$\$
     DECLARE
         flags text := '';
@@ -371,7 +371,7 @@ update_execution_with_new_resources() {
     psql_new_resources=$(echo "$new_resources" | jq '. | join(" ")' | tr -d '"')
 
     log "Adding new resources to execution record" "INFO"
-    query """
+    query -c """
     UPDATE
         executions
     SET
@@ -388,7 +388,7 @@ update_execution_status() {
     local execution_id=$(echo $1 | tr -d '"')
     local status=$(echo $2 | tr -d '"')
 
-    query """
+    query -c """
     UPDATE
         executions
     SET
@@ -432,7 +432,7 @@ verify_param() {
 executions_in_progress() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    query --psql-extra-args "-qtAX" """
+    query -qtAX """
     SELECT 
         count(*)
     FROM
@@ -485,7 +485,7 @@ update_commit_queue_with_rollback_commits() {
 
     local pr_id=$(echo $1 | tr -d '"')
 
-    query """
+    query -c """
     INSERT INTO commit_queue (
         commit_id,
         is_rollback,
@@ -525,7 +525,7 @@ create_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
     log "Dequeuing next PR if commit queue is empty" "INFO"
-    pr_items=$(query --psql-extra-args "-qtA" """
+    pr_items=$(query -qtA """
     IF (SELECT count(*) FROM commit_queue WHERE status = 'waiting') = 0 THEN
         RAISE NOTICE 'Pulling next PR from queue';
         UPDATE
@@ -563,7 +563,7 @@ create_executions() {
 
         head_commit_id=$(git log --pretty=format:'%H' -n 1)
         
-        query """
+        query -c """
         INSERT INTO commit_queue (
             commit_id,
             is_rollback,
@@ -583,7 +583,7 @@ create_executions() {
     fi
 
     log "Dequeuing next commit that is waiting" "INFO"
-    commit_items=$(query --psql-extra-args "-qtA" """
+    commit_items=$(query -qtA """
 
     UPDATE
         commit_queue
@@ -631,7 +631,7 @@ start_sf_executions() {
 
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
     
-    IFS=$'\n' target_execution_ids=$(query --psql-extra-args "-tA" """
+    IFS=$'\n' target_execution_ids=$(query -tA """
     CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS \$\$
     
         -- Returns the total number of array values in the first array that's in the second array
@@ -727,7 +727,7 @@ start_sf_executions() {
     for id in "${target_execution_ids[@]}"; do
         log "Execution ID: $id" "INFO"
 
-        sf_input=$(query --psql-extra-args "-t" """
+        sf_input=$(query -t """
         SELECT 
             row_to_json(sub) 
         FROM (
@@ -747,7 +747,7 @@ start_sf_executions() {
                 --name "$id" \
                 --input "$sf_input"
                 
-            query """
+            query -c """
             UPDATE
                 executions
             SET

@@ -51,7 +51,7 @@ modify_tg_path() {
 }
 
 add_test_case_pr_to_queue() {
-	results=$(query """
+	results=$(query -c """
 	INSERT INTO pr_queue (
         pr_id,
         status,
@@ -96,7 +96,7 @@ add_test_case_head_commit_to_queue() {
 
 	log "Adding testing commit to queue" "INFO"
 
-	results=$(query """
+	results=$(query -c """
 	INSERT INTO commit_queue (
 		commit_id,
         pr_id,

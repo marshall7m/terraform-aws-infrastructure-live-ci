@@ -42,39 +42,11 @@ teardown() {
     run mock_tables.bash
 }
 
-@test "Create staging_cfg_stack and account dim tables" {
-    account_dim=$(jq -n '
-    [
-        {
-            "account_name": "dev",
-            "account_path": "directory_dependency/dev-account",
-            "account_deps": [],
-            "min_approval_count": 1,
-            "min_rejection_count": 1,
-            "voters": ["voter-1"]
-        }
-    ]
-    ')
-    run mock_tables.bash --account-dim "$account_dim" --based-on-tg-dir "$TEST_CASE_REPO_DIR/directory_dependency" --git-root "$TEST_CASE_REPO_DIR"
-    assert_success
-
-    log "$(query --psql-extra-args "-x" "SELECT * FROM mock_staging_cfg_stack;")" "DEBUG"
-    run query """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT 
-                    COUNT(*)
-                FROM 
-                    mock_staging_cfg_stack
-            ) >= 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
-    assert_success
-}
-
-
 @test "Mock pr queue records" {
-    run mock_tables.bash --table "pr_queue" --status "running"
+    expected=$(jq -n '{"pr_id": 1}')
+    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count 5
+    assert_failure
+
+    # run query -c "SELECT * FROM pr_queue;"
+    # assert_failure
 }

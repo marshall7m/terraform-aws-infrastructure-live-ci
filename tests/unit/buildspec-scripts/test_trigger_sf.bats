@@ -97,8 +97,8 @@ teardown() {
     assert_success
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run query """
+    log "$(query -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -119,8 +119,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run query """
+    log "$(query -x "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -204,8 +204,8 @@ teardown() {
     assert_success
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run query """
+    log "$(query -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -224,8 +224,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run query """
+    log "$(query -x "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -295,8 +295,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit rollback is running" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from commit_queue where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run query """
+    log "$(query -x "select * from commit_queue where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -315,8 +315,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit rollback executions are created" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from executions where commit_id = '$TESTING_COMMIT_ID' AND is_rollback = true;")" "DEBUG"
-    run query """
+    log "$(query -x "select * from executions where commit_id = '$TESTING_COMMIT_ID' AND is_rollback = true;")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -419,8 +419,8 @@ teardown() {
     assert_success
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run query """
+    log "$(query -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -439,8 +439,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    log "$(query --psql-extra-args "-x" "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run query """
+    log "$(query -x "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    run query -c """
     do \$\$
         BEGIN
             ASSERT (

@@ -3,7 +3,7 @@
 is_local_db_running() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	
-	query "SELECT 1" 2>/dev/null || return 1
+	query -c "SELECT 1"  || return 1
 }
 
 setup_metadb() {
@@ -100,12 +100,12 @@ clear_metadb_tables() {
 	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'pr_queue');
 
 	"""
-	query "$sql"
+	query -c "$sql"
 }
 
 drop_temp_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-	query "DROP TABLE IF EXISTS staging_cfg_stack, queued_executions;"
+	query -c "DROP TABLE IF EXISTS staging_cfg_stack, queued_executions;"
 }
 
 

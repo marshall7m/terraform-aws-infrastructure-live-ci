@@ -38,33 +38,17 @@ var_exists() {
 }
 
 query() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-  while (( "$#" )); do
-		case "$1" in
-			--psql-extra-args)
-        psql_extra_args=$2
-        shift 2
-      ;;
-      *)
-        sql=$1
-        shift 1
-      ;;
-    esac
-  done
-
-  log "Query:" "DEBUG"
-  log "$sql" "DEBUG"
-	
 	# export PGUSER=$TESTING_POSTGRES_USER
 	# export PGDATABASE=$TESTING_POSTGRES_DB
 	
+  log "args: printf('\n\t%s' "$@")" "DEBUG"
+
 	if [ "$METADB_TYPE" == "local" ]; then
 		docker exec --interactive "$CONTAINER_NAME" psql \
       -U "$TESTING_POSTGRES_USER" \
       -d "$TESTING_POSTGRES_DB" \
       -h /run/postgresql \
-      $psql_extra_args \
-      -c "$sql"
+      "$@"
 
   elif [ "$METADB_TYPE" == "aws" ]; then
     psql \
@@ -73,8 +57,7 @@ query() {
     --username="$RDS_USERNAME" \
     --password \
     --dbname="$RDS_DB" \
-    $psql_extra_args \
-    -c "$sql"
+    "$@"
 	else
 		log "METADB_TYPE is not set (local|aws)" "ERROR"
 	fi
@@ -141,6 +124,33 @@ jq_to_psql_records() {
     exit 1
   fi
   
+  if table_exists "$table"; then
+    log "Adding to existing table" "DEBUG"
+  else
+    log "Table does not exists -- creating table" "DEBUG"
+    cols=$(echo "$jq_in" | jq '
+    def psql_cols(in):
+      {
+          "number": "INT", 
+          "string": "VARCHAR", 
+          "array": "ARRAY[]",
+          "boolean": "BOOL"
+      } as $psql_types
+      | if (in | type) == "array" then 
+      map(. | to_entries | map(.key + " " + (.value | type | $psql_types[.])))
+      else
+      in | to_entries | map(.key + " " + (.value | type | $psql_types[.]))
+      end
+      | flatten | unique | join(", ")
+      ;
+    psql_cols(.)
+    ' | tr -d '"')
+
+    log "Columns: $cols" "DEBUG"
+    
+    query -c "CREATE TABLE IF NOT EXISTS $table($cols);"
+  fi
+
   csv_table=$(echo "$jq_in" | jq -r '
     if . | type == "array" then .[] else . end
     | map(if values | type == "array" then values |= "{" + join(", ") + "}" else . end) | @csv')
@@ -149,7 +159,7 @@ jq_to_psql_records() {
 	log "$csv_table" "DEBUG"
 
   log "Loading to table" "INFO"
-	echo "$csv_table" | query """
+	echo "$csv_table" | query -c """
 	COPY $table FROM STDIN DELIMITER ',' CSV
 	"""
 }

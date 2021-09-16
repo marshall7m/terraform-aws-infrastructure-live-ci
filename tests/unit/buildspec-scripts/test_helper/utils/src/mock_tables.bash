@@ -1,71 +1,16 @@
 : '
-
 - Mock order:
 	- account dim
 	- pr queue
 	- commit queue
 	- executions
-
-- For each mock table:
-	- use fixed values
-	- if fixed value is not defined create random value based on column type
-	- if table is a dependency, update parent tables to reflect mock items (e.g. mock executions > mock commit > mock pr)
-
-mock_tables --table "" --fixed-attr "{}" --items "[{}]" --count --based-on-tg-dir "" (only for executions) --return-jq-results
 '
-
-mock_pr_queue() {
-	query """
-	INSERT INTO
-		pr_queue
-	SELECT (
-		RANDOM > max_pr_id,
-		'$status' as status,
-		base_ref,
-		'feature-' || substr(md5(random()::text), 0, 8)
-	)
-	FROM (
-		SELECT
-			MAX(pr_id) as max_pr_id,
-			base_ref
-		FROM
-			pr_queue
-	)
-	"""
-}
 
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	while (( "$#" )); do
 		case "$1" in
-			--based-on-tg-dir)
-				if [ -n "$2" ]; then
-					tg_dir="$2"
-					shift 2
-				else
-					echo "Error: Argument for $1 is missing" >&2
-					exit 1
-				fi
-			;;
-			--git-root)
-				if [ -n "$2" ]; then
-					git_root="$2"
-					shift 2
-				else
-					echo "Error: Argument for $1 is missing" >&2
-					exit 1
-				fi
-			;;
-			--account-dim)
-				if [ -n "$2" ]; then
-					account_dim="$2"
-					shift 2
-				else
-					echo "Error: Argument for $1 is missing" >&2
-					exit 1
-				fi
-			;;
 			--table)
 				if [ -n "$2" ]; then
 					table="$2"
@@ -75,7 +20,36 @@ parse_args() {
 					exit 1
 				fi
 			;;
-
+			--items)
+				if [ -n "$2" ]; then
+					items="$2"
+					shift 2
+				else
+					echo "Error: Argument for $1 is missing" >&2
+					exit 1
+				fi
+			;;
+			--count)
+				if [ -n "$2" ]; then
+					count="$2"
+					shift 2
+				else
+					echo "Error: Argument for $1 is missing" >&2
+					exit 1
+				fi
+			;;
+			--random-defaults)
+				random_defaults=true
+				shift 1
+			;;
+			--update-parents)
+				update_parents=true
+				shift 1
+			;;
+			--return-jq-results)
+				return_jq_results=true
+				shift 1
+			;;
 			*)
 				echo "Unknown Option: $1"
 				exit 1
@@ -131,7 +105,7 @@ jq_map_to_psql_table() {
 	log "JQ mapping transformed to CSV strings" "DEBUG"
 	log "$csv_table" "DEBUG"
 	
-	echo "$csv_table" | query "COPY $table FROM STDIN DELIMITER ',' CSV"
+	echo "$csv_table" | query -c "COPY $table FROM STDIN DELIMITER ',' CSV"
 }
 
 setup_mock_executions() {
@@ -140,7 +114,7 @@ setup_mock_executions() {
 
 	jq_to_psql_records "$records" "staging_executions"
 
-	query """
+	query -c """
 	INSERT INTO executions (
 		execution_id,
         pr_id,
@@ -262,7 +236,7 @@ setup_mock_staging_cfg_stack() {
 
 	log "Creating execution table based on local Terragrunt directory configurations" "INFO"
 
-	query "CREATE TABLE mock_staging_cfg_stack (cfg_path VARCHAR PRIMARY KEY, cfg_deps text[], account_path VARCHAR);"
+	query -c "CREATE TABLE mock_staging_cfg_stack (cfg_path VARCHAR PRIMARY KEY, cfg_deps text[], account_path VARCHAR);"
 	
 	cd "$git_root"
 	while read account_path; do
@@ -293,7 +267,7 @@ setup_mock_staging_cfg_stack() {
 setup_mock_account_dim() {
 	local account_dim=$1
 
-	query """
+	query -c """
 	CREATE OR REPLACE FUNCTION random_between(low INT, high INT) 
 		RETURNS INT 
 		LANGUAGE plpgsql AS
@@ -316,9 +290,9 @@ setup_mock_account_dim() {
 	jq_to_psql_records "$account_dim" "mock_staging_account_dim"
 
 	log "mock_staging_account_dim table:" "DEBUG"
-	log "$(query --psql-extra-args "-x" "SELECT * FROM mock_staging_account_dim;")" "DEBUG"
+	log "$(query -x "SELECT * FROM mock_staging_account_dim;")" "DEBUG"
 
-	query """
+	query -c """
 	INSERT INTO account_dim (
 		account_name,
 		account_path,
@@ -341,7 +315,7 @@ setup_mock_finished_status_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	
-	query """
+	query -c """
 
 	CREATE OR REPLACE FUNCTION random_between(low INT, high INT) 
 		RETURNS INT 
@@ -564,21 +538,21 @@ setup_mock_finished_status_tables() {
 	"""
 
 	log "pr_queue:" "DEBUG"
-	log "$(query --psql-extra-args "-x" "SELECT * FROM pr_queue;")" "DEBUG"
+	log "$(query -x "SELECT * FROM pr_queue;")" "DEBUG"
 
 	log "commit_queue:" "DEBUG"
-	log "$(query --psql-extra-args "-x" "SELECT * FROM commit_queue;")" "DEBUG"
+	log "$(query -x "SELECT * FROM commit_queue;")" "DEBUG"
 
 	log "account_dim:" "DEBUG"
-	log "$(query --psql-extra-args "-x" "SELECT * FROM account_dim;")" "DEBUG"
+	log "$(query -x "SELECT * FROM account_dim;")" "DEBUG"
 
 	log "executions:" "DEBUG"
-	log "$(query --psql-extra-args "-x" "SELECT * FROM executions;")" "DEBUG"
+	log "$(query -x "SELECT * FROM executions;")" "DEBUG"
 }
 
 drop_mock_temp_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-	query "DROP TABLE IF EXISTS mock_staging_account_stack, mock_staging_cfg_stack;"
+	query -c "DROP TABLE IF EXISTS mock_staging_account_stack, mock_staging_cfg_stack;"
 }
 
 table_exists() {
@@ -586,7 +560,7 @@ table_exists() {
 
 	local table=$1
 
-	res=$(query --psql-extra-args "-qtAX" """
+	res=$(query -qtAX """
 	SELECT EXISTS (
 		SELECT 
 			1 
@@ -608,36 +582,21 @@ table_exists() {
 	fi
 }
 
-
 main() {
 	parse_args "$@"
 
-	if table_exists "account_dim"; then
-		log "Using existing account_dim table" "INFO"
+	if [ -n "$random_defaults" ]; then
+		jq_to_psql_records "$items" "staging_$table"
+
+		# res=$(query -f "${BASH_SOURCE}/mock_sql/mock_insert_$table.sql" --variable=mock_count="$count")
+
+		# echo "$res"
 	else
-		setup_mock_account_dim "$account_dim"
+		res=$(jq_to_psql_records "$items" "$table")
 	fi
 
-	if table_exists "mock_staging_cfg_stack"; then
-		log "Using existing mock_staging_cfg_stack table" "INFO"
-	else
-		setup_mock_staging_cfg_stack "$account_dim" "$git_root"
-		log "Staging config stack table:" "DEBUG"
-		log "$(query --psql-extra-args "-x" "SELECT * FROM mock_staging_cfg_stack")" "DEBUG"
-	fi
-
-	if [ "$table" == "pr_queue" ]; then
-		mock_pr_queue 
-	elif [ "$table" == "commit_queue" ]; then
-		echo "doo"
-	elif [ "$table" == "executions" ]; then
-		echo "doo"
-	elif [ -z "$table" ]; then
-		log "table is not set -- skip mocking table" "INFO"
-		exit 0
-	else
-		log "$table is not valid" "ERROR"
-		exit 1
+	if  [ -n "$update_parents" ]; then
+		update_parents "$table" "${BASH_SOURCE}/mock_sql/mock_update_$table\_parents.sql"
 	fi
 }
 
