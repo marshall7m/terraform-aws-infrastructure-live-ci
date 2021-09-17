@@ -432,7 +432,7 @@ verify_param() {
 executions_in_progress() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    query -qtAX """
+    query -qtAX -c """
     SELECT 
         count(*)
     FROM
@@ -525,7 +525,7 @@ create_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
     log "Dequeuing next PR if commit queue is empty" "INFO"
-    pr_items=$(query -qtA """
+    pr_items=$(query -qtA -c """
     IF (SELECT count(*) FROM commit_queue WHERE status = 'waiting') = 0 THEN
         RAISE NOTICE 'Pulling next PR from queue';
         UPDATE
@@ -583,7 +583,7 @@ create_executions() {
     fi
 
     log "Dequeuing next commit that is waiting" "INFO"
-    commit_items=$(query -qtA """
+    commit_items=$(query -qtA -c """
 
     UPDATE
         commit_queue

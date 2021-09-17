@@ -47,6 +47,6 @@ teardown() {
     run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count 5
     assert_failure
 
-    # run query -c "SELECT * FROM pr_queue;"
-    # assert_failure
+    run query -c "SELECT * FROM pr_queue;"
+    assert_failure
 }

@@ -560,7 +560,7 @@ table_exists() {
 
 	local table=$1
 
-	res=$(query -qtAX """
+	res=$(query -qtAX -c """
 	SELECT EXISTS (
 		SELECT 
 			1 
@@ -583,20 +583,23 @@ table_exists() {
 }
 
 main() {
+	
+	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
+
 	parse_args "$@"
 
 	if [ -n "$random_defaults" ]; then
 		jq_to_psql_records "$items" "staging_$table"
 
-		# res=$(query -f "${BASH_SOURCE}/mock_sql/mock_insert_$table.sql" --variable=mock_count="$count")
+		res=$(query -f "$DIR/mock_sql/mock_insert_$table.sql" --variable=mock_count="$count")
 
-		# echo "$res"
+		echo "$res"
 	else
 		res=$(jq_to_psql_records "$items" "$table")
 	fi
 
 	if  [ -n "$update_parents" ]; then
-		update_parents "$table" "${BASH_SOURCE}/mock_sql/mock_update_$table\_parents.sql"
+		update_parents "$table" "$(dirname "${BASH_SOURCE}")/mock_sql/mock_update_$table\_parents.sql"
 	fi
 }
 

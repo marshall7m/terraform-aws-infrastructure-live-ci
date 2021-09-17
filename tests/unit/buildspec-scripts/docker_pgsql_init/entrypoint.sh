@@ -47,7 +47,6 @@ psql -v ON_ERROR_STOP=1 \
         min_rejection_count INT CHECK (min_rejection_count >= 0)
     );
 
-
     CREATE TABLE IF NOT EXISTS pr_queue (
         id INT GENERATED ALWAYS AS IDENTITY,
         pr_id INT,

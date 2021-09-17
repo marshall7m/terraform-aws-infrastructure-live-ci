@@ -38,17 +38,37 @@ var_exists() {
 }
 
 query() {
+  log "FUNCNAME=$FUNCNAME" "DEBUG"
 	# export PGUSER=$TESTING_POSTGRES_USER
 	# export PGDATABASE=$TESTING_POSTGRES_DB
 	
   log "args: printf('\n\t%s' "$@")" "DEBUG"
 
 	if [ "$METADB_TYPE" == "local" ]; then
-		docker exec --interactive "$CONTAINER_NAME" psql \
+
+    args=("$@")
+    for i in "${!args[@]}"; do
+      if [ "${args[i]}" == "-f" ]; then
+          sql_file="${args[i+1]}"
+          unset 'args[i]'
+          unset 'args[i+1]'
+      fi
+    done
+
+    if [ -n "$sql_file" ]; then
+      log "Piping sql file content to psql -c instead of having to mount or cp file to container" "DEBUG"
+      cat "$sql_file" | docker exec --interactive "$CONTAINER_NAME" psql \
+        -U "$TESTING_POSTGRES_USER" \
+        -d "$TESTING_POSTGRES_DB" \
+        -h /run/postgresql \
+        "${args[*]}"
+    else
+      docker exec --interactive "$CONTAINER_NAME" psql \
       -U "$TESTING_POSTGRES_USER" \
       -d "$TESTING_POSTGRES_DB" \
       -h /run/postgresql \
       "$@"
+    fi
 
   elif [ "$METADB_TYPE" == "aws" ]; then
     psql \
@@ -131,10 +151,10 @@ jq_to_psql_records() {
     cols=$(echo "$jq_in" | jq '
     def psql_cols(in):
       {
-          "number": "INT", 
-          "string": "VARCHAR", 
-          "array": "ARRAY[]",
-          "boolean": "BOOL"
+        "number": "INT", 
+        "string": "VARCHAR", 
+        "array": "ARRAY[]",
+        "boolean": "BOOL"
       } as $psql_types
       | if (in | type) == "array" then 
       map(. | to_entries | map(.key + " " + (.value | type | $psql_types[.])))
@@ -147,8 +167,8 @@ jq_to_psql_records() {
     ' | tr -d '"')
 
     log "Columns: $cols" "DEBUG"
-    
-    query -c "CREATE TABLE IF NOT EXISTS $table($cols);"
+    echo "CREATE TABLE IF NOT EXISTS $table ( $cols );"
+    query -c "CREATE TABLE IF NOT EXISTS $table ( $cols );"
   fi
 
   csv_table=$(echo "$jq_in" | jq -r '
@@ -159,7 +179,5 @@ jq_to_psql_records() {
 	log "$csv_table" "DEBUG"
 
   log "Loading to table" "INFO"
-	echo "$csv_table" | query -c """
-	COPY $table FROM STDIN DELIMITER ',' CSV
-	"""
+	echo "$csv_table" | query -c "COPY $table FROM STDIN DELIMITER ',' CSV"
 }
