@@ -31,7 +31,8 @@ parse_args() {
 			;;
 			--count)
 				if [ -n "$2" ]; then
-					count="$2"
+					# minus the input --items record
+					count=$(($2 - 1))
 					shift 2
 				else
 					echo "Error: Argument for $1 is missing" >&2
@@ -583,23 +584,53 @@ table_exists() {
 }
 
 main() {
-	
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
 	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 
 	parse_args "$@"
 
 	if [ -n "$random_defaults" ]; then
-		jq_to_psql_records "$items" "staging_$table"
+		staging_table="staging_$table"
+		jq_to_psql_records "$items" "$staging_table"
 
-		res=$(query -f "$DIR/mock_sql/mock_insert_$table.sql" --variable=mock_count="$count")
+		log "Creating $table mock defaults trigger" "DEBUG"
+		query -f "$DIR/mock_sql/trigger_defaults/$table.sql"
+
+		log "Inserting $staging_table into $table" "DEBUG"
+		res=$(query -c """
+		-- creates duplicate rows of '$staging_table' to match mock_count only if '$staging_table' contains one item
+
+		DO \$\$
+			DECLARE
+				seq VARCHAR := (SELECT pg_get_serial_sequence('$table', 'id'));
+			BEGIN
+				INSERT INTO $staging_table
+				SELECT s.* 
+				FROM $staging_table s, GENERATE_SERIES(1, '$count')
+				WHERE (SELECT COUNT(*) FROM $staging_table) = 1;
+
+				PERFORM setval(seq, (SELECT COALESCE(MAX(id), 1) FROM $table));
+
+				INSERT INTO $table
+				SELECT
+					nextval(seq),
+					*
+				FROM $staging_table;
+
+				DROP TABLE $staging_table;
+				ALTER TABLE $table DISABLE TRIGGER "$table"_default;  
+			END;
+		\$\$ LANGUAGE plpgsql;
+		""")
 
 		echo "$res"
 	else
 		res=$(jq_to_psql_records "$items" "$table")
 	fi
 
-	if  [ -n "$update_parents" ]; then
-		update_parents "$table" "$(dirname "${BASH_SOURCE}")/mock_sql/mock_update_$table\_parents.sql"
+	if [ -n "$update_parents" ]; then
+		query -f "$DIR/mock_sql/mock_update_$table\_parents.sql"
 	fi
 }
 

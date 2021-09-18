@@ -42,18 +42,21 @@ query() {
 	# export PGUSER=$TESTING_POSTGRES_USER
 	# export PGDATABASE=$TESTING_POSTGRES_DB
 	
-  log "args: printf('\n\t%s' "$@")" "DEBUG"
-
 	if [ "$METADB_TYPE" == "local" ]; then
-
     args=("$@")
     for i in "${!args[@]}"; do
       if [ "${args[i]}" == "-f" ]; then
           sql_file="${args[i+1]}"
+          sql_cmd=$(cat "$sql_file")
           unset 'args[i]'
           unset 'args[i+1]'
+      elif [ "${args[i]}" == "-c" ]; then
+          sql_cmd="${args[i+1]}"
       fi
     done
+
+    log "SQL command:" "DEBUG"
+    log "$sql_cmd" "DEBUG"
 
     if [ -n "$sql_file" ]; then
       log "Piping sql file content to psql -c instead of having to mount or cp file to container" "DEBUG"
@@ -167,7 +170,7 @@ jq_to_psql_records() {
     ' | tr -d '"')
 
     log "Columns: $cols" "DEBUG"
-    echo "CREATE TABLE IF NOT EXISTS $table ( $cols );"
+
     query -c "CREATE TABLE IF NOT EXISTS $table ( $cols );"
   fi
 

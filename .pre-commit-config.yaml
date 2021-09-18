@@ -5,3 +5,8 @@ repos:
       - id: terraform_docs
       - id: terraform_fmt
       - id: terragrunt_fmt
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 0.6.5
+    hooks:
+      - id: sqlfluff-lint
+      - id: sqlfluff-fix

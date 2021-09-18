@@ -42,11 +42,52 @@ teardown() {
     run mock_tables.bash
 }
 
-@test "Mock pr queue records" {
-    expected=$(jq -n '{"pr_id": 1}')
-    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count 5
-    assert_failure
+@test "Mock pr queue records based on object" {
+    pr_id=1
+    count=5
+    expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
+    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
 
-    run query -c "SELECT * FROM pr_queue;"
-    assert_failure
+    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count "$count"
+    assert_success
+    
+    log "$(query -c "SELECT * FROM pr_queue;")" "DEBUG"
+
+    run query -c """ 
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM pr_queue 
+                WHERE pr_id = $pr_id
+            ) = $(($count + $init_count));
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
+}
+
+@test "Mock commit queue records based on object" {
+    pr_id=1
+    count=5
+    expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
+    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM commit_queue WHERE pr_id = $pr_id")
+    
+    run mock_tables.bash --table "commit_queue" --random-defaults --items "$expected" --count "$count"
+    assert_success
+    
+    log "$(query -c "SELECT * FROM commit_queue;")" "DEBUG"
+
+    run query -c """ 
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM commit_queue 
+                WHERE pr_id = $pr_id
+            ) = $(($count + $init_count));
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
 }
