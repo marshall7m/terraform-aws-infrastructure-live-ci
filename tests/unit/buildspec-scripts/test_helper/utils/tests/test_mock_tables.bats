@@ -28,7 +28,7 @@ setup() {
     setup_test_case_repo
     # setup_test_case_tf_state
 
-    run_only_test 2
+    run_only_test 3
 }
 
 teardown() {
@@ -72,8 +72,8 @@ teardown() {
     count=5
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
     init_count=$(query -qtAX -c "SELECT COUNT(*) FROM commit_queue WHERE pr_id = $pr_id")
-    
-    run mock_tables.bash --table "commit_queue" --random-defaults --items "$expected" --count "$count"
+
+    run mock_tables.bash --table "commit_queue" --random-defaults --items "$expected" --count "$count" --update-parents
     assert_success
     
     log "$(query -c "SELECT * FROM commit_queue;")" "DEBUG"
@@ -86,6 +86,35 @@ teardown() {
                 FROM commit_queue 
                 WHERE pr_id = $pr_id
             ) = $(($count + $init_count));
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
+
+    log "Assert all commit queue PR IDs are within pr_queue" "DEBUG"
+
+    log "commit_queue:" "DEBUG"
+    log "$(query -c "SELECT DISTINCT pr_id FROM commit_queue;")" "DEBUG"
+
+    log "pr_queue:" "DEBUG"
+    
+    log "$(query -c "SELECT DISTINCT pr_id FROM pr_queue;")" "DEBUG"
+    run query -c """ 
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM (
+                    SELECT DISTINCT pr_id
+                    FROM commit_queue 
+                ) commit
+            ) = (
+                SELECT COUNT(*)
+                FROM (
+                    SELECT DISTINCT pr_id
+                    FROM pr_queue 
+                ) pr
+            );
         END;
     \$\$ LANGUAGE plpgsql;
     """

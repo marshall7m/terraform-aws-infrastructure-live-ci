@@ -697,14 +697,10 @@ start_sf_executions() {
         cardinality(account_deps) = arr_in_arr_count(account_deps, ( -- if count of dependency array == the count of successful dependencies
             -- gets accounts that have all successful executions
             SELECT ARRAY(
-                SELECT
-                    DISTINCT account_name
-                FROM
-                    commit_executions
-                GROUP BY
-                    account_name
-                HAVING
-                    COUNT(*) FILTER (WHERE status = 'success') = COUNT(*) --
+                SELECT DISTINCT account_name
+                FROM commit_executions
+                GROUP BY account_name
+                HAVING COUNT(*) FILTER (WHERE status = 'success') = COUNT(*) --
             )
         ))
     AND

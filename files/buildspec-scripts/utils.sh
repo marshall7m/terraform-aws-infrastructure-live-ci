@@ -151,7 +151,8 @@ jq_to_psql_records() {
     log "Adding to existing table" "DEBUG"
   else
     log "Table does not exists -- creating table" "DEBUG"
-    cols=$(echo "$jq_in" | jq '
+
+    cols_types=$(echo "$jq_in" | jq '
     def psql_cols(in):
       {
         "number": "INT", 
@@ -169,18 +170,26 @@ jq_to_psql_records() {
     psql_cols(.)
     ' | tr -d '"')
 
-    log "Columns: $cols" "DEBUG"
+    log "Columns Types: $cols_types" "DEBUG"
 
-    query -c "CREATE TABLE IF NOT EXISTS $table ( $cols );"
+    query -c "CREATE TABLE IF NOT EXISTS $table ( $cols_types );"
   fi
 
-  csv_table=$(echo "$jq_in" | jq -r '
-    if . | type == "array" then .[] else . end
-    | map(if values | type == "array" then values |= "{" + join(", ") + "}" else . end) | @csv')
+  # get array of cols for psql insert/select for explicit column ordering
+  col_order=$(echo "$jq_in" | jq 'if (. | type) == "array" then map(keys) else keys end | flatten | unique')
+  log "Column order: $col_order" "DEBUG"
+
+  csv_table=$(echo "$jq_in" | jq -r --arg col_order "$col_order" '
+    ($col_order | fromjson) as $col_order
+    | if (. | type) == "array" then .[] else . end
+    | map_values(if (. | type) == "array" then . |= "{" + join(", ") + "}" else . end) as $stage
+    | $col_order | map($stage[.]) | @csv
+  ')
 
   log "JQ transformed to CSV strings" "DEBUG"
 	log "$csv_table" "DEBUG"
 
+  psql_cols=$(echo "$col_order" | jq 'join(", ")' | tr -d '"')
   log "Loading to table" "INFO"
-	echo "$csv_table" | query -c "COPY $table FROM STDIN DELIMITER ',' CSV"
+	echo "$csv_table" | query -c "COPY $table ($psql_cols) FROM STDIN DELIMITER ',' CSV"
 }

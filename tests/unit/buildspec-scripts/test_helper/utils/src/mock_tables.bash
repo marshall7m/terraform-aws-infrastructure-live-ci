@@ -354,8 +354,7 @@ setup_mock_finished_status_tables() {
 		head_ref
 	)
 
-	SELECT
-		DISTINCT ON (pr_id) pr_id,
+	SELECT DISTINCT ON (pr_id) pr_id,
 		status,
 		base_ref,
 		head_ref
@@ -593,29 +592,33 @@ main() {
 	if [ -n "$random_defaults" ]; then
 		staging_table="staging_$table"
 		jq_to_psql_records "$items" "$staging_table"
+		log "$staging_table:" "DEBUG"
+		log "$(printf '\n%s' "$(query -c "SELECT * FROM $staging_table")") " "DEBUG"
 
-		log "Creating $table mock defaults trigger" "DEBUG"
-		query -f "$DIR/mock_sql/trigger_defaults/$table.sql"
+		log "Creating mock defaults triggers" "DEBUG"
+		query -f "$DIR/mock_sql/trigger_defaults.sql"
 
 		log "Inserting $staging_table into $table" "DEBUG"
 		res=$(query -c """
-		-- creates duplicate rows of '$staging_table' to match mock_count only if '$staging_table' contains one item
 
 		DO \$\$
 			DECLARE
 				seq VARCHAR := (SELECT pg_get_serial_sequence('$table', 'id'));
 			BEGIN
+
+				-- creates duplicate rows of '$staging_table' to match mock_count only if '$staging_table' contains one item
 				INSERT INTO $staging_table
 				SELECT s.* 
 				FROM $staging_table s, GENERATE_SERIES(1, '$count')
 				WHERE (SELECT COUNT(*) FROM $staging_table) = 1;
 
+				-- resets identity column
 				PERFORM setval(seq, (SELECT COALESCE(MAX(id), 1) FROM $table));
 
-				INSERT INTO $table
+				INSERT INTO $table (id, $psql_cols)
 				SELECT
 					nextval(seq),
-					*
+					$psql_cols
 				FROM $staging_table;
 
 				DROP TABLE $staging_table;
@@ -630,7 +633,8 @@ main() {
 	fi
 
 	if [ -n "$update_parents" ]; then
-		query -f "$DIR/mock_sql/mock_update_$table\_parents.sql"
+		log "Updating parent tables" "INFO"
+		query -f "$DIR/mock_sql/mock_update_$(echo "$table")_parents.sql"
 	fi
 }
 
