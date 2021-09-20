@@ -28,7 +28,7 @@ setup() {
     setup_test_case_repo
     # setup_test_case_tf_state
 
-    run_only_test 3
+    run_only_test 2
 }
 
 teardown() {
@@ -41,6 +41,30 @@ teardown() {
 @test "Script is runnable" {
     run mock_tables.bash
 }
+
+@test "Mock account dim records based on object" {
+    account_name=dev
+    expected=$(jq -n --arg account_name "$account_name" '{"account_name": $account_name}')
+
+    run mock_tables.bash --table "account_dim" --random-defaults --items "$expected"
+    assert_success
+    
+    log "$(query -c "SELECT * FROM account_dim;")" "DEBUG"
+
+    run query -c """ 
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM account_dim 
+                WHERE account_name = '$account_name'
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
+}
+
 
 @test "Mock pr queue records based on object" {
     pr_id=1
@@ -97,7 +121,7 @@ teardown() {
     log "$(query -c "SELECT DISTINCT pr_id FROM commit_queue;")" "DEBUG"
 
     log "pr_queue:" "DEBUG"
-    
+
     log "$(query -c "SELECT DISTINCT pr_id FROM pr_queue;")" "DEBUG"
     run query -c """ 
     do \$\$
@@ -115,6 +139,29 @@ teardown() {
                     FROM pr_queue 
                 ) pr
             );
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
+}
+
+@test "Mock executions records based on object" {
+    expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
+    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
+
+    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count "$count"
+    assert_success
+    
+    log "$(query -c "SELECT * FROM pr_queue;")" "DEBUG"
+
+    run query -c """ 
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM pr_queue 
+                WHERE pr_id = $pr_id
+            ) = $(($count + $init_count));
         END;
     \$\$ LANGUAGE plpgsql;
     """

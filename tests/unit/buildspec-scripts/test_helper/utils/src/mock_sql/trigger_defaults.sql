@@ -1,3 +1,76 @@
+CREATE OR REPLACE FUNCTION random_between(low INT, high INT) 
+    RETURNS INT 
+    LANGUAGE plpgsql AS
+$$
+BEGIN
+    RETURN floor(random()* (high-low + 1) + low);
+END;
+$$;
+
+
+-- acount_dim
+
+CREATE OR REPLACE FUNCTION trig_account_dim_default()
+  RETURNS trigger
+  LANGUAGE plpgsql AS
+$func$
+BEGIN
+   IF NEW.account_name IS NULL THEN
+    NEW.account_name := 'account-' || substr(md5(random()::text), 0, 4);
+   END IF;
+
+   IF NEW.account_path IS NULL THEN
+    NEW.account_path := NEW.account_name || '/' || substr(md5(random()::text), 0, 8);
+   END IF;
+
+   IF NEW.account_deps IS NULL THEN
+    SELECT ARRAY(
+        SELECT account_name 
+        INTO NEW.account_deps
+        FROM account_dim
+        LIMIT random_between(0, (
+            SELECT COUNT(*)
+            FROM (
+                SELECT DISTINCT account_name
+                FROM account_dim
+            ) uniq
+        ))
+    );
+   END IF;
+
+   IF NEW.min_approval_count IS NULL THEN
+    NEW.min_approval_count := random_between(1, 5);
+   END IF;
+
+   IF NEW.min_rejection_count IS NULL THEN
+    NEW.min_rejection_count := random_between(1, 5);
+   END IF;
+
+   IF NEW.voters IS NULL THEN
+    NEW.voters := ARRAY['voter-' || substr(md5(random()::text), 0, 4)];
+   END IF;
+
+   RETURN NEW;
+END
+$func$;
+
+DROP TRIGGER IF EXISTS account_dim_default ON public.account_dim;
+
+CREATE TRIGGER account_dim_default
+BEFORE INSERT ON account_dim
+FOR EACH ROW
+WHEN (
+    NEW.account_name IS NULL
+    OR NEW.account_path IS NULL
+    OR NEW.account_deps IS NULL
+    OR NEW.min_approval_count IS NULL
+    OR NEW.min_rejection_count IS NULL
+    OR NEW.voters IS NULL
+)
+EXECUTE PROCEDURE trig_account_dim_default();
+
+--commit_queue
+
 CREATE OR REPLACE FUNCTION trig_commit_queue_default()
   RETURNS trigger
   LANGUAGE plpgsql AS
@@ -91,5 +164,7 @@ WHEN (
 )
 EXECUTE PROCEDURE trig_pr_queue_default();
 
+
+ALTER TABLE account_dim DISABLE trigger account_dim_default;
 ALTER TABLE pr_queue DISABLE trigger pr_queue_default;
-ALTER TABLE pr_queue DISABLE trigger commit_queue_default;
+ALTER TABLE commit_queue DISABLE trigger commit_queue_default;

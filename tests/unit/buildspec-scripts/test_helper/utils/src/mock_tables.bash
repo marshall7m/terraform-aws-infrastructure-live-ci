@@ -8,7 +8,8 @@
 
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-
+	count=0
+	reset_identity_col=false
 	while (( "$#" )); do
 		case "$1" in
 			--table)
@@ -49,6 +50,10 @@ parse_args() {
 			;;
 			--return-jq-results)
 				return_jq_results=true
+				shift 1
+			;;
+			--reset-identity-col)
+				reset_identity_col=true
 				shift 1
 			;;
 			*)
@@ -599,30 +604,41 @@ main() {
 		query -f "$DIR/mock_sql/trigger_defaults.sql"
 
 		log "Inserting $staging_table into $table" "DEBUG"
+
+
+		#WA: `psql -v bar=foo` giving syntax error for :bar within sql file using inline command as WA
 		res=$(query -c """
-
-		DO \$\$
+		DO \$\$		
 			DECLARE
-				seq VARCHAR := (SELECT pg_get_serial_sequence('$table', 'id'));
+				seq VARCHAR;	
 			BEGIN
+				IF $count > 0 THEN
+					-- creates duplicate rows of '$staging_table' to match mock_count only if '$staging_table' contains one item
+					INSERT INTO $staging_table
+					SELECT s.* 
+					FROM $staging_table s, GENERATE_SERIES(1, $count)
+					WHERE (SELECT COUNT(*) FROM $staging_table) = 1;
+				END IF;
 
-				-- creates duplicate rows of '$staging_table' to match mock_count only if '$staging_table' contains one item
-				INSERT INTO $staging_table
-				SELECT s.* 
-				FROM $staging_table s, GENERATE_SERIES(1, '$count')
-				WHERE (SELECT COUNT(*) FROM $staging_table) = 1;
+				IF $reset_identity_col = true THEN
+					seq := (SELECT pg_get_serial_sequence('$table', 'id'));
+				
+					PERFORM setval(seq, (SELECT COALESCE(MAX(id), 1) FROM $table));
 
-				-- resets identity column
-				PERFORM setval(seq, (SELECT COALESCE(MAX(id), 1) FROM $table));
-
-				INSERT INTO $table (id, $psql_cols)
-				SELECT
+					INSERT INTO $table (id, $psql_cols)
+					SELECT
 					nextval(seq),
 					$psql_cols
-				FROM $staging_table;
-
-				DROP TABLE $staging_table;
+					FROM $staging_table;
+				ELSE
+					INSERT INTO $table ($psql_cols)
+					SELECT
+					$psql_cols
+					FROM $staging_table;
+				END IF;
+				
 				ALTER TABLE $table DISABLE TRIGGER "$table"_default;  
+				DROP TABLE $staging_table;
 			END;
 		\$\$ LANGUAGE plpgsql;
 		""")
