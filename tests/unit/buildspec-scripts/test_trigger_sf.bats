@@ -1,11 +1,11 @@
-export script_logging_level="DEBUG"
-# export KEEP_METADB_OPEN=true
-export METADB_TYPE=local
-
-load 'test_helper/bats-support/load'
-load 'test_helper/bats-assert/load'
-
 setup_file() {
+    load 'test_helper/bats-support/load'
+    load 'test_helper/bats-assert/load'
+
+    export script_logging_level="DEBUG"
+    export KEEP_METADB_OPEN=true
+    export METADB_TYPE=local
+
     export BASE_REF=master
     export CODEBUILD_INITIATOR=rule/test
     export EVENTBRIDGE_FINISHED_RULE=rule/test
@@ -34,13 +34,12 @@ setup() {
     setup_test_case_repo
     setup_test_case_tf_state
 
-    run_only_test 1
+    run_only_test 2
 }
 
 teardown() {
     load 'test_helper/utils/load.bash'
     clear_metadb_tables
-    drop_mock_temp_tables
     drop_temp_tables
     teardown_test_case_tmp_dir
 }
@@ -51,52 +50,89 @@ teardown() {
 
 @test "Successful deployment event with new provider resources, dequeue deploy commit with no new providers" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
+    
+    modify_items=$(jq -n '
+        [
+            {
+                "cfg_path": "directory_dependency/dev-account/global",
+                "new_provider": true,
+                "apply_changes": false
+            }
+        ]
+    ')
+    
+    commit_items=$(jq -n '
+        {
+            "is_rollback": false,
+            "status": "running"
+        }
+    ')
 
-    execution_id="run-0000001"
-    pr_id=1
-    commit_id=$( git log --pretty=format:'%H' -n 1)
-    testing_dir="directory_dependency/dev-account/global"
-    abs_testing_dir="$TEST_CASE_REPO_DIR/$testing_dir"
+    mock_commit=$(bash "$BATS_TEST_DIRNAME/test_helper/utils/src/mock_commit.bash" \
+        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --modify-items "$modify_items" \
+        --commit-item "$commit_items" \
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    )
 
-    log "Modifying Terragrunt directory within test repo's base branch" "DEBUG"
-    res=$(modify_tg_path --path "$abs_testing_dir" --new-provider-resource)
-    mock_provider=$(echo "$res" | jq 'keys')
-    mock_resource=$(echo "$res" | jq 'map(.resource) | join(", ")' | tr -d '"')
+    finished_execution=$(jq -n \
+        --arg execution_id "$execution_id" \
+        --arg cfg_path "$testing_dir" \
+        --arg commit_id "$commit_id" \
+        --arg new_providers "$new_providers" '
+        {
+            "cfg_path": $cfg_path,
+            "commit_id": $commit_id,
+            "new_providers": $new_providers
+        }
+    ')
 
-    log "Exporting execution cloudwatch event to env var: EVENTBRIDGE_EVENT" "INFO"
-    export EVENTBRIDGE_EVENT=$( echo "$execution" | jq --arg status "$finished_status" '.status = $status | tostring')
-    log "EVENTBRIDGE_EVENT: $(printf '\n\t' "$EVENTBRIDGE_EVENT")" "DEBUG"
+    finished_status="success"
+
+    mock_cloudwatch_execution "$finished_execution" "$finished_status" 
 
     log "Creating mock account_dim" "INFO"
 
     account_dim=$(jq -n '
-    [
         {
             "account_path": "directory_dependency/dev-account",
             "account_deps": [],
         }
-    ]
     ')
 
+    mock_table --table "account_dim" --items "$account_dim" --random-defaults
 
-    log "Creating test commit execution" "INFO"
-    checkout_test_case_branch
+    modify_items=$(jq -n '
+        [
+            {
+                "cfg_path": "directory_dependency/dev-account/env-one/doo",
+                "new_provider": false,
+                "apply_changes": false
+            }
+        ]
+    ')
 
-    log "Modifying Terragrunt directories within test repo" "DEBUG"
-    modify_tg_path --path "$abs_testing_dir"
-    
-    git add "$(git rev-parse --show-toplevel)/"
-	git commit -m "modify $testing_dir"
+    commit_items=$(jq -n '
+        {
+            "is_rollback": false,
+            "status": "waiting"
+        }
+    ')
 
-	commit_id=$(git log --pretty=format:'%H' -n 1)
-    
-    log "Switching back to default branch" "DEBUG"
-    git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')"
+    mock_commit=$(bash "$BATS_TEST_DIRNAME/test_helper/utils/src/mock_commit.bash" \
+        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --modify-items "$modify_items" \
+        --commit-item "$commit_items" \
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    )
 
     run trigger_sf.sh
     assert_success
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
+    execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
+    new_resources=$(echo "$mock_commit" | jq 'modify.new_resources' | tr -d '"')
+
     log "$(query -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
     run query -c """
     do \$\$
@@ -109,7 +145,7 @@ teardown() {
                 WHERE
                     execution_id = '$execution_id' 
                 AND
-                    new_resources = ARRAY['$mock_resource']
+                    new_resources = ARRAY['$new_resources']
                 AND
                     status = 'success'
             ) = 1;
@@ -119,7 +155,12 @@ teardown() {
     assert_success
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    log "$(query -x "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+
+    commit_id=$(echo "$mock_commit" | jq '.commit.commit_id')
+    cfg_path=$(echo "$mock_commit" | jq '.modify[0].cfg_path')
+    is_rollback=$(echo "$mock_commit" | jq '.modify[0].is_rollback')
+
+    log "$(query -x "select * from executions where commit_id = '$commit_id';")" "DEBUG"
     run query -c """
     do \$\$
         BEGIN
@@ -129,11 +170,11 @@ teardown() {
                 FROM
                     executions
                 WHERE
-                    commit_id = '$TESTING_COMMIT_ID' 
+                    commit_id = '$commit_id' 
                 AND
-                    cfg_path = '$testing_dir' 
+                    cfg_path = '$cfg_path' 
                 AND
-                    is_rollback = false 
+                    is_rollback = '$is_rollback' 
                 AND
                     status = 'running'
             ) = 1;

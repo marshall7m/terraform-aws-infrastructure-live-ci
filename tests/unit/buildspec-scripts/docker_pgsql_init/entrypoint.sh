@@ -26,8 +26,10 @@ psql -v ON_ERROR_STOP=1 \
     CREATE TABLE IF NOT EXISTS executions (
         execution_id VARCHAR PRIMARY KEY,
         is_rollback BOOL,
-        pr_id VARCHAR,
+        pr_id INT,
         commit_id VARCHAR,
+        base_ref VARCHAR,
+        head_ref VARCHAR,
         base_source_version VARCHAR,
         head_source_version VARCHAR,
         cfg_path VARCHAR,

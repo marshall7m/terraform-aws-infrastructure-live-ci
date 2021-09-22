@@ -39,7 +39,7 @@ setup_metadb() {
 			log "Sleep (sec): $sleep_sec" "DEBUG"
 			is_local_db_running
 			while [ $? -ne 0 ]; do
-				if (( $count < $timeout_sec )); then
+				if (( $count > $timeout_sec )); then
 					log "Timeout has been reached -- exiting" "ERROR"
 					exit 1
 				fi

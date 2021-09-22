@@ -28,12 +28,11 @@ setup() {
     setup_test_case_repo
     # setup_test_case_tf_state
 
-    run_only_test 2
+    run_only_test 5
 }
 
 teardown() {
     clear_metadb_tables
-    drop_mock_temp_tables
     drop_temp_tables
     teardown_test_case_tmp_dir
 }
@@ -72,7 +71,7 @@ teardown() {
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
     init_count=$(query -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
 
-    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count "$count"
+    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count "$count" --reset-identity-col
     assert_success
     
     log "$(query -c "SELECT * FROM pr_queue;")" "DEBUG"
@@ -97,7 +96,7 @@ teardown() {
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
     init_count=$(query -qtAX -c "SELECT COUNT(*) FROM commit_queue WHERE pr_id = $pr_id")
 
-    run mock_tables.bash --table "commit_queue" --random-defaults --items "$expected" --count "$count" --update-parents
+    run mock_tables.bash --table "commit_queue" --random-defaults --items "$expected" --count "$count" --update-parents --reset-identity-col
     assert_success
     
     log "$(query -c "SELECT * FROM commit_queue;")" "DEBUG"
@@ -146,22 +145,27 @@ teardown() {
 }
 
 @test "Mock executions records based on object" {
-    expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
-    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
+    pr_id=1
+    count=5
+    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM executions WHERE pr_id = $pr_id")
 
-    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count "$count"
+    expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
+    expected_count=$(($count + $init_count))
+
+    run mock_tables.bash --table "executions" --random-defaults --items "$expected" --count "$count" --update-parents
     assert_success
     
-    log "$(query -c "SELECT * FROM pr_queue;")" "DEBUG"
+    log "$(query -x -c "SELECT * FROM executions;")" "DEBUG"
+    log "$(query -x -c "SELECT COUNT(*) FROM executions;")" "DEBUG"
 
     run query -c """ 
     do \$\$
         BEGIN
             ASSERT (
                 SELECT COUNT(*)
-                FROM pr_queue 
-                WHERE pr_id = $pr_id
-            ) = $(($count + $init_count));
+                FROM executions 
+                WHERE pr_id = '$pr_id'
+            ) = $expected_count;
         END;
     \$\$ LANGUAGE plpgsql;
     """

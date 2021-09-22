@@ -1,41 +1,69 @@
-parse_tg_path_args() {
+parse_args() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+	head_ref="mock-commit-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+	commit_msg="mock modify tg paths"
 	while (( "$#" )); do
 		case "$1" in
-			--path)
+			--commit-item)
 				if [ -n "$2" ]; then
-					tg_dir="$2"
+					commit_item="$2"
 					shift 2
 				else
-					echo "Error: Argument for $1 is missing" >&2
+					log "Error: Argument for $1 is missing" "ERROR"
 					exit 1
 				fi
 			;;
-			--new-provider-resource)
-				new_provider_resource=true
-				shift 1
+			--modify-items)
+				if [ -n "$2" ]; then
+					modify_items="$2"
+					shift 2
+				else
+					log "Error: Argument for $1 is missing" "ERROR"
+					exit 1
+				fi
+			;;
+			--abs-repo-dir)
+			if [ -n "$2" ]; then
+					abs_repo_dir="$2"
+					shift 2
+				else
+					log "Error: Argument for $1 is missing" "ERROR"
+					exit 1
+				fi
+			;;
+			--head-ref)
+				if [ -n "$2" ]; then
+					head_ref="$2"
+					shift 2
+				else
+					log "Error: Argument for $1 is missing" "ERROR"
+					exit 1
+				fi
+			;;
+			--commit-msg)
+				if [ -n "$2" ]; then
+					commit_msg="$2"
+					shift 2
+				else
+					log "Error: Argument for $1 is missing" "ERROR"
+					exit 1
+				fi
 			;;
 			*)
-				echo "Unknown Option: $1"
+				log "Unknown Option: $1" "ERROR"
 				exit 1
 			;;
 		esac
 	done
 }
 
-checkout_test_case_branch() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-	export TESTING_HEAD_REF="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
-	
-	log "Creating testing branch: $TESTING_HEAD_REF" "INFO"
-	git checkout -B "$TESTING_HEAD_REF"
-}
-
 modify_tg_path() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-	
-	parse_tg_path_args "$@"
 
+	local tg_dir=$1
+	local new_provider_resource=$2
+	
 	# get terraform source dir from .terragrunt-cache/
 	tf_dir=$(terragrunt terragrunt-info --terragrunt-working-dir "$tg_dir" | jq '.WorkingDir' | tr -d '"')
 	
@@ -50,36 +78,39 @@ modify_tg_path() {
 	fi
 }
 
-add_test_case_pr_to_queue() {
-	results=$(query -c """
-	INSERT INTO pr_queue (
-        pr_id,
-        status,
-        base_ref,
-		head_ref
-	)
-	VALUES (
-		11,
-		'waiting',
-		'$TESTING_BASE_REF',
-		'$TESTING_HEAD_REF'
-	)
-	RETURNING *;
-	""")
-
-	log "Results:" "DEBUG"
-	log "$results" "DEBUG"
-}
-
-add_test_case_head_commit_to_queue() {
+create_commit_changes() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-	if [ -z "$TEST_CASE_REPO_DIR" ]; then
-		log "Test case repo directory was not set" "ERROR"
-		exit 1
-	else
-		cd "$TEST_CASE_REPO_DIR"
-	fi
+	local modify_items=$1
+	
+	for (( idx=0; idx<=$(echo "$modify_items" | jq '. | length'); idx+=1 )); do
+		cfg_path=$(echo "$modify_items" | jq --arg idx $idx '.[($idx | tonumber)].cfg_path' | tr -d '"')
+		new_provider_resource=$(echo "$modify_items" | jq --arg idx $idx '.[($idx | tonumber)].new_provider_resource' | tr -d '"')
+		apply_changes=$(echo "$modify_items" | jq --arg idx $idx '.[($idx | tonumber)].apply_changes' | tr -d '"')
+
+		res=$(modify_tg_path "$cfg_path" "$new_provider_resource")
+		mock_provider=$(echo "$res" | jq 'keys')
+		mock_resource=$(echo "$res" | jq '.resource')
+
+		if [ -n "$apply_changes" ]; then
+			terragrunt apply --terragrunt-working-dir $cfg_path -auto-approve >/dev/null
+		fi
+
+		modify_items=$(echo "$modify_items" | jq \
+		--arg idx $idx \
+		--arg mock_provider $mock_provider \
+		--arg mock_resource $mock_resource '
+		($idx | tonumber) as $idx
+		| .[$idx].new_providers = $mock_provider | .[$idx].new_resources = $mock_resource
+		')
+	done
+}
+
+add_commit_to_queue() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+	local commit_item=$1
+	local commit_msg=$2
 
 	log "Adding testing changes to branch: $(git rev-parse --abbrev-ref HEAD)" "INFO"
 
@@ -89,31 +120,19 @@ add_test_case_head_commit_to_queue() {
 	fi
 
 	git add "$(git rev-parse --show-toplevel)/"
-	git commit -m $TESTING_HEAD_REF
+	git commit -m "$commit_msg"
 
-	export TESTING_COMMIT_ID=$(git log --pretty=format:'%H' -n 1)
-	log "Expected next commit in queue: $TESTING_COMMIT_ID" "DEBUG"
+	commit_id=$(git log --pretty=format:'%H' -n 1)
 
-	log "Adding testing commit to queue" "INFO"
+	log "Adding commit ID to queue: $commit_id" "DEBUG"
 
-	results=$(query -c """
-	INSERT INTO commit_queue (
-		commit_id,
-        pr_id,
-        status,
-        is_rollback
-	)
-	VALUES (
-		'$TESTING_COMMIT_ID',
-		11,
-		'waiting',
-		false
-	)
-	RETURNING *;
-	""")
+	commit_items=$(echo "$commit_item" | jq -n \
+	--arg commit_id $commit_id '
+		{"commit_id": $commit_id} + .
+	')
 
-	log "Results:" "DEBUG"
-	log "$results" "DEBUG"
+	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
+	"$DIR/mock_tables.bash" --tables "commit_queue" --items "$commit_item" --reset-identity-col --random-defaults --update-parents
 }
 
 create_new_provider_resource() {
@@ -191,3 +210,29 @@ output "test_case_$BATS_TEST_NUMBER" {
 }
 EOF
 }
+
+
+main() {
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+	parse_args "$@"
+
+	cd "$abs_repo_dir"
+
+	log "Creating testing branch: $head_ref" "INFO"
+	git checkout -B "$head_ref"
+
+	modify_items=$(create_commit_changes "$modify_items")
+
+	commit_item=$(add_commit_to_queue "$commit_item" "$commit_msg")
+
+	log "Switching back to default branch" "DEBUG"
+	cd "$abs_repo_dir"
+    git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')"
+	
+	jq --arg commit_item "$commit_item" --arg modify_items "$modify_items" '{"commit": $commit_item, "modify": $modify_items}'
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	main "$@"
+fi

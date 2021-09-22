@@ -1,11 +1,12 @@
 #!/bin/bash
 _common_setup() {
+  # add testing directory to PATH
   src_path="$( cd "$( dirname "$BASH_SOURCE[0]" )/../../../../../../files/buildspec-scripts" >/dev/null 2>&1 && pwd )"
   PATH="$src_path:$PATH"
   chmod u+x "$src_path"
   
   load "$src_path/utils.sh"
-
+  export -f log
   export -f query
   export -f jq_to_psql_records
 }
