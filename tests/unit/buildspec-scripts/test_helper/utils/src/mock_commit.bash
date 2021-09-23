@@ -1,8 +1,8 @@
+source "$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )/"
+
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-	head_ref="mock-commit-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
-	commit_msg="mock modify tg paths"
 	while (( "$#" )); do
 		case "$1" in
 			--commit-item)
@@ -34,7 +34,7 @@ parse_args() {
 			;;
 			--head-ref)
 				if [ -n "$2" ]; then
-					head_ref="$2"
+					head_ref=${2:-"mock-commit-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"}
 					shift 2
 				else
 					log "Error: Argument for $1 is missing" "ERROR"
@@ -43,7 +43,7 @@ parse_args() {
 			;;
 			--commit-msg)
 				if [ -n "$2" ]; then
-					commit_msg="$2"
+					commit_msg=${2:-"mock modify tg paths"}
 					shift 2
 				else
 					log "Error: Argument for $1 is missing" "ERROR"
@@ -213,6 +213,7 @@ EOF
 
 
 main() {
+	set -e
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	parse_args "$@"
@@ -231,6 +232,8 @@ main() {
     git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')"
 	
 	jq --arg commit_item "$commit_item" --arg modify_items "$modify_items" '{"commit": $commit_item, "modify": $modify_items}'
+
+	set +e
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

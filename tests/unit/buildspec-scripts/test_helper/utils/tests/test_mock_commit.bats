@@ -1,48 +1,89 @@
+#!/usr/bin/env bats
+
 load '../../bats-support/load'
 load '../../bats-assert/load'
-export script_logging_level="DEBUG"
+load '../load.bash'
 
 setup_file() {
-    load '../load.bash'
-    export TESTING_LOCAL_PARENT_TF_STATE_DIR="$BATS_TEST_TMPDIR/test-repo-tf-state"
-    
+    export script_logging_level="DEBUG"
+    export KEEP_METADB_OPEN=true
+    export METADB_TYPE=local
+
+    load './load.bash'
+
+    _common_setup
     log "FUNCNAME=$FUNCNAME" "DEBUG"
+    setup_metadb
+
+    export TESTING_LOCAL_PARENT_TF_STATE_DIR="$BATS_TEST_TMPDIR/test-repo-tf-state"
     setup_test_file_repo "https://github.com/marshall7m/infrastructure-live-testing-template.git"
+    setup_test_file_tf_state "directory_dependency/dev-account"
 }
 
 teardown_file() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
+    teardown_metadb
     teardown_test_file_tmp_dir
 }
 
 setup() {
-    load '../load.bash'
-    
     setup_test_case_repo
+    setup_test_case_tf_state
+
+    run_only_test 1
 }
 
 teardown() {
-    load '../load.bash'
+    clear_metadb_tables
+    drop_temp_tables
     teardown_test_case_tmp_dir
 }
 
 @test "Script is runnable" {
-    run mock_commit.bash
-}
-
-@test "setup terragrunt mock config" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
 
-    testing_dir="directory_dependency/dev-account/global"
-    abs_testing_dir="$TEST_CASE_REPO_DIR/$testing_dir"
+    run mock_commit.bash
+    assert_failure
+}
 
-    res=$(modify_tg_path --path "$abs_testing_dir" --new-provider-resource)
+@test "create commit with new provider and apply changes" {
+    log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
+
+    modify_items=$(jq -n '
+        [
+            {
+                "cfg_path": "directory_dependency/dev-account/global",
+                "new_provider": true,
+                "apply_changes": true
+            }
+        ]
+    ')
     
-    log "Assert provider results" "INFO"
-    run echo "$res"
-    assert_output --regexp '.+'
+    commit_items=$(jq -n '
+        {
+            "is_rollback": false,
+            "status": "running"
+        }
+    ')
 
-    log "Assert resource results" "INFO"
-    run echo "$res" | jq 'map(.resource)[0]'
-    assert_output --regexp '.+\..+'
+    run mock_commit.bash \
+        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --modify-items "$modify_items" \
+        --commit-item "$commit_items" \
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    assert_success
+
+    commit_id=$(echo "$output" | jq '.commit.commit_id')
+    cfg_path=$(echo "$output" | jq '.modify[0].cfg_path')
+    is_rollback=$(echo "$output" | jq '.modify[0].is_rollback')
+    new_resources=$(echo "$output" | jq 'modify.new_resources' | tr -d '"')
+
+    cd "$TEST_CASE_REPO_DIR"
+
+    assert_equal "$(echo "$output" | jq '.commit.commit_id')" "$(git log --pretty=format:'%H' -n 1)"
+
+    
+    # assert commit msg/base-ref are correct
+    # assert if modify items are correct via git
+    #assert commit queue item is correct
 }

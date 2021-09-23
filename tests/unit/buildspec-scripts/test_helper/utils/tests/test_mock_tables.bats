@@ -42,6 +42,8 @@ teardown() {
 }
 
 @test "Mock account dim records based on object" {
+    log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
+    
     account_name=dev
     expected=$(jq -n --arg account_name "$account_name" '{"account_name": $account_name}')
 
