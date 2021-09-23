@@ -11,3 +11,6 @@ __pycache__
 *deps/
 *tmp*
 *docker_pgsql_volume*
+/node_modules
+/package-lock.json
+/yarn.lock

@@ -12,7 +12,7 @@ setup_metadb() {
 
 	if [ "$METADB_TYPE" == "local" ]; then
 		DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-		export DOCKER_COMPOSE_DIR="$DIR/../../../"
+		export DOCKER_COMPOSE_DIR="$DIR/../../"
 		export VOLUME_DATA_DIR="$DOCKER_COMPOSE_DIR/docker_pgsql_volume"
 		export VOLUME_ENTRYPOINT_DIR="$DOCKER_COMPOSE_DIR/docker_pgsql_init"
 		export CONTAINER_NAME="metadb"
@@ -102,12 +102,6 @@ clear_metadb_tables() {
 	"""
 	query -c "$sql"
 }
-
-drop_temp_tables() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-	query -c "DROP TABLE IF EXISTS staging_cfg_stack, queued_executions;"
-}
-
 
 teardown_metadb() {
 

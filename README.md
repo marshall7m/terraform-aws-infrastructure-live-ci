@@ -671,14 +671,6 @@ else
 With waiting stage executions run dependency logic
 
 
-Update execution queue
-
-
-Repo queue with CW finsihed rule
-update repo queue commit status 
-
-
-
 Changing from json meta-db to aurora db
 Reasons:
     - Readability (simple postgres query syntax compared to complex jq statements)
@@ -686,18 +678,6 @@ Reasons:
         - easily migrate aurora metadb to another service if need be
         - jq is constraint to file based storage
     - Accessibility
-
-
-TODO:
-- change jq data to csv data for testing
-- Change jq statements to postgres queries
-
-
-Create separate sf executions with wait task token:
-
-Create task token table
-
-
 
 [['security'], ['dev, 'staging', 'prod']] -> Workspace mapping:
     - run tg plan-all on workspace parent dir
@@ -716,3 +696,9 @@ Create task token table
 {path_input} -> Cfg mapping
 
 path -> deployment flow mapping
+
+
+# TODO:
+- Move psql test helper functions to separate repo
+- trigger_sf passing all BATS tests
+- Update pr/commit queue columns in buildspec

@@ -1,5 +1,3 @@
-source "$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )/"
-
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 

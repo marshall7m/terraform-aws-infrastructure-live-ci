@@ -1,17 +1,14 @@
 #!/usr/bin/env bats
 
-load '../../bats-support/load'
-load '../../bats-assert/load'
-load '../load.bash'
-
 setup_file() {
     export script_logging_level="DEBUG"
     export KEEP_METADB_OPEN=true
     export METADB_TYPE=local
 
-    load './load.bash'
+    load 'common_setup.bash'
 
     _common_setup
+    
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     setup_metadb
 

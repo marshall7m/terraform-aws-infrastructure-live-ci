@@ -200,14 +200,6 @@ update_executions_with_new_deploy_stack() {
             log "Stack is empty -- skipping" "DEBUG"
             continue
         fi
-        
-        query -c """
-        CREATE TABLE staging_cfg_stack (
-            cfg_path VARCHAR,
-            cfg_deps TEXT[],
-            new_providers TEXT[]
-        );
-        """
 
         jq_to_psql_records "$stack" "staging_cfg_stack"
 
@@ -272,6 +264,9 @@ update_executions_with_new_deploy_stack() {
         log "Execution table items for account:" "DEBUG"
         log "$(query -x "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
     done
+
+    log "Cleaning up" "DEBUG"
+    query -c "DROP TABLE IF EXISTS staging_cfg_stack;"
     set +e
 }
 
@@ -755,7 +750,11 @@ start_sf_executions() {
             log "DRY_RUN was set -- skip starting sf executions" "INFO"
         fi
     done
+    
+    log "Cleaning up" "DEBUG"
+    query -c "DROP TABLE IF EXISTS queued_executions;"
 }
+
 
 stop_running_sf_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"

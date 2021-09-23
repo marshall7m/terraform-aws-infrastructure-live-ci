@@ -1,34 +1,35 @@
 {
-    "name": "terraform-aws-infrastructure-live-ci-bash-scripts",
-    "version": "0.0.1",
-    "description": "Bash functions and scripts used to orchestrate AWS Step Function runs for IAC deployment flows",
-    "homepage": "https://github.com/marshall7m/terraform-aws-infrastructure-live-ci",
-    "author": "Marshall Mamiya",
-    "repository": "github:marshall7m/terraform-aws-infrastructure-live-ci",
-    "directories": {
-        "lib": "files/buildspec-scripts",
-        "test": "tests/unit/buildspec-scripts"
-    },
-    "files": ["files/buildspec-scripts"],
-    "dependencies": {
-        "bats-core/bats-core": "v1.4.1",
-        "bats-core/bats-support": "v0.3.0",
-        "bats-core/bats-assert": "v2.0.0",
-        "marshall7m/bash-utils": "master"
-    },
-    "devDependencies": {
-        "bats-core/bats-core": "v1.4.1",
-        "bats-core/bats-support": "v0.3.0",
-        "bats-core/bats-assert": "v2.0.0"
-    },
-    "keywords": [
-        "bats",
-        "bash",
-        "shell",
-        "tests",
-        "unit",
-        "assert",
-        "assertion",
-        "helper"
-    ]
+  "name": "terraform-aws-infrastructure-live-ci-bash-scripts",
+  "version": "0.0.1",
+  "description": "Bash functions and scripts used to orchestrate AWS Step Function runs for IAC deployment flows",
+  "homepage": "https://github.com/marshall7m/terraform-aws-infrastructure-live-ci",
+  "author": "Marshall Mamiya",
+  "repository": "github:marshall7m/terraform-aws-infrastructure-live-ci",
+  "directories": {
+    "lib": "files/buildspec-scripts",
+    "test": "tests/unit/buildspec-scripts"
+  },
+  "files": [
+    "files/buildspec-scripts"
+  ],
+  "dependencies": {
+    "bash-utils": "https://github.com/marshall7m/bash-utils"
+  },
+  "devDependencies": {
+    "bats": "https://github.com/bats-core/bats-core",
+    "bats-assert": "https://github.com/bats-core/bats-assert",
+    "bats-support": "https://github.com/bats-core/bats-support",
+    "bash-utils": "https://github.com/marshall7m/bash-utils",
+    "bats-utils": "https://github.com/marshall7m/bats-utils"
+  },
+  "keywords": [
+    "bats",
+    "bash",
+    "shell",
+    "tests",
+    "unit",
+    "assert",
+    "assertion",
+    "helper"
+  ]
 }
