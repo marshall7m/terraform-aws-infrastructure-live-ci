@@ -135,8 +135,8 @@ teardown() {
     execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
     new_resources=$(echo "$target_commit" | jq 'modify.new_resources' | tr -d '"')
 
-    log "$(query -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -162,8 +162,8 @@ teardown() {
     cfg_path=$(echo "$target_commit" | jq '.modify[0].cfg_path')
     is_rollback=$(echo "$target_commit" | jq '.modify[0].is_rollback')
 
-    log "$(query -x "select * from executions where commit_id = '$commit_id';")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from executions where commit_id = '$commit_id';")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -270,8 +270,8 @@ teardown() {
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
     execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
 
-    log "$(query -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -298,8 +298,8 @@ teardown() {
     is_rollback=$(echo "$target_commit" | jq '.modify[0].is_rollback')
     new_resources=$(echo "$target_commit" | jq 'modify.new_resources' | tr -d '"')
 
-    log "$(query -x "select * from executions where commit_id = '$commit_id';")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from executions where commit_id = '$commit_id';")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -369,8 +369,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit rollback is running" "INFO"
-    log "$(query -x "select * from commit_queue where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from commit_queue where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -389,8 +389,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit rollback executions are created" "INFO"
-    log "$(query -x "select * from executions where commit_id = '$TESTING_COMMIT_ID' AND is_rollback = true;")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from executions where commit_id = '$TESTING_COMMIT_ID' AND is_rollback = true;")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -493,8 +493,8 @@ teardown() {
     assert_success
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    log "$(query -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (
@@ -513,8 +513,8 @@ teardown() {
     assert_success
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    log "$(query -x "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run query -c """
+    log "$(psql -x "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    run psql -c """
     do \$\$
         BEGIN
             ASSERT (

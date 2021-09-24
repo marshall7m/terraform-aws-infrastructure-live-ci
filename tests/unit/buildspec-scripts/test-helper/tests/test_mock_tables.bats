@@ -50,9 +50,9 @@ teardown() {
     run mock_tables.bash --table "account_dim" --random-defaults --items "$expected"
     assert_success
     
-    log "$(query -c "SELECT * FROM account_dim;")" "DEBUG"
+    log "$(psql -c "SELECT * FROM account_dim;")" "DEBUG"
 
-    run query -c """ 
+    run psql -c """ 
     do \$\$
         BEGIN
             ASSERT (
@@ -71,14 +71,14 @@ teardown() {
     pr_id=1
     count=5
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
-    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
+    init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
 
     run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count "$count" --reset-identity-col
     assert_success
     
-    log "$(query -c "SELECT * FROM pr_queue;")" "DEBUG"
+    log "$(psql -c "SELECT * FROM pr_queue;")" "DEBUG"
 
-    run query -c """ 
+    run psql -c """ 
     do \$\$
         BEGIN
             ASSERT (
@@ -96,14 +96,14 @@ teardown() {
     pr_id=1
     count=5
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
-    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM commit_queue WHERE pr_id = $pr_id")
+    init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM commit_queue WHERE pr_id = $pr_id")
 
     run mock_tables.bash --table "commit_queue" --random-defaults --items "$expected" --count "$count" --update-parents --reset-identity-col
     assert_success
     
-    log "$(query -c "SELECT * FROM commit_queue;")" "DEBUG"
+    log "$(psql -c "SELECT * FROM commit_queue;")" "DEBUG"
 
-    run query -c """ 
+    run psql -c """ 
     do \$\$
         BEGIN
             ASSERT (
@@ -119,12 +119,12 @@ teardown() {
     log "Assert all commit queue PR IDs are within pr_queue" "DEBUG"
 
     log "commit_queue:" "DEBUG"
-    log "$(query -c "SELECT DISTINCT pr_id FROM commit_queue;")" "DEBUG"
+    log "$(psql -c "SELECT DISTINCT pr_id FROM commit_queue;")" "DEBUG"
 
     log "pr_queue:" "DEBUG"
 
-    log "$(query -c "SELECT DISTINCT pr_id FROM pr_queue;")" "DEBUG"
-    run query -c """ 
+    log "$(psql -c "SELECT DISTINCT pr_id FROM pr_queue;")" "DEBUG"
+    run psql -c """ 
     do \$\$
         BEGIN
             ASSERT (
@@ -149,7 +149,7 @@ teardown() {
 @test "Mock executions records based on object" {
     pr_id=1
     count=5
-    init_count=$(query -qtAX -c "SELECT COUNT(*) FROM executions WHERE pr_id = $pr_id")
+    init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM executions WHERE pr_id = $pr_id")
 
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
     expected_count=$(($count + $init_count))
@@ -157,10 +157,10 @@ teardown() {
     run mock_tables.bash --table "executions" --random-defaults --items "$expected" --count "$count" --update-parents
     assert_success
     
-    log "$(query -x -c "SELECT * FROM executions;")" "DEBUG"
-    log "$(query -x -c "SELECT COUNT(*) FROM executions;")" "DEBUG"
+    log "$(psql -x -c "SELECT * FROM executions;")" "DEBUG"
+    log "$(psql -x -c "SELECT COUNT(*) FROM executions;")" "DEBUG"
 
-    run query -c """ 
+    run psql -c """ 
     do \$\$
         BEGIN
             ASSERT (

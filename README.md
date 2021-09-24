@@ -699,6 +699,7 @@ path -> deployment flow mapping
 
 
 # TODO:
-- Move psql test helper functions to separate repo
+- Figure out how to install binaries for deps without package.json/defined binary within repo for yarn installation
+    - see running build.sh via scripts within package.json is okay
 - trigger_sf passing all BATS tests
 - Update pr/commit queue columns in buildspec

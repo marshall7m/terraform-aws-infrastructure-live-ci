@@ -10,7 +10,6 @@ get_diff_paths() {
     local tg_plan_out=$1
     local git_root=$2
     
-
     # use pcregrep with -M multiline option to scan terragrunt plan output for
     # directories that exited plan with exit status 2 (diff in plan)
     # -N flag defines the convention for newline and CRLF allows for all of the conventions
@@ -176,7 +175,7 @@ update_executions_with_new_deploy_stack() {
     fi
 
     log "Getting Account Paths" "INFO"
-    IFS=$'\n' account_paths=($(query -tA "SELECT account_path FROM account_dim;"))
+    IFS=$'\n' account_paths=($(psql -tA "SELECT account_path FROM account_dim;"))
 
     if [ ${#account_paths} -eq 0 ]; then
         log "No account paths are defined in account_dim" "ERROR"
@@ -204,9 +203,9 @@ update_executions_with_new_deploy_stack() {
         jq_to_psql_records "$stack" "staging_cfg_stack"
 
         log "staging_cfg_stack table:" "DEBUG"
-        log "$(query -x "SELECT * FROM staging_cfg_stack")" "DEBUG"
+        log "$(psql -x "SELECT * FROM staging_cfg_stack")" "DEBUG"
 
-        query -c """
+        psql -c """
         INSERT INTO
             executions
         SELECT
@@ -262,11 +261,11 @@ update_executions_with_new_deploy_stack() {
         """
 
         log "Execution table items for account:" "DEBUG"
-        log "$(query -x "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
+        log "$(psql -x "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
     done
 
     log "Cleaning up" "DEBUG"
-    query -c "DROP TABLE IF EXISTS staging_cfg_stack;"
+    psql -c "DROP TABLE IF EXISTS staging_cfg_stack;"
     set +e
 }
 
@@ -275,7 +274,7 @@ update_executions_with_new_rollback_stack() {
     
     local commit_id=$1
 
-    query -c """
+    psql -c """
     CREATE OR REPLACE FUNCTION target_resources(text[]) RETURNS text AS \$\$
     DECLARE
         flags text := '';
@@ -366,7 +365,7 @@ update_execution_with_new_resources() {
     psql_new_resources=$(echo "$new_resources" | jq '. | join(" ")' | tr -d '"')
 
     log "Adding new resources to execution record" "INFO"
-    query -c """
+    psql -c """
     UPDATE
         executions
     SET
@@ -383,7 +382,7 @@ update_execution_status() {
     local execution_id=$(echo $1 | tr -d '"')
     local status=$(echo $2 | tr -d '"')
 
-    query -c """
+    psql -c """
     UPDATE
         executions
     SET
@@ -427,7 +426,7 @@ verify_param() {
 executions_in_progress() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    query -qtAX -c """
+    psql -qtAX -c """
     SELECT 
         count(*)
     FROM
@@ -480,7 +479,7 @@ update_commit_queue_with_rollback_commits() {
 
     local pr_id=$(echo $1 | tr -d '"')
 
-    query -c """
+    psql -c """
     INSERT INTO commit_queue (
         commit_id,
         is_rollback,
@@ -520,7 +519,7 @@ create_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
     log "Dequeuing next PR if commit queue is empty" "INFO"
-    pr_items=$(query -qtA -c """
+    pr_items=$(psql -qtA -c """
     IF (SELECT count(*) FROM commit_queue WHERE status = 'waiting') = 0 THEN
         RAISE NOTICE 'Pulling next PR from queue';
         UPDATE
@@ -558,7 +557,7 @@ create_executions() {
 
         head_commit_id=$(git log --pretty=format:'%H' -n 1)
         
-        query -c """
+        psql -c """
         INSERT INTO commit_queue (
             commit_id,
             is_rollback,
@@ -578,7 +577,7 @@ create_executions() {
     fi
 
     log "Dequeuing next commit that is waiting" "INFO"
-    commit_items=$(query -qtA -c """
+    commit_items=$(psql -qtA -c """
 
     UPDATE
         commit_queue
@@ -626,7 +625,7 @@ start_sf_executions() {
 
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
     
-    IFS=$'\n' target_execution_ids=$(query -tA """
+    IFS=$'\n' target_execution_ids=$(psql -tA """
     CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS \$\$
     
         -- Returns the total number of array values in the first array that's in the second array
@@ -718,7 +717,7 @@ start_sf_executions() {
     for id in "${target_execution_ids[@]}"; do
         log "Execution ID: $id" "INFO"
 
-        sf_input=$(query -t """
+        sf_input=$(psql -t """
         SELECT 
             row_to_json(sub) 
         FROM (
@@ -738,7 +737,7 @@ start_sf_executions() {
                 --name "$id" \
                 --input "$sf_input"
                 
-            query -c """
+            psql -c """
             UPDATE
                 executions
             SET
@@ -752,7 +751,7 @@ start_sf_executions() {
     done
     
     log "Cleaning up" "DEBUG"
-    query -c "DROP TABLE IF EXISTS queued_executions;"
+    psql -c "DROP TABLE IF EXISTS queued_executions;"
 }
 
 

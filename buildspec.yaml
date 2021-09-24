@@ -1,0 +1,10 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+  install:
+    commands:
+      - yarn install
+  build:
+    commands:
+      - bats tests/unit/buildspec-scripts

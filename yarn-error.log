@@ -1,5 +1,5 @@
 Arguments: 
-  /usr/local/Cellar/node/16.9.1/bin/node /usr/local/Cellar/yarn/1.22.11/libexec/bin/yarn.js add https://github.com/bats-core/bats-support -D
+  /usr/local/Cellar/node/16.9.1/bin/node /usr/local/Cellar/yarn/1.22.11/libexec/bin/yarn.js add terragrunt
 
 PATH: 
   /Users/marshallmamiya/projects/terraform-modules/terraform-aws-infrastructure-live-ci/tests/unit/buildspec-scripts/deps/bin:/usr/local/Caskroom/miniconda/base/envs/py39/bin:/usr/local/Caskroom/miniconda/base/condabin:/usr/local/opt/grep/libexec/gnubin:/usr/local/opt/gnu-getopt/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/lib/python3.8/site-packages:/usr/local/lib/python3.9/site-packages:/Users/marshallmamiya/go/bin:/usr/local/opt/go/libexec/bin:/usr/local/Cellar/tfenv:/usr/local/bin/semtag
@@ -14,12 +14,17 @@ Platform:
   darwin x64
 
 Trace: 
-  SyntaxError: /Users/marshallmamiya/projects/terraform-modules/terraform-aws-infrastructure-live-ci/package.json: Unexpected token } in JSON at position 909
-      at JSON.parse (<anonymous>)
-      at /usr/local/Cellar/yarn/1.22.11/libexec/lib/cli.js:1625:59
-      at Generator.next (<anonymous>)
-      at step (/usr/local/Cellar/yarn/1.22.11/libexec/lib/cli.js:310:30)
-      at /usr/local/Cellar/yarn/1.22.11/libexec/lib/cli.js:321:13
+  Error: https://registry.yarnpkg.com/terragrunt: Not found
+      at Request.params.callback [as _callback] (/usr/local/Cellar/yarn/1.22.11/libexec/lib/cli.js:66992:18)
+      at Request.self.callback (/usr/local/Cellar/yarn/1.22.11/libexec/lib/cli.js:140763:22)
+      at Request.emit (node:events:394:28)
+      at Request.<anonymous> (/usr/local/Cellar/yarn/1.22.11/libexec/lib/cli.js:141735:10)
+      at Request.emit (node:events:394:28)
+      at IncomingMessage.<anonymous> (/usr/local/Cellar/yarn/1.22.11/libexec/lib/cli.js:141657:12)
+      at Object.onceWrapper (node:events:513:28)
+      at IncomingMessage.emit (node:events:406:35)
+      at endReadableNT (node:internal/streams/readable:1343:12)
+      at processTicksAndRejections (node:internal/process/task_queues:83:21)
 
 npm manifest: 
   {
@@ -37,11 +42,15 @@ npm manifest:
       "files/buildspec-scripts"
     ],
     "dependencies": {
-      "bash-utils": "https://github.com/marshall7m/bash-utils",
-      "bats-utils": "https://github.com/marshall7m/bats-utils"
+      "bash-utils": "https://github.com/marshall7m/bash-utils"
     },
     "devDependencies": {
-      "bats-assert": "https://github.com/bats-core/bats-assert"
+      "bats": "https://github.com/bats-core/bats-core",
+      "bats-assert": "https://github.com/bats-core/bats-assert",
+      "bats-support": "https://github.com/bats-core/bats-support",
+      "bash-utils": "https://github.com/marshall7m/bash-utils",
+      "bats-utils": "https://github.com/marshall7m/bats-utils",
+      "terragrunt": "git+https://github.com/gruntwork-io/terragrunt.git/releases/download/v0.32.4/terragrunt_linux_amd64"
     },
     "keywords": [
       "bats",
@@ -52,7 +61,7 @@ npm manifest:
       "assert",
       "assertion",
       "helper"
-    ],
+    ]
   }
 
 yarn manifest: 
@@ -71,6 +80,18 @@ Lockfile:
     version "2.0.0"
     resolved "https://github.com/bats-core/bats-assert#672ad1823a4d2f0c475fdbec0c4497498eec5f41"
   
+  "bats-support@https://github.com/bats-core/bats-support":
+    version "0.3.0"
+    resolved "https://github.com/bats-core/bats-support#d140a65044b2d6810381935ae7f0c94c7023c8c3"
+  
   "bats-utils@https://github.com/marshall7m/bats-utils":
     version "0.0.1"
     resolved "https://github.com/marshall7m/bats-utils#47457e1666891d8456b97c23a3cee55bebc704af"
+  
+  "bats@https://github.com/bats-core/bats-core":
+    version "1.4.1"
+    resolved "https://github.com/bats-core/bats-core#90a051bf2d58432348002091bc6eb0c202a3eee7"
+  
+  "terragrunt@https://github.com/gruntwork-io/terragrunt":
+    version "0.0.0"
+    resolved "https://github.com/gruntwork-io/terragrunt#fed8039a6f08c2816bd18d6377c77b379ccbc345"

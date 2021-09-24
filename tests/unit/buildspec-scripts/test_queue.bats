@@ -50,7 +50,7 @@ teardown() {
     \$\$ LANGUAGE plpgsql;
     """
 
-    query -c "$assert_sql"
+    psql -c "$assert_sql"
     assert_success
 }
 
@@ -79,7 +79,7 @@ teardown() {
     FROM GENERATE_SERIES(1, 10) seq;
     """
 
-    query -c "$sql"
+    psql -c "$sql"
 
     run queue.sh
     assert_success
@@ -103,10 +103,10 @@ teardown() {
     \$\$ LANGUAGE plpgsql;
     """
 
-    results=$(query -x "SELECT * FROM commit_queue WHERE commit_id = 'CODEBUILD_RESOLVED_SOURCE_VERSION';")
+    results=$(psql -x "SELECT * FROM commit_queue WHERE commit_id = 'CODEBUILD_RESOLVED_SOURCE_VERSION';")
     log "Commit records:" "DEBUG"
     log "$results" "DEBUG"
 
-    run query -c "$assert_sql"
+    run psql -c "$assert_sql"
     assert_success
 }

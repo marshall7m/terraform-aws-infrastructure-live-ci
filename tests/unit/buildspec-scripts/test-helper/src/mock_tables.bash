@@ -89,30 +89,13 @@ parse_tg_graph_deps() {
     echo "$parsed_stack"
 }
 
-jq_map_to_psql_table() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-	local jq_map=$1	
-	local table=$2
-
-	csv_table=$( echo "$jq_map" | jq -r '
-		with_entries(if .value | type == "array" then .value |= "{" + join(", ") + "}" else . end) 
-		| [values[]] | @csv
-	')
-
-	log "JQ mapping transformed to CSV strings" "DEBUG"
-	log "$csv_table" "DEBUG"
-	
-	echo "$csv_table" | query -c "COPY $table FROM STDIN DELIMITER ',' CSV"
-}
-
 setup_mock_staging_cfg_stack() {
 	local account_dim=$1
 	local git_root=$2
 
 	log "Creating execution table based on local Terragrunt directory configurations" "INFO"
 
-	query -c "CREATE TABLE mock_staging_cfg_stack (cfg_path VARCHAR PRIMARY KEY, cfg_deps text[], account_path VARCHAR);"
+	psql -c "CREATE TABLE mock_staging_cfg_stack (cfg_path VARCHAR PRIMARY KEY, cfg_deps text[], account_path VARCHAR);"
 	
 	cd "$git_root"
 	while read account_path; do
@@ -140,33 +123,6 @@ setup_mock_staging_cfg_stack() {
 	done <<< "$(echo "$account_dim" | jq 'map(.account_path)' | jq -c '.[]')"
 }
 
-table_exists() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-	local table=$1
-
-	res=$(query -qtAX -c """
-	SELECT EXISTS (
-		SELECT 
-			1 
-		FROM 
-			information_schema.tables 
-		WHERE 
-			table_schema = 'public' 
-		AND 
-			table_name = '$table'
-	);
-	""")
-
-	log "results: $res" "DEBUG"
-
-	if [ "$res" == 't' ]; then
-		return 0
-	else
-		return 1
-	fi
-}
-
 main() {
 
 	set -e
@@ -180,16 +136,16 @@ main() {
 		staging_table="staging_$table"
 		jq_to_psql_records "$items" "$staging_table"
 		log "$staging_table:" "DEBUG"
-		log "$(printf '\n%s' "$(query -c "SELECT * FROM $staging_table")") " "DEBUG"
+		log "$(printf '\n%s' "$(psql -c "SELECT * FROM $staging_table")") " "DEBUG"
 
 		log "Creating mock defaults triggers" "DEBUG"
-		query -f "$DIR/mock_sql/trigger_defaults.sql"
+		psql -f "$DIR/mock_sql/trigger_defaults.sql"
 
 		log "Inserting $staging_table into $table" "DEBUG"
 
 
 		#WA: `psql -v bar=foo` giving syntax error for :bar within sql file -- using inline command as WA
-		res=$(query -t -c """
+		res=$(psql -t -c """
 		DO \$\$		
 			DECLARE
 				seq VARCHAR;	
@@ -234,7 +190,7 @@ main() {
 
 	if [ -n "$update_parents" ]; then
 		log "Updating parent tables" "INFO"
-		query -f "$DIR/mock_sql/mock_update_$(echo "$table")_parents.sql"
+		psql -f "$DIR/mock_sql/mock_update_$(echo "$table")_parents.sql"
 	fi
 
 	set +e
