@@ -2,9 +2,6 @@
 
 setup_file() {
     export script_logging_level="DEBUG"
-    export KEEP_METADB_OPEN=true
-    export METADB_TYPE=local
-
     load 'common_setup.bash'
 
     _common_setup

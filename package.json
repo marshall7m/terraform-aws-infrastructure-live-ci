@@ -13,16 +13,14 @@
     "files/buildspec-scripts"
   ],
   "dependencies": {
-    "bash-utils": "https://github.com/marshall7m/bash-utils",
-    "git": "^0.1.5"
+    "bash-utils": "https://github.com/marshall7m/bash-utils"
   },
   "devDependencies": {
     "bash-utils": "https://github.com/marshall7m/bash-utils",
     "bats": "https://github.com/bats-core/bats-core",
     "bats-assert": "https://github.com/bats-core/bats-assert",
     "bats-support": "https://github.com/bats-core/bats-support",
-    "bats-utils": "https://github.com/marshall7m/bats-utils",
-    "git": "^0.1.5"
+    "bats-utils": "https://github.com/marshall7m/bats-utils"
   },
   "keywords": [
     "bats",

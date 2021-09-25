@@ -2,7 +2,7 @@ export script_logging_level="DEBUG"
 # export KEEP_METADB_OPEN=true
 
 setup_file() {
-    load 'test_helper/common-setup'
+    load 'test-helper/common-setup'
     _common_setup
 
     log "FUNCNAME=$FUNCNAME" "DEBUG"

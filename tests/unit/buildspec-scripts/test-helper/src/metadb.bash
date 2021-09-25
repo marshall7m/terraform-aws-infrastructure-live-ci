@@ -1,4 +1,4 @@
-init_tables() {
+setup_metadb() {
 
     psql -v ON_ERROR_STOP=1 \
     --username "$POSTGRES_USER" \
@@ -71,40 +71,7 @@ init_tables() {
 EOSQL
 }
 
-if [ "$DB_TYPE" == "dev" ]; then
-
-    DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    export VOLUME_DATA_DIR="$DIR/docker_pgsql_volume"
-    docker-compose --file "docker-compose.yml" up --detach || exit 1
-
-elif [ "$DB_TYPE" == "CI" ]; then
-    #TODO: GET params from secure source (e.g. aws ssm param store)
-    export POSTGRES_USER:="postgres"
-    export POSTGRES_PASSWORD:="testing_password"
-    export PGUSER:="testing_user"
-    export PGDATABASE:="testing_db"
-    export PGHOST:="/run/postgresql"
-else
-    echo >&2 "DB_TYPE is not set (local|aws)"
-fi
-
-teardown_db() {
-
-	echo >&2 "FUNCNAME=$FUNCNAME"
-
-	if [ "$DB_TYPE" == "dev" ]; then
-		if [ -z "$KEEP_db_OPEN" ]; then
-			docker-compose down -v 
-			echo >&2 "Removing local postgres data to allow postgres image to run *.sh | *.sql scripts within host"
-			rm -rf "$VOLUME_DATA_DIR"
-		else
-			echo >&2 "Keeping local db container running"
-		fi
-	fi
-	
-}
-
-clear_db_tables() {
+clear_metadb_tables() {
 	echo >&2 "FUNCNAME=$FUNCNAME"
 
 	sql="""

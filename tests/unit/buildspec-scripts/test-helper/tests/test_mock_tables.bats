@@ -4,9 +4,6 @@ load '../load.bash'
 
 setup_file() {
     export script_logging_level="DEBUG"
-    export KEEP_METADB_OPEN=true
-    export METADB_TYPE=local
-
     load './load.bash'
 
     _common_setup

@@ -1,19 +1,17 @@
 #!/usr/bin/env bats
 
 setup_file() {
-    load 'test_helper/bats-support/load'
-    load 'test_helper/bats-assert/load'
+    load 'test-helper/bats-support/load'
+    load 'test-helper/bats-assert/load'
 
     export script_logging_level="DEBUG"
-    export KEEP_METADB_OPEN=true
-    export METADB_TYPE=local
 
     export BASE_REF=master
     export CODEBUILD_INITIATOR=rule/test
     export EVENTBRIDGE_FINISHED_RULE=rule/test
     source mock_aws_cmds.sh
 
-    load 'test_helper/utils/load.bash'
+    load 'test-helper/load.bash'
 
     _common_setup
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -26,12 +24,11 @@ setup_file() {
 
 teardown_file() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    teardown_metadb
     teardown_test_file_tmp_dir
 }
 
 setup() {
-    load 'test_helper/utils/load.bash'
+    load 'test-helper/load.bash'
 
     setup_test_case_repo
     setup_test_case_tf_state
@@ -40,7 +37,8 @@ setup() {
 }
 
 teardown() {
-    load 'test_helper/utils/load.bash'
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     clear_metadb_tables
     drop_temp_tables
     teardown_test_case_tmp_dir
@@ -70,7 +68,7 @@ teardown() {
         }
     ')
 
-    cw_commit=$(bash "$BATS_TEST_DIRNAME/test_helper/utils/src/mock_commit.bash" \
+    cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
         --modify-items "$modify_items" \
         --commit-item "$commit_items" \
@@ -121,7 +119,7 @@ teardown() {
         }
     ')
 
-    target_commit=$(bash "$BATS_TEST_DIRNAME/test_helper/utils/src/mock_commit.bash" \
+    target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
         --modify-items "$modify_items" \
         --commit-item "$commit_items" \
@@ -206,7 +204,7 @@ teardown() {
         }
     ')
 
-    cw_commit=$(bash "$BATS_TEST_DIRNAME/test_helper/utils/src/mock_commit.bash" \
+    cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
         --modify-items "$modify_items" \
         --commit-item "$commit_items" \
@@ -257,7 +255,7 @@ teardown() {
         }
     ')
 
-    target_commit=$(bash "$BATS_TEST_DIRNAME/test_helper/utils/src/mock_commit.bash" \
+    target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
         --modify-items "$modify_items" \
         --commit-item "$commit_items" \

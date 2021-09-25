@@ -699,7 +699,8 @@ path -> deployment flow mapping
 
 
 # TODO:
-- Figure out how to install binaries for deps without package.json/defined binary within repo for yarn installation
-    - see running build.sh via scripts within package.json is okay
+
+- run initial scripts to get into container if local
+
 - trigger_sf passing all BATS tests
 - Update pr/commit queue columns in buildspec
