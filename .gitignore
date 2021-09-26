@@ -10,7 +10,7 @@ __pycache__
 *.zip*
 *deps/
 *tmp*
-*docker_pgsql_volume*
+*docker-pgsql-volume*
 /node_modules
 /package-lock.json
 /yarn.lock

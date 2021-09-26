@@ -1,7 +1,7 @@
 {
   "name": "terraform-aws-infrastructure-live-ci-bash-scripts",
   "version": "0.0.1",
-  "description": "Bash functions and scripts used to orchestrate AWS Step Function runs for IAC deployment flows",
+  "description": "Bash functions and scripts used to orchestrate AWS Step Function runs for IAC deployment flow",
   "homepage": "https://github.com/marshall7m/terraform-aws-infrastructure-live-ci",
   "author": "Marshall Mamiya",
   "repository": "github:marshall7m/terraform-aws-infrastructure-live-ci",
@@ -13,14 +13,16 @@
     "files/buildspec-scripts"
   ],
   "dependencies": {
-    "bash-utils": "https://github.com/marshall7m/bash-utils"
+    "bash-utils": "https://github.com/marshall7m/bash-utils",
+    "psql-utils": "https://github.com/marshall7m/psql-utils"
   },
   "devDependencies": {
     "bash-utils": "https://github.com/marshall7m/bash-utils",
     "bats": "https://github.com/bats-core/bats-core",
     "bats-assert": "https://github.com/bats-core/bats-assert",
     "bats-support": "https://github.com/bats-core/bats-support",
-    "bats-utils": "https://github.com/marshall7m/bats-utils"
+    "bats-utils": "https://github.com/marshall7m/bats-utils",
+    "psql-utils": "https://github.com/marshall7m/psql-utils"
   },
   "keywords": [
     "bats",

@@ -1,9 +1,6 @@
 #!/usr/bin/env bats
 
 setup_file() {
-    load 'test-helper/bats-support/load'
-    load 'test-helper/bats-assert/load'
-
     export script_logging_level="DEBUG"
 
     export BASE_REF=master
@@ -12,7 +9,8 @@ setup_file() {
     source mock_aws_cmds.sh
 
     load 'test-helper/load.bash'
-
+    
+    load 'common_setup.bash'
     _common_setup
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     setup_metadb
@@ -29,7 +27,7 @@ teardown_file() {
 
 setup() {
     load 'test-helper/load.bash'
-
+    load "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
     setup_test_case_repo
     setup_test_case_tf_state
 
