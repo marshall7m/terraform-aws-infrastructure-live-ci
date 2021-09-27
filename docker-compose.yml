@@ -33,6 +33,7 @@ services:
       - PGPASSWORD
       - PGDATABASE
       - PGHOST
+      - ADDITIONAL_PATHS=/src/node_modules/.bin
     command: ["/bin/bash"]
     depends_on: 
       - postgres

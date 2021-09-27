@@ -25,6 +25,7 @@ setup() {
     load './load.bash'
     
     setup_test_case_repo
+    cd "$TEST_CASE_REPO_DIR"
 
     run_only_test 2
 }

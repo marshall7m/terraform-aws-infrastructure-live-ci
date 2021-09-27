@@ -1,3 +1,5 @@
+source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
+
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 

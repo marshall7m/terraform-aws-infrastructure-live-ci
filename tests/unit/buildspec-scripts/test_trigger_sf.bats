@@ -1,4 +1,13 @@
 #!/usr/bin/env bats
+load "${BATS_TEST_DIRNAME}/test-helper/load.bash"
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bash-utils/load.bash"
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-utils/load.bash"
+
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-support/load.bash"
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-assert/load.bash"
+
+load "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/load.bash"
+
 
 setup_file() {
     export script_logging_level="DEBUG"
@@ -6,12 +15,14 @@ setup_file() {
     export BASE_REF=master
     export CODEBUILD_INITIATOR=rule/test
     export EVENTBRIDGE_FINISHED_RULE=rule/test
+
     source mock_aws_cmds.sh
 
-    load 'test-helper/load.bash'
+    
     
     load 'common_setup.bash'
     _common_setup
+
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     setup_metadb
 
@@ -26,9 +37,10 @@ teardown_file() {
 }
 
 setup() {
-    load 'test-helper/load.bash'
-    load "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
     setup_test_case_repo
+    cd "$TEST_CASE_REPO_DIR"
     setup_test_case_tf_state
 
     run_only_test 3

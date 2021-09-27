@@ -1,4 +1,7 @@
+source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
+
 setup_metadb() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     psql -c """
     CREATE TABLE IF NOT EXISTS executions (
@@ -55,10 +58,10 @@ setup_metadb() {
 }
 
 clear_metadb_tables() {
-	echo >&2 "FUNCNAME=$FUNCNAME"
+	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-	sql="""
-	CREATE OR REPLACE FUNCTION truncate_if_exists(_schema VARCHAR, _cataecho >&2 VARCHAR, _table VARCHAR) 
+	psql -c """
+	CREATE OR REPLACE FUNCTION truncate_if_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR) 
 		RETURNS text 
 		LANGUAGE plpgsql AS
 		
@@ -73,7 +76,7 @@ clear_metadb_tables() {
 				INFORMATION_SCHEMA.TABLES 
 			WHERE
 				TABLE_SCHEMA = _schema AND
-				TABLE_CATAecho >&2 = _cataecho >&2 AND
+				TABLE_CATALOG = _catalog AND
 				TABLE_NAME = _table
 		)
 		THEN
@@ -91,5 +94,4 @@ clear_metadb_tables() {
 	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'pr_queue');
 
 	"""
-	sql -c "$sql"
 }

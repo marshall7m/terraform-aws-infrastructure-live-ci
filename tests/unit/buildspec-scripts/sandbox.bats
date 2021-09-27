@@ -6,6 +6,9 @@
     export BASE_REF=master
     export CODEBUILD_INITIATOR=rule/test
     export EVENTBRIDGE_FINISHED_RULE=rule/test
+
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+
     source mock_aws_cmds.sh
 
     load 'test-helper/load.bash'

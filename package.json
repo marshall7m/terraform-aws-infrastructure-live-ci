@@ -7,7 +7,7 @@
   "repository": "github:marshall7m/terraform-aws-infrastructure-live-ci",
   "directories": {
     "lib": "files/buildspec-scripts",
-    "test": "tests/unit/buildspec-scripts"
+    "tests": "tests/unit/buildspec-scripts"
   },
   "files": [
     "files/buildspec-scripts"

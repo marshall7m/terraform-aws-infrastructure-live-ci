@@ -26,7 +26,14 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV PATH="$VIRTUAL_ENV/lib/python3.9/site-packages:$PATH"
 
+ENV PATH="$ADDITIONAL_PATHS:$PATH"
+
 # TODO: Figure out how to install apk packages to /usr/local/bin instead of usr/bin
 # then mv runtime pkg to build stage
-RUN apk add --virtual .runtime bash git jq \
-    && git config --global advice.detachedHead false
+RUN apk add --virtual .runtime \
+    bash \
+    git \
+    jq \
+    # needed for bats --pretty formatter
+    ncurses \ 
+&& git config --global advice.detachedHead false

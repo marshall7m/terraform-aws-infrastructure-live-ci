@@ -23,6 +23,8 @@ teardown_file() {
 
 setup() {
     setup_test_case_repo
+    cd "$TEST_CASE_REPO_DIR"
+    
     # setup_test_case_tf_state
 
     run_only_test 5
