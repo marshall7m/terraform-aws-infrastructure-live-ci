@@ -1,3 +1,6 @@
+source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
+source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/psql-utils/load.bash"
+
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 	count=0
@@ -51,7 +54,7 @@ parse_args() {
 			*)
 				echo "Unknown Option: $1"
 				exit 1
-				;;
+			;;
 		esac
 	done
 }
@@ -145,10 +148,10 @@ main() {
 
 
 		#WA: `psql -v bar=foo` giving syntax error for :bar within sql file -- using inline command as WA
-		res=$(psql -t -c """
+		psql -t -c """
 		DO \$\$		
 			DECLARE
-				seq VARCHAR;	
+				seq VARCHAR;
 			BEGIN
 				ALTER TABLE $table ENABLE TRIGGER "$table"_default;
 				IF $count > 0 THEN
@@ -160,32 +163,28 @@ main() {
 				END IF;
 
 				IF $reset_identity_col = true THEN
-					seq := (SELECT pg_get_serial_sequence('$table', 'id'));
-				
-					PERFORM setval(seq, (SELECT COALESCE(MAX(id), 1) FROM $table));
+					SELECT pg_get_serial_sequence('$table', 'id') INTO seq;
+
+					PERFORM setval(seq, COALESCE(max(id) + 1, 1), false) FROM $table;
 
 					INSERT INTO $table (id, $psql_cols)
 					SELECT
 					nextval(seq),
 					$psql_cols
-					FROM $staging_table
-					RETURNING row_to_json(*);
+					FROM $staging_table;
 				ELSE
 					INSERT INTO $table ($psql_cols)
 					SELECT $psql_cols
-					FROM $staging_table
-					RETURNING row_to_json(*);
+					FROM $staging_table;
 				END IF;
 				
 				ALTER TABLE $table DISABLE TRIGGER "$table"_default;  
 				DROP TABLE $staging_table;
 			END;
 		\$\$ LANGUAGE plpgsql;
-		""" | jq -r '. | tojson')
-
-		echo "$res"
+		"""
 	else
-		res=$(jq_to_psql_records "$items" "$table")
+		jq_to_psql_records "$items" "$table"
 	fi
 
 	if [ -n "$update_parents" ]; then
@@ -193,7 +192,7 @@ main() {
 		psql -f "$DIR/mock_sql/mock_update_$(echo "$table")_parents.sql"
 	fi
 
-	set +e
+	set +e 
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -3,6 +3,9 @@ source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-top
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
+	head_ref="mock-commit-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+	commit_msg="mock modify tg paths"
+
 	while (( "$#" )); do
 		case "$1" in
 			--commit-item)
@@ -34,7 +37,7 @@ parse_args() {
 			;;
 			--head-ref)
 				if [ -n "$2" ]; then
-					head_ref=${2:-"mock-commit-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"}
+					head_ref="$2"
 					shift 2
 				else
 					log "Error: Argument for $1 is missing" "ERROR"
@@ -43,7 +46,7 @@ parse_args() {
 			;;
 			--commit-msg)
 				if [ -n "$2" ]; then
-					commit_msg=${2:-"mock modify tg paths"}
+					commit_msg="$2"
 					shift 2
 				else
 					log "Error: Argument for $1 is missing" "ERROR"
@@ -62,55 +65,66 @@ modify_tg_path() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	local tg_dir=$1
-	local new_provider_resource=$2
+	local create_provider_resource=$2
 	
 	# get terraform source dir from .terragrunt-cache/
 	tf_dir=$(terragrunt terragrunt-info --terragrunt-working-dir "$tg_dir" | jq '.WorkingDir' | tr -d '"')
 	
 	log "Terraform dir: $tf_dir" "DEBUG"
 
-	if [ -n "$new_provider_resource" ]; then
+	if [ -n "$create_provider_resource" ]; then
 		log "Adding new provider resource" "INFO"
-		create_new_provider_resource "$tf_dir"
+		res=$(create_resource "$tf_dir")
 	else
 		log "Adding random terraform output" "INFO"
-		create_random_output "$tf_dir"
+		res=$(create_random_output "$tf_dir")
 	fi
+
+	echo "$res"
 }
 
 create_commit_changes() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	local modify_items=$1
-	
-	for (( idx=0; idx<=$(echo "$modify_items" | jq '. | length'); idx+=1 )); do
-		cfg_path=$(echo "$modify_items" | jq --arg idx $idx '.[($idx | tonumber)].cfg_path' | tr -d '"')
-		new_provider_resource=$(echo "$modify_items" | jq --arg idx $idx '.[($idx | tonumber)].new_provider_resource' | tr -d '"')
-		apply_changes=$(echo "$modify_items" | jq --arg idx $idx '.[($idx | tonumber)].apply_changes' | tr -d '"')
+	while read item; do
+		cfg_path=$(echo "$item" | jq '.cfg_path' | tr -d '"')
+		create_provider_resource=$(echo "$item" | '.create_provider_resource' | tr -d '"')
+		apply_changes=$(echo "$item" | jq '.apply_changes' | tr -d '"')
 
-		res=$(modify_tg_path "$cfg_path" "$new_provider_resource")
-		mock_provider=$(echo "$res" | jq 'keys')
-		mock_resource=$(echo "$res" | jq '.resource')
+		log "Path item:" "DEBUG"
+		log "$(echo "$item" | jq '.')" "DEBUG"
+
+		res=$(modify_tg_path "$cfg_path" "$create_provider_resource")
+
+		item=$(echo "$item" | jq --arg add_items "$res" '
+		($add_items | fromjson) as $add_items
+		| . + $add_items
+		')
+
+		log "Updated path item:" "DEBUG"
+		log "$item" "DEBUG"
+
+		modify_items=$(echo "$modify_items" | jq \
+		--arg cfg_path "$cfg_path" \
+		--arg item "$item" '
+		($item | fromjson) as $item
+		| map(if .cfg_path == $cfg_path then . = $item else . end)
+		')
 
 		if [ -n "$apply_changes" ]; then
 			terragrunt apply --terragrunt-working-dir $cfg_path -auto-approve >/dev/null
 		fi
+	done <<< "$(echo "$modify_items" | jq -c '.[]')"
 
-		modify_items=$(echo "$modify_items" | jq \
-		--arg idx $idx \
-		--arg mock_provider $mock_provider \
-		--arg mock_resource $mock_resource '
-		($idx | tonumber) as $idx
-		| .[$idx].new_providers = $mock_provider | .[$idx].new_resources = $mock_resource
-		')
-	done
+	echo "$modify_items"
 }
 
 add_commit_to_queue() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-	local commit_item=$1
-	local commit_msg=$2
+	commit_item=$1
+	commit_msg=$2
 
 	log "Adding testing changes to branch: $(git rev-parse --abbrev-ref HEAD)" "INFO"
 
@@ -119,6 +133,7 @@ add_commit_to_queue() {
 		touch dummy.txt
 	fi
 
+	log "commit msg: $commit_msg" "DEBUG"
 	git add "$(git rev-parse --show-toplevel)/"
 	git commit -m "$commit_msg"
 
@@ -126,16 +141,16 @@ add_commit_to_queue() {
 
 	log "Adding commit ID to queue: $commit_id" "DEBUG"
 
-	commit_items=$(echo "$commit_item" | jq -n \
-	--arg commit_id $commit_id '
+	commit_item=$(echo "$commit_item" | jq \
+	--arg commit_id "$commit_id" '
 		{"commit_id": $commit_id} + .
 	')
 
 	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
-	"$DIR/mock_tables.bash" --tables "commit_queue" --items "$commit_item" --reset-identity-col --random-defaults --update-parents
+	"$DIR/mock_tables.bash" --table "commit_queue" --items "$commit_item" --reset-identity-col --random-defaults --update-parents
 }
 
-create_new_provider_resource() {
+create_resource() {
 	local tf_dir=$1
 
 	testing_id=$(openssl rand -base64 10 | tr -dc A-Za-z0-9)
@@ -159,56 +174,74 @@ EOM
 	testing_providers_data=$(jq -n \
 	--arg random_content "$random_content" \
 	--arg null_content "$null_content" '
-	{
-		"registry.terraform.io/hashicorp/random": {
+	[
+		{
+			"address": "registry.terraform.io/hashicorp/random",
 			"content": $random_content,
-			"resource": "random_id.this"
+			"resource_spec": "random_id.this"
 		},
-		"registry.terraform.io/hashicorp/null": {
+		{
+			"address": "registry.terraform.io/hashicorp/null",
 			"content": $null_content,
-			"resource": "null_resource.this"
-		},
-
-	}
+			"resource_spec": "null_resource.this"
+		}
+	]
 	')
 
 	log "Getting Terragrunt file providers" "INFO"
 	cfg_providers=$(terragrunt providers --terragrunt-working-dir $tf_dir 2> /dev/null | grep -oP '─\sprovider\[\K.+(?=\])' | sort -u)
 	log "Providers: $(printf "\n%s" "${cfg_providers[@]}")" "DEBUG"
 
-	log "Getting testing providers that are not in terraform directory" "INFO"
+	file_path="$tf_dir/$testing_id.tf"
+
+	log "Getting a testing provider that is not in the terraform directory" "INFO"
 	target_testing_provider=$(echo "$testing_providers_data" | jq \
-	--arg cfg_providers "${cfg_providers[*]}" '
+	--arg cfg_providers "${cfg_providers[*]}" \
+	--arg file_path "$file_path" '
 	(try ($cfg_providers | split(" ")) // []) as $cfg_providers
-	| with_entries(select(.key | IN($cfg_providers[]) | not))
-	| (keys[0]) as $idx
-	| with_entries(select(.key == $idx))
+	| (map(select(.name | IN($cfg_providers[]) | not)[0]) as $target
+	| $target + {"file_path": $file_path, "type": "provider"}}
 	')
 	
-	out_file="$tf_dir/$testing_id.tf"
 	#convert jq to formatted content and remove escape characters
-	content=$(echo "$target_testing_provider" | jq 'map(.content)[0]' | sed -e 's/^.//' -e 's/.$//')
+	content=$(echo "$target_testing_provider" | jq '.content' | sed -e 's/^.//' -e 's/.$//')
 	content=$(echo -e "$content" | tr -d '\')
 
-	log "Adding mock resource content to $out_file:" "DEBUG"
-	log "$content" "DEBUG"
-	echo "$content" > "$out_file"
+	log "Adding mock resource content to $file_path:" "DEBUG"
 
-	echo "$target_testing_provider"
+	log "$content" "DEBUG"
+	echo "$content" > "$file_path"
+
+	echo "$target_testing_provider" 
 }
 
 create_random_output() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	local tf_dir=$1
-	out_file="$tf_dir/$(openssl rand -base64 10 | tr -dc A-Za-z0-9).tf"
-	log "Filepath: $out_file" "DEBUG"
+	file_path="$tf_dir/$(openssl rand -base64 10 | tr -dc A-Za-z0-9).tf"
+	log "Filepath: $file_path" "DEBUG"
 
-	cat << EOF > "$out_file"
-output "test_case_$BATS_TEST_NUMBER" {
-	value = "test"
+	resource_name="test_case_$BATS_TEST_NUMBER"
+	resoure_spec="output.$resource_name"
+	value="test"
+
+	cat << EOF > "$file_path"
+output "$resource_name" {
+	value = "$value"
 }
 EOF
+
+	jq -n \
+	--arg resource_spec "$resource_spec" \
+	--arg value "$value" \
+	--arg file_path "$file_path" '
+	{
+		"type": "output",
+		"resource_spec": $resource_spec,
+		"value": $value,
+		"filepath": $file_path
+	}'
 }
 
 
@@ -218,21 +251,29 @@ main() {
 
 	parse_args "$@"
 
-	cd "$abs_repo_dir"
-
 	log "Creating testing branch: $head_ref" "INFO"
-	git checkout -B "$head_ref"
+	cd "$abs_repo_dir" && git checkout -B "$head_ref" > /dev/null
 
 	modify_items=$(create_commit_changes "$modify_items")
 
-	commit_item=$(add_commit_to_queue "$commit_item" "$commit_msg")
+	add_commit_to_queue "$commit_item" "$commit_msg" > /dev/null
 
 	log "Switching back to default branch" "DEBUG"
-	cd "$abs_repo_dir"
-    git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')"
 	
-	jq --arg commit_item "$commit_item" --arg modify_items "$modify_items" '{"commit": $commit_item, "modify": $modify_items}'
+    cd "$abs_repo_dir" && git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" > /dev/null
+	
+	log "commit_item" "DEBUG"
+	log "$commit_item" "DEBUG"
 
+	log "modify_items" "DEBUG"
+	log "$modify_items" "DEBUG"
+
+	jq -n --arg commit_item "$commit_item" --arg modify_items "$modify_items" '
+		($commit_item | fromjson) as $commit_item
+		| ($modify_items | fromjson) as $modify_items
+		| $commit_item + {"modify_items": $modify_items}
+	'
+	
 	set +e
 }
 
