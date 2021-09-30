@@ -28,7 +28,7 @@ BEGIN
             SELECT account_name 
             FROM account_dim
             LIMIT random_between(0, (
-                SELECT COUNT(*)
+                SELECT COUNT(*)::INT
                 FROM account_dim
                 WHERE account_name != NEW.account_name
             ))

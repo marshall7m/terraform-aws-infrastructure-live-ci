@@ -1,38 +1,34 @@
-load '../../bats-support/load'
-load '../../bats-assert/load'
-load '../load.bash'
+#!/usr/bin/env bats
+load "${BATS_TEST_DIRNAME}/../load.bash"
+load "${BATS_TEST_DIRNAME}/../../../../../node_modules/bash-utils/load.bash"
+load "${BATS_TEST_DIRNAME}/../../../../../node_modules/bats-utils/load.bash"
+
+load "${BATS_TEST_DIRNAME}/../../../../../node_modules/bats-support/load.bash"
+load "${BATS_TEST_DIRNAME}/../../../../../node_modules/bats-assert/load.bash"
+
+load "${BATS_TEST_DIRNAME}/../../../../../node_modules/psql-utils/load.bash"
 
 setup_file() {
     export script_logging_level="DEBUG"
-    load './load.bash'
-
-    _common_setup
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    setup_metadb
 
-    export TESTING_LOCAL_PARENT_TF_STATE_DIR="$BATS_TEST_TMPDIR/test-repo-tf-state"
-    setup_test_file_repo "https://github.com/marshall7m/infrastructure-live-testing-template.git"
-    # setup_test_file_tf_state "directory_dependency/dev-account"
+    load './common_setup.bash'
+    _common_setup
+    
+    setup_metadb
 }
 
 teardown_file() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    teardown_metadb
     teardown_test_file_tmp_dir
 }
 
-setup() {
-    setup_test_case_repo
-    cd "$TEST_CASE_REPO_DIR"
-    
-    # setup_test_case_tf_state
-
-    run_only_test 5
+setup() {    
+    run_only_test 2
 }
 
 teardown() {
     clear_metadb_tables
-    drop_temp_tables
     teardown_test_case_tmp_dir
 }
 
@@ -48,7 +44,7 @@ teardown() {
 
     run mock_tables.bash --table "account_dim" --random-defaults --items "$expected"
     assert_success
-    
+
     log "$(psql -c "SELECT * FROM account_dim;")" "DEBUG"
 
     run psql -c """ 

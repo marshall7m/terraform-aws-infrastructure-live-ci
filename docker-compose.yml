@@ -25,7 +25,7 @@ services:
     build:
       context: ./testing-img
     container_name: metadb
-    image: bats-testing:${TAG}
+    image: ${REPO}-bats-testing:${TAG}
     volumes:
       - "$PWD:/src"
     environment:

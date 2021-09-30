@@ -13,26 +13,44 @@ log "Head Ref: ${head_ref}" "INFO"
 
 log "Commit ID: ${CODEBUILD_RESOLVED_SOURCE_VERSION}" "INFO"
 
-log "Adding commit record to queue" "INFO"
+log "Adding PR to pr_queue" "INFO"
+
+psql -c  """
+INSERT INTO pr_queue AS pr (
+    pr_id,
+    status,
+    base_ref,
+    head_ref
+)
+VALUES (
+    '$pr_id',
+    'waiting',
+    '$base_ref,
+    '$head_ref',
+)
+ON CONFLICT (pr_id) 
+DO UPDATE SET 
+    status = EXCLUDED.status,
+    base_ref = EXCLUDED.base_ref,
+    head_ref = EXCLUDED.head_ref
+WHERE pr.status != 'running';
+"""
+
+log "Adding commit record to commit_queue" "INFO"
 
 psql -c  """
 INSERT INTO commit_queue(
     commit_id,
     pr_id,
     status,
-    base_ref,
-    head_ref,
     is_rollback
 )
 VALUES (
     '$CODEBUILD_RESOLVED_SOURCE_VERSION',
     '$pr_id',
-    'Waiting',
-    'master',
-    '$head_ref',
-    '0'
-)
-ON CONFLICT (commit_id, is_rollback) DO NOTHING;
+    'waiting',
+    false
+);
 """
 
 set +e
