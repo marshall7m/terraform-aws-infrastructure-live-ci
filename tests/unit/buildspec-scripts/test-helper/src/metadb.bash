@@ -54,7 +54,7 @@ setup_metadb() {
         min_rejection_count INT,
         voters TEXT[]
     );
-"""
+    """
 }
 
 clear_metadb_tables() {
@@ -87,11 +87,10 @@ clear_metadb_tables() {
 		END IF;
 	END;
 	\$\$;
+    """
 
-	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'executions');
-	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'commit_queue');
-	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'account_dim');
-	SELECT truncate_if_exists('public', '$TESTING_POSTGRES_DB', 'pr_queue');
-
-	"""
+	psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'executions');"
+    psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'account_dim');"
+    psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'commit_queue');"
+    psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'pr_queue');"
 }

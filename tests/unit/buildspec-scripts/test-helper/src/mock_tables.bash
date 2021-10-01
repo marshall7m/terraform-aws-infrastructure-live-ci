@@ -82,16 +82,16 @@ main() {
 		log "Inserting $staging_table into $table" "DEBUG"
 		psql -f "$DIR/mock_sql/insert_mock_records.sql"
 
-		psql -t -c "insert_mock_records($staging_table, $table, $psql_cols, $count, $reset_identity_col, "${table}_defaults");"
+		psql -t -c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');"
 
-		#WA: `psql -v bar=foo` giving syntax error for :bar within sql file -- using inline command as WA
+		psql -c "DROP TABLE IF EXISTS $staging_table;"
 	else
 		jq_to_psql_records "$items" "$table"
 	fi
 
 	if [ -n "$update_parents" ]; then
 		log "Updating parent tables" "INFO"
-		psql -f "$DIR/mock_sql/mock_update_$(echo "$table")_parents.sql"
+		psql -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
 	fi
 
 	set +e 

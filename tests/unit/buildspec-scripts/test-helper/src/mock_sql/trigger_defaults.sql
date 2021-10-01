@@ -240,7 +240,7 @@ BEGIN
     END IF;
     
     IF NEW.base_ref IS NULL THEN
-        NEW.base_ref := COALESCE((SELECT base_ref FROM pr_queue), 'master');
+        NEW.base_ref := COALESCE((SELECT base_ref FROM pr_queue LIMIT 1), 'master');
     END IF;
 
     IF NEW.head_ref IS NULL THEN

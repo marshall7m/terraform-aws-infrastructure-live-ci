@@ -24,7 +24,8 @@ teardown_file() {
 }
 
 setup() {    
-    run_only_test 2
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    # run_only_test 2
 }
 
 teardown() {
