@@ -11,6 +11,7 @@ load "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/load.bash"
 
 setup_file() {
     export script_logging_level="DEBUG"
+    export DRY_RUN=true
 
     export BASE_REF=master
     export CODEBUILD_INITIATOR=rule/test
@@ -64,7 +65,7 @@ teardown() {
         [
             {
                 "cfg_path": "directory_dependency/dev-account/global",
-                "new_provider": true,
+                "create_provider_resource": true,
                 "apply_changes": false
             }
         ]
@@ -98,13 +99,13 @@ teardown() {
         }
     ')
 
-    mock_table --table "account_dim" --items "$account_dim" --random-defaults
+    mock_tables --table "account_dim" --items "$account_dim" --random-defaults
 
     modify_items=$(jq -n '
         [
             {
                 "cfg_path": "directory_dependency/dev-account/env-one/doo",
-                "new_provider": false,
+                "create_provider_resource": false,
                 "apply_changes": false
             }
         ]
@@ -189,7 +190,7 @@ teardown() {
         [
             {
                 "cfg_path": "directory_dependency/dev-account/global",
-                "new_provider": false,
+                "create_provider_resource": false,
                 "apply_changes": false
             }
         ]
@@ -224,7 +225,7 @@ teardown() {
         {
             "cfg_path": .modify_items[0].cfg_path,
             "commit_id": .commit_id,
-            "new_providers": []
+            "create_provider_resource": []
         }
     ')
 
@@ -242,13 +243,13 @@ teardown() {
         }
     ')
 
-    mock_table --table "account_dim" --items "$account_dim" --random-defaults
+    bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" --table "account_dim" --items "$account_dim" --random-defaults
 
     modify_items=$(jq -n '
         [
             {
                 "cfg_path": "directory_dependency/dev-account/env-one/doo",
-                "new_provider": true,
+                "create_provider_resource": true,
                 "apply_changes": false
             }
         ]

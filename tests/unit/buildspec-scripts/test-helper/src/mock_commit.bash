@@ -68,11 +68,11 @@ modify_tg_path() {
 	local create_provider_resource=$2
 	
 	# get terraform source dir from .terragrunt-cache/
-	tf_dir=$(terragrunt terragrunt-info --terragrunt-working-dir "$tg_dir" | jq '.WorkingDir' | tr -d '"')
+	tf_dir=$(terragrunt terragrunt-info --terragrunt-working-dir "$tg_dir" | jq '.WorkingDir' | tr -d '"') || exit 1
 	
 	log "Terraform dir: $tf_dir" "DEBUG"
 
-	if [ -n "$create_provider_resource" ]; then
+	if [ "$create_provider_resource" == true ]; then
 		log "Adding new provider resource" "INFO"
 		res=$(create_resource "$tf_dir")
 	else
@@ -87,29 +87,30 @@ create_commit_changes() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	local modify_items=$1
-	while read item; do
-		cfg_path=$(echo "$item" | jq '.cfg_path' | tr -d '"')
-		create_provider_resource=$(echo "$item" | '.create_provider_resource' | tr -d '"')
-		apply_changes=$(echo "$item" | jq '.apply_changes' | tr -d '"')
 
+	res=$(jq -n '[{}]')
+	while read item; do
 		log "Path item:" "DEBUG"
 		log "$(echo "$item" | jq '.')" "DEBUG"
 
-		res=$(modify_tg_path "$cfg_path" "$create_provider_resource")
+		cfg_path=$(echo "$item" | jq '.cfg_path' | tr -d '"')
+		create_provider_resource=$(echo "$item" | jq '.create_provider_resource // false' | tr -d '"')
+		apply_changes=$(echo "$item" | jq '.apply_changes' | tr -d '"')
 
-		item=$(echo "$item" | jq --arg add_items "$res" '
-		($add_items | fromjson) as $add_items
-		| . + $add_items
+		modify_res=$(modify_tg_path "$cfg_path" "$create_provider_resource")
+
+		item=$(echo "$item" | jq --arg modify_res "$modify_res" '
+		($modify_res | fromjson) as $modify_res
+		| . + $modify_res
 		')
 
 		log "Updated path item:" "DEBUG"
 		log "$item" "DEBUG"
 
-		modify_items=$(echo "$modify_items" | jq \
-		--arg cfg_path "$cfg_path" \
+		res=$(echo "$res" | jq \
 		--arg item "$item" '
 		($item | fromjson) as $item
-		| map(if .cfg_path == $cfg_path then . = $item else . end)
+		| . + [$item]
 		')
 
 		if [ -n "$apply_changes" ]; then
@@ -117,7 +118,7 @@ create_commit_changes() {
 		fi
 	done <<< "$(echo "$modify_items" | jq -c '.[]')"
 
-	echo "$modify_items"
+	echo "$res"
 }
 
 add_commit_to_queue() {
@@ -223,7 +224,7 @@ create_random_output() {
 	log "Filepath: $file_path" "DEBUG"
 
 	resource_name="test_case_$BATS_TEST_NUMBER"
-	resoure_spec="output.$resource_name"
+	resource_spec="output.$resource_name"
 	value="test"
 
 	cat << EOF > "$file_path"

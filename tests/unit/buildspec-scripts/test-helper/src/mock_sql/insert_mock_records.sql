@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION insert_mock_records (
             EXECUTE format('INSERT INTO %1$I SELECT s.* FROM %1$I s, GENERATE_SERIES(1, %2$s)', staging_table, mock_count);
         END IF;
         IF reset_identity_col = true THEN
-            RAISE INFO 'Resetting indentity column sequence';
+            RAISE INFO 'Resetting identity column sequence';
             EXECUTE format('SELECT pg_get_serial_sequence(''%s'', ''id'')', target_table)
             INTO seq;
             -- EXECUTE format('PERFORM setval(%s, COALESCE(max(id) + 1, 1), false) FROM %I', seq, target_table);

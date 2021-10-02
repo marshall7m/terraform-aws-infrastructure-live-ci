@@ -1,8 +1,6 @@
 #!/bin/bash
 
-DIR="${BASH_SOURCE%/*}"
-if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
-source "$DIR/utils.sh"
+source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
 
 get_diff_paths() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -175,7 +173,7 @@ update_executions_with_new_deploy_stack() {
     fi
 
     log "Getting Account Paths" "INFO"
-    IFS=$'\n' account_paths=($(psql -tA "SELECT account_path FROM account_dim;"))
+    IFS=$'\n' account_paths=($(psql -tA -c "SELECT account_path FROM account_dim;"))
 
     if [ ${#account_paths} -eq 0 ]; then
         log "No account paths are defined in account_dim" "ERROR"
@@ -203,7 +201,7 @@ update_executions_with_new_deploy_stack() {
         jq_to_psql_records "$stack" "staging_cfg_stack"
 
         log "staging_cfg_stack table:" "DEBUG"
-        log "$(psql -x "SELECT * FROM staging_cfg_stack")" "DEBUG"
+        log "$(psql -x -c "SELECT * FROM staging_cfg_stack")" "DEBUG"
 
         psql -c """
         INSERT INTO
@@ -261,7 +259,7 @@ update_executions_with_new_deploy_stack() {
         """
 
         log "Execution table items for account:" "DEBUG"
-        log "$(psql -x "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
+        log "$(psql -x -c "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
     done
 
     log "Cleaning up" "DEBUG"
@@ -444,7 +442,7 @@ execution_finished() {
     log "Triggered via Step Function Event" "INFO"
 
     var_exists "$EVENTBRIDGE_EVENT"
-    sf_event=$( echo $EVENTBRIDGE_EVENT | jq '. | fromjson')
+    sf_event=$( echo $EVENTBRIDGE_EVENT | jq '.')
     log "Step Function Event:" "DEBUG"
     log "$sf_event" "DEBUG"
 
@@ -519,37 +517,39 @@ create_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
     log "Dequeuing next PR if commit queue is empty" "INFO"
-    pr_items=$(psql -qtA -c """
-    IF (SELECT count(*) FROM commit_queue WHERE status = 'waiting') = 0 THEN
-        RAISE NOTICE 'Pulling next PR from queue';
+
+    #WA: checking if results is empty till jq handles empty input see: https://github.com/stedolan/jq/issues/1628
+    pr_items=$(psql -t -c """
         UPDATE
             pr_queue
         SET
             status = 'running'
         WHERE 
             id = (
-                SELECT
-                    id
-                FROM
-                    pr_queue
-                WHERE
-                    status = 'waiting'
+                SELECT id
+                FROM pr_queue
+                WHERE status = 'waiting'
                 LIMIT 1
             )
-        RETURNING pr_id, head_ref;
-    END IF;
-    """)
+        AND
+            0 = (
+                SELECT count(*) 
+                FROM commit_queue 
+                WHERE status = 'waiting'
+            )
+        RETURNING row_to_json(pr_queue.*);
+    """ | jq '.' 2> /dev/null)
 
-    pr_items=(${pr_items//|/ })
-
-    if [ ${#pr_items} -ne 0 ]; then
+    if [ "$pr_items" == "" ]; then
+        log "Another PR is in progress or no PR is waiting" "INFO"
+    else
         log "Updating commit queue with dequeued PR's most recent commit" "INFO"
 
-        pr_id="${pr_items[0]}"
-        head_ref="${pr_items[1]}"
         log "Dequeued pr items:" "DEBUG"
-        log "pr_id: $pr_id" "DEBUG"
-        log "head_ref: $head_ref" "DEBUG"
+        log "$pr_items" "DEBUG"
+
+        pr_id=$(echo "$pr_items" | jq '.pr_id')
+        head_ref=$(echo "$pr_items" | jq '.head_ref')
         
         log "Checking out PR" "DEBUG"
         git fetch origin "pull/$pr_id/head:$head_ref"
@@ -577,7 +577,7 @@ create_executions() {
     fi
 
     log "Dequeuing next commit that is waiting" "INFO"
-    commit_items=$(psql -qtA -c """
+    commit_items=$(psql -t -c """
 
     UPDATE
         commit_queue
@@ -594,26 +594,24 @@ create_executions() {
             LIMIT 1
         )
 
-    RETURNING commit_id, is_rollback;
-    """)
-
-    commit_items=(${commit_items//|/ })
+    RETURNING row_to_json(commit_queue.*);
+    """ | jq '.' 2> /dev/null)
     
-    if [ ${#commit_items} -eq 0 ]; then
+    if [ "$commit_items" == "" ]; then
         log "No commits to dequeue -- skipping execution creation" "INFO"
         exit 0
     fi
 
-    commit_id="${commit_items[0]}"
-    is_rollback="${commit_items[1]}"
     log "Dequeued commit items:" "DEBUG"
-    log "commit_id: $commit_id" "DEBUG"
-    log "rollback: ${commit_items[1]}" "DEBUG"
+    log "$commit_items" "DEBUG"
 
-    if [ "$is_rollback" == "t" ]; then
+    commit_id=$(echo "$commit_items" | jq '.commit_id' | tr -d '"')
+    is_rollback=$(echo "$commit_items" | jq '.is_rollback' | tr -d '"')
+
+    if [ "$is_rollback" == "true" ]; then
         update_executions_with_new_rollback_stack
-    elif [ "$is_rollback" == "f" ]; then
-        update_executions_with_new_deploy_stack "${commit_items[0]}"
+    elif [ "$is_rollback" == "false" ]; then
+        update_executions_with_new_deploy_stack "$commit_id"
     else
         log "is_rollback value is invalid" "ERROR"
         exit 1
