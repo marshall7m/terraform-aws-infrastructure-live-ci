@@ -37,6 +37,8 @@ RUN apk add --virtual .runtime \
     ncurses \
     openssl \
     grep \
+    # needed for pcregrep
+    pcre-tools \
 && git config --global advice.detachedHead false \
 && git config --global user.email testing_user@users.noreply.github.com \
 && git config --global user.name testing_user

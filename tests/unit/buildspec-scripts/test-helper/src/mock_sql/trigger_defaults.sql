@@ -275,14 +275,14 @@ BEGIN
 
     IF NEW.new_providers IS NULL THEN
 		NEW.new_providers := CASE
-            WHEN NEW.is_rollback = 'f' THEN ARRAY[NULL]
+            WHEN NEW.is_rollback = 'f' THEN ARRAY[]::TEXT[]
             WHEN NEW.is_rollback = 't' THEN ARRAY['provider/' || substr(md5(random()::text), 0, 5)]
         END;
     END IF;
 
     IF NEW.new_resources IS NULL THEN
 		NEW.new_resources := CASE
-            WHEN NEW.is_rollback = 'f' THEN ARRAY[NULL]
+            WHEN NEW.is_rollback = 'f' THEN ARRAY[]::TEXT[]
             WHEN NEW.is_rollback = 't' THEN ARRAY['resource.' || substr(md5(random()::text), 0, 5)]
         END;
     END IF;

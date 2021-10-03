@@ -8,7 +8,6 @@ load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-assert/load.bash"
 
 load "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/load.bash"
 
-
 setup_file() {
     export script_logging_level="DEBUG"
     export DRY_RUN=true
@@ -86,9 +85,9 @@ teardown() {
         }
     ')
 
-    finished_status="success"
+    cw_finished_status="success"
 
-    mock_cloudwatch_execution "$finished_execution" "$finished_status" 
+    mock_cloudwatch_execution "$finished_execution" "$cw_finished_status" 
 
     log "Creating mock account_dim" "INFO"
 
@@ -104,7 +103,7 @@ teardown() {
     modify_items=$(jq -n '
         [
             {
-                "cfg_path": "directory_dependency/dev-account/env-one/doo",
+                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/doo",
                 "create_provider_resource": false,
                 "apply_changes": false
             }
@@ -125,14 +124,17 @@ teardown() {
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
 
+    commit_id=$(echo "$target_commit" | jq '.commit_id' | tr -d '"')
+
+
     run trigger_sf.sh
-    assert_success
+    assert_failure
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
     execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
     new_resources=$(echo "$cw_commit" | jq 'modify_items.resource_spec' | tr -d '"')
 
-    log "$(psql -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    log "$(psql -x -c "select * from executions where execution_id = '$execution_id';")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN
@@ -155,11 +157,11 @@ teardown() {
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
 
-    commit_id=$(echo "$target_commit" | jq '.commit_id')
-    cfg_path=$(echo "$target_commit" | jq '.modify_items[0].cfg_path')
-    is_rollback=$(echo "$target_commit" | jq '.modify_items[0].is_rollback')
+    commit_id=$(echo "$target_commit" | jq '.commit_id' | tr -d '"')
+    cfg_path=$(echo "$target_commit" | jq '.modify_items[0].cfg_path' | tr -d '"')
+    is_rollback=$(echo "$target_commit" | jq '.is_rollback' | tr -d '"')
 
-    log "$(psql -x "select * from executions where commit_id = '$commit_id';")" "DEBUG"
+    log "$(psql -x -c "select * from executions where commit_id = '$commit_id';")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN
@@ -186,98 +188,77 @@ teardown() {
 @test "Successful deployment event with no new provider resources, dequeue deploy commit with new providers" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
     
-    modify_items=$(jq -n '
-        [
-            {
-                "cfg_path": "directory_dependency/dev-account/global",
-                "create_provider_resource": false,
-                "apply_changes": false
-            }
-        ]
-    ')
-
-    commit_item=$(jq -n '
-        {
-            "is_rollback": false,
-            "status": "waiting"
-        }
-    ')
-
-    target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
-        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --modify-items "$modify_items" \
-        --commit-item "$commit_item" \
-        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
-    )
     log "Mocking cloudwatch commit" "INFO"
 
     cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --modify-items "$modify_items" \
-        --commit-item "$commit_item" \
+        --commit-item "$(jq -n '
+            {
+                "is_rollback": false,
+                "status": "waiting"
+            }
+        ')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
 
     log "Cloudwatch commit:" "DEBUG"
     log "$cw_commit" "DEBUG"
 
-    finished_execution=$(echo "$cw_commit" | jq '
+    cw_execution=$(echo "$cw_commit" | jq '
         {
-            "cfg_path": .modify_items[0].cfg_path,
+            "cfg_path": "directory_dependency/dev-account/global",
             "commit_id": .commit_id,
-            "create_provider_resource": []
+            "new_providers": []
         }
     ')
 
-    finished_status="success"
+    cw_finished_status="success"
 
     log "Mocking cloudwatch execution" "INFO"
-    mock_cloudwatch_execution "$finished_execution" "$finished_status" 
+    mock_cloudwatch_execution "$cw_execution" "$cw_finished_status" 
 
     log "Creating mock account_dim" "INFO"
 
-    account_dim=$(jq -n '
-        {
-            "account_path": "directory_dependency/dev-account",
-            "account_deps": [],
-        }
-    ')
-
-    bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" --table "account_dim" --items "$account_dim" --random-defaults
-
-    modify_items=$(jq -n '
-        [
+    bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "account_dim" \
+        --random-defaults \
+        --items "$(jq -n '
             {
-                "cfg_path": "directory_dependency/dev-account/env-one/doo",
-                "create_provider_resource": true,
-                "apply_changes": false
+                "account_path": "directory_dependency/dev-account",
+                "account_deps": [],
             }
-        ]
-    ')
+        ')"
 
-    commit_item=$(jq -n '
-        {
-            "is_rollback": false,
-            "status": "waiting"
-        }
-    ')
-
+    log "Creating mock commit and adding to queue" "INFO"
     target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --modify-items "$modify_items" \
-        --commit-item "$commit_item" \
-        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)" \
+        --modify-items "$(jq -n '
+            [
+                {
+                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
+                    "create_provider_resource": true,
+                    "apply_changes": false
+                }
+            ]
+        ')" \
+        --commit-item "$(jq -n '
+            {
+                "is_rollback": false,
+                "status": "waiting"
+            }
+        ')"
     )
 
     run trigger_sf.sh
-    assert_success
+    assert_failure
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
     execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
 
-    log "$(psql -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    log "$(psql -x -c "select * from executions where execution_id = '$execution_id';")" "DEBUG"
     run psql -c """
-    do \$\$
+    DO \$\$
         BEGIN
             ASSERT (
                 SELECT 
@@ -299,11 +280,14 @@ teardown() {
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
     
     commit_id=$(echo "$target_commit" | jq '.commit_id')
-    cfg_path=$(echo "$target_commit" | jq '.modify_items[0].cfg_path')
-    is_rollback=$(echo "$target_commit" | jq '.modify_items[0].is_rollback')
-    new_resources=$(echo "$target_commit" | jq 'modify_items.resource_spec' | tr -d '"')
+    is_rollback=$(echo "$target_commit" | jq '.is_rollback')
 
-    log "$(psql -x "select * from executions where commit_id = '$commit_id';")" "DEBUG"
+    cfg_path=$(echo "$target_commit" | jq '.modify_items[0].cfg_path')
+    new_resources=$(echo "$target_commit" | jq '.modify_items[0].resource_spec' | tr -d '"')
+
+    log "$(psql -x -c "select * from executions")" "DEBUG"
+
+    log "$(psql -x -c "select * from executions where commit_id = '$commit_id';")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN
@@ -374,7 +358,7 @@ teardown() {
     assert_success
 
     log "Assert mock commit rollback is running" "INFO"
-    log "$(psql -x "select * from commit_queue where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    log "$(psql -x -c "select * from commit_queue where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN
@@ -394,7 +378,7 @@ teardown() {
     assert_success
 
     log "Assert mock commit rollback executions are created" "INFO"
-    log "$(psql -x "select * from executions where commit_id = '$TESTING_COMMIT_ID' AND is_rollback = true;")" "DEBUG"
+    log "$(psql -x -c "select * from executions where commit_id = '$TESTING_COMMIT_ID' AND is_rollback = true;")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN
@@ -498,7 +482,7 @@ teardown() {
     assert_success
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    log "$(psql -x "select * from executions where execution_id = '$execution_id';")" "DEBUG"
+    log "$(psql -x -c "select * from executions where execution_id = '$execution_id';")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN
@@ -518,7 +502,7 @@ teardown() {
     assert_success
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    log "$(psql -x "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
+    log "$(psql -x -c "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN

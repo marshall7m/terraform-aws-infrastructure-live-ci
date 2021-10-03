@@ -11,16 +11,17 @@ get_diff_paths() {
     # use pcregrep with -M multiline option to scan terragrunt plan output for
     # directories that exited plan with exit status 2 (diff in plan)
     # -N flag defines the convention for newline and CRLF allows for all of the conventions
-    abs_paths=$( echo "$tg_plan_out" \
+    abs_paths=($( echo "$tg_plan_out" \
         | pcregrep -Mo -N CRLF '(?<=exit\sstatus\s2\n).+?(?=\])' \
         | grep -oP 'prefix=\[\K.+'
-    )
+    ))
     log "Absolute paths: $(printf '\n\t%s\n' "${abs_paths[@]}")" "DEBUG"
 
     diff_paths=()
-    while read -r dir; do
+
+    for dir in "${abs_path[@]}"; do
         diff_paths+=($(realpath -e --relative-to="$git_root" "$dir"))
-    done <<< "$abs_paths"
+    done
 }
 
 get_parsed_stack() {
@@ -377,17 +378,21 @@ update_execution_with_new_resources() {
 update_execution_status() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    local execution_id=$(echo $1 | tr -d '"')
-    local status=$(echo $2 | tr -d '"')
+    local execution_id=$1
+    local status=$2
 
-    psql -c """
+    update_results=$(psql -x -c """
     UPDATE
         executions
     SET
         status = '$status'
     WHERE 
         execution_id = '$execution_id'
-    """
+    RETURNING *
+    """)
+
+    log "Update results:" "DEBUG"
+    log "$update_results" "DEBUG"
 }
 
 get_new_providers_resources() {
@@ -457,6 +462,9 @@ execution_finished() {
     log "Updating Execution Status" "INFO"
     update_execution_status "$execution_id" "$status"
 
+    #TODO: 
+    # create query to update pr queue status if all commits are finished
+    # create query to update commit queue status if all executions are finished
     if [ "$is_rollback" == false ]; then
         git checkout "$commit_id" > /dev/null
         if [ "$(echo "$new_providers" | jq '. | length')" -gt 0 ]; then
@@ -468,6 +476,8 @@ execution_finished() {
         if [ "$status" == "failed" ]; then
             update_commit_queue_with_rollback_commits "$pr_id"
         fi
+
+
     fi
     set +e
 }
@@ -496,6 +506,7 @@ update_commit_queue_with_rollback_commits() {
         FROM
             commit_queue
         WHERE 
+            -- gets commit executions that created new provider resources
             commit_id = ANY(
                             SELECT
                                 commit_id
@@ -541,6 +552,7 @@ create_executions() {
     """ | jq '.' 2> /dev/null)
 
     if [ "$pr_items" == "" ]; then
+        #TODO: narrow down reason
         log "Another PR is in progress or no PR is waiting" "INFO"
     else
         log "Updating commit queue with dequeued PR's most recent commit" "INFO"
@@ -609,8 +621,10 @@ create_executions() {
     is_rollback=$(echo "$commit_items" | jq '.is_rollback' | tr -d '"')
 
     if [ "$is_rollback" == "true" ]; then
+        log "Adding commit rollbacks to executions" "INFO"
         update_executions_with_new_rollback_stack
     elif [ "$is_rollback" == "false" ]; then
+        log "Adding commit deployments to executions" "INFO"
         update_executions_with_new_deploy_stack "$commit_id"
     else
         log "is_rollback value is invalid" "ERROR"
@@ -620,102 +634,23 @@ create_executions() {
 
 start_sf_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-
+    DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
+    
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
     
-    IFS=$'\n' target_execution_ids=$(psql -tA """
-    CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS \$\$
+    target_execution_ids=$(psql -t -f "$DIR/sql/select_target_execution_ids.sql" | jq '.' 2> /dev/null)
+
+    log "Target execution IDs:" "INFO"
+    log "$target_execution_ids" "INFO"
     
-        -- Returns the total number of array values in the first array that's in the second array
+    readarray -t target_execution_ids < <(echo "$target_execution_ids" | jq -c '.[]')
 
-        DECLARE
-            total int := 0;
-            i text;
-        BEGIN
-            FOREACH i IN ARRAY \$1 LOOP
-                IF (SELECT i = ANY (\$2)::BOOL) or i IS NULL THEN
-                    total := total + 1;
-                    RAISE NOTICE 'total: %', total;
-                END IF;
-            END LOOP;
-            RETURN total;
-        END;
-    \$\$ LANGUAGE plpgsql;
+    log "Count: ${#target_execution_ids[@]}" "INFO"
 
-    -- gets all executions from running commit
-    SELECT
-        *
-    INTO
-        TEMP commit_executions
-    FROM
-        executions
-    WHERE
-        commit_id = (
-            SELECT
-                commit_id
-            FROM
-                commit_queue
-            WHERE
-                status = 'running'
-        )
-    AND
-        is_rollback = (
-            SELECT
-                is_rollback
-            FROM
-                commit_queue
-            WHERE
-                status = 'running'
-        )
-    ;
-
-    -- get all executions that are waiting within commit
-    SELECT
-        *
-    INTO
-        queued_executions
-    FROM
-        commit_executions
-    WHERE
-        status = 'waiting'
-    ;
-
-    -- selects executions where all account/terragrunt config dependencies are successful
-    SELECT
-        execution_id
-    FROM
-        queued_executions
-    WHERE
-        cardinality(account_deps) = arr_in_arr_count(account_deps, ( -- if count of dependency array == the count of successful dependencies
-            -- gets accounts that have all successful executions
-            SELECT ARRAY(
-                SELECT DISTINCT account_name
-                FROM commit_executions
-                GROUP BY account_name
-                HAVING COUNT(*) FILTER (WHERE status = 'success') = COUNT(*) --
-            )
-        ))
-    AND
-        cardinality(cfg_deps) = arr_in_arr_count(cfg_deps, (
-            -- gets terragrunt config paths that have successful executions
-            SELECT ARRAY(
-                SELECT
-                    DISTINCT commit_executions.cfg_path
-                FROM
-                    commit_executions
-                WHERE 
-                    status = 'success'
-            )
-        ))
-    ;
-    """)
-
-    log "Target execution IDs: $(printf '\n\t%s' "${target_execution_ids[@]}")" "INFO"
-    
     for id in "${target_execution_ids[@]}"; do
         log "Execution ID: $id" "INFO"
 
-        sf_input=$(psql -t """
+        sf_input=$(psql -t -c """
         SELECT 
             row_to_json(sub) 
         FROM (

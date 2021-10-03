@@ -88,7 +88,7 @@ create_commit_changes() {
 
 	local modify_items=$1
 
-	res=$(jq -n '[{}]')
+	res=$(jq -n '[]')
 	while read item; do
 		log "Path item:" "DEBUG"
 		log "$(echo "$item" | jq '.')" "DEBUG"
@@ -114,7 +114,8 @@ create_commit_changes() {
 		')
 
 		if [ -n "$apply_changes" ]; then
-			terragrunt apply --terragrunt-working-dir $cfg_path -auto-approve >/dev/null
+			log "Applying mock changes" "INFO"
+			terragrunt apply --terragrunt-working-dir $cfg_path -auto-approve > /dev/null 2> /dev/null
 		fi
 	done <<< "$(echo "$modify_items" | jq -c '.[]')"
 
@@ -200,10 +201,10 @@ EOM
 	--arg cfg_providers "${cfg_providers[*]}" \
 	--arg file_path "$file_path" '
 	(try ($cfg_providers | split(" ")) // []) as $cfg_providers
-	| (map(select(.name | IN($cfg_providers[]) | not)[0]) as $target
-	| $target + {"file_path": $file_path, "type": "provider"}}
+	| (map(select(.name | IN($cfg_providers[]) | not))[0]) as $target
+	| $target + {"file_path": $file_path, "type": "provider"}
 	')
-	
+
 	#convert jq to formatted content and remove escape characters
 	content=$(echo "$target_testing_provider" | jq '.content' | sed -e 's/^.//' -e 's/.$//')
 	content=$(echo -e "$content" | tr -d '\')
@@ -220,10 +221,11 @@ create_random_output() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	local tf_dir=$1
-	file_path="$tf_dir/$(openssl rand -base64 10 | tr -dc A-Za-z0-9).tf"
+	id=$(openssl rand -base64 10 | tr -dc A-Za-z0-9)
+	file_path="$tf_dir/$id.tf"
 	log "Filepath: $file_path" "DEBUG"
 
-	resource_name="test_case_$BATS_TEST_NUMBER"
+	resource_name="test_file_$id"
 	resource_spec="output.$resource_name"
 	value="test"
 
@@ -260,7 +262,6 @@ main() {
 	add_commit_to_queue "$commit_item" "$commit_msg" > /dev/null
 
 	log "Switching back to default branch" "DEBUG"
-	
     cd "$abs_repo_dir" && git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" > /dev/null
 	
 	log "commit_item" "DEBUG"
@@ -270,8 +271,8 @@ main() {
 	log "$modify_items" "DEBUG"
 
 	jq -n --arg commit_item "$commit_item" --arg modify_items "$modify_items" '
-		($commit_item | fromjson) as $commit_item
-		| ($modify_items | fromjson) as $modify_items
+		($commit_item | try fromjson // {}) as $commit_item
+		| ($modify_items | try fromjson // []) as $modify_items
 		| $commit_item + {"modify_items": $modify_items}
 	'
 	

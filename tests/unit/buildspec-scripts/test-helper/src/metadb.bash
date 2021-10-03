@@ -66,31 +66,41 @@ clear_metadb_tables() {
 		LANGUAGE plpgsql AS
 		
 	\$\$
-	DECLARE 
-		_full_table text := concat_ws('.', quote_ident(_schema), quote_ident(_table));
-	BEGIN
-		IF EXISTS (
-			SELECT 
-				1 
-			FROM 
-				INFORMATION_SCHEMA.TABLES 
-			WHERE
-				TABLE_SCHEMA = _schema AND
-				TABLE_CATALOG = _catalog AND
-				TABLE_NAME = _table
-		)
-		THEN
-			EXECUTE 'TRUNCATE ' || _full_table ;
-			RETURN 'Table truncated: ' || _full_table;
-		ELSE
-			RETURN 'Table does not exists: ' || _full_table;
-		END IF;
-	END;
+        DECLARE 
+            _full_table text := concat_ws('.', quote_ident(_schema), quote_ident(_table));
+        BEGIN
+            IF EXISTS (
+                SELECT 
+                    1 
+                FROM 
+                    INFORMATION_SCHEMA.TABLES 
+                WHERE
+                    TABLE_SCHEMA = _schema AND
+                    TABLE_CATALOG = _catalog AND
+                    TABLE_NAME = _table
+            )
+            THEN
+                EXECUTE 'TRUNCATE ' || _full_table ;
+                RETURN 'Table truncated: ' || _full_table;
+            ELSE
+                RETURN 'Table does not exists: ' || _full_table;
+            END IF;
+        END;
+	\$\$;
+
+    CREATE OR REPLACE FUNCTION reset_identity_col(_table VARCHAR, _identity_col VARCHAR)
+    RETURNS VOID AS \$\$
+        BEGIN
+            PERFORM format('setval(pg_get_serial_sequence(''%1\$I'', ''%2\$s''), 1) FROM %1\$I', target_table, _identity_col);
+        END;
 	\$\$;
     """
 
-	psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'executions');"
+	# psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'executions');"
     psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'account_dim');"
     psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'commit_queue');"
     psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'pr_queue');"
+
+    psql -c "SELECT reset_identity_col('pr_queue', 'id');"
+    psql -c "SELECT reset_identity_col('commit_queue', 'id');"
 }
