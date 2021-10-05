@@ -95,11 +95,12 @@ main() {
 		psql -f "$DIR/mock_sql/trigger_defaults.sql" > /dev/null
 
 		log "Inserting $staging_table into $table" "DEBUG"
-		psql -f "$DIR/mock_sql/insert_mock_records.sql" > /dev/null
+		psql -f "$DIR/mock_sql/insert_mock_records.sql" > &2
 
 		if [ -n "$results_to_json" ]; then
 			log "Storing mock results within: $mock_filepath" "INFO" 
-			psql -t -c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');" -o "$mock_filepath"
+			psql -t -o "$mock_filepath" \
+				-c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');"
 			log "adding response" "DEBUG"
 			res=$(jq -n --arg mock_filepath "$mock_filepath" '{"mock_filepath": $mock_filepath}')
 		else

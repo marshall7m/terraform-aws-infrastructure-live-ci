@@ -365,34 +365,108 @@ update_execution_with_new_resources() {
 
     log "Adding new resources to execution record" "INFO"
     psql -c """
-    UPDATE
-        executions
-    SET
-        new_resources = string_to_array('$psql_new_resources', ' ')
-    WHERE
-        execution_id = '$execution_id'
+    UPDATE executions
+    SET new_resources = string_to_array('$psql_new_resources', ' ')
+    WHERE execution_id = '$execution_id'
     ;
     """
 }
 
-update_execution_status() {
+refresh_queues() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
+    
+    local execution_id=$1
+
+    psql -x -c """
+    
+    """
+}
+
+cw_event_table_update() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     local execution_id=$1
     local status=$2
 
-    update_results=$(psql -x -c """
-    UPDATE
-        executions
-    SET
-        status = '$status'
-    WHERE 
-        execution_id = '$execution_id'
-    RETURNING *
-    """)
-
     log "Update results:" "DEBUG"
-    log "$update_results" "DEBUG"
+    psql -x -c <<EOF
+    CREATE OR REPLACE FUNCTION status_all_update(text[]) RETURNS VARCHAR AS \$\$
+
+        DECLARE
+            fail_count INT := 0;
+            succcess_count INT := 0;
+            i text;
+        BEGIN
+            FOREACH i IN ARRAY \$1 LOOP
+                CASE
+                WHEN i = 'running' THEN
+                    RETURN i;
+                WHEN i = 'failed' THEN
+                    fail_count := fail_count + 1;
+                WHEN i = 'success' THEN
+                    succcess_count := succcess_count + 1;
+                ELSE
+                    RAISE EXCEPTION 'status is unknown: %', i; 
+                END CASE;
+            END LOOP;
+            IF fail_count > 0 THEN
+                RETURN 'failed';
+            ELSE
+                RETURN 'success';
+            END IF;
+        END;
+    \$\$ LANGUAGE plpgsql;
+
+    DO \$\$
+        DECLARE
+            executed_commit_id VARCHAR;
+            updated_commit_id VARCHAR;
+            updated_commit_status VARCHAR;
+            updated_pr_id INTEGER;
+            updated_pr_status VARCHAR;
+        BEGIN
+            UPDATE executions
+            SET "status" = "$status"
+            WHERE execution_id = '$execution_id'
+            RETURNING commit_id
+            INTO executed_commit_id;
+
+            RAISE NOTICE 'Commit ID: %', executed_commit_id;
+
+            SELECT status_all_update(ARRAY(
+                SELECT "status"
+                FROM executions 
+                WHERE commit_id = executed_commit_id
+            ))
+            INTO updated_commit_status;
+
+            UPDATE commit_queue
+            SET "status" = updated_commit_status
+            WHERE commit_id = executed_commit_id
+            AND updated_commit_status != NULL
+            RETURNING pr_id
+            INTO updated_pr_id;
+
+            RAISE NOTICE 'Updated commit status: %', updated_commit_status;
+
+            SELECT status_all_update(ARRAY(
+                SELECT "status"
+                FROM commit_queue 
+                WHERE pr_id = updated_pr_id
+            ))
+            INTO updated_pr_status;
+
+            UPDATE pr_queue
+            SET "status" = updated_pr_status
+            WHERE pr_id = updated_pr_id
+            AND updated_pr_status != NULL
+            RETURNING *
+            INTO updated_pr_id;
+
+            RAISE NOTICE 'Updated PR status: %', updated_pr_status;
+        END;
+    \$\$ LANGUAGE plpgsql;
+EOF
 }
 
 get_new_providers_resources() {
@@ -460,11 +534,9 @@ execution_finished() {
     new_providers=$( echo $sf_event | jq '.new_providers')
 
     log "Updating Execution Status" "INFO"
-    update_execution_status "$execution_id" "$status"
-
-    #TODO: 
-    # create query to update pr queue status if all commits are finished
-    # create query to update commit queue status if all executions are finished
+    cw_event_table_update "$execution_id" "$status"
+    refresh_queues "$execution_id"
+    
     if [ "$is_rollback" == false ]; then
         git checkout "$commit_id" > /dev/null
         if [ "$(echo "$new_providers" | jq '. | length')" -gt 0 ]; then
