@@ -47,7 +47,7 @@ WHERE status = 'waiting'
 ;
 
 -- selects executions where all account/terragrunt config dependencies are successful
-SELECT row_to_json(execution_id)
+SELECT execution_id
 FROM queued_executions
 -- where count of dependency array == the count of successful dependencies
 WHERE cardinality(account_deps) = arr_in_arr_count(
@@ -72,4 +72,6 @@ AND
             )
         )
     )
+INTO target_execution_ids
 ;
+SELECT row_to_json(target_execution_ids);

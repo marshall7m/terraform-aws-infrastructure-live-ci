@@ -187,7 +187,6 @@ teardown() {
 
 @test "Successful deployment event with no new provider resources, dequeue deploy commit with new providers" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
-    
     log "Mocking cloudwatch commit" "INFO"
 
     cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
@@ -252,7 +251,7 @@ teardown() {
     )
 
     run trigger_sf.sh
-    assert_failure
+    assert_success
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
     execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')

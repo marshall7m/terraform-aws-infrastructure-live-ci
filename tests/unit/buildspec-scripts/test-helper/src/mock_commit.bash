@@ -118,7 +118,7 @@ create_commit_changes() {
 		| . + [$item]
 		')
 
-		if [ -n "$apply_changes" ]; then
+		if [ "$apply_changes" == true ]; then
 			log "Applying mock changes" "INFO"
 			terragrunt apply --terragrunt-working-dir $cfg_path -auto-approve > /dev/null 2> /dev/null
 		fi

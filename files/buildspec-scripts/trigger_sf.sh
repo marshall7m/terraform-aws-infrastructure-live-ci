@@ -1,6 +1,8 @@
 #!/bin/bash
 
 source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
+source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/psql-utils/load.bash"
+
 export SQL_DIR="$( cd "$( dirname "$BASH_SOURCE[0]" )/sql"  >/dev/null 2>&1 && pwd )"
 # find "$src_path" -type f -exec chmod u+x {} \;
 
@@ -17,11 +19,11 @@ get_diff_paths() {
         | pcregrep -Mo -N CRLF '(?<=exit\sstatus\s2\n).+?(?=\])' \
         | grep -oP 'prefix=\[\K.+'
     ))
-    log "Absolute paths: $(printf '\n\t%s\n' "${abs_paths[@]}")" "DEBUG"
+    log "Absolute paths: $(printf '\n\t%s' "${abs_paths[@]}")" "DEBUG"
 
     diff_paths=()
-
-    for dir in "${abs_path[@]}"; do
+    for dir in "${abs_paths[@]}"; do
+        log "Absolute path: $dir" "DEBUG"
         diff_paths+=($(realpath -e --relative-to="$git_root" "$dir"))
     done
 }
@@ -122,6 +124,7 @@ create_stack() {
     local terragrunt_working_dir=$1
     local git_root=$2
 
+    log "Terragrunt working dir: $terragrunt_working_dir" "DEBUG"
     # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)
     tg_plan_out=$(terragrunt run-all plan \
         --terragrunt-working-dir $terragrunt_working_dir \
@@ -227,16 +230,12 @@ get_new_providers() {
 
     log "Running Terragrunt Providers Command" "INFO"
     tg_providers_cmd_out=$( terragrunt providers --terragrunt-working-dir $terragrunt_working_dir 2>&1)
-    log "Terragrunt Command Output" "DEBUG"
-    log "$tg_providers_cmd_out" "DEBUG"
 
-    log "Getting Terragrunt file providers" "INFO"
     cfg_providers=$(echo "$tg_providers_cmd_out" | grep -oP '─\sprovider\[\K.+(?=\])' | sort -u)
-    log "Providers: $(printf "\n%s" "${cfg_providers[@]}")" "DEBUG"
+    log "Terragrunt file providers: $(printf "\n%s" "${cfg_providers[@]}")" "DEBUG"
 
-    log "Getting Terragrunt state providers" "INFO"
     state_providers=$(echo "$tg_providers_cmd_out" | grep -oP '^\s+provider\[\K.+(?=\])' | sort -u)
-    log "Providers: $(printf "\n%s" "${state_providers[@]}")" "DEBUG"
+    log "Terragrunt state providers: $(printf "\n%s" "${state_providers[@]}")" "DEBUG"
 
     log "Getting providers that are not in the state file" "INFO"
     new_providers=()
