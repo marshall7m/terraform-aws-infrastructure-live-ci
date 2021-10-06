@@ -194,8 +194,7 @@ teardown() {
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
         --commit-item "$(jq -n '
             {
-                "is_rollback": false,
-                "status": "waiting"
+                "status": "running"
             }
         ')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
@@ -208,6 +207,8 @@ teardown() {
         {
             "cfg_path": "directory_dependency/dev-account/global",
             "commit_id": .commit_id,
+            "status": .status,
+            "is_rollback": false,
             "new_providers": []
         }
     ')
@@ -267,8 +268,6 @@ teardown() {
                     executions
                 WHERE
                     execution_id = '$execution_id' 
-                AND
-                    new_resources = '{}'
                 AND
                     status = 'success'
             ) = 1;

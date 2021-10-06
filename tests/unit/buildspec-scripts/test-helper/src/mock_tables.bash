@@ -95,7 +95,7 @@ main() {
 		psql -f "$DIR/mock_sql/trigger_defaults.sql" > /dev/null
 
 		log "Inserting $staging_table into $table" "DEBUG"
-		psql -f "$DIR/mock_sql/insert_mock_records.sql" > &2
+		psql -f "$DIR/mock_sql/insert_mock_records.sql" >&2
 
 		if [ -n "$results_to_json" ]; then
 			log "Storing mock results within: $mock_filepath" "INFO" 

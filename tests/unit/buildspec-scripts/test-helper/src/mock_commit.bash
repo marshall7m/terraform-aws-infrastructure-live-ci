@@ -66,6 +66,11 @@ modify_tg_path() {
 
 	local tg_dir=$1
 	local create_provider_resource=$2
+
+	if [ -z "$tg_dir" ]; then
+		log "\$1 for terragrunt directory is not set" "ERROR"
+		exit 1
+	fi
 	
 	# get terraform source dir from .terragrunt-cache/
 	tf_dir=$(terragrunt terragrunt-info --terragrunt-working-dir "$tg_dir" | jq '.WorkingDir' | tr -d '"') || exit 1

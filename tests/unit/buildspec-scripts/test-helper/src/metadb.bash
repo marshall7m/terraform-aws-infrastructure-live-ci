@@ -89,14 +89,15 @@ clear_metadb_tables() {
 	\$\$;
 
     CREATE OR REPLACE FUNCTION reset_identity_col(_table VARCHAR, _identity_col VARCHAR)
-    RETURNS VOID AS \$\$
+    RETURNS VOID 
+    LANGUAGE plpgsql AS \$\$
         BEGIN
-            PERFORM format('setval(pg_get_serial_sequence(''%1\$I'', ''%2\$s''), 1) FROM %1\$I', target_table, _identity_col);
+            PERFORM format('setval(pg_get_serial_sequence(''%1\$I'', ''%2\$s''), 1) FROM %1\$I', _table, _identity_col);
         END;
 	\$\$;
     """
 
-	# psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'executions');"
+	psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'executions');"
     psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'account_dim');"
     psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'commit_queue');"
     psql -c "SELECT truncate_if_exists('public', '$PGDATABASE', 'pr_queue');"

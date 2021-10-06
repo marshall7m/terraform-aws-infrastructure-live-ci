@@ -1,6 +1,8 @@
 #!/bin/bash
 
 source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
+export SQL_DIR="$( cd "$( dirname "$BASH_SOURCE[0]" )/sql"  >/dev/null 2>&1 && pwd )"
+# find "$src_path" -type f -exec chmod u+x {} \;
 
 get_diff_paths() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
@@ -204,119 +206,18 @@ update_executions_with_new_deploy_stack() {
         log "staging_cfg_stack table:" "DEBUG"
         log "$(psql -x -c "SELECT * FROM staging_cfg_stack")" "DEBUG"
 
-        psql -c """
-        INSERT INTO
-            executions
-        SELECT
-            'run-' || substr(md5(random()::text), 0, 8) as execution_id,
-            false as is_rollback,
-            commit.pr_id as pr_id,
-            commit.commit_id as commit_id,
-            'refs/heads/$BASE_REF^{$( git rev-parse --verify $BASE_REF )}' as base_source_version,
-            'refs/pull/' || commit.pr_id || '/head^{' || commit.commit_id || '}' as head_source_version,
-            cfg_path as cfg_path,
-            cfg_deps as cfg_deps,
-            'waiting' as status,
-            'terragrunt plan ' || '--terragrunt-working-dir ' || stack.cfg_path as plan_command,
-            'terragrunt apply ' || '--terragrunt-working-dir ' || stack.cfg_path || ' -auto-approve' as deploy_command,
-            new_providers as new_providers, 
-            ARRAY[NULL] as new_resources,
-            account.account_name as account_name,
-            account.account_path as account_path,
-            account.account_deps as account_deps,
-            account.voters as voters,
-            0 as approval_count,
-            account.min_approval_count as min_approval_count,
-            0 as rejection_account,
-            account.min_rejection_count as min_rejection_count
-        FROM (
-            SELECT
-                pr_id,
-                commit_id
-            FROM
-                commit_queue
-            WHERE
-                commit_id = '$commit_id'
-        ) commit,
-        (
-            SELECT
-                account_name,
-                account_path,
-                account_deps,
-                voters,
-                min_approval_count,
-                min_rejection_count
-            FROM
-                account_dim
-            WHERE
-                account_path = '$account_path'
-        ) account,
-        (
-            SELECT
-                *
-            FROM
-                staging_cfg_stack
-        ) stack;
-        """
-
-        log "Execution table items for account:" "DEBUG"
-        log "$(psql -x -c "SELECT * FROM executions WHERE account_path = '$account_path' AND commit_id = '$commit_id'")" "DEBUG"
+        log "Inserting execution items for account:" "INFO"
+        psql \
+            -v base_ref="'$BASE_REF'" \
+            -v base_commit_id "'$( git rev-parse --verify $BASE_REF )'" \
+            -v commit_id="'$commit_id'" \
+            -v account_path="'$account_path'" \
+            -f "$SQL_DIR/update_executions_with_new_deploy_stack.sql"
     done
 
     log "Cleaning up" "DEBUG"
     psql -c "DROP TABLE IF EXISTS staging_cfg_stack;"
     set +e
-}
-
-update_executions_with_new_rollback_stack() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
-    local commit_id=$1
-
-    psql -c """
-    CREATE OR REPLACE FUNCTION target_resources(text[]) RETURNS text AS \$\$
-    DECLARE
-        flags text := '';
-        resource text;
-    BEGIN
-        FOREACH resource IN ARRAY \$1
-        LOOP
-            flags := flags || ' -target ' || resource;
-        END LOOP;
-        RETURN flags;
-    END;
-    \$\$ LANGUAGE plpgsql;
-
-    INSERT INTO
-        executions
-    SELECT
-        'run-' || substr(md5(random()::text), 0, 8) as execution_id,
-        true as is_rollback,
-        pr_id,
-        commit_id,
-        base_source_version,
-        head_source_version,
-        cfg_path,
-        cfg_deps,
-        'waiting' as status,
-        'terragrunt destroy' || target_resources(new_resources) as plan_command,
-        'terragrunt destroy' || target_resources(new_resources) || ' -auto-approve' as deploy_commmand,
-        new_providers,
-        new_resources,
-        account_name,
-        account_deps,
-        account_path,
-        voters,
-        0 as approval_count,
-        min_approval_count,
-        0 as rejection_count,
-        min_rejection_count
-    FROM
-        executions
-    WHERE
-        commit_id = '$commit_id' AND
-        cardinality(new_resources) > 0
-    """
 }
 
 get_new_providers() {
@@ -372,103 +273,6 @@ update_execution_with_new_resources() {
     """
 }
 
-refresh_queues() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
-    local execution_id=$1
-
-    psql -x -c """
-    
-    """
-}
-
-cw_event_table_update() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local execution_id=$1
-    local status=$2
-
-    log "Update results:" "DEBUG"
-    psql -x -c <<EOF
-    CREATE OR REPLACE FUNCTION status_all_update(text[]) RETURNS VARCHAR AS \$\$
-
-        DECLARE
-            fail_count INT := 0;
-            succcess_count INT := 0;
-            i text;
-        BEGIN
-            FOREACH i IN ARRAY \$1 LOOP
-                CASE
-                WHEN i = 'running' THEN
-                    RETURN i;
-                WHEN i = 'failed' THEN
-                    fail_count := fail_count + 1;
-                WHEN i = 'success' THEN
-                    succcess_count := succcess_count + 1;
-                ELSE
-                    RAISE EXCEPTION 'status is unknown: %', i; 
-                END CASE;
-            END LOOP;
-            IF fail_count > 0 THEN
-                RETURN 'failed';
-            ELSE
-                RETURN 'success';
-            END IF;
-        END;
-    \$\$ LANGUAGE plpgsql;
-
-    DO \$\$
-        DECLARE
-            executed_commit_id VARCHAR;
-            updated_commit_id VARCHAR;
-            updated_commit_status VARCHAR;
-            updated_pr_id INTEGER;
-            updated_pr_status VARCHAR;
-        BEGIN
-            UPDATE executions
-            SET "status" = "$status"
-            WHERE execution_id = '$execution_id'
-            RETURNING commit_id
-            INTO executed_commit_id;
-
-            RAISE NOTICE 'Commit ID: %', executed_commit_id;
-
-            SELECT status_all_update(ARRAY(
-                SELECT "status"
-                FROM executions 
-                WHERE commit_id = executed_commit_id
-            ))
-            INTO updated_commit_status;
-
-            UPDATE commit_queue
-            SET "status" = updated_commit_status
-            WHERE commit_id = executed_commit_id
-            AND updated_commit_status != NULL
-            RETURNING pr_id
-            INTO updated_pr_id;
-
-            RAISE NOTICE 'Updated commit status: %', updated_commit_status;
-
-            SELECT status_all_update(ARRAY(
-                SELECT "status"
-                FROM commit_queue 
-                WHERE pr_id = updated_pr_id
-            ))
-            INTO updated_pr_status;
-
-            UPDATE pr_queue
-            SET "status" = updated_pr_status
-            WHERE pr_id = updated_pr_id
-            AND updated_pr_status != NULL
-            RETURNING *
-            INTO updated_pr_id;
-
-            RAISE NOTICE 'Updated PR status: %', updated_pr_status;
-        END;
-    \$\$ LANGUAGE plpgsql;
-EOF
-}
-
 get_new_providers_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
@@ -518,8 +322,6 @@ execution_finished() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    log "Triggered via Step Function Event" "INFO"
-
     var_exists "$EVENTBRIDGE_EVENT"
     sf_event=$( echo $EVENTBRIDGE_EVENT | jq '.')
     log "Step Function Event:" "DEBUG"
@@ -532,10 +334,9 @@ execution_finished() {
     pr_id=$( echo $sf_event | jq '.pr_id' | tr -d '"')
     commit_id=$( echo $sf_event | jq '.commit_id' | tr -d '"')
     new_providers=$( echo $sf_event | jq '.new_providers')
-
+    status=success
     log "Updating Execution Status" "INFO"
-    cw_event_table_update "$execution_id" "$status"
-    refresh_queues "$execution_id"
+    psql -v execution_id="'$execution_id'" -v status="'$status'" -f "$SQL_DIR/cw_event_table_update.sql"
     
     if [ "$is_rollback" == false ]; then
         git checkout "$commit_id" > /dev/null
@@ -546,54 +347,10 @@ execution_finished() {
         fi
 
         if [ "$status" == "failed" ]; then
-            update_commit_queue_with_rollback_commits "$pr_id"
+            psql -v pr_id="'$pr_id'" -f "$SQL_DIR/update_commit_queue_with_rollback_commits.sql"
         fi
-
-
     fi
     set +e
-}
-
-update_commit_queue_with_rollback_commits() {
-    log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-    local pr_id=$(echo $1 | tr -d '"')
-
-    psql -c """
-    INSERT INTO commit_queue (
-        commit_id,
-        is_rollback,
-        pr_id,
-        status
-    )
-
-    SELECT
-        commit_id,
-        true as is_rollback,
-        '$pr_id',
-        'waiting' as status
-    FROM (
-        SELECT
-            commit_id
-        FROM
-            commit_queue
-        WHERE 
-            -- gets commit executions that created new provider resources
-            commit_id = ANY(
-                            SELECT
-                                commit_id
-                            FROM
-                                executions
-                            WHERE
-                                pr_id = '$pr_id' AND
-                                is_rolback = false AND
-                                new_resources > 0
-                        )
-    ) AS sub
-    ;
-    ALTER TABLE commit_queue ALTER COLUMN id RESTART WITH max(id) + 1;
-    
-    """
 }
 
 create_executions() {
@@ -694,7 +451,7 @@ create_executions() {
 
     if [ "$is_rollback" == "true" ]; then
         log "Adding commit rollbacks to executions" "INFO"
-        update_executions_with_new_rollback_stack
+        psql -v commit_id="'$commit_id'" -f "$SQL_DIR/update_executions_with_new_rollback_stack.sql"
     elif [ "$is_rollback" == "false" ]; then
         log "Adding commit deployments to executions" "INFO"
         update_executions_with_new_deploy_stack "$commit_id"
@@ -706,11 +463,9 @@ create_executions() {
 
 start_sf_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
-    
+
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
-    
-    target_execution_ids=$(psql -t -f "$DIR/sql/select_target_execution_ids.sql" | jq '.' 2> /dev/null)
+    target_execution_ids=$(psql -t -f "$SQL_DIR/select_target_execution_ids.sql" | jq '.' 2> /dev/null)
 
     log "Target execution IDs:" "INFO"
     log "$target_execution_ids" "INFO"
@@ -743,12 +498,9 @@ start_sf_executions() {
                 --input "$sf_input"
                 
             psql -c """
-            UPDATE
-                executions
-            SET
-                status = 'running'
-            WHERE 
-                execution_id = '$id'   
+            UPDATE executions
+            SET status = 'running'
+            WHERE execution_id = '$id'   
             """
         else
             log "DRY_RUN was set -- skip starting sf executions" "INFO"
@@ -779,6 +531,7 @@ stop_running_sf_executions() {
 
 main() {
     set -e
+
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     if [ -z "$CODEBUILD_INITIATOR" ]; then
@@ -791,10 +544,12 @@ main() {
     
     log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
     if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then
+        log "Triggered via Step Function Event" "INFO"
         execution_finished
     fi
 
     log "Checking if any Step Function executions are running" "DEBUG"
+    executions_in_progress
     if [ $(executions_in_progress) -eq 0 ]; then
         log "No deployment or rollback executions in progress" "DEBUG"
         create_executions

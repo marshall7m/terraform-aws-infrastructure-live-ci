@@ -8,7 +8,8 @@ mock_cloudwatch_execution() {
 
     log "Adding execution record to executions table" "DEBUG"
     res=$(bash "$DIR"/mock_tables.bash \
-        --table "executions" --items "$execution" \
+        --table "executions" \
+        --items "$execution" \
         --random-defaults \
         --results-to-json \
         --results-out-dir "$BATS_TEST_TMPDIR" \
