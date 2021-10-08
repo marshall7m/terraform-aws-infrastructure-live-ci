@@ -1,9 +1,9 @@
 #!/bin/bash
 
 source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/bash-utils/load.bash"
-source "$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/psql-utils/load.bash"
 
 export SQL_DIR="$( cd "$( dirname "$BASH_SOURCE[0]" )/sql"  >/dev/null 2>&1 && pwd )"
+export PATH="$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --show-toplevel)" >/dev/null 2>&1 && pwd )/node_modules/psql-utils/src:$PATH"
 # find "$src_path" -type f -exec chmod u+x {} \;
 
 get_diff_paths() {
@@ -204,7 +204,7 @@ update_executions_with_new_deploy_stack() {
             continue
         fi
 
-        jq_to_psql_records "$stack" "staging_cfg_stack"
+        jq_to_psql_records.bash --jq-input "$stack" --table "staging_cfg_stack"
 
         log "staging_cfg_stack table:" "DEBUG"
         log "$(psql -x -c "SELECT * FROM staging_cfg_stack")" "DEBUG"

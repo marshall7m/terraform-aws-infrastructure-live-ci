@@ -98,7 +98,7 @@ teardown() {
         }
     ')
 
-    mock_tables --table "account_dim" --items "$account_dim" --random-defaults
+    mock_tables --table "account_dim" --items "$account_dim" --enable-defaults
 
     modify_items=$(jq -n '
         [
@@ -221,11 +221,12 @@ teardown() {
 
     bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
         --table "account_dim" \
-        --random-defaults \
+        --enable-defaults \
+        --type-map "$(jq -n {"account_deps": "TEXT[]"})" \
         --items "$(jq -n '
             {
                 "account_path": "directory_dependency/dev-account",
-                "account_deps": [],
+                "account_deps": []
             }
         ')"
 
@@ -339,7 +340,7 @@ teardown() {
     ]
     ')
 
-    jq_to_psql_records "$account_dim" "account_dim"
+    jq_to_psql_records.bash --jq-input "$account_dim" --table "account_dim"
 
     log "Modifying Terragrunt directory within test repo's base branch" "DEBUG"
     res=$(modify_tg_path --path "$abs_testing_dir" --new-provider-resource)

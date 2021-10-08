@@ -61,7 +61,7 @@ setup_mock_staging_cfg_stack() {
 		log "Terragrunt Dependency Mapping:" "DEBUG"
 		log "$tg_deps_mapping" "DEBUG"
 		
-		jq_to_psql_records "$tg_deps_mapping" "mock_staging_cfg_stack"
+		jq_to_psql_records.bash --jq-input "$tg_deps_mapping" --table "mock_staging_cfg_stack"
 
 	done <<< "$(echo "$account_dim" | jq 'map(.account_path)' | jq -c '.[]')"
 }

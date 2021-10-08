@@ -11,6 +11,24 @@ CREATE OR REPLACE FUNCTION insert_mock_records (
         seq VARCHAR;
         res record;
     BEGIN
+        EXECUTE format('
+        SELECT array_to_string(array(
+            SELECT concat(pg_attribute.attname) AS column_name
+            FROM pg_catalog.pg_attribute
+            INNER JOIN pg_catalog.pg_class 
+            ON pg_class.oid = pg_attribute.attrelid
+            INNER JOIN pg_catalog.pg_namespace 
+            ON pg_namespace.oid = pg_class.relnamespace
+            WHERE
+                pg_attribute.attnum > 0
+                AND NOT pg_attribute.attisdropped
+                AND pg_namespace.nspname = ''%I''
+                AND pg_class.relname = ''%I''
+            ORDER BY
+                attnum ASC
+        ), '', '')', 'public', staging_table)
+        INTO col_names;
+
         EXECUTE format('ALTER TABLE %I ENABLE TRIGGER %s', target_table, trigger);
         IF mock_count > 0 THEN
             RAISE INFO 'Duplicating rows to match mock_count';

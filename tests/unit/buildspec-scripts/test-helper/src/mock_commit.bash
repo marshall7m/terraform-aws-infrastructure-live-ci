@@ -153,8 +153,10 @@ add_commit_to_queue() {
 		{"commit_id": $commit_id} + .
 	')
 
+	log "commit item: " "DEBUG"
+	log "$commit_item" "DEBUG"
 	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
-	"$DIR/mock_tables.bash" --table "commit_queue" --items "$commit_item" --reset-identity-col --random-defaults --update-parents
+	"$DIR/mock_tables.bash" --table "commit_queue" --items "$commit_item" --reset-identity-col --enable-defaults --update-parents
 }
 
 create_resource() {
@@ -254,7 +256,6 @@ EOF
 
 
 main() {
-	set -e
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	parse_args "$@"
@@ -262,10 +263,13 @@ main() {
 	log "Creating testing branch: $head_ref" "INFO"
 	cd "$abs_repo_dir" && git checkout -B "$head_ref" > /dev/null
 
-	modify_items=$(create_commit_changes "$modify_items")
+	if [ -n "$modify_items" ]; then
+		log "Creating changes within $head_ref" "INFO"
+		modify_items=$(create_commit_changes "$modify_items")
+	fi
 
+	log "Committing changes and adding commit to queue" "INFO"
 	add_commit_to_queue "$commit_item" "$commit_msg" > /dev/null
-
 	log "Switching back to default branch" "DEBUG"
     cd "$abs_repo_dir" && git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" > /dev/null
 	
@@ -280,8 +284,6 @@ main() {
 		| ($modify_items | try fromjson // []) as $modify_items
 		| $commit_item + {"modify_items": $modify_items}
 	'
-	
-	set +e
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

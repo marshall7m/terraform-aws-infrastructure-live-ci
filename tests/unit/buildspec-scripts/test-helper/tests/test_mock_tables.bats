@@ -43,7 +43,7 @@ teardown() {
     account_name=dev
     expected=$(jq -n --arg account_name "$account_name" '{"account_name": $account_name}')
 
-    run mock_tables.bash --table "account_dim" --random-defaults --items "$expected"
+    run mock_tables.bash --table "account_dim" --enable-defaults --items "$expected"
     assert_success
 
     log "$(psql -c "SELECT * FROM account_dim;")" "DEBUG"
@@ -69,7 +69,7 @@ teardown() {
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
     init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
 
-    run mock_tables.bash --table "pr_queue" --random-defaults --items "$expected" --count "$count" --reset-identity-col
+    run mock_tables.bash --table "pr_queue" --enable-defaults --items "$expected" --count "$count" --reset-identity-col
     assert_success
     
     log "$(psql -c "SELECT * FROM pr_queue;")" "DEBUG"
@@ -94,7 +94,7 @@ teardown() {
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
     init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM commit_queue WHERE pr_id = $pr_id")
 
-    run mock_tables.bash --table "commit_queue" --random-defaults --items "$expected" --count "$count" --update-parents --reset-identity-col
+    run mock_tables.bash --table "commit_queue" --enable-defaults --items "$expected" --count "$count" --update-parents --reset-identity-col
     assert_success
     
     log "$(psql -c "SELECT * FROM commit_queue;")" "DEBUG"
@@ -150,7 +150,7 @@ teardown() {
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
     expected_count=$(($count + $init_count))
 
-    run mock_tables.bash --table "executions" --random-defaults --items "$expected" --count "$count" --update-parents
+    run mock_tables.bash --table "executions" --enable-defaults --items "$expected" --count "$count" --update-parents
     assert_success
     
     log "$(psql -x -c "SELECT * FROM executions;")" "DEBUG"
