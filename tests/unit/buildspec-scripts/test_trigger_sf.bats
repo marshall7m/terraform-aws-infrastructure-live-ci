@@ -222,7 +222,7 @@ teardown() {
     bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
         --table "account_dim" \
         --enable-defaults \
-        --type-map "$(jq -n {"account_deps": "TEXT[]"})" \
+        --type-map "$(jq -n '{"account_deps": "TEXT[]"}')" \
         --items "$(jq -n '
             {
                 "account_path": "directory_dependency/dev-account",
@@ -283,9 +283,8 @@ teardown() {
 
     cfg_path=$(echo "$target_commit" | jq '.modify_items[0].cfg_path')
     new_resources=$(echo "$target_commit" | jq '.modify_items[0].resource_spec' | tr -d '"')
-
-    log "$(psql -x -c "select * from executions")" "DEBUG"
-
+    
+    log "$(psql -x -c "select * from commit_queue where commit_id = '$commit_id';")" "DEBUG"
     log "$(psql -x -c "select * from executions where commit_id = '$commit_id';")" "DEBUG"
     run psql -c """
     do \$\$

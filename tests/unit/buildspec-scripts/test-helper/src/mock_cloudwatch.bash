@@ -3,15 +3,15 @@ mock_cloudwatch_execution() {
 
     DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
 
-    local execution=$1
-    local finished_status=$2
+    local execution="$1"
+    local finished_status="$2"
     type_map=$(jq -n '
     {
         "new_providers": "TEXT[]", 
         "new_resources": "TEXT[]"
     }
     ')
-
+    
     log "Adding execution record to executions table" "DEBUG"
     res=$(bash "$DIR"/mock_tables.bash \
         --table "executions" \
@@ -19,14 +19,15 @@ mock_cloudwatch_execution() {
         --type-map "$type_map" \
         --enable-defaults \
         --results-to-json \
-        --results-out-dir "$BATS_TEST_TMPDIR" \
-    | jq '.mock_filepath' | tr -d '"' | xargs -I {} jq '.' {} )
-
+        --results-out-dir "$BATS_TEST_TMPDIR"
+    )
+    
+    mock_record=$(echo "$res" | jq '.mock_filepath' | tr -d '"' | xargs -I {} cat {} | jq '.')
     log "Mock execution record:" "DEBUG"
-    log "$res" "DEBUG"
+    log "$mock_record" "DEBUG"
 
     log "Exporting execution cloudwatch event to env var: EVENTBRIDGE_EVENT" "INFO"
-    export EVENTBRIDGE_EVENT=$( echo "$res" | jq --arg status "$finished_status" '.status = $status')
+    export EVENTBRIDGE_EVENT=$( echo "$mock_record" | jq --arg status "$finished_status" '.status = $status')
     log "EVENTBRIDGE_EVENT:" "DEBUG"
     log "$EVENTBRIDGE_EVENT" "DEBUG"
 }

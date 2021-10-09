@@ -13,7 +13,7 @@ parse_args() {
 					table="$2"
 					shift 2
 				else
-					echo "Error: Argument for $1 is missing" >&2
+					log "Error: Argument for $1 is missing" "ERROR"
 					exit 1
 				fi
 			;;
@@ -22,7 +22,7 @@ parse_args() {
 					items="$2"
 					shift 2
 				else
-					echo "Error: Argument for $1 is missing" >&2
+					log "Error: Argument for $1 is missing" "ERROR"
 					exit 1
 				fi
 			;;
@@ -32,7 +32,7 @@ parse_args() {
 					count=$(($2 - 1))
 					shift 2
 				else
-					echo "Error: Argument for $1 is missing" >&2
+					log "Error: Argument for $1 is missing" "ERROR"
 					exit 1
 				fi
 			;;
@@ -62,7 +62,7 @@ parse_args() {
 					results_out_dir="$2"
 					shift 2
 				else
-					echo "Error: Argument for $1 is missing" >&2
+					log "Error: Argument for $1 is missing" "ERROR"
 					exit 1
 				fi
 			;;
@@ -71,12 +71,12 @@ parse_args() {
 					type_map="$2"
 					shift 2
 				else
-					echo "Error: Argument for $1 is missing" >&2
+					log "Error: Argument for $1 is missing" "ERROR"
 					exit 1
 				fi
 			;;
 			*)
-				echo "Unknown Option: $1"
+				log "Unknown Option: $1" "ERROR"
 				exit 1
 			;;
 		esac
@@ -95,29 +95,30 @@ main() {
 		log "Enabling table's associated default triggers" "INFO"
 
 		staging_table="staging_$table"
+
 		psql -c "DROP TABLE IF EXISTS $staging_table;" > /dev/null
 
 		if [ -n "$type_map" ]; then
-			jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" --type-map "$type_map" || exit 1
+			jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" --type-map "$type_map" > /dev/null || exit 1 
 		else
-			jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" || exit 1
+			jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" > /dev/null || exit 1
 		fi
 		log "$staging_table:" "DEBUG"
-		log "$(printf '\n%s' "$(psql -c "SELECT * FROM $staging_table")") " "DEBUG"
+		log "$(printf '\n%s' "$(psql -x -c "SELECT * FROM $staging_table")") " "DEBUG"
 
 		log "Creating mock defaults triggers" "DEBUG"
 		psql -f "$DIR/mock_sql/trigger_defaults.sql" > /dev/null
 
 		log "Inserting $staging_table into $table" "DEBUG"
-		psql -f "$DIR/mock_sql/insert_mock_records.sql" >&2
+		psql -f "$DIR/mock_sql/insert_mock_records.sql" > /dev/null
 
 		if [ -n "$results_to_json" ]; then
 			log "Storing mock results within: $mock_filepath" "INFO" 
 			psql -t -o "$mock_filepath" \
-				-c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');"
+				-c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');" > /dev/null
 			res=$(jq -n --arg mock_filepath "$mock_filepath" '{"mock_filepath": $mock_filepath}')
 		else
-			psql -c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');"
+			psql -c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');" > /dev/null
 		fi
 		psql -c "DROP TABLE IF EXISTS $staging_table;" > /dev/null
 	else
@@ -129,10 +130,10 @@ main() {
 			else
 				jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" > "$mock_filepath" || exit 1
 			fi
-			
+
 			res=$(jq -n --arg mock_filepath "$mock_filepath" '{"mock_filepath": $mock_filepath}')
 		else
-			jq_to_psql_records.bash --jq-input "$items" --table "$table" --type-map "$type_map"
+			jq_to_psql_records.bash --jq-input "$items" --table "$table" --type-map "$type_map" > /dev/null
 		fi
 	fi
 
