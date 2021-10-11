@@ -138,20 +138,17 @@ main() {
 	fi
 
 	if [ -n "$update_parents" ]; then
-		for update_file in "$DIR/mock_sql/mock_update_${table}_parents/*.sql"; do
-			if [ -n "$results_to_json" ]; then
-				update_filepaths="$results_out_dir/$update_dir/${update_file}_results.json"
-				log "Storing mock results within: $update_filepaths" "INFO"
-				update_dir=$(dirname "$update_file" | xargs -I {} basename {})
-				log "Updating parent tables" "INFO"
-				psql -t -f "$DIR/mock_sql/mock_update_${table}_parents.sql" -o "$update_filepaths"
+		log "Updating parent tables" "INFO"
+		if [ -n "$results_to_json" ]; then
+			update_filepath="$results_out_dir/mock_update_${table}_parents.json"
+			log "Storing mock results within: $update_filepath" "INFO"
+			
+			psql -t -f "$DIR/mock_sql/mock_update_${table}_parents.sql" -o "$update_filepath"
 
-				res=$(echo "$res" | jq --arg update_filepaths "$update_filepaths" '.update_filepaths |= . + [$update_filepaths]')
-			else
-				log "Updating parent tables" "INFO"
-				psql -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
-			fi
-		done
+			res=$(echo "$res" | jq --arg update_filepath "$update_filepath" '{"update_filepath": $update_filepath}')
+		else
+			psql -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
+		fi
 	fi
 
 	echo "$res"

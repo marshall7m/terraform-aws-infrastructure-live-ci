@@ -9,7 +9,7 @@ CREATE OR REPLACE FUNCTION insert_mock_records (
     RETURNS JSON AS $$ 
     DECLARE
         seq VARCHAR;
-        res record;
+        res RECORD;
     BEGIN
         EXECUTE format('
         SELECT array_to_string(array(

@@ -72,6 +72,6 @@ AND
             )
         )
     )
-INTO target_execution_ids
-;
-SELECT row_to_json(target_execution_ids);
+INTO target_execution_ids;
+
+SELECT row_to_json(target_execution_ids.*);

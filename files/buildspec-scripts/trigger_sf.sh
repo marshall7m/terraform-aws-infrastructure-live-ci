@@ -103,7 +103,6 @@ update_stack_with_new_providers() {
     local stack=$1
     
     while read dir; do
-        dir=$(echo "$dir" | tr -d '"')
         log "Directory: $dir" "DEBUG"
         get_new_providers "$dir"
 
@@ -113,7 +112,7 @@ update_stack_with_new_providers() {
         (if $new_providers == null or $new_providers == "" then [] else ($new_providers | split(" ")) end) as $new_providers
         | map(if .cfg_path == $dir then .new_providers |= $new_providers else . end)
         ')
-    done <<< "$(echo "$stack" | jq 'map(.cfg_path)' | jq -c '.[]')"
+    done <<< "$(echo "$stack" | jq 'map(.cfg_path)' | jq -r -c '.[]')"
     
     echo "$stack"
 }
@@ -211,11 +210,10 @@ update_executions_with_new_deploy_stack() {
 
         log "Inserting execution items for account:" "INFO"
         psql \
-            -v base_ref="'$BASE_REF'" \
-            -v base_commit_id "'$( git rev-parse --verify $BASE_REF )'" \
+            -v base_commit_id="'$( git rev-parse --verify $BASE_REF )'" \
             -v commit_id="'$commit_id'" \
             -v account_path="'$account_path'" \
-            -f "$SQL_DIR/update_executions_with_new_deploy_stack.sql"
+            -x -f "$SQL_DIR/update_executions_with_new_deploy_stack.sql"
     done
 
     log "Cleaning up" "DEBUG"
@@ -261,7 +259,7 @@ update_execution_with_new_resources() {
     log "Resources from new providers:" "INFO"
     log "$new_resources" "INFO"
     
-    psql_new_resources=$(echo "$new_resources" | jq '. | join(" ")' | tr -d '"')
+    psql_new_resources=$(echo "$new_resources" | jq -r '. | join(" ")')
 
     log "Adding new resources to execution record" "INFO"
     psql -c """
@@ -326,13 +324,13 @@ execution_finished() {
     log "Step Function Event:" "DEBUG"
     log "$sf_event" "DEBUG"
 
-    deployed_path=$( echo $sf_event | jq '.cfg_path' | tr -d '"')
-    execution_id=$( echo $sf_event | jq '.execution_id' | tr -d '"')
-    is_rollback=$( echo $sf_event | jq '.is_rollback' | tr -d '"')
-    status=$( echo $sf_event | jq '.status' | tr -d '"')
-    pr_id=$( echo $sf_event | jq '.pr_id' | tr -d '"')
-    commit_id=$( echo $sf_event | jq '.commit_id' | tr -d '"')
-    new_providers=$( echo $sf_event | jq '.new_providers')
+    deployed_path=$( echo $sf_event | jq -r '.cfg_path')
+    execution_id=$( echo $sf_event | jq -r '.execution_id')
+    is_rollback=$( echo $sf_event | jq '.is_rollback')
+    status=$( echo $sf_event | jq -r '.status')
+    pr_id=$( echo $sf_event | jq -r '.pr_id')
+    commit_id=$( echo $sf_event | jq -r '.commit_id')
+    new_providers=$( echo $sf_event | jq -r '.new_providers')
     status=success
     log "Updating Execution Status" "INFO"
     psql -v execution_id="'$execution_id'" -v status="'$status'" -f "$SQL_DIR/cw_event_table_update.sql"
@@ -445,8 +443,8 @@ create_executions() {
     log "Dequeued commit items:" "DEBUG"
     log "$commit_items" "DEBUG"
 
-    commit_id=$(echo "$commit_items" | jq '.commit_id' | tr -d '"')
-    is_rollback=$(echo "$commit_items" | jq '.is_rollback' | tr -d '"')
+    commit_id=$(echo "$commit_items" | jq -r '.commit_id')
+    is_rollback=$(echo "$commit_items" | jq -r '.is_rollback')
 
     if [ "$is_rollback" == "true" ]; then
         log "Adding commit rollbacks to executions" "INFO"

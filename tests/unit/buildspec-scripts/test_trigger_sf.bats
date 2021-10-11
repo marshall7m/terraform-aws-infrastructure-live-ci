@@ -252,7 +252,7 @@ teardown() {
     )
 
     run trigger_sf.sh
-    assert_success
+    assert_failure
 
     log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
     execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
@@ -278,13 +278,12 @@ teardown() {
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
     
-    commit_id=$(echo "$target_commit" | jq '.commit_id')
-    is_rollback=$(echo "$target_commit" | jq '.is_rollback')
+    commit_id=$(echo "$target_commit" | jq -r '.commit_id')
+    is_rollback=$(echo "$target_commit" | jq -r '.is_rollback')
 
-    cfg_path=$(echo "$target_commit" | jq '.modify_items[0].cfg_path')
-    new_resources=$(echo "$target_commit" | jq '.modify_items[0].resource_spec' | tr -d '"')
-    
-    log "$(psql -x -c "select * from commit_queue where commit_id = '$commit_id';")" "DEBUG"
+    cfg_path=$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')
+    new_resources=$(echo "$target_commit" | jq -r '.modify_items[0].resource_spec')
+
     log "$(psql -x -c "select * from executions where commit_id = '$commit_id';")" "DEBUG"
     run psql -c """
     do \$\$
@@ -297,7 +296,7 @@ teardown() {
                 WHERE
                     commit_id = '$commit_id' 
                 AND
-                    cfg_path = '$cfg_path' 
+                    cfg_path = '$cfg_path'
                 AND
                     is_rollback = '$is_rollback' 
                 AND

@@ -136,8 +136,8 @@ BEGIN
     END IF;
 
     IF NEW.base_ref IS NULL THEN
-        SELECT COALESCE(pr.base_ref, 'master') INTO NEW.base_ref
-        FROM pr_queue pr;
+        -- TODO: change to select distinct base_ref from pr queue or if null then 'master
+        NEW.base_ref := 'master';
     END IF;
 
     IF NEW.head_ref IS NULL THEN
@@ -240,7 +240,8 @@ BEGIN
     END IF;
     
     IF NEW.base_ref IS NULL THEN
-        NEW.base_ref := COALESCE((SELECT base_ref FROM pr_queue LIMIT 1), 'master');
+        SELECT COALESCE(pr.base_ref, 'master') INTO NEW.base_ref 
+        FROM pr_queue pr;
     END IF;
 
     IF NEW.head_ref IS NULL THEN
