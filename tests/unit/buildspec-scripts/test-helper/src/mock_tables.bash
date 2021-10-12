@@ -3,9 +3,7 @@ export PATH="$( cd "$( dirname "$BASH_SOURCE[0]" )" && cd "$(git rev-parse --sho
 
 parse_args() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
-	count=0
 	reset_identity_col=false
-	results_out_dir="$PWD"
 	while (( "$#" )); do
 		case "$1" in
 			--table)
@@ -44,16 +42,8 @@ parse_args() {
 				update_parents=true
 				shift 1
 			;;
-			--return-jq-results)
-				return_jq_results=true
-				shift 1
-			;;
 			--reset-identity-col)
 				reset_identity_col=true
-				shift 1
-			;;
-			--results-to-json)
-				results_to_json=true
 				shift 1
 			;;
 			--results-out-dir)
@@ -90,68 +80,51 @@ main() {
 
 	parse_args "$@"
 
-	mock_filepath="$results_out_dir/mock_results.json"
 	if [ -n "$enable_defaults" ]; then
-		log "Enabling table's associated default triggers" "INFO"
-
-		staging_table="staging_$table"
-
-		psql -c "DROP TABLE IF EXISTS $staging_table;" > /dev/null
-
-		if [ -n "$type_map" ]; then
-			jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" --type-map "$type_map" > /dev/null || exit 1 
-		else
-			jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" > /dev/null || exit 1
-		fi
-		log "$staging_table:" "DEBUG"
-		log "$(printf '\n%s' "$(psql -x -c "SELECT * FROM $staging_table")") " "DEBUG"
-
-		log "Creating mock defaults triggers" "DEBUG"
+		log "Enabling default trigger for table: $table" "INFO"
 		psql -f "$DIR/mock_sql/trigger_defaults.sql" > /dev/null
+		psql -c "ALTER TABLE $table ENABLE TRIGGER ${table}_default"
+	fi
 
-		log "Inserting $staging_table into $table" "DEBUG"
-		psql -f "$DIR/mock_sql/insert_mock_records.sql" > /dev/null
+	if [ -n "$count" ]; then
+		log "Generating $count copies of item into jq array" "INFO"
+		items=$(echo "$items" | jq --arg count "$count" '
+		if (. | type) == "object" then
+			[(. | fromjson)] as $items
+			| [range($count)] | .[] 
+			| $items += $items[-1] 
+		else 
+			error("--mock-count is not available with array item") 
+		end')
+	fi
 
-		if [ -n "$results_to_json" ]; then
-			log "Storing mock results within: $mock_filepath" "INFO" 
-			psql -t -o "$mock_filepath" \
-				-c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');" > /dev/null
-			res=$(jq -n --arg mock_filepath "$mock_filepath" '{"mock_filepath": $mock_filepath}')
-		else
-			psql -c "SELECT insert_mock_records('$staging_table', '$table', '$psql_cols', $count, $reset_identity_col, '"${table}_default"');" > /dev/null
-		fi
-		psql -c "DROP TABLE IF EXISTS $staging_table;" > /dev/null
+	log "Inserting mock records to $table" "INFO"
+	if [ -n "$results_out_dir" ]; then
+		mock_output="$results_out_dir/mock_records.json"
+		log "Storing mock results within: $mock_output" "INFO" 
+		jq_to_psql_records.bash --jq-input "$items" --table "$table" ${type_map:+--type-map "$type_map"} > "$mock_output" || exit 1
 	else
-		if [ -n "$results_to_json" ]; then
-			log "Storing mock results within: $mock_filepath" "INFO" 
+		mock_output=$(jq_to_psql_records.bash --jq-input "$items" --table "$table" ${type_map:+--type-map "$type_map"})
+	fi
+	
+	res=$(jq -n --arg mock_output "$mock_output" 'try ($mock_output | fromjson) // $mock_output | {"mock_output": $mock_output}')
 
-			if [ -n "$type_map" ]; then
-				jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" --type-map "$type_map" > "$mock_filepath" || exit 1
-			else
-				jq_to_psql_records.bash --jq-input "$items" --table "$staging_table" > "$mock_filepath" || exit 1
-			fi
-
-			res=$(jq -n --arg mock_filepath "$mock_filepath" '{"mock_filepath": $mock_filepath}')
-		else
-			jq_to_psql_records.bash --jq-input "$items" --table "$table" --type-map "$type_map" > /dev/null
-		fi
+	if [ -n "$enable_defaults" ]; then
+		psql -c "ALTER TABLE $table DISABLE TRIGGER ${table}_default"
 	fi
 
 	if [ -n "$update_parents" ]; then
 		log "Updating parent tables" "INFO"
-		if [ -n "$results_to_json" ]; then
-			update_filepath="$results_out_dir/mock_update_${table}_parents.json"
-			log "Storing mock results within: $update_filepath" "INFO"
-			
-			psql -t -f "$DIR/mock_sql/mock_update_${table}_parents.sql" -o "$update_filepath"
-
-			res=$(echo "$res" | jq --arg update_filepath "$update_filepath" '{"update_filepath": $update_filepath}')
+		if [ -n "$results_out_dir" ]; then
+			update_output="$results_out_dir/mock_update_${table}_parents.json"
+			log "Storing mock results within: $update_output" "INFO"
+			psql -t -f "$DIR/mock_sql/mock_update_${table}_parents.sql" -o "$update_output"
 		else
-			psql -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
+			update_output=$(psql -f "$DIR/mock_sql/mock_update_${table}_parents.sql")
 		fi
 	fi
 
-	echo "$res"
+	echo "$res" | jq --arg update_output "$update_output" 'try ($update_output | fromjson) // $update_output | . + {"update_output": $update_output}'
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -146,17 +146,24 @@ add_commit_to_queue() {
 
 	commit_id=$(git log --pretty=format:'%H' -n 1)
 
-	log "Adding commit ID to queue: $commit_id" "DEBUG"
-
 	commit_item=$(echo "$commit_item" | jq \
 	--arg commit_id "$commit_id" '
 		{"commit_id": $commit_id} + .
 	')
 
-	log "commit item: " "DEBUG"
-	log "$commit_item" "DEBUG"
+	log "Adding commit ID to queue: $commit_id" "DEBUG"
+	
 	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
-	"$DIR/mock_tables.bash" --table "commit_queue" --items "$commit_item" --reset-identity-col --enable-defaults --update-parents
+	commit_item=$("$DIR/mock_tables.bash" \
+		--table "commit_queue" \
+		--items "$commit_item" \
+		--reset-identity-col \
+		--enable-defaults \
+		--update-parents \
+	| jq '.mock_results')
+	
+	log "Inserted commit record: " "DEBUG"
+	log "$commit_item" "DEBUG"
 }
 
 create_resource() {

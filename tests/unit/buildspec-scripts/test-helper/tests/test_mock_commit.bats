@@ -1,4 +1,11 @@
 #!/usr/bin/env bats
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bash-utils/load.bash"
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-utils/load.bash"
+
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-support/load.bash"
+load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-assert/load.bash"
+
+load "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/load.bash"
 
 setup_file() {
     export script_logging_level="DEBUG"
@@ -69,17 +76,41 @@ teardown() {
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     assert_success
 
-    commit_id=$(echo "$output" | jq '.commit.commit_id')
-    cfg_path=$(echo "$output" | jq '.modify[0].cfg_path')
-    is_rollback=$(echo "$output" | jq '.modify[0].is_rollback')
-    new_resources=$(echo "$output" | jq 'modify.new_resources' | tr -d '"')
+    commit_id=$(echo "$output" | jq -r '.commit.commit_id')
+    pr_id=$(echo "$output" | jq -r '.commit.pr_id')
+    cfg_path=$(echo "$output" | jq -r '.modify[0].cfg_path')
+    is_rollback=$(echo "$output" | jq -r '.modify[0].is_rollback')
+    new_resources=$(echo "$output" | jq -r 'modify.new_resources')
 
-    cd "$TEST_CASE_REPO_DIR"
+    log "Assert mock commit record was added to the commit_queue" "INFO"
+    run psql -c """
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM commit_queue
+                WHERE pr_id = '$pr_id'
+                AND commit_Id = '$commit_id'
+                AND is_rollback = '$is_rollback'
+                AND status = '$status'
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
 
-    assert_equal "$(echo "$output" | jq '.commit.commit_id')" "$(git log --pretty=format:'%H' -n 1)"
-
+    log "Assert pr_queue was updated with commit's associated PR ID" "INFO"
+    run psql -c """
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM pr_queue
+                WHERE pr_id = '$pr_id'
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
     
-    # assert commit msg/base-ref are correct
-    # assert if modify items are correct via git
-    #assert commit queue item is correct
 }

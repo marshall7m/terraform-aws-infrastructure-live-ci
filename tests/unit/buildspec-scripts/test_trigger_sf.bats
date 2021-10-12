@@ -17,8 +17,6 @@ setup_file() {
     export EVENTBRIDGE_FINISHED_RULE=rule/test
 
     source mock_aws_cmds.sh
-
-    
     
     load 'common_setup.bash'
     _common_setup
@@ -191,11 +189,7 @@ teardown() {
 
     cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --commit-item "$(jq -n '
-            {
-                "status": "running"
-            }
-        ')" \
+        --commit-item "$(jq -n ' {"status": "running"}')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
 

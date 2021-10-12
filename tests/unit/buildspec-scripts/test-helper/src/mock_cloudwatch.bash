@@ -17,12 +17,10 @@ mock_cloudwatch_execution() {
         --table "executions" \
         --items "$execution" \
         --type-map "$type_map" \
-        --enable-defaults \
-        --results-to-json \
-        --results-out-dir "$BATS_TEST_TMPDIR"
+        --enable-defaults
     )
     
-    mock_record=$(echo "$res" | jq '.mock_filepath' | tr -d '"' | xargs -I {} cat {} | jq '.')
+    mock_record=$(echo "$res" | jq '.mock_output')
     log "Mock execution record:" "DEBUG"
     log "$mock_record" "DEBUG"
 

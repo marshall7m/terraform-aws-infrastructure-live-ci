@@ -117,8 +117,6 @@ teardown() {
     log "commit_queue:" "DEBUG"
     log "$(psql -c "SELECT DISTINCT pr_id FROM commit_queue;")" "DEBUG"
 
-    log "pr_queue:" "DEBUG"
-
     log "$(psql -c "SELECT DISTINCT pr_id FROM pr_queue;")" "DEBUG"
     run psql -c """ 
     do \$\$
