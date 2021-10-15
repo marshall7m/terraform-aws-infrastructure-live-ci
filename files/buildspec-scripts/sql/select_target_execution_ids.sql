@@ -1,19 +1,18 @@
-CREATE OR REPLACE FUNCTION arr_in_arr_count(text[], text[]) RETURNS int AS $$
-    
--- Returns the total number of array values in the first array that's in the second array
-
-DECLARE
-    total int := 0;
-    i text;
-BEGIN
-    FOREACH i IN ARRAY $1 LOOP
-        IF (SELECT i = ANY ($2)::BOOL) or i IS NULL THEN
-            total := total + 1;
-            RAISE NOTICE 'total: %', total;
-        END IF;
-    END LOOP;
-    RETURN total;
-END;
+DROP TABLE IF EXISTS queued_executions, commit_executions;
+CREATE OR REPLACE FUNCTION arr_in_arr_count(TEXT[], TEXT[]) RETURNS int AS $$ 
+    -- Returns the total number of array values in the first array that's in the second array
+    DECLARE
+        total int := 0;
+        i TEXT;
+    BEGIN
+        FOREACH i IN ARRAY $1 LOOP
+            IF (SELECT i = ANY ($2)::BOOL) or i IS NULL THEN
+                total := total + 1;
+                RAISE NOTICE 'total: %', total;
+            END IF;
+        END LOOP;
+        RETURN total;
+    END;
 $$ LANGUAGE plpgsql;
 
 -- gets all executions from running commit
@@ -21,21 +20,15 @@ SELECT *
 INTO TEMP commit_executions
 FROM executions
 WHERE commit_id = (
-    SELECT
-        commit_id
-    FROM
-        commit_queue
-    WHERE
-        status = 'running'
+    SELECT commit_id
+    FROM commit_queue
+    WHERE "status" = 'running'
 )
 AND
     is_rollback = (
-        SELECT
-            is_rollback
-        FROM
-            commit_queue
-        WHERE
-            status = 'running'
+        SELECT is_rollback
+        FROM commit_queue
+        WHERE "status" = 'running'
     )
 ;
 
@@ -47,7 +40,7 @@ WHERE status = 'waiting'
 ;
 
 -- selects executions where all account/terragrunt config dependencies are successful
-SELECT execution_id
+SELECT array_to_json(ARRAY[execution_id])
 FROM queued_executions
 -- where count of dependency array == the count of successful dependencies
 WHERE cardinality(account_deps) = arr_in_arr_count(
@@ -71,7 +64,4 @@ AND
                 WHERE status = 'success'
             )
         )
-    )
-INTO target_execution_ids;
-
-SELECT row_to_json(target_execution_ids.*);
+    );
