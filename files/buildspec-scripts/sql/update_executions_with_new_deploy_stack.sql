@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_deploy_stack(_account_path VARCHAR, _c
         RAISE NOTICE '_commit_id: %', _commit_id;
         RAISE NOTICE '_base_commit_id: %', _base_commit_id;
 
-        RETURN QUERY INSERT INTO executions (
+        RETURN QUERY EXECUTE format('INSERT INTO executions (
             execution_id,
             is_rollback,
             pr_id,
@@ -31,20 +31,20 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_deploy_stack(_account_path VARCHAR, _c
             min_rejection_count
         )
         SELECT
-            'run-' || substr(md5(random()::text), 0, 8),
+            ''run-'' || substr(md5(random()::text), 0, 8),
             false,
             "commit".pr_id,
             "commit".commit_id,
             "commit".base_ref,
             "commit".head_ref,
-            format('refs/heads/%s^{%s}', "commit".base_ref, _base_commit_id),
-            format('refs/pull/%s/head^{%s}', "commit".pr_id, "commit".commit_id),
+            ''refs/heads/'' || "commit".base_ref || ''^{'' || %s || ''}'',
+            ''refs/pull/'' || "commit".pr_id || ''/head^{'' || "commit".commit_id || ''}'',
             stack.cfg_path,
             stack.cfg_deps,
-            'waiting',
+            ''waiting'',
             -- TODO: add user defined extra tf args from terraform module input
-            format('terragrunt plan --terragrunt-working-dir %s', stack.cfg_path),
-            format('terragrunt apply --terragrunt-working-dir %s -auto-approve', stack.cfg_path),
+            ''terragrunt plan --terragrunt-working-dir '' || stack.cfg_path,
+            ''terragrunt apply --terragrunt-working-dir '' || stack.cfg_path || '' -auto-approve'',
             stack.new_providers, 
             ARRAY[]::TEXT[],
             account.account_name,
@@ -64,7 +64,7 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_deploy_stack(_account_path VARCHAR, _c
             FROM commit_queue
             JOIN pr_queue
             ON pr_queue.pr_id = commit_queue.pr_id
-            WHERE commit_queue.commit_id = _commit_id
+            WHERE commit_queue.commit_id = %s
         ) "commit",
         (
             SELECT
@@ -75,13 +75,13 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_deploy_stack(_account_path VARCHAR, _c
                 account_dim.min_approval_count,
                 account_dim.min_rejection_count
             FROM account_dim
-            WHERE account_dim.account_path = _account_path
+            WHERE account_dim.account_path = %s
         ) account,
         (
             SELECT *
             FROM staging_cfg_stack
         ) stack
-        RETURNING *;
+        RETURNING executions.*;', _base_commit_id, _commit_id, _account_path);
     END;
 $$ LANGUAGE plpgsql;
 
