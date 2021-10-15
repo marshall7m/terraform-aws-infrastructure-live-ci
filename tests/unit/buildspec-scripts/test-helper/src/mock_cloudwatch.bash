@@ -20,7 +20,7 @@ mock_cloudwatch_execution() {
         --enable-defaults
     )
     
-    mock_record=$(echo "$res" | jq '.mock_output')
+    mock_record=$(echo "$res" | jq '.[0]')
     log "Mock execution record:" "DEBUG"
     log "$mock_record" "DEBUG"
 

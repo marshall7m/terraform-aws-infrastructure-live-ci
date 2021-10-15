@@ -193,6 +193,8 @@ update_executions_with_new_deploy_stack() {
 
     log "Getting Account Stacks" "INFO"
     for account_path in "${account_paths[@]}"; do
+        psql -c "DROP TABLE IF EXISTS staging_cfg_stack;"
+
         log "Account Path: $account_path" "DEBUG"
 
         stack=$(create_stack $account_path $git_root) || exit 1
@@ -209,15 +211,13 @@ update_executions_with_new_deploy_stack() {
         log "$(psql -x -c "SELECT * FROM staging_cfg_stack")" "DEBUG"
 
         log "Inserting execution items for account:" "INFO"
+        
         psql \
             -v base_commit_id="'$( git rev-parse --verify $BASE_REF )'" \
             -v commit_id="'$commit_id'" \
             -v account_path="'$account_path'" \
-            -x -f "$SQL_DIR/update_executions_with_new_deploy_stack.sql"
+            -qx -f "$SQL_DIR/update_executions_with_new_deploy_stack.sql"
     done
-
-    log "Cleaning up" "DEBUG"
-    psql -c "DROP TABLE IF EXISTS staging_cfg_stack;"
     set +e
 }
 
@@ -462,12 +462,12 @@ start_sf_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
-    target_execution_ids=$(psql -t -f "$SQL_DIR/select_target_execution_ids.sql" | jq '.' 2> /dev/null)
-
+    target_execution_ids=$(psql -qt -f "$SQL_DIR/select_target_execution_ids.sql" | jq '.')
+    
     log "Target execution IDs:" "INFO"
     log "$target_execution_ids" "INFO"
-    
-    readarray -t target_execution_ids < <(echo "$target_execution_ids" | jq -c '.[]')
+
+    readarray -t target_execution_ids < <(echo "$target_execution_ids" | jq -r -c '.[]')
 
     log "Count: ${#target_execution_ids[@]}" "INFO"
 
@@ -485,6 +485,7 @@ start_sf_executions() {
             WHERE execution_id = '$id'
         ) sub
         """ | jq -r '. | tojson')
+
         log "SF input: $(printf '\n\t%s' "$sf_input")" "DEBUG"
         
         if [ -z "$DRY_RUN" ]; then
@@ -505,7 +506,6 @@ start_sf_executions() {
     done
     
     log "Cleaning up" "DEBUG"
-    psql -c "DROP TABLE IF EXISTS queued_executions;"
 }
 
 

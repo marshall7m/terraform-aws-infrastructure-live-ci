@@ -160,7 +160,7 @@ add_commit_to_queue() {
 		--reset-identity-col \
 		--enable-defaults \
 		--update-parents \
-	| jq '.mock_results')
+	| jq '.[0]')
 	
 	log "Inserted commit record: " "DEBUG"
 	log "$commit_item" "DEBUG"
@@ -279,9 +279,6 @@ main() {
 	add_commit_to_queue "$commit_item" "$commit_msg" > /dev/null
 	log "Switching back to default branch" "DEBUG"
     cd "$abs_repo_dir" && git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" > /dev/null
-	
-	log "commit_item" "DEBUG"
-	log "$commit_item" "DEBUG"
 
 	log "modify_items" "DEBUG"
 	log "$modify_items" "DEBUG"
