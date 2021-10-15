@@ -82,8 +82,8 @@ main() {
 
 	if [ -n "$enable_defaults" ]; then
 		log "Enabling default trigger for table: $table" "INFO"
-		psql -f "$DIR/mock_sql/trigger_defaults.sql" > /dev/null
-		psql -c "ALTER TABLE $table ENABLE TRIGGER ${table}_default"
+		psql -q -f "$DIR/mock_sql/trigger_defaults.sql"
+		psql -q -c "ALTER TABLE $table ENABLE TRIGGER ${table}_default"
 	fi
 
 	if [ -n "$count" ]; then
@@ -106,25 +106,18 @@ main() {
 	else
 		mock_output=$(jq_to_psql_records.bash --jq-input "$items" --table "$table" ${type_map:+--type-map "$type_map"})
 	fi
-	
-	res=$(jq -n --arg mock_output "$mock_output" 'try ($mock_output | fromjson) // $mock_output | {"mock_output": $mock_output}')
 
 	if [ -n "$enable_defaults" ]; then
-		psql -c "ALTER TABLE $table DISABLE TRIGGER ${table}_default"
+		log "Disabling default trigger for table: $table" "INFO"
+		psql -q -c "ALTER TABLE $table DISABLE TRIGGER ${table}_default"
 	fi
 
 	if [ -n "$update_parents" ]; then
 		log "Updating parent tables" "INFO"
-		if [ -n "$results_out_dir" ]; then
-			update_output="$results_out_dir/mock_update_${table}_parents.json"
-			log "Storing mock results within: $update_output" "INFO"
-			psql -t -f "$DIR/mock_sql/mock_update_${table}_parents.sql" -o "$update_output"
-		else
-			update_output=$(psql -f "$DIR/mock_sql/mock_update_${table}_parents.sql")
-		fi
+		psql -qt -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
 	fi
 
-	echo "$res" | jq --arg update_output "$update_output" 'try ($update_output | fromjson) // $update_output | . + {"update_output": $update_output}'
+	echo "$mock_output"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

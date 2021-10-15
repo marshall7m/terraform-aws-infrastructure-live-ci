@@ -2,14 +2,14 @@ INSERT INTO pr_queue (
     pr_id,
     base_ref,
     head_ref,
-    status
+    "status"
 )
 
 SELECT (
     pr_id,
     base_ref,
     head_ref,
-    status
+    "status"
 )
 FROM executions
 ON CONFLICT DO NOTHING;
@@ -18,14 +18,14 @@ INSERT INTO commit_queue (
     commit_id,
     is_rollback,
     pr_id,
-    status
+    "status"
 )
 
 SELECT (
     commit_id,
     is_rollback,
     pr_id,
-    status
+    "status"
 )
 FROM executions
 ON CONFLICT DO NOTHING;
