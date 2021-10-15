@@ -9,8 +9,7 @@ load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-assert/load.bash"
 load "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/load.bash"
 
 setup_file() {
-    export script_logging_level="DEBUG"
-    export DRY_RUN=true
+    export script_logging_level="INFO"
 
     export BASE_REF=master
     export CODEBUILD_INITIATOR=rule/test
@@ -41,7 +40,7 @@ setup() {
     cd "$TEST_CASE_REPO_DIR"
     setup_test_case_tf_state
 
-    run_only_test 3
+    run_only_test 2
 }
 
 teardown() {
@@ -71,7 +70,7 @@ teardown() {
     cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
         --modify-items "$modify_items" \
-        --commit-item "$commit_item" \
+        --commit-item "$(jq -n ' {"status": "running"}')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
 
@@ -96,7 +95,16 @@ teardown() {
         }
     ')
 
-    mock_tables --table "account_dim" --items "$account_dim" --enable-defaults
+    bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "account_dim" \
+        --enable-defaults \
+        --type-map "$(jq -n '{"account_deps": "TEXT[]"}')" \
+        --items "$(jq -n '
+            {
+                "account_path": "directory_dependency/dev-account",
+                "account_deps": []
+            }
+        ')"
 
     modify_items=$(jq -n '
         [
@@ -122,64 +130,31 @@ teardown() {
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
 
-    commit_id=$(echo "$target_commit" | jq '.commit_id' | tr -d '"')
-
+    dequeued_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
 
     run trigger_sf.sh
-    assert_failure
-
-    log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
-    new_resources=$(echo "$cw_commit" | jq 'modify_items.resource_spec' | tr -d '"')
-
-    log "$(psql -x -c "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run psql -c """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT 
-                    COUNT(*)
-                FROM 
-                    executions
-                WHERE
-                    execution_id = '$execution_id' 
-                AND
-                    new_resources = ARRAY['$new_resources']
-                AND
-                    status = 'success'
-            ) = 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
     assert_success
 
-    log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
+    run assert_record_count --table "executions" --assert-count 1 \
+        --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
+        --status "'success'"
+    assert_success
 
-    commit_id=$(echo "$target_commit" | jq '.commit_id' | tr -d '"')
-    cfg_path=$(echo "$target_commit" | jq '.modify_items[0].cfg_path' | tr -d '"')
-    is_rollback=$(echo "$target_commit" | jq '.is_rollback' | tr -d '"')
+    run assert_record_count --table "pr_queue" --assert-count 1 \
+        --pr-id "'$(echo "$target_commit" | jq -r '.pr_id')'" \
+        --status "'running'"
+    assert_success
 
-    log "$(psql -x -c "select * from executions where commit_id = '$commit_id';")" "DEBUG"
-    run psql -c """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT
-                    COUNT(*)
-                FROM
-                    executions
-                WHERE
-                    commit_id = '$commit_id' 
-                AND
-                    cfg_path = '$cfg_path' 
-                AND
-                    is_rollback = '$is_rollback' 
-                AND
-                    status = 'running'
-            ) = 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$dequeued_commit_id'" \
+        --status "'running'"
+    assert_success
+
+    run assert_record_count --table "executions" --assert-count 1 \
+        --commit-id "'$dequeued_commit_id'" \
+        --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
+        --is-rollback "'$(echo "$target_commit" | jq -r '.is_rollback')'" \
+        --status "'running'"
     assert_success
 }
 
@@ -246,29 +221,9 @@ teardown() {
     )
 
     run trigger_sf.sh
-    assert_failure
-
-    log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    execution_id=$(echo "$EVENTBRIDGE_EVENT" | jq '.execution_id' | tr -d '"')
-
-    log "$(psql -x -c "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run psql -c """
-    DO \$\$
-        BEGIN
-            ASSERT (
-                SELECT 
-                    COUNT(*)
-                FROM 
-                    executions
-                WHERE
-                    execution_id = '$execution_id' 
-                AND
-                    status = 'success'
-            ) = 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
     assert_success
+
+    assert_cw_event_status "success"
 
     log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
     
@@ -276,27 +231,20 @@ teardown() {
     is_rollback=$(echo "$target_commit" | jq -r '.is_rollback')
 
     cfg_path=$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')
-    new_resources=$(echo "$target_commit" | jq -r '.modify_items[0].resource_spec')
+    new_providers=$(echo "$target_commit" | jq -r '.modify_items[0].address')
 
     log "$(psql -x -c "select * from executions where commit_id = '$commit_id';")" "DEBUG"
     run psql -c """
     do \$\$
         BEGIN
             ASSERT (
-                SELECT
-                    COUNT(*)
-                FROM
-                    executions
-                WHERE
-                    commit_id = '$commit_id' 
-                AND
-                    cfg_path = '$cfg_path'
-                AND
-                    is_rollback = '$is_rollback' 
-                AND
-                    status = 'running'
-                AND
-                    new_resources = ARRAY['$new_resources']
+                SELECT COUNT(*)
+                FROM executions
+                WHERE commit_id = '$commit_id' 
+                AND cfg_path = '$cfg_path'
+                AND status = 'running'
+                AND is_rollback = '$is_rollback'::BOOL
+                AND new_providers = ARRAY['$new_providers']
             ) = 1;
         END;
     \$\$ LANGUAGE plpgsql;

@@ -60,7 +60,7 @@ setup_metadb() {
 clear_metadb_tables() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-	psql -c """
+	psql -q -c """
 	CREATE OR REPLACE FUNCTION truncate_if_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR) 
 		RETURNS text 
 		LANGUAGE plpgsql AS
