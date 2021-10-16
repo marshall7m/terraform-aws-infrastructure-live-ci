@@ -40,7 +40,7 @@ setup() {
     cd "$TEST_CASE_REPO_DIR"
     setup_test_case_tf_state
 
-    run_only_test 2
+    run_only_test 4
 }
 
 teardown() {
@@ -57,19 +57,17 @@ teardown() {
 @test "Successful deployment event with new provider resources, dequeue deploy commit with no new providers" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
     
-    modify_items=$(jq -n '
-        [
-            {
-                "cfg_path": "directory_dependency/dev-account/global",
-                "create_provider_resource": true,
-                "apply_changes": false
-            }
-        ]
-    ')
-    
     cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --modify-items "$modify_items" \
+        --modify-items "$(jq -n '
+            [
+                {
+                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/doo",
+                    "create_provider_resource": true,
+                    "apply_changes": false
+                }
+            ]
+        ')" \
         --commit-item "$(jq -n ' {"status": "running"}')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
@@ -82,9 +80,7 @@ teardown() {
         }
     ')
 
-    cw_finished_status="success"
-
-    mock_cloudwatch_execution "$finished_execution" "$cw_finished_status" 
+    mock_cloudwatch_execution "$finished_execution" "$success" 
 
     log "Creating mock account_dim" "INFO"
 
@@ -106,31 +102,27 @@ teardown() {
             }
         ')"
 
-    modify_items=$(jq -n '
-        [
-            {
-                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/doo",
-                "create_provider_resource": false,
-                "apply_changes": false
-            }
-        ]
-    ')
-
-    commit_item=$(jq -n '
-        {
-            "is_rollback": false,
-            "status": "waiting"
-        }
-    ')
-
     target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --modify-items "$modify_items" \
-        --commit-item "$commit_item" \
+        --modify-items "$(jq -n '
+            [
+                {
+                    "cfg_path": "directory_dependency/dev-account/global",
+                    "create_provider_resource": false,
+                    "apply_changes": false
+                }
+            ]
+        ')" \
+        --commit-item "$(jq -n '
+            {
+                "is_rollback": false,
+                "status": "waiting"
+            }
+        ')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
 
-    dequeued_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
+    target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
 
     run trigger_sf.sh
     assert_success
@@ -146,14 +138,14 @@ teardown() {
     assert_success
 
     run assert_record_count --table "commit_queue" --assert-count 1 \
-        --commit-id "'$dequeued_commit_id'" \
+        --commit-id "'$target_commit_id'" \
         --status "'running'"
     assert_success
 
     run assert_record_count --table "executions" --assert-count 1 \
-        --commit-id "'$dequeued_commit_id'" \
+        --commit-id "'$target_commit_id'" \
         --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
-        --is-rollback "'$(echo "$target_commit" | jq -r '.is_rollback')'" \
+        --is-rollback "$(echo "$target_commit" | jq -r '.is_rollback')" \
         --status "'running'"
     assert_success
 }
@@ -174,6 +166,7 @@ teardown() {
     cw_execution=$(echo "$cw_commit" | jq '
         {
             "cfg_path": "directory_dependency/dev-account/global",
+            "pr_id": .pr_id,
             "commit_id": .commit_id,
             "status": .status,
             "is_rollback": false,
@@ -223,32 +216,28 @@ teardown() {
     run trigger_sf.sh
     assert_success
 
-    assert_cw_event_status "success"
+    target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
 
-    log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    
-    commit_id=$(echo "$target_commit" | jq -r '.commit_id')
-    is_rollback=$(echo "$target_commit" | jq -r '.is_rollback')
+    run assert_record_count --table "executions" --assert-count 1 \
+        --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
+        --status "'success'"
+    assert_success
 
-    cfg_path=$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')
-    new_providers=$(echo "$target_commit" | jq -r '.modify_items[0].address')
+    run assert_record_count --table "pr_queue" --assert-count 1 \
+        --pr-id "'$(echo "$target_commit" | jq -r '.pr_id')'" \
+        --status "'running'"
+    assert_success
 
-    log "$(psql -x -c "select * from executions where commit_id = '$commit_id';")" "DEBUG"
-    run psql -c """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT COUNT(*)
-                FROM executions
-                WHERE commit_id = '$commit_id' 
-                AND cfg_path = '$cfg_path'
-                AND status = 'running'
-                AND is_rollback = '$is_rollback'::BOOL
-                AND new_providers = ARRAY['$new_providers']
-            ) = 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$target_commit_id'" \
+        --status "'running'"
+    assert_success
+
+    run assert_record_count --table "executions" --assert-count 1 \
+        --commit-id "'$target_commit_id'" \
+        --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
+        --new-providers "ARRAY['$(echo "$target_commit" | jq -r '.modify_items[0].address')']" \
+        --status "'running'"
     assert_success
 }
 
@@ -256,84 +245,128 @@ teardown() {
 @test "Successful deployment event, commit deployment stack is finished and contains new providers and rollback is needed" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
 
-    execution_id="run-0000001"
-    running_execution=$(jq -n \
-    --arg execution_id "$execution_id" '
+    log "Mocking cloudwatch commit" "INFO"
+
+    target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
+        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --modify-items "$(jq -n '
+        [
+            {
+                "apply_changes": true,
+                "create_provider_resource": true,
+                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
+            }
+        ]')" \
+        --commit-item "$(jq -n ' {"status": "running"}')" \
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    )
+
+    log "Target commit:" "DEBUG"
+    log "$target_commit" "DEBUG"
+
+    cw_execution=$(echo "$target_commit" | jq '
+        {
+            "cfg_path": "directory_dependency/dev-account/global",
+            "pr_id": .pr_id,
+            "commit_id": .commit_id,
+            "status": .status,
+            "is_rollback": false,
+            "new_providers": []
+        }
+    ')
+
+    cw_finished_status="success"
+
+    log "Mocking cloudwatch execution" "INFO"
+    mock_cloudwatch_execution "$cw_execution" "$cw_finished_status" 
+
+    log "Mocking failed execution" "INFO"
+
+    type_map=$(jq -n '
     {
-        "execution_id": $execution_id
+        "new_providers": "TEXT[]", 
+        "new_resources": "TEXT[]"
     }
     ')
-
-    mock_cloudwatch_execution "$running_execution" "success"
-
-    log "Creating mock account_dim" "INFO"
-    account_dim=$(jq -n '
-    [
+    
+    failed_execution=$(echo "$target_commit" | jq '
         {
-            "account_name": "dev",
-            "account_path": "directory_dependency/dev-account",
-            "account_deps": [],
-            "min_approval_count": 1,
-            "min_rejection_count": 1,
-            "voters": ["voter-1"]
+            "cfg_path": .modify_items[0].cfg_path,
+            "is_rollback": false,
+            "status": "failed",
+            "pr_id": .pr_id,
+            "commit_id": .commit_id,
+            "new_providers": [.modify_items[0].address],
+            "new_resources": [.modify_items[0].resource_spec]
         }
-    ]
     ')
-
-    jq_to_psql_records.bash --jq-input "$account_dim" --table "account_dim"
-
-    log "Modifying Terragrunt directory within test repo's base branch" "DEBUG"
-    res=$(modify_tg_path --path "$abs_testing_dir" --new-provider-resource)
-    mock_provider=$(echo "$res" | jq 'keys')
-    mock_resource=$(echo "$res" | jq 'map(.resource_spec) | join(", ")' | tr -d '"')
     
-    log "Committing modifications and adding commit to commit queue" "DEBUG"
-    add_test_case_head_commit_to_finished_execution
+    bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "executions" \
+        --items "$failed_execution" \
+        --type-map "$type_map" \
+        --enable-defaults
     
-    log "Switching back to default branch" "DEBUG"
-    git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')"
+    log "Adding rollback commit to commit queue" "INFO"
+    bash "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/src/jq_to_psql_records.bash" \
+        --table "commit_queue" \
+        --jq-input "$(echo "$target_commit" | jq '
+            {
+                "commit_id": .commit_id,
+                "is_rollback": true,
+                "pr_id": .pr_id,
+                "status": "waiting"
+            }
+        ')"
+    psql -c """
+    SELECT * FROM commit_queue
+    """ 
+    log "Creating mock account_dim" "INFO"
+
+    bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "account_dim" \
+        --enable-defaults \
+        --type-map "$(jq -n '{"account_deps": "TEXT[]"}')" \
+        --items "account_dim=$(jq -n '
+            [
+                {
+                    "account_name": "dev",
+                    "account_path": "directory_dependency/dev-account",
+                    "account_deps": [],
+                    "min_approval_count": 1,
+                    "min_rejection_count": 1,
+                    "voters": ["voter-1"]
+                }
+            ]
+        ')"
     
     run trigger_sf.sh
     assert_success
+    assert_output "zozoz"
+
+    target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
+    psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
+    log "Assert mock Cloudwatch event status was updated" "INFO"
+    run assert_record_count --table "executions" --assert-count 1 \
+        --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
+        --status "'success'"
+    assert_success
 
     log "Assert mock commit rollback is running" "INFO"
-    log "$(psql -x -c "select * from commit_queue where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run psql -c """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT
-                    COUNT(*)
-                FROM
-                    commit_queue
-                WHERE
-                    commit_id = '$TESTING_COMMIT_ID'
-                AND
-                    is_rollback = true
-            ) = 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$target_commit_id'" \
+        --status "'running'"
+        --is-rollback true
     assert_success
 
     log "Assert mock commit rollback executions are created" "INFO"
-    log "$(psql -x -c "select * from executions where commit_id = '$TESTING_COMMIT_ID' AND is_rollback = true;")" "DEBUG"
-    run psql -c """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT
-                    COUNT(*)
-                FROM
-                    commit_queue
-                WHERE
-                    commit_id = '$TESTING_COMMIT_ID'
-                AND
-                    is_rollback = true
-            ) > 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
+    run assert_record_count --table "executions" --assert-count 1 \
+        --commit-id "'$target_commit_id'" \
+        --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
+        --new-providers "ARRAY['$(echo "$target_commit" | jq -r '.modify_items[0].address')']" \
+        --status "'running'"
+        --is-rollback true
+    assert_success
 }
 
 @test "Successful deployment event, deployment stack is not finished, and rollback is needed" {
