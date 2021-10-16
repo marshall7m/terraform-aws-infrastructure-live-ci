@@ -25,7 +25,7 @@ teardown_file() {
 
 setup() {    
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    # run_only_test 2
+    run_only_test 5
 }
 
 teardown() {
@@ -65,15 +65,14 @@ teardown() {
 
 @test "Mock pr queue records based on object" {
     pr_id=1
-    count=5
-    expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
-    init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM pr_queue WHERE pr_id = $pr_id")
+    items=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
 
-    run mock_tables.bash --table "pr_queue" --enable-defaults --items "$expected" --count "$count" --reset-identity-col
+    run mock_tables.bash --table "pr_queue" --enable-defaults --items "$items" --reset-identity-col
     assert_success
     
     log "$(psql -c "SELECT * FROM pr_queue;")" "DEBUG"
 
+    log "Assert pr_queue was updated" "INFO"
     run psql -c """ 
     do \$\$
         BEGIN
@@ -81,20 +80,18 @@ teardown() {
                 SELECT COUNT(*)
                 FROM pr_queue 
                 WHERE pr_id = $pr_id
-            ) = $(($count + $init_count));
+            ) = 1;
         END;
     \$\$ LANGUAGE plpgsql;
     """
     assert_success
 }
 
-@test "Mock commit queue records based on object" {
+@test "Mock commit queue records based on object and update parents" {
     pr_id=1
-    count=5
-    expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
-    init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM commit_queue WHERE pr_id = $pr_id")
+    items=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
 
-    run mock_tables.bash --table "commit_queue" --enable-defaults --items "$expected" --count "$count" --update-parents --reset-identity-col
+    run mock_tables.bash --table "commit_queue" --enable-defaults --items "$items" --update-parents --reset-identity-col
     assert_success
     
     log "$(psql -c "SELECT * FROM commit_queue;")" "DEBUG"
@@ -106,62 +103,75 @@ teardown() {
                 SELECT COUNT(*)
                 FROM commit_queue 
                 WHERE pr_id = $pr_id
-            ) = $(($count + $init_count));
+            ) = 1;
         END;
     \$\$ LANGUAGE plpgsql;
     """
     assert_success
 
-    log "Assert all commit queue PR IDs are within pr_queue" "DEBUG"
-
-    log "commit_queue:" "DEBUG"
-    log "$(psql -c "SELECT DISTINCT pr_id FROM commit_queue;")" "DEBUG"
-
-    log "$(psql -c "SELECT DISTINCT pr_id FROM pr_queue;")" "DEBUG"
+    log "Assert pr_queue was updated" "INFO"
     run psql -c """ 
     do \$\$
         BEGIN
             ASSERT (
                 SELECT COUNT(*)
-                FROM (
-                    SELECT DISTINCT pr_id
-                    FROM commit_queue 
-                ) commit
-            ) = (
-                SELECT COUNT(*)
-                FROM (
-                    SELECT DISTINCT pr_id
-                    FROM pr_queue 
-                ) pr
-            );
+                FROM pr_queue 
+                WHERE pr_id = $pr_id
+            ) = 1;
         END;
     \$\$ LANGUAGE plpgsql;
     """
     assert_success
 }
 
-@test "Mock executions records based on object" {
+@test "Mock executions records based on object and update parents" {
     pr_id=1
-    count=5
-    init_count=$(psql -qtAX -c "SELECT COUNT(*) FROM executions WHERE pr_id = $pr_id")
 
     expected=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
-    expected_count=$(($count + $init_count))
 
-    run mock_tables.bash --table "executions" --enable-defaults --items "$expected" --count "$count" --update-parents
+    run mock_tables.bash --table "executions" --enable-defaults --items "$expected" --update-parents
     assert_success
     
-    log "$(psql -x -c "SELECT * FROM executions;")" "DEBUG"
-    log "$(psql -x -c "SELECT COUNT(*) FROM executions;")" "DEBUG"
-
+    log "Assert executions was updated" "INFO"
+    psql -x -c "SELECT * FROM executions;"
     run psql -c """ 
     do \$\$
         BEGIN
             ASSERT (
                 SELECT COUNT(*)
                 FROM executions 
-                WHERE pr_id = '$pr_id'
-            ) = $expected_count;
+                WHERE pr_id = $pr_id
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
+
+    log "Assert pr_queue was updated" "INFO"
+    psql -c "SELECT * FROM pr_queue;"
+    run psql -c """ 
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM pr_queue 
+                WHERE pr_id = $pr_id
+            ) = 1;
+        END;
+    \$\$ LANGUAGE plpgsql;
+    """
+    assert_success
+
+    log "Assert commit_queue was updated" "INFO"
+    psql -c "SELECT * FROM commit_queue;"
+    run psql -c """ 
+    do \$\$
+        BEGIN
+            ASSERT (
+                SELECT COUNT(*)
+                FROM commit_queue 
+                WHERE pr_id = $pr_id
+            ) = 1;
         END;
     \$\$ LANGUAGE plpgsql;
     """
