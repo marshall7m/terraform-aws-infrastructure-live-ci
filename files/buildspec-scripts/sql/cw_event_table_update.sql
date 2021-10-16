@@ -41,7 +41,7 @@ CREATE OR REPLACE FUNCTION pg_temp.cw_event_table_update (_execution_id VARCHAR,
         EXECUTE format('UPDATE executions
         SET "status" = %s
         WHERE execution_id = %s
-        RETURNING pr_id, commit_id
+        RETURNING pr_id, commit_id, is_rollback
         ', _status, _execution_id)
         INTO cw_event;
 
@@ -53,12 +53,14 @@ CREATE OR REPLACE FUNCTION pg_temp.cw_event_table_update (_execution_id VARCHAR,
             SELECT "status"
             FROM executions 
             WHERE commit_id = cw_event.commit_id
+            AND is_rollback = cw_event.is_rollback
         ))
         INTO updated_commit_status;
 
         UPDATE commit_queue
         SET "status" = updated_commit_status
-        WHERE commit_id = cw_event.commit_id;
+        WHERE commit_id = cw_event.commit_id
+        AND is_rollback = cw_event.is_rollback;
 
         RAISE NOTICE 'Updated commit status: %', updated_commit_status;
 
