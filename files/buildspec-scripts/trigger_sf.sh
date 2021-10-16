@@ -333,7 +333,7 @@ execution_finished() {
     new_providers=$( echo $sf_event | jq -r '.new_providers')
     status=success
     log "Updating Execution Status" "INFO"
-    psql -v execution_id="'$execution_id'" -v status="'$status'" -f "$SQL_DIR/cw_event_table_update.sql"
+    psql -q -v execution_id="'$execution_id'" -v status="'$status'" -f "$SQL_DIR/cw_event_table_update.sql"
     
     if [ "$is_rollback" == false ]; then
         git checkout "$commit_id" > /dev/null
@@ -370,7 +370,7 @@ create_executions() {
             )
         AND
             0 = (
-                SELECT count(*) 
+                SELECT COUNT(*) 
                 FROM commit_queue 
                 WHERE status = 'waiting'
             )
@@ -415,25 +415,18 @@ create_executions() {
     fi
 
     log "Dequeuing next commit that is waiting" "INFO"
-    commit_items=$(psql -t -c """
-
-    UPDATE
-        commit_queue
-    SET
-        status = 'running'
-    WHERE 
-        id = (
-            SELECT
-                id
-            FROM
-                commit_queue
-            WHERE
-                status = 'waiting'
-            LIMIT 1
-        )
+    commit_items=$(psql -q -t -c """
+    UPDATE commit_queue
+    SET status = 'running'
+    WHERE id = (
+        SELECT id
+        FROM commit_queue
+        WHERE status = 'waiting'
+        LIMIT 1
+    )
 
     RETURNING row_to_json(commit_queue.*);
-    """ | jq '.' 2> /dev/null)
+    """ | jq '.')
     
     if [ "$commit_items" == "" ]; then
         log "No commits to dequeue -- skipping execution creation" "INFO"
@@ -448,7 +441,7 @@ create_executions() {
 
     if [ "$is_rollback" == "true" ]; then
         log "Adding commit rollbacks to executions" "INFO"
-        psql -v commit_id="'$commit_id'" -f "$SQL_DIR/update_executions_with_new_rollback_stack.sql"
+        psql -q -v commit_id="'$commit_id'" -x -f "$SQL_DIR/update_executions_with_new_rollback_stack.sql"
     elif [ "$is_rollback" == "false" ]; then
         log "Adding commit deployments to executions" "INFO"
         update_executions_with_new_deploy_stack "$commit_id"
