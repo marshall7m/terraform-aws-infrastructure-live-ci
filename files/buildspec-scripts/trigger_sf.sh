@@ -455,10 +455,7 @@ start_sf_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
-    target_execution_ids=$(psql -qt -f "$SQL_DIR/select_target_execution_ids.sql" | jq '.')
-    
-    log "Target execution IDs:" "INFO"
-    log "$target_execution_ids" "INFO"
+    target_execution_ids=$(psql -qt -f "$SQL_DIR/select_target_execution_ids.sql")
 
     readarray -t target_execution_ids < <(echo "$target_execution_ids" | jq -r -c '.[]')
 
@@ -497,8 +494,6 @@ start_sf_executions() {
             log "DRY_RUN was set -- skip starting sf executions" "INFO"
         fi
     done
-    
-    log "Cleaning up" "DEBUG"
 }
 
 

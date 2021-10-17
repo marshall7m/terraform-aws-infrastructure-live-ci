@@ -327,7 +327,7 @@ teardown() {
         --table "account_dim" \
         --enable-defaults \
         --type-map "$(jq -n '{"account_deps": "TEXT[]"}')" \
-        --items "account_dim=$(jq -n '
+        --items "$(jq -n '
             [
                 {
                     "account_name": "dev",
@@ -342,7 +342,6 @@ teardown() {
     
     run trigger_sf.sh
     assert_success
-    assert_output "zozoz"
 
     target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
     psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
@@ -355,7 +354,7 @@ teardown() {
     log "Assert mock commit rollback is running" "INFO"
     run assert_record_count --table "commit_queue" --assert-count 1 \
         --commit-id "'$target_commit_id'" \
-        --status "'running'"
+        --status "'running'" \
         --is-rollback true
     assert_success
 
@@ -364,7 +363,7 @@ teardown() {
         --commit-id "'$target_commit_id'" \
         --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
         --new-providers "ARRAY['$(echo "$target_commit" | jq -r '.modify_items[0].address')']" \
-        --status "'running'"
+        --status "'running'" \
         --is-rollback true
     assert_success
 }
