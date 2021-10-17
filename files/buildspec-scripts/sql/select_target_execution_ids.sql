@@ -1,5 +1,5 @@
 DROP TABLE IF EXISTS queued_executions, commit_executions;
-CREATE OR REPLACE FUNCTION arr_in_arr_count(TEXT[], TEXT[]) RETURNS int AS $$ 
+CREATE OR REPLACE FUNCTION arr_in_arr_count(TEXT[], TEXT[]) RETURNS INT AS $$ 
     -- Returns the total number of array values in the first array that's in the second array
     DECLARE
         total int := 0;
@@ -15,53 +15,85 @@ CREATE OR REPLACE FUNCTION arr_in_arr_count(TEXT[], TEXT[]) RETURNS int AS $$
     END;
 $$ LANGUAGE plpgsql;
 
--- gets all executions from running commit
-SELECT *
-INTO TEMP commit_executions
-FROM executions
-WHERE commit_id = (
-    SELECT commit_id
-    FROM commit_queue
-    WHERE "status" = 'running'
-)
-AND
-    is_rollback = (
+CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS JSON AS $$
+    DECLARE
+        _is_rollback BOOLEAN;
+    BEGIN
         SELECT is_rollback
+        INTO _is_rollback
         FROM commit_queue
-        WHERE "status" = 'running'
-    )
-;
-
--- get all executions that are waiting within commit
-SELECT *
-INTO queued_executions
-FROM commit_executions
-WHERE status = 'waiting'
-;
-
--- selects executions where all account/terragrunt config dependencies are successful
-SELECT array_to_json(ARRAY[execution_id])
-FROM queued_executions
--- where count of dependency array == the count of successful dependencies
-WHERE cardinality(account_deps) = arr_in_arr_count(
-    account_deps, ( 
-        -- gets account names that have all successful executions within commit
-        SELECT ARRAY(
-            SELECT DISTINCT account_name
-            FROM commit_executions
-            GROUP BY account_name
-            HAVING COUNT(*) FILTER (WHERE status = 'success') = COUNT(*)
-        )
-    )
-)
-AND
-    cardinality(cfg_deps) = arr_in_arr_count(
-        cfg_deps, (
-        -- gets terragrunt config paths that have successful executions
-            SELECT ARRAY(
-                SELECT DISTINCT commit_executions.cfg_path
-                FROM commit_executions
-                WHERE status = 'success'
+        WHERE "status" = 'running';
+        
+        -- gets all executions from running commit
+        CREATE TABLE commit_executions AS
+            SELECT *
+            FROM executions
+            WHERE commit_id = (
+                SELECT commit_id
+                FROM commit_queue
+                WHERE "status" = 'running'
             )
-        )
-    );
+            AND is_rollback = _is_rollback;
+
+        -- get all executions that are waiting within commit
+        CREATE TABLE queued_executions AS
+            SELECT *
+            FROM commit_executions
+            WHERE "status" = 'waiting';
+
+        IF _is_rollback = true THEN
+            RAISE NOTICE 'Getting target rollback executions';
+            -- selects executions where all account/terragrunt config dependencies are successful
+            RETURN (
+                SELECT json_agg(execution_id)
+                FROM queued_executions
+                WHERE account_path NOT IN (
+                    SELECT c.account_deps
+                    FROM   commit_executions t
+                    LEFT   JOIN unnest(t.account_deps) c(account_deps) ON true
+                    WHERE "status" = 'running'
+                    AND t.account_deps IS NOT NULL
+                    AND cardinality(t.account_deps) > 0
+                )
+                AND cfg_path NOT IN (
+                    SELECT c.cfg_deps
+                    FROM   executions t
+                    LEFT   JOIN unnest(t.cfg_deps) c(cfg_deps) ON true
+                    WHERE "status" = 'running'
+                    AND t.cfg_deps IS NOT NULL
+                    AND cardinality(t.cfg_deps) > 0
+                )
+            );
+        ELSE
+            RAISE NOTICE 'Getting target deployment executions';
+            -- selects executions where all account/terragrunt config dependencies are successful
+            RETURN (
+                SELECT json_agg(execution_id)
+                FROM queued_executions
+                -- where count of dependency array == the count of successful dependencies
+                WHERE cardinality(account_deps) = arr_in_arr_count(
+                    account_deps, ( 
+                        SELECT ARRAY(
+                            SELECT DISTINCT account_name
+                            FROM commit_executions
+                            GROUP BY account_name
+                            HAVING COUNT(*) FILTER (WHERE "status" = 'success') = COUNT(*)
+                        )
+                    )
+                )
+                AND cardinality(cfg_deps) = arr_in_arr_count(
+                    cfg_deps, (
+                        SELECT ARRAY(
+                            SELECT DISTINCT commit_executions.cfg_path
+                            FROM commit_executions
+                            WHERE "status" = 'success'
+                        )
+                    )
+                )
+            );
+        END IF;
+    END;
+$$ LANGUAGE plpgsql;
+
+
+SELECT get_target_execution_ids();
