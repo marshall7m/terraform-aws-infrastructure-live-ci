@@ -251,8 +251,12 @@ get_new_providers() {
 update_execution_with_new_resources() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     local execution_id=$1
-    local terragrunt_working_dir=$2
-    local new_providers=$3
+    local commit_id=$2
+    local terragrunt_working_dir=$3
+    local new_providers=$4
+
+    log "Checking out commit ID: $commit_id" "DEBUG"
+    git checkout "$commit_id" > /dev/null
 
     new_resources=$(get_new_providers_resources "$terragrunt_working_dir" "$new_providers")
 
@@ -319,8 +323,12 @@ execution_finished() {
     set -e
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
-    var_exists "$EVENTBRIDGE_EVENT"
-    sf_event=$( echo $EVENTBRIDGE_EVENT | jq '.')
+    if [ -n "$EVENTBRIDGE_EVENT" ]; then
+        sf_event=$( echo $EVENTBRIDGE_EVENT | jq '.')
+    else
+        log "EVENTBRIDGE_EVENT is not set" "ERROR"
+    fi
+
     log "Step Function Event:" "DEBUG"
     log "$sf_event" "DEBUG"
 
@@ -331,20 +339,28 @@ execution_finished() {
     pr_id=$( echo $sf_event | jq -r '.pr_id')
     commit_id=$( echo $sf_event | jq -r '.commit_id')
     new_providers=$( echo $sf_event | jq -r '.new_providers')
-    status=success
+
     log "Updating Execution Status" "INFO"
-    psql -q -v execution_id="'$execution_id'" -v status="'$status'" -f "$SQL_DIR/cw_event_table_update.sql"
+    psql -c """
+    UPDATE executions
+    SET status = '$status'
+    WHERE execution_id = '$execution_id'
+    """
     
     if [ "$is_rollback" == false ]; then
-        git checkout "$commit_id" > /dev/null
         if [ "$(echo "$new_providers" | jq '. | length')" -gt 0 ]; then
-            log "Config contains new providers" "INFO"
-            log "Adding new provider resources to config execution record" "INFO"
-            update_execution_with_new_resources "$execution_id" "$deployed_path" "$new_providers"
+            log "Adding configuration's new provider resources to associated execution record" "INFO"
+            update_execution_with_new_resources "$execution_id" "$commit_id" "$deployed_path" "$new_providers"
         fi
-
-        if [ "$status" == "failed" ]; then
-            psql -v pr_id="'$pr_id'" -f "$SQL_DIR/update_commit_queue_with_rollback_commits.sql"
+        
+        if [ "$status" == 'failed' ]; then
+            log "Updating commit queue and executions to reflect failed execution" "INFO"
+            psql -q \
+                -v commit_id="$commit_id" \
+                -v base_commit_id="$( git rev-parse --verify $BASE_REF )" \
+                -v pr_id="$pr_id" \
+                -f "$SQL_DIR/failed_execution_update.sql"
+            psql -c "SELECT * FROM commit_queue"
         fi
     fi
     set +e
@@ -415,6 +431,8 @@ create_executions() {
     fi
 
     log "Dequeuing next commit that is waiting" "INFO"
+    #TODO: choose rollback commits that are waiting before 
+
     commit_items=$(psql -q -t -c """
     UPDATE commit_queue
     SET status = 'running'
@@ -479,16 +497,17 @@ start_sf_executions() {
         log "SF input: $(printf '\n\t%s' "$sf_input")" "DEBUG"
         
         if [ -z "$DRY_RUN" ]; then
-            log "DRY_RUN is not set -- starting sf executions" "INFO"
+            log "DRY_RUN is not set -- starting sf executions" "DEBUG"
             aws stepfunctions start-execution \
                 --state-machine-arn "$STATE_MACHINE_ARN" \
                 --name "$id" \
                 --input "$sf_input"
-                
-            psql -c """
+            
+            log "Updating execution status to running" "INFO"
+            psql -q -c """
             UPDATE executions
             SET status = 'running'
-            WHERE execution_id = '$id'   
+            WHERE execution_id = '$id'
             """
         else
             log "DRY_RUN was set -- skip starting sf executions" "INFO"
@@ -549,3 +568,9 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
+
+#TODO::
+# Figure out why deployment stack continues if execution fails
+# if a cfg dependency fails, there should be no point in running further deployments?
+# if so, should execution_finished() change waiting executions to status: aborted?
+# if so, should future commit executions ignore previously approved cfg deps within previous commit?
