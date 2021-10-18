@@ -568,9 +568,3 @@ main() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
-
-#TODO::
-# Figure out why deployment stack continues if execution fails
-# if a cfg dependency fails, there should be no point in running further deployments?
-# if so, should execution_finished() change waiting executions to status: aborted?
-# if so, should future commit executions ignore previously approved cfg deps within previous commit?

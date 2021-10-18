@@ -67,7 +67,7 @@ teardown() {
     pr_id=1
     items=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
 
-    run mock_tables.bash --table "pr_queue" --enable-defaults --items "$items" --reset-identity-col
+    run mock_tables.bash --table "pr_queue" --enable-defaults --items "$items"
     assert_success
     
     log "$(psql -c "SELECT * FROM pr_queue;")" "DEBUG"
@@ -91,7 +91,7 @@ teardown() {
     pr_id=1
     items=$(jq -n --arg pr_id $pr_id '{"pr_id": ($pr_id | tonumber)}')
 
-    run mock_tables.bash --table "commit_queue" --enable-defaults --items "$items" --update-parents --reset-identity-col
+    run mock_tables.bash --table "commit_queue" --enable-defaults --items "$items" --update-parents
     assert_success
     
     log "$(psql -c "SELECT * FROM commit_queue;")" "DEBUG"

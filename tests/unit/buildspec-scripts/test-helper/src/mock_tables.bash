@@ -42,10 +42,6 @@ parse_args() {
 				update_parents=true
 				shift 1
 			;;
-			--reset-identity-col)
-				reset_identity_col=true
-				shift 1
-			;;
 			--results-out-dir)
 				if [ -n "$2" ]; then
 					# minus the input --items record

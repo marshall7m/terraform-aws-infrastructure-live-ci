@@ -157,7 +157,6 @@ add_commit_to_queue() {
 	commit_item=$("$DIR/mock_tables.bash" \
 		--table "commit_queue" \
 		--items "$commit_item" \
-		--reset-identity-col \
 		--enable-defaults \
 		--update-parents \
 	| jq '.[0]')
