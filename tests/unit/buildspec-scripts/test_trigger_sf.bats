@@ -40,7 +40,7 @@ setup() {
     cd "$TEST_CASE_REPO_DIR"
     setup_test_case_tf_state
 
-    run_only_test 4
+    run_only_test 5
 }
 
 teardown() {
@@ -351,6 +351,20 @@ teardown() {
         --status "'success'"
     assert_success
 
+    log "Assert mock commit deploy waiting executions are aborted" "INFO"
+    run assert_record_count --table "executions" --assert-count 0 \
+        --commit-id "'$target_commit_id'" \
+        --status "'waiting'" \
+        --is-rollback false
+    assert_success
+
+    log "Assert mock commit deployment is failed" "INFO"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$target_commit_id'" \
+        --status "'failed'" \
+        --is-rollback false
+    assert_success
+
     log "Assert mock commit rollback is running" "INFO"
     run assert_record_count --table "commit_queue" --assert-count 1 \
         --commit-id "'$target_commit_id'" \
@@ -368,131 +382,135 @@ teardown() {
     assert_success
 }
 
-@test "Successful deployment event, deployment stack is not finished, and rollback is needed" {
+@test "Failed deployment event, commit deployment stack is finished, another commit from same PR is in queue" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
 
-    #TODO: Mock waiting executions and failed executions
-}
+    log "Mocking cloudwatch commit" "INFO"
 
-@test "Failed deployment event and deployment stack is finished and rollback is needed" {
-    log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
+    cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
+        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --commit-item "$(jq -n ' {"status": "running"}')" \
+        --modify-items "$(jq -n '
+        [
+            {
+                "apply_changes": true,
+                "create_provider_resource": true,
+                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
+            }
+        ]')" \
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    )
 
-    running_execution=$(jq -n \
-    --arg execution_id "$execution_id" \
-    --arg cfg_path "$testing_dir" \
-    --arg commit_id "$commit_id" '
-    {
-        "execution_id": $execution_id,
-        "cfg_path": $cfg_path,
-        "commit_id": $commit_id
-    }
+    log "Cloudwatch commit:" "DEBUG"
+    log "$cw_commit" "DEBUG"
+
+    cw_execution=$(echo "$cw_commit" | jq '
+        {
+            "cfg_path": .modify_items[0].cfg_path,
+            "pr_id": .pr_id,
+            "commit_id": .commit_id,
+            "status": .status,
+            "is_rollback": false,
+            "new_providers": [.modify_items[0].address],
+            "new_resources": [.modify_items[0].resource_spec]
+        }
     ')
 
-    mock_cloudwatch_execution "$running_execution" "failed"
+    cw_finished_status="failed"
 
-}
+    log "Mocking cloudwatch execution" "INFO"
+    mock_cloudwatch_execution "$cw_execution" "$cw_finished_status" 
 
-@test "Failed deployment event and deployment stack is not finished" {
-    log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
+    log "Mocking failed execution" "INFO"
 
-    running_execution=$(jq -n \
-    --arg execution_id "$execution_id" \
-    --arg cfg_path "$testing_dir" \
-    --arg commit_id "$commit_id" '
+    type_map=$(jq -n '
     {
-        "execution_id": $execution_id,
-        "cfg_path": $cfg_path,
-        "commit_id": $commit_id
+        "new_providers": "TEXT[]", 
+        "new_resources": "TEXT[]"
     }
     ')
+    
+    target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
+        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --commit-item "$(echo "$cw_commit" | jq '{
+            "pr_id": .pr_id,
+            "status": "waiting"
+        }')" \
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    )
 
-    mock_cloudwatch_execution "$running_execution" "failed"
+    log "Creating mock account_dim" "INFO"
 
+    bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "account_dim" \
+        --enable-defaults \
+        --type-map "$(jq -n '{"account_deps": "TEXT[]"}')" \
+        --items "$(jq -n '
+            [
+                {
+                    "account_name": "dev",
+                    "account_path": "directory_dependency/dev-account",
+                    "account_deps": [],
+                    "min_approval_count": 1,
+                    "min_rejection_count": 1,
+                    "voters": ["voter-1"]
+                }
+            ]
+        ')"
+    
+    run trigger_sf.sh
+    assert_success
+    assert_output "zzozozo"
+
+    
+    log "Assert mock Cloudwatch event status was updated" "INFO"
+    psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
+    run assert_record_count --table "executions" --assert-count 1 \
+        --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
+        --status "'$cw_finished_status'"
+    assert_success
+
+    
+    log "Assert mock commit deployment status is set to failed" "INFO"
+    psql -x -c "select * from commit_queue where commit_id = '$(echo "$cw_commit" | jq -r '.commit_id')'"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$(echo "$cw_commit" | jq -r '.commit_id')'" \
+        --status "'failed'" \
+        --is-rollback false
+    assert_success
+
+    log "Assert rollback commit is running" "INFO"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$(echo "$cw_commit" | jq -r '.commit_id')'" \
+        --status "'running'" \
+        --is-rollback true
+    assert_success
+
+    log "Assert next deploy commit is waiting" "INFO"
+    psql -x -c "select * from commit_queue where commit_id = '$(echo "$target_commit" | jq -r '.commit_id')'"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$(echo "$target_commit" | jq -r '.commit_id')'" \
+        --status "'waiting'" \
+        --is-rollback false
+    assert_success
+
+    log "Assert cloudwatch commit rollback executions are created" "INFO"
+    psql -x -c "select * from executions where commit_id = '$(echo "$cw_commit" | jq -r '.commit_id')'"
+    run assert_record_count --table "executions" --assert-count 1 \
+        --commit-id "'$cw_commit_id'" \
+        --cfg-path "'$(echo "$cw_commit" | jq -r '.modify_items[0].cfg_path')'" \
+        --new-providers "ARRAY['$(echo "$cw_commit" | jq -r '.modify_items[0].address')']" \
+        --status "'running'" \
+        --is-rollback true
+    assert_success
 }
+
 
 @test "Successful rollback deployment event and dequeue next rollback stack" {
-    running_execution=$(jq -n \
-    --arg execution_id "$execution_id" \
-    --arg is_rollback "true" '
-    {
-        "execution_id": $execution_id,
-        "is_rollback": $cfg_path
-    }
-    ')
-
-    mock_cloudwatch_execution "$running_execution" "success"
-
+    log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
     #TODO: Mock waiting rollback deployment stack
 }
 
 @test "Successful rollback deployment event and dequeue next commit" {
-    running_execution=$(jq -n \
-    --arg execution_id "$execution_id" \
-    --arg is_rollback "true" '
-    {
-        "execution_id": $execution_id,
-        "is_rollback": $cfg_path
-    }
-    ')
-
-    mock_cloudwatch_execution "$running_execution" "success"
-
-    log "Creating test commit execution" "INFO"
-    checkout_test_case_branch
-
-    log "Modifying Terragrunt directories within test repo" "DEBUG"
-    modify_tg_path --path "$abs_testing_dir"
-    
-    log "Committing modifications and adding commit to commit queue" "DEBUG"
-    add_test_case_head_commit_to_queue
-    
-    log "Switching back to default branch" "DEBUG"
-    git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')"
-
-    run trigger_sf.sh
-    assert_success
-
-    log "Assert mock Cloudwatch event for step function execution has updated execution status" "INFO"
-    log "$(psql -x -c "select * from executions where execution_id = '$execution_id';")" "DEBUG"
-    run psql -c """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT 
-                    COUNT(*)
-                FROM 
-                    executions
-                WHERE
-                    execution_id = '$execution_id' 
-                AND
-                    status = 'success'
-            ) = 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
-    assert_success
-
-    log "Assert mock commit for step function execution has been dequeued by having a running status" "INFO"
-    log "$(psql -x -c "select * from executions where commit_id = '$TESTING_COMMIT_ID';")" "DEBUG"
-    run psql -c """
-    do \$\$
-        BEGIN
-            ASSERT (
-                SELECT
-                    COUNT(*)
-                FROM
-                    executions
-                WHERE
-                    commit_id = '$TESTING_COMMIT_ID' 
-                AND
-                    cfg_path = '$testing_dir' 
-                AND
-                    is_rollback = false 
-                AND
-                    status = 'running'
-            ) = 1;
-        END;
-    \$\$ LANGUAGE plpgsql;
-    """
-    assert_success
+    log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
 }
