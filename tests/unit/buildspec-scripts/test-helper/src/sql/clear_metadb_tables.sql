@@ -41,10 +41,11 @@ RETURNS TEXT
 LANGUAGE plpgsql AS $$
     DECLARE 
         _full_table TEXT := concat_ws('.', quote_ident(_schema), quote_ident(_table));
+        _reset_val INT := 1;
     BEGIN
         IF table_exists(_schema, _catalog, _table) THEN
-            PERFORM setval(pg_get_serial_sequence(_table, _identity_col), 1);
-            RETURN format('Table: %s Reset column: %s Reset value: %s', _table, _identity_col, 1);
+            PERFORM setval(pg_get_serial_sequence(_table, _identity_col), _reset_val, false);
+            RETURN format('Table: %s Reset column: %s Reset value: %s', _table, _identity_col, _reset_val);
         ELSE
             RETURN 'Table does not exists: ' || _full_table;
         END IF;
