@@ -96,7 +96,7 @@ main() {
 
 	log "Inserting mock records to $table" "INFO"
 	if [ -n "$results_out_dir" ]; then
-		mock_output="$results_out_dir/mock_records.json"
+		mock_output=$(jq -n --arg results_out_dir "$results_out_dir" '"$results_out_dir/mock_records.json"')
 		log "Storing mock results within: $mock_output" "INFO" 
 		jq_to_psql_records.bash --jq-input "$items" --table "$table" ${type_map:+--type-map "$type_map"} > "$mock_output" || exit 1
 	else
@@ -112,7 +112,7 @@ main() {
 		log "Updating parent tables" "INFO"
 		psql -qt -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
 	fi
-
+	
 	echo "$mock_output"
 }
 
