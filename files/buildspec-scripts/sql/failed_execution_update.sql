@@ -66,7 +66,6 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
             RAISE NOTICE 'Adding rollback commit to commit queue';
 
             INSERT INTO commit_queue (
-                id,
                 commit_id,
                 is_rollback,
                 pr_id,
@@ -74,7 +73,6 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
             )
 
             VALUES (
-                nextval(commit_seq),
                 _commit_id,
                 true,
                 _pr_id,
@@ -85,7 +83,6 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
 
         RAISE NOTICE 'Adding base commit to commit queue';
         INSERT INTO commit_queue (
-            id,
             commit_id,
             is_rollback,
             pr_id,
@@ -93,7 +90,6 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
         )
 
         VALUES (
-            nextval(commit_seq),
             _base_commit_id,
             true,
             _pr_id,
