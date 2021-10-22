@@ -68,6 +68,7 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
             INSERT INTO commit_queue (
                 commit_id,
                 is_rollback,
+                is_base_rollback,
                 pr_id,
                 "status"
             )
@@ -75,6 +76,7 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
             VALUES (
                 _commit_id,
                 true,
+                false,
                 _pr_id,
                 'waiting'
             );
@@ -85,6 +87,7 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
         INSERT INTO commit_queue (
             commit_id,
             is_rollback,
+            is_base_rollback,
             pr_id,
             "status"
         )
@@ -92,9 +95,12 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
         VALUES (
             _base_commit_id,
             true,
+            true,
             _pr_id,
             'waiting'
         );
+
+        RETURN;
     END;
 $$ LANGUAGE plpgsql;
 

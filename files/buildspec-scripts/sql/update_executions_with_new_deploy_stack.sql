@@ -8,6 +8,7 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_deploy_stack(_account_path VARCHAR, _c
         RETURN QUERY EXECUTE format('INSERT INTO executions (
             execution_id,
             is_rollback,
+            is_base_rollback,
             pr_id,
             commit_id,
             base_ref,
@@ -32,7 +33,8 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_deploy_stack(_account_path VARCHAR, _c
         )
         SELECT
             ''run-'' || substr(md5(random()::text), 0, 8),
-            false,
+            "commit".is_rollback,
+            "commit".is_base_rollback,
             "commit".pr_id,
             "commit".commit_id,
             "commit".base_ref,
@@ -60,7 +62,9 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_deploy_stack(_account_path VARCHAR, _c
                 pr_queue.pr_id,
                 base_ref,
                 head_ref,
-                commit_id
+                commit_id,
+                is_rollback,
+                is_base_rollback
             FROM commit_queue
             JOIN pr_queue
             ON pr_queue.pr_id = commit_queue.pr_id

@@ -43,12 +43,14 @@ INSERT INTO commit_queue(
     commit_id,
     pr_id,
     status,
-    is_rollback
+    is_rollback,
+    is_base_rollback
 )
 VALUES (
     '$CODEBUILD_RESOLVED_SOURCE_VERSION',
     '$pr_id',
     'waiting',
+    false,
     false
 );
 """

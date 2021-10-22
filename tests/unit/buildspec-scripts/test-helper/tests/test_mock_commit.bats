@@ -80,6 +80,7 @@ teardown() {
     pr_id=$(echo "$output" | jq -r '.commit.pr_id')
     cfg_path=$(echo "$output" | jq -r '.modify[0].cfg_path')
     is_rollback=$(echo "$output" | jq -r '.modify[0].is_rollback')
+    is_base_rollback=$(echo "$output" | jq -r '.modify[0].is_base_rollback')
     new_resources=$(echo "$output" | jq -r 'modify.new_resources')
 
     log "Assert mock commit record was added to the commit_queue" "INFO"
@@ -90,7 +91,8 @@ teardown() {
                 SELECT COUNT(*)
                 FROM commit_queue
                 WHERE pr_id = '$pr_id'
-                AND commit_Id = '$commit_id'
+                AND commit_id = '$commit_id',
+                AND is_base_rollback = '$is_base_rollback',
                 AND is_rollback = '$is_rollback'
                 AND status = '$status'
             ) = 1;

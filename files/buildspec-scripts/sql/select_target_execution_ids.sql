@@ -32,8 +32,7 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS JSON AS $$
                 SELECT commit_id
                 FROM commit_queue
                 WHERE "status" = 'running'
-            )
-            AND is_rollback = _is_rollback;
+            );
 
         -- get all executions that are waiting within commit
         CREATE TABLE queued_executions AS

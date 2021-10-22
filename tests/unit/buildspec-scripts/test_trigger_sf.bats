@@ -35,12 +35,11 @@ teardown_file() {
 
 setup() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
+    run_only_test 5
+
     setup_test_case_repo
     cd "$TEST_CASE_REPO_DIR"
     setup_test_case_tf_state
-
-    run_only_test 5
 }
 
 teardown() {
@@ -125,7 +124,7 @@ teardown() {
     target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
 
     run trigger_sf.sh
-    assert_success
+    assert_failure
 
     run assert_record_count --table "executions" --assert-count 1 \
         --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
@@ -244,7 +243,7 @@ teardown() {
 
 @test "Successful deployment event, commit deployment stack is finished and contains new providers and rollback is needed" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
-
+    psql -c "ALTER TABLE public.commit_queue  ALTER COLUMN id RESTART WITH 0;"
     log "Mocking cloudwatch commit" "INFO"
 
     target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
@@ -411,6 +410,7 @@ teardown() {
             "commit_id": .commit_id,
             "status": .status,
             "is_rollback": false,
+            "is_base_rollback": false,
             "new_providers": [.modify_items[0].address],
             "new_resources": [.modify_items[0].resource_spec]
         }
@@ -421,8 +421,7 @@ teardown() {
     log "Mocking cloudwatch execution" "INFO"
     mock_cloudwatch_execution "$cw_execution" "$cw_finished_status" 
 
-    log "Mocking failed execution" "INFO"
-
+    log "Mocking commit with the same PR ID as CW event" "DEBUG"
     type_map=$(jq -n '
     {
         "new_providers": "TEXT[]", 
@@ -438,8 +437,6 @@ teardown() {
         }')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
-
-    log "Creating mock account_dim" "INFO"
 
     bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
         --table "account_dim" \
@@ -457,11 +454,9 @@ teardown() {
                 }
             ]
         ')"
-    
+
     run trigger_sf.sh
     assert_success
-    assert_output "zzozozo"
-
     
     log "Assert mock Cloudwatch event status was updated" "INFO"
     psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
@@ -469,7 +464,6 @@ teardown() {
         --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
         --status "'$cw_finished_status'"
     assert_success
-
     
     log "Assert mock commit deployment status is set to failed" "INFO"
     psql -x -c "select * from commit_queue where commit_id = '$(echo "$cw_commit" | jq -r '.commit_id')'"
@@ -497,7 +491,7 @@ teardown() {
     log "Assert cloudwatch commit rollback executions are created" "INFO"
     psql -x -c "select * from executions where commit_id = '$(echo "$cw_commit" | jq -r '.commit_id')'"
     run assert_record_count --table "executions" --assert-count 1 \
-        --commit-id "'$cw_commit_id'" \
+        --commit-id "'$(echo "$cw_commit" | jq -r '.commit_id')'" \
         --cfg-path "'$(echo "$cw_commit" | jq -r '.modify_items[0].cfg_path')'" \
         --new-providers "ARRAY['$(echo "$cw_commit" | jq -r '.modify_items[0].address')']" \
         --status "'running'" \

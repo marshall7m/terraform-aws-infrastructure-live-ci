@@ -15,12 +15,14 @@ ON CONFLICT DO NOTHING;
 INSERT INTO commit_queue (
     commit_id,
     is_rollback,
+    is_base_rollback,
     pr_id,
     "status"
 )
 SELECT
     commit_id,
     is_rollback,
+    is_base_rollback,
     pr_id,
     "status"
 FROM executions

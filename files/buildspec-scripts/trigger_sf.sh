@@ -177,6 +177,11 @@ update_executions_with_new_deploy_stack() {
         exit 1
     fi
 
+    if [ -z "$commit_id" ]; then
+        log "\$1 for commit_id is not set" "ERROR"
+        exit 1
+    fi
+
     log "Getting Account Paths" "INFO"
     IFS=$'\n' account_paths=($(psql -tA -c "SELECT account_path FROM account_dim;"))
 
@@ -327,6 +332,7 @@ execution_finished() {
         sf_event=$( echo $EVENTBRIDGE_EVENT | jq '.')
     else
         log "EVENTBRIDGE_EVENT is not set" "ERROR"
+        exit 1
     fi
 
     log "Step Function Event:" "DEBUG"
@@ -341,7 +347,7 @@ execution_finished() {
     new_providers=$( echo $sf_event | jq -r '.new_providers')
 
     log "Updating Execution Status" "INFO"
-    psql -c """
+    psql -q -c """
     UPDATE executions
     SET status = '$status'
     WHERE execution_id = '$execution_id'
@@ -363,40 +369,25 @@ execution_finished() {
             psql -c "SELECT * FROM commit_queue"
         fi
     fi
+
     set +e
 }
 
-create_executions() {
+dequeue_commit() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    
-    log "Dequeuing next PR if commit queue is empty" "INFO"
+
+    commit_item=$(psql -qt -f "$SQL_DIR/dequeue_rollback_commit.sql" | jq '.')
+
+    if [ -n "$commit_item" ]; then
+        echo "$commit_item"
+        exit 0
+    fi
+
+    log "Dequeuing next PR if commit queue is empty" "INFO"    
+    pr_items=$(psql -t -f "$SQL_DIR/dequeue_pr.sql" | jq '.' 2> /dev/null)
 
     #WA: checking if results is empty till jq handles empty input see: https://github.com/stedolan/jq/issues/1628
-    pr_items=$(psql -t -c """
-        UPDATE
-            pr_queue
-        SET
-            status = 'running'
-        WHERE 
-            id = (
-                SELECT id
-                FROM pr_queue
-                WHERE status = 'waiting'
-                LIMIT 1
-            )
-        AND
-            0 = (
-                SELECT COUNT(*) 
-                FROM commit_queue 
-                WHERE status = 'waiting'
-            )
-        RETURNING row_to_json(pr_queue.*);
-    """ | jq '.' 2> /dev/null)
-
-    if [ "$pr_items" == "" ]; then
-        #TODO: narrow down reason
-        log "Another PR is in progress or no PR is waiting" "INFO"
-    else
+    if [ -n "$pr_items" ]; then
         log "Updating commit queue with dequeued PR's most recent commit" "INFO"
 
         log "Dequeued pr items:" "DEBUG"
@@ -415,56 +406,54 @@ create_executions() {
         INSERT INTO commit_queue (
             commit_id,
             is_rollback,
+            is_base_rollback,
             pr_id,
             status
         )
         VALUES (
-            '$head_commit_id'
-            'f'
-            '$pr_id'
-            'waiting'
+            '$head_commit_id',
+            false,
+            false,
+            '$pr_id',
+            'running'
         );
         """
 
         log "Switching back to default branch" "DEBUG"
         git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" || exit 1
+    else
+        #TODO: narrow down reason
+        log "Another PR is in progress or no PR is waiting" "INFO"
     fi
 
-    log "Dequeuing next commit that is waiting" "INFO"
-    #TODO: choose rollback commits that are waiting before 
-
-    commit_items=$(psql -q -t -c """
-    UPDATE commit_queue
-    SET status = 'running'
-    WHERE id = (
-        SELECT id
-        FROM commit_queue
-        WHERE status = 'waiting'
-        LIMIT 1
-    )
-
-    RETURNING row_to_json(commit_queue.*);
-    """ | jq '.')
+}
+create_executions() {
+    log "FUNCNAME=$FUNCNAME" "DEBUG"
     
-    if [ "$commit_items" == "" ]; then
+    local commit_item=$1
+
+    log "Dequeued commit item:" "DEBUG"
+    log "$commit_item" "DEBUG"
+
+    if [ "$commit_item" == "" ]; then
         log "No commits to dequeue -- skipping execution creation" "INFO"
         exit 0
     fi
+    
+    commit_id=$(echo "$commit_item" | jq -r '.commit_id')
+    is_rollback=$(echo "$commit_item" | jq -r '.is_rollback')
+    is_base_rollback=$(echo "$commit_item" | jq -r '.is_base_rollback')
 
-    log "Dequeued commit items:" "DEBUG"
-    log "$commit_items" "DEBUG"
-
-    commit_id=$(echo "$commit_items" | jq -r '.commit_id')
-    is_rollback=$(echo "$commit_items" | jq -r '.is_rollback')
-
-    if [ "$is_rollback" == "true" ]; then
+    if [ "$is_rollback" == true ] && [ "$is_base_rollback" == false ]; then
         log "Adding commit rollbacks to executions" "INFO"
         psql -q -v commit_id="'$commit_id'" -x -f "$SQL_DIR/update_executions_with_new_rollback_stack.sql"
-    elif [ "$is_rollback" == "false" ]; then
+    elif [ "$is_rollback" == true ] && [ "$is_base_rollback" == true ] || [ "$is_rollback" == false ]; then
         log "Adding commit deployments to executions" "INFO"
         update_executions_with_new_deploy_stack "$commit_id"
     else
-        log "is_rollback value is invalid" "ERROR"
+        log "Could not identitfy commit type" "ERROR"
+        log "Value for is_rollback may be invalid: $is_rollback" "ERROR"
+        log "Value for is_base_rollback may be invalid: $is_base_rollback" "ERROR"
         exit 1
     fi
 }
@@ -545,7 +534,7 @@ main() {
         log "EVENTBRIDGE_FINISHED_RULE is not set" "ERROR"
         exit 1
     fi
-    
+
     log "Checking if build was triggered via a finished Step Function execution" "DEBUG"
     if [ "$CODEBUILD_INITIATOR" == "$EVENTBRIDGE_FINISHED_RULE" ]; then
         log "Triggered via Step Function Event" "INFO"
@@ -553,10 +542,10 @@ main() {
     fi
 
     log "Checking if any Step Function executions are running" "DEBUG"
-    executions_in_progress
     if [ $(executions_in_progress) -eq 0 ]; then
         log "No deployment or rollback executions in progress" "DEBUG"
-        create_executions
+        commit_item=$(dequeue_commit)
+        create_executions "$commit_item"
     fi
 
     log "Starting Step Function Deployment Flow" "INFO"

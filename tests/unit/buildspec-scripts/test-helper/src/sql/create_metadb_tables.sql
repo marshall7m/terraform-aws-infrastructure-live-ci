@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS executions (
     execution_id VARCHAR PRIMARY KEY,
     is_rollback BOOL,
+    is_base_rollback BOOL,
     pr_id INT,
     commit_id VARCHAR,
     base_ref VARCHAR,
@@ -9,7 +10,7 @@ CREATE TABLE IF NOT EXISTS executions (
     head_source_version VARCHAR,
     cfg_path VARCHAR,
     cfg_deps TEXT[],
-    status VARCHAR,
+    "status" VARCHAR,
     plan_command TEXT,
     deploy_command TEXT,
     new_providers TEXT[],
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS commit_queue (
     id INT GENERATED ALWAYS AS IDENTITY,
     commit_id VARCHAR,
     is_rollback BOOL,
+    is_base_rollback BOOL,
     pr_id INT,
     status VARCHAR
 );

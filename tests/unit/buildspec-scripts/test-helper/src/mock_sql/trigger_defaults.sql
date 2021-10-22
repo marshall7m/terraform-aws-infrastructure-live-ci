@@ -94,6 +94,10 @@ BEGIN
         END;
     END IF;
 
+    IF NEW.is_base_rollback IS NULL THEN
+        NEW.is_base_rollback := false;
+    END IF;
+
     IF NEW.commit_id IS NULL THEN
         NEW.commit_id := substr(md5(random()::text), 0, 40);
     END IF;
@@ -111,6 +115,7 @@ WHEN (
     NEW.pr_id IS NULL
     OR NEW.status IS NULL
     OR NEW.is_rollback IS NULL
+    OR NEW.is_base_rollback IS NULL
     OR NEW.commit_id IS NULL
 )
 EXECUTE PROCEDURE trig_commit_queue_default();
@@ -258,8 +263,10 @@ BEGIN
 
     IF NEW.plan_command IS NULL THEN
         NEW.plan_command := CASE
-            WHEN NEW.is_rollback = 'f' THEN 'terragrunt plan ' || '--terragrunt-working-dir ' || NEW.cfg_path
-            WHEN NEW.is_rollback = 't' THEN 'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path
+            WHEN NEW.is_rollback = 'f' AND NEW.is_base_rollback = 'f' THEN
+                'terragrunt plan ' || '--terragrunt-working-dir ' || NEW.cfg_path
+            WHEN NEW.is_rollback = 't'  THEN 
+                'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path
         END;
     END IF;
 
@@ -272,6 +279,10 @@ BEGIN
             WHEN 0 THEN false
             WHEN 1 THEN true
         END;
+    END IF;
+
+    IF NEW.is_base_rollback IS NULL THEN
+        NEW.is_base_rollback := false;
     END IF;
 
     IF NEW.new_providers IS NULL THEN
@@ -312,6 +323,7 @@ WHEN (
     OR NEW.base_source_version IS NULL
     OR NEW.head_source_version IS NULL
     OR NEW.is_rollback IS NULL
+    OR NEW.is_base_rollback IS NULL
     OR NEW.commit_id IS NULL
     OR NEW.account_name IS NULL
     OR NEW.account_path IS NULL

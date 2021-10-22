@@ -19,6 +19,7 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_rollback_stack(_commit_id VARCHAR)
         RETURN QUERY EXECUTE format('INSERT INTO executions (
             execution_id,
             is_rollback,
+            is_base_rollback,
             pr_id,
             commit_id,
             base_ref,
@@ -44,6 +45,7 @@ CREATE OR REPLACE FUNCTION pg_temp.insert_rollback_stack(_commit_id VARCHAR)
         SELECT
             ''run-'' || substr(md5(random()::text), 0, 8) as execution_id,
             true as is_rollback,
+            false as is_base_rollback,
             pr_id,
             commit_id,
             base_ref,
