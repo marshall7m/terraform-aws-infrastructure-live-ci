@@ -1,6 +1,6 @@
 #!/bin/bash
 
-yarn install
+yarn upgrade
 
 docker-compose up --detach
 
