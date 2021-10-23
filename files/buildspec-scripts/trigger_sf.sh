@@ -346,12 +346,7 @@ execution_finished() {
     commit_id=$( echo $sf_event | jq -r '.commit_id')
     new_providers=$( echo $sf_event | jq -r '.new_providers')
 
-    log "Updating Execution Status" "INFO"
-    psql -q -c """
-    UPDATE executions
-    SET status = '$status'
-    WHERE execution_id = '$execution_id'
-    """
+    psql -q -v execution_id="$execution_id" -v status="$status" -f "$SQL_DIR/cw_event_status_update.sql"
     
     if [ "$is_rollback" == false ]; then
         if [ "$(echo "$new_providers" | jq '. | length')" -gt 0 ]; then
@@ -368,6 +363,10 @@ execution_finished() {
                 -f "$SQL_DIR/failed_execution_update.sql"
             psql -c "SELECT * FROM commit_queue"
         fi
+    elif [ "$is_rollback" == true ] && [ "$status" == 'failed' ]; then
+        log "Rollback execution failed -- User with administrative privileges will need to manually fix configuration" "ERROR"
+        # TODO: Create feature for contacting admin user via AWS SES or SNS?
+        exit 1
     fi
 
     set +e
