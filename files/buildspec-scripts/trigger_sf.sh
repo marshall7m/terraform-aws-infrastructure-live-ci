@@ -123,6 +123,8 @@ create_stack() {
     local terragrunt_working_dir=$1
     local git_root=$2
 
+    log "Running Terragrunt plan" "INFO"
+    log "Checked out commit ID: $(git rev-parse --verify HEAD)" "DEBUG"
     log "Terragrunt working dir: $terragrunt_working_dir" "DEBUG"
     # returns the exitcode instead of the plan output (0=no plan difference, 1=error, 2=detected plan difference)
     tg_plan_out=$(terragrunt run-all plan \
