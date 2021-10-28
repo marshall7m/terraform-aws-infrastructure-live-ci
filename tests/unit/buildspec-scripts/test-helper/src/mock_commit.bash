@@ -66,14 +66,18 @@ modify_tg_path() {
 
 	local tg_dir=$1
 	local create_provider_resource=$2
-
+	
 	if [ -z "$tg_dir" ]; then
 		log "\$1 for terragrunt directory is not set" "ERROR"
 		exit 1
 	fi
 	
 	# get terraform source dir from .terragrunt-cache/
-	tf_dir=$(terragrunt terragrunt-info --terragrunt-working-dir "$tg_dir" | jq '.WorkingDir' | tr -d '"') || exit 1
+	# tf_dir=$(terragrunt terragrunt-info --terragrunt-working-dir "$tg_dir" | jq '.WorkingDir' | tr -d '"') || exit 1
+	#WA: use terragrunt dir instead of .terragrunt-cache for tf_dir since cache will be in .gitignore which leads to git not tracking cache changes
+	# tradeoff being testing will be limited to terraform sources within cwd of terragrunt file
+	#could workaround .gitignore and use different download source for tf module although that may risk .tfstate being exposed if more git involved test are included
+	tf_dir="$tg_dir"
 	
 	log "Terraform dir: $tf_dir" "DEBUG"
 
@@ -92,17 +96,18 @@ create_commit_changes() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	local modify_items=$1
+	local abs_repo_dir=$2
 
 	res=$(jq -n '[]')
 	while read item; do
 		log "Path item:" "DEBUG"
 		log "$(echo "$item" | jq '.')" "DEBUG"
 
-		cfg_path=$(echo "$item" | jq '.cfg_path' | tr -d '"')
-		create_provider_resource=$(echo "$item" | jq '.create_provider_resource // false' | tr -d '"')
-		apply_changes=$(echo "$item" | jq '.apply_changes' | tr -d '"')
+		cfg_path=$(echo "$item" | jq -r '.cfg_path')
+		create_provider_resource=$(echo "$item" | jq -r '.create_provider_resource // false')
+		apply_changes=$(echo "$item" | jq -r '.apply_changes')
 
-		modify_res=$(modify_tg_path "$cfg_path" "$create_provider_resource")
+		modify_res=$(modify_tg_path "$abs_repo_dir/$cfg_path" "$create_provider_resource")
 
 		item=$(echo "$item" | jq --arg modify_res "$modify_res" '
 		($modify_res | fromjson) as $modify_res
@@ -120,7 +125,7 @@ create_commit_changes() {
 
 		if [ "$apply_changes" == true ]; then
 			log "Applying mock changes" "INFO"
-			terragrunt apply --terragrunt-working-dir $cfg_path -auto-approve > /dev/null 2> /dev/null
+			terragrunt apply --terragrunt-working-dir $cfg_path -auto-approve > /dev/null 2> /dev/null || exit 1
 		fi
 	done <<< "$(echo "$modify_items" | jq -c '.[]')"
 
@@ -256,7 +261,7 @@ EOF
 		"type": "output",
 		"resource_spec": $resource_spec,
 		"value": $value,
-		"filepath": $file_path
+		"file_path": $file_path
 	}'
 }
 
@@ -265,17 +270,18 @@ main() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	parse_args "$@"
-
+	
 	log "Creating testing branch: $head_ref" "INFO"
 	cd "$abs_repo_dir" && git checkout -B "$head_ref" > /dev/null
 
 	if [ -n "$modify_items" ]; then
 		log "Creating changes within $head_ref" "INFO"
-		modify_items=$(create_commit_changes "$modify_items")
+		modify_items=$(create_commit_changes "$modify_items" "$abs_repo_dir")
 	fi
 
 	log "Committing changes and adding commit to queue" "INFO"
 	add_commit_to_queue "$commit_item" "$commit_msg" > /dev/null
+
 	log "Switching back to default branch" "DEBUG"
     cd "$abs_repo_dir" && git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" > /dev/null
 
