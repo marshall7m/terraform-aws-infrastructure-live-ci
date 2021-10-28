@@ -212,7 +212,7 @@ update_executions_with_new_deploy_stack() {
             continue
         fi
 
-        jq_to_psql_records.bash --jq-input "$stack" --table "staging_cfg_stack"
+        jq_to_psql_records.bash --jq-input "$stack" --table "staging_cfg_stack" --type-map "$(jq -n '{"cfg_deps": "TEXT[]", "new_providers": "TEXT[]"}')"
 
         log "staging_cfg_stack table:" "DEBUG"
         log "$(psql -x -c "SELECT * FROM staging_cfg_stack")" "DEBUG"
@@ -463,6 +463,15 @@ start_sf_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     log "Getting executions that have all account dependencies and terragrunt dependencies met" "INFO"
+    log "$(psql -x -c """
+    SELECT *
+    FROM executions
+    WHERE commit_id = (
+        SELECT commit_id
+        FROM commit_queue
+        WHERE "status" = 'running')
+    """
+    )" "DEBUG"
     target_execution_ids=$(psql -qt -f "$SQL_DIR/select_target_execution_ids.sql")
 
     readarray -t target_execution_ids < <(echo "$target_execution_ids" | jq -r -c '.[]')
