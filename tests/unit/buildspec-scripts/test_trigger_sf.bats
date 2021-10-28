@@ -23,19 +23,26 @@ setup_file() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     setup_metadb
 
-    export TESTING_LOCAL_PARENT_TF_STATE_DIR="$BATS_TEST_TMPDIR/test-repo-tf-state"
     setup_test_file_repo "https://github.com/marshall7m/infrastructure-live-testing-template.git"
-    setup_test_file_tf_state "directory_dependency/dev-account"
+
+    log "Applying Terragrunt configurations within test repo's base branch" "INFO"
+    # configures the local parent directory to store tf-state files given the repo's parent terragrunt.hcl file
+    # includes the following local backend path that child cfg files inherit: "$TESTING_LOCAL_PARENT_TF_STATE_DIR/${path_relative_to_include()}/terraform.tfstate"
+    export TESTING_LOCAL_PARENT_TF_STATE_DIR="$TEST_FILE_REPO_DIR/tf-state"
+    terragrunt run-all apply --terragrunt-working-dir "$TEST_FILE_REPO_DIR/directory_dependency/dev-account"  --terragrunt-non-interactive -auto-approve 
 }
 
 teardown_file() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
+
+    log "Destroying test file's base terragrunt resources" "INFO"
+    terragrunt run-all destroy --terragrunt-working-dir "$TEST_FILE_REPO_DIR/directory_dependency/dev-account"  --terragrunt-non-interactive -auto-approve 
     teardown_test_file_tmp_dir
 }
 
 setup() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    run_only_test 6
+    run_only_test 1
 
     bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
         --table "account_dim" \
@@ -48,15 +55,32 @@ setup() {
             }
         ')"
 
+    log "Creating test case repo" "INFO"
     setup_test_case_repo
+
+    log "Copying test file's tf-state to test case repo's tf-state" "INFO"
+    # this removes the need for the test case to reapply mock resources
+    test_case_tf_state_parent_dir="$BATS_TEST_TMPDIR/tf-state"
+    mkdir -p "$test_case_tf_state_parent_dir"
+    cd "$TESTING_LOCAL_PARENT_TF_STATE_DIR" && find . -iname "*.tfstate" | xargs -I {} cp --parents {} "$test_case_tf_state_parent_dir"
+
+    # changing TESTING_LOCAL_PARENT_TF_STATE_DIR to test case tf-state dir to create persistant local tf-state
+    # prevents loss of local tf-state when new github branches are created/checked out for mocking commits
+    export TESTING_LOCAL_PARENT_TF_STATE_DIR="$test_case_tf_state_parent_dir"
+
+    log "Tracking branches that use Terragrunt commands within test case" "INFO"
+    setup_terragrunt_branch_tracking
+    
+    log "Changing into test case repo directory" "DEBUG"
+    # cd into test case repo dir since Codebuild will initially cd into it's source repo root directory
     cd "$TEST_CASE_REPO_DIR"
-    setup_test_case_tf_state
 }
 
 teardown() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
 
     clear_metadb_tables
+    teardown_tf_state
     teardown_test_case_tmp_dir
 }
 
@@ -447,32 +471,35 @@ teardown() {
     assert_success
 }
 
-
 @test "Successful rollback deployment event and dequeue base rollback execution" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
 
-    log "Mocking cloudwatch commit" "INFO"
+    log "Mocking target commit" "INFO"
 
-    cw_head_ref="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    target_head_ref="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
 
-    cw_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
+    target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --commit-item "$(jq -n ' {"status": "running"}')" \
+        --commit-item "$(jq -n ' {
+            "status": "running",
+            "is_rollback": true,
+            "is_base_rollback": false
+        }')" \
         --modify-items "$(jq -n '
         [
             {
                 "apply_changes": true,
-                "create_provider_resource": true,
-                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
+                "create_provider_resource": false,
+                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo"
             }
         ]')" \
-        --head-ref $cw_head_ref
+        --head-ref $target_head_ref
     )
 
-    log "Cloudwatch commit:" "DEBUG"
-    log "$cw_commit" "DEBUG"
+    log "Target commit:" "DEBUG"
+    log "$target_commit" "DEBUG"
 
-    cw_execution=$(echo "$cw_commit" | jq '
+    cw_execution=$(echo "$target_commit" | jq '
         {
             "cfg_path": .modify_items[0].cfg_path,
             "pr_id": .pr_id,
@@ -480,8 +507,8 @@ teardown() {
             "status": .status,
             "is_rollback": true,
             "is_base_rollback": false,
-            "new_providers": [.modify_items[0].address],
-            "new_resources": [.modify_items[0].resource_spec]
+            "new_providers": ["mock-provider"],
+            "new_resources": ["mock-resource"]
         }
     ')
 
@@ -495,7 +522,7 @@ teardown() {
     base_commit_id=$( cd "$TEST_CASE_REPO_DIR" && git rev-parse --verify $BASE_REF )
     bash "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/src/jq_to_psql_records.bash" \
         --table "commit_queue" \
-        --jq-input "$(echo "$cw_commit" | jq --arg commit_id "$base_commit_id" '{
+        --jq-input "$(echo "$target_commit" | jq --arg commit_id "$base_commit_id" '{
             "pr_id": .pr_id,
             "commit_id": $commit_id,
             "status": "waiting",
@@ -505,7 +532,6 @@ teardown() {
 
     run trigger_sf.sh
     assert_success
-    assert_output "zozoz"
 
     log "Assert mock Cloudwatch event status was updated" "INFO"
     psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
@@ -515,9 +541,9 @@ teardown() {
     assert_success
     
     log "Assert mock rollback commit status was updated" "INFO"
-    psql -x -c "select * from commit_queue where commit_id = '$(echo "$cw_commit" | jq -r '.commit_id')'"
+    psql -x -c "select * from commit_queue where commit_id = '$(echo "$target_commit" | jq -r '.commit_id')'"
     run assert_record_count --table "commit_queue" --assert-count 1 \
-        --commit-id "'$(echo "$cw_commit" | jq -r '.commit_id')'" \
+        --commit-id "'$(echo "$target_commit" | jq -r '.commit_id')'" \
         --status "'success'" \
         --is-rollback true \
         --is-base-rollback false
@@ -532,18 +558,17 @@ teardown() {
     assert_success
 
     log "Assert cloudwatch commit base rollback executions are created" "INFO"
-    psql -x -c "select * from executions where commit_id = '$(echo "$base_commit_id" | jq -r '.commit_id')'"
+    psql -x -c "select * from executions where commit_id = '$base_commit_id'"
     run assert_record_count --table "executions" --assert-count 1 \
         --commit-id "'$base_commit_id'" \
-        --cfg-path "'$(echo "$cw_commit" | jq -r '.modify_items[0].cfg_path')'" \
-        --new-providers "ARRAY[]" \
+        --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
         --status "'running'" \
         --is-rollback true \
         --is-base-rollback true
     assert_success
 }
 
-@test "Successful base rollback deployment event and dequeue next commit from same PR" {
+@test "Successful base rollback deployment event and dequeue next commit from different PR" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
 }
 
