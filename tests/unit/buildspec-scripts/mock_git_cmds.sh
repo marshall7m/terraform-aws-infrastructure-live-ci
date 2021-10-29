@@ -1,18 +1,17 @@
 #!/bin/bash
 
-checkout_pr() {
-    return
+git() {
+    for arg in "$@"; do
+        case "$arg" in 
+            fetch)
+                echo "MOCK: FUNCNAME=$FUNCNAME"
+                exit 0
+            ;;
+        esac
+    done
+
+    # if none of the git args match, then run git as is
+    "$(which git)" "$@"
 }
 
-get_rel_path() {
-    local rel_to=$1
-    local path=$2
-    
-    # get relaive path even if it doesn't exists
-    echo "$(xargs realpath -m --relative-to=$rel_to $path)"
-}
-
-get_git_source_versions() {
-    base_source_version="MOCK: FUNCNAME=$FUNCNAME"
-    head_source_version="MOCK: FUNCNAME=$FUNCNAME"
-}
+export -f git
