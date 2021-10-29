@@ -16,6 +16,7 @@ setup_file() {
     export EVENTBRIDGE_FINISHED_RULE=rule/test
 
     source mock_aws_cmds.sh
+    source mock_git_cmds.sh
     
     load 'common_setup.bash'
     _common_setup
@@ -38,6 +39,8 @@ teardown_file() {
     log "Destroying test file's base terragrunt resources" "INFO"
     terragrunt run-all destroy --terragrunt-working-dir "$TEST_FILE_REPO_DIR/directory_dependency/dev-account"  --terragrunt-non-interactive -auto-approve 
     teardown_test_file_tmp_dir
+    
+    unset -f git
 }
 
 setup() {
@@ -102,23 +105,29 @@ teardown() {
                 }
             ]
         ')" \
-        --commit-item "$(jq -n ' {"status": "running"}')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
 
-    finished_execution=$(echo "$cw_commit" | jq '
+    cw_execution=$(echo "$cw_commit" | jq '
         {
             "cfg_path": .modify_items[0].cfg_path,
             "commit_id": .commit_id,
-            "new_providers": []
+            "status": "running",
+            "is_rollback": false,
+            "is_base_rollback": false
+            "new_providers": [.modify_items[0].address]
         }
     ')
 
-    mock_cloudwatch_execution "$finished_execution" "$success" 
+    mock_cloudwatch_execution "$cw_execution" "$success" 
 
     
     target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --commit-item "$(jq -n '
+        {
+            "status": "waiting"
+        }')" \
         --modify-items "$(jq -n '
             [
                 {
@@ -128,14 +137,8 @@ teardown() {
                 }
             ]
         ')" \
-        --commit-item "$(jq -n '
-            {
-                "is_rollback": false,
-                "status": "waiting"
-            }
-        ')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
-    )
+    )    
 
     target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
 
@@ -476,8 +479,6 @@ teardown() {
 
     log "Mocking target commit" "INFO"
 
-    target_head_ref="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
-
     target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
         --commit-item "$(jq -n ' {
@@ -493,8 +494,9 @@ teardown() {
                 "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo"
             }
         ]')" \
-        --head-ref $target_head_ref
+        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
+    
 
     log "Target commit:" "DEBUG"
     log "$target_commit" "DEBUG"
@@ -505,10 +507,8 @@ teardown() {
             "pr_id": .pr_id,
             "commit_id": .commit_id,
             "status": .status,
-            "is_rollback": true,
-            "is_base_rollback": false,
-            "new_providers": ["mock-provider"],
-            "new_resources": ["mock-resource"]
+            "is_rollback": .is_rollback,
+            "is_base_rollback": .is_base_rollback
         }
     ')
 
@@ -570,5 +570,91 @@ teardown() {
 
 @test "Successful base rollback deployment event and dequeue next commit from different PR" {
     log "TEST CASE: $BATS_TEST_NUMBER" "INFO"
-}
 
+    cw_execution=$(jq -n '
+        {
+            "status": "running",
+            "is_base_rollback": true,
+            "is_rollback": true
+        }
+    ')
+
+    cw_finished_status="success"
+
+    log "Mocking base rollback cloudwatch execution" "INFO"
+    mock_cloudwatch_execution "$cw_execution" "$cw_finished_status" 
+
+    log "Mocking next PR's commit changes" "INFO"
+    target_head_ref="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
+    target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
+        --abs-repo-dir "$TEST_CASE_REPO_DIR" \
+        --modify-items "$(jq -n '
+        [
+            {
+                "apply_changes": false,
+                "create_provider_resource": false,
+                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo"
+            }
+        ]')" \
+        --head-ref "$target_head_ref"
+    )
+    
+    log "Adding mock PR to pr_queue" "INFO"
+    target_pr=$(bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "pr_queue" \
+        --enable-defaults \
+        --items "$(jq -n --arg head_ref "$target_head_ref" '
+            {
+                "head_ref": $head_ref,
+                "status": "waiting"
+            }
+        ')" | jq '.[0]')
+
+    run trigger_sf.sh
+    assert_success
+    assert_output "zozoz"
+
+    log "Assert mock Cloudwatch event status was updated" "INFO"
+    psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
+    run assert_record_count --table "executions" --assert-count 1 \
+        --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
+        --status "'$cw_finished_status'"
+    assert_success
+    
+    log "Assert mock base rollback commit status was updated" "INFO"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.commit_id')'" \
+        --status "'success'" \
+        --is-rollback true \
+        --is-base-rollback true
+    assert_success
+
+    log "Assert next PR is running" "INFO"
+    psql -x -c "select * from pr_queue where pr_id = '$(echo "$target_pr" | jq -r '.pr_id')'"
+    run assert_record_count --table "pr_queue" --assert-count 1 \
+        --status "'running'" \
+        --base-ref "'$(echo "$target_pr" | jq -r '.base_ref')'" \
+        --head-ref "'$(echo "$target_pr" | jq -r '.head_ref')'" \
+        --pr-id "'$(echo "$target_pr" | jq -r '.pr_id')'" 
+    assert_success
+    
+    log "Assert next PR's commit is running" "INFO"
+    log "target_commit: $target_commit" "DEBUG"
+    psql -x -c "select * from commit_queue where commit_id = '$(echo "$target_commit" | jq -r '.commit_id')'"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$(echo "$target_commit" | jq -r '.commit_id')'" \
+        --status "'running'" \
+        --is-rollback false \
+        --is-base-rollback false
+    assert_success
+
+    log "Assert next PR's execution(s) are running" "INFO"
+    psql -x -c "select * from executions where commit_id = '$(echo "$target_commit" | jq -r '.commit_id')'"
+    run assert_record_count --table "executions" --assert-count 1 \
+        --commit-id "'$(echo "$target_commit" | jq -r '.commit_id')'" \
+        --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
+        --status "'running'" \
+        --is-rollback false \
+        --is-base-rollback false
+    assert_success
+}
