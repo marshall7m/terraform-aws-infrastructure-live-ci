@@ -132,44 +132,6 @@ create_commit_changes() {
 	echo "$res"
 }
 
-add_commit_to_queue() {
-	log "FUNCNAME=$FUNCNAME" "DEBUG"
-
-	commit_item=$1
-	commit_msg=$2
-
-	log "Adding testing changes to branch: $(git rev-parse --abbrev-ref HEAD)" "INFO"
-
-	if [ $(git status --short | wc -l) == 0 ]; then
-		log "Nothing to commit -- creating dummy file to allow git to create a new commit" "DEBUG"
-		touch dummy.txt
-	fi
-
-	log "commit msg: $commit_msg" "DEBUG"
-	git add "$(git rev-parse --show-toplevel)/"
-	git commit -m "$commit_msg"
-
-	commit_id=$(git log --pretty=format:'%H' -n 1)
-
-	commit_item=$(echo "$commit_item" | jq \
-	--arg commit_id "$commit_id" '
-		{"commit_id": $commit_id} + .
-	')
-
-	log "Adding commit ID to queue: $commit_id" "DEBUG"
-	
-	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
-	commit_item=$("$DIR/mock_tables.bash" \
-		--table "commit_queue" \
-		--items "$commit_item" \
-		--enable-defaults \
-		--update-parents \
-	| jq '.[0]')
-	
-	log "Inserted commit record: " "DEBUG"
-	log "$commit_item" "DEBUG"
-}
-
 create_resource() {
 	local tf_dir=$1
 
@@ -265,7 +227,6 @@ EOF
 	}'
 }
 
-
 main() {
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
@@ -279,20 +240,61 @@ main() {
 		modify_items=$(create_commit_changes "$modify_items" "$abs_repo_dir")
 	fi
 
-	log "Committing changes and adding commit to queue" "INFO"
-	add_commit_to_queue "$commit_item" "$commit_msg" > /dev/null
+	log "Committing changes" "INFO"
+
+	if [ $(git status --short | wc -l) == 0 ]; then
+		log "Nothing to commit -- creating dummy file to allow git to create a new commit" "DEBUG"
+		touch dummy.txt
+	fi
+
+	git add "$(git rev-parse --show-toplevel)/" > /dev/null
+	git commit -m "$commit_msg" > /dev/null
+	commit_id=$(git log --pretty=format:'%H' -n 1)
+
+	if [ -n "$commit_item" ]; then
+		log "Adding commit to queues" "INFO"
+
+		commit_item=$(echo "$commit_item" | jq \
+		--arg commit_id "$commit_id" '
+			{"commit_id": $commit_id} + .
+		')
+		
+		DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
+		commit_item=$("$DIR/mock_tables.bash" \
+			--table "commit_queue" \
+			--items "$commit_item" \
+			--enable-defaults
+		| jq '.[0]')
+		
+		log "Inserted commit record: " "DEBUG"
+		log "$commit_item" "DEBUG"
+
+		pr_item=$("$DIR/mock_tables.bash" \
+			--table "pr_queue" \
+			--enable-defaults \
+			--items "$(echo "$commit_item" | jq --arg head_ref "$head_ref" '{
+				"pr_id": .pr_id,
+				"head_ref": $head_ref
+			}')"
+		| jq '.[0]')
+		
+		log "Inserted pr record: " "DEBUG"
+		log "$pr_item" "DEBUG"
+
+		jq -n --arg commit_item "$commit_item" --arg modify_items "$modify_items" '
+			($commit_item | try fromjson // {}) as $commit_item
+			| ($modify_items | try fromjson // []) as $modify_items
+			| $commit_item + {"modify_items": $modify_items}
+		'
+	else
+		jq -n --arg commit_id "$commit_id" --arg modify_items "$modify_items" '
+			($modify_items | try fromjson // []) as $modify_items
+			| {"commit_id": $commit_id, "modify_items": $modify_items}
+		'
+	fi
 
 	log "Switching back to default branch" "DEBUG"
     cd "$abs_repo_dir" && git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" > /dev/null
-
-	log "modify_items" "DEBUG"
-	log "$modify_items" "DEBUG"
-
-	jq -n --arg commit_item "$commit_item" --arg modify_items "$modify_items" '
-		($commit_item | try fromjson // {}) as $commit_item
-		| ($modify_items | try fromjson // []) as $modify_items
-		| $commit_item + {"modify_items": $modify_items}
-	'
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
