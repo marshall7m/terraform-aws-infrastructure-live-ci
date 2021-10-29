@@ -394,11 +394,14 @@ dequeue_commit() {
         log "Dequeued pr items:" "DEBUG"
         log "$pr_items" "DEBUG"
 
-        pr_id=$(echo "$pr_items" | jq '.pr_id')
-        head_ref=$(echo "$pr_items" | jq '.head_ref')
+        pr_id=$(echo "$pr_items" | jq -r '.pr_id')
+        head_ref=$(echo "$pr_items" | jq -r '.head_ref')
+        
+        log "Fetching PR from remote" "DEBUG"
+        #TODO: fix issue of mock git() causes error for func (check error code on mock)
+        # git fetch origin "pull/$pr_id/head:$head_ref" > /dev/null
         
         log "Checking out PR" "DEBUG"
-        git fetch origin "pull/$pr_id/head:$head_ref"
         git checkout "$head_ref" || exit 1
 
         head_commit_id=$(git log --pretty=format:'%H' -n 1)

@@ -7,6 +7,8 @@ mock_cloudwatch_execution() {
     local finished_status="$2"
     type_map=$(jq -n '
     {
+        "voters": "TEXT[]",
+        "account_deps": "TEXT[]",
         "new_providers": "TEXT[]", 
         "new_resources": "TEXT[]"
     }
@@ -17,6 +19,7 @@ mock_cloudwatch_execution() {
         --table "executions" \
         --items "$execution" \
         --type-map "$type_map" \
+        --update-parents \
         --enable-defaults
     )
     

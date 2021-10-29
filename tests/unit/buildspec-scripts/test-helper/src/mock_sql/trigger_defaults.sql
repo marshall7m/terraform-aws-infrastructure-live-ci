@@ -1,3 +1,34 @@
+CREATE OR REPLACE FUNCTION pg_temp.status_all_update(text[]) 
+    RETURNS VARCHAR AS $$
+    DECLARE
+        fail_count INT := 0;
+        succcess_count INT := 0;
+        i text;
+    BEGIN
+        FOREACH i IN ARRAY $1 LOOP
+            CASE
+                WHEN i = ANY('{running, waiting}'::TEXT[]) THEN
+                    RETURN 'running';
+                WHEN i = 'failed' THEN
+                    fail_count := fail_count + 1;
+                WHEN i = 'success' THEN
+                    succcess_count := succcess_count + 1;
+                ELSE
+                    RAISE EXCEPTION 'status is unknown: %', i; 
+            END CASE;
+        END LOOP;
+
+        CASE
+            WHEN fail_count > 0 THEN
+                RETURN 'failed';
+            WHEN succcess_count > 0 THEN
+                RETURN 'success';
+            ELSE
+                RAISE EXCEPTION 'Array is empty: %', $1; 
+        END CASE;
+    END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION random_between(low INT, high INT) 
     RETURNS INT 
     LANGUAGE plpgsql AS
@@ -78,15 +109,6 @@ BEGIN
         FROM commit_queue pr;
     END IF;
 
-    IF NEW.status IS NULL THEN
-        NEW.status := CASE (RANDOM() * 1)::INT
-            WHEN 0 THEN 'success'
-            WHEN 1 THEN 'failed'
-            WHEN 2 THEN 'running'
-            WHEN 3 THEN 'waiting'
-        END;
-    END IF;
-
     IF NEW.is_rollback IS NULL THEN
         NEW.is_rollback := CASE (RANDOM() * .5)::INT
             WHEN 0 THEN false
@@ -100,6 +122,18 @@ BEGIN
 
     IF NEW.commit_id IS NULL THEN
         NEW.commit_id := substr(md5(random()::text), 0, 40);
+    END IF;
+
+    IF NEW.status IS NULL THEN
+        NEW.status := coalesce(pg_temp.status_all_update(
+            ARRAY(
+                SELECT "status"
+                FROM executions
+                WHERE is_rollback = NEW.is_rollback
+                AND is_base_rollback = NEW.is_base_rollback
+                AND commit_id = NEW.commit_id
+            )
+        ), 'waiting');
     END IF;
 
     RETURN NEW;
@@ -132,12 +166,13 @@ BEGIN
     END IF;
 
     IF NEW.status IS NULL THEN
-        NEW.status := CASE (RANDOM() * 1)::INT
-            WHEN 0 THEN 'success'
-            WHEN 1 THEN 'failed'
-            WHEN 2 THEN 'running'
-            WHEN 3 THEN 'waiting'
-        END;
+        NEW.status := coalesce(pg_temp.status_all_update(
+            ARRAY(
+                SELECT "status"
+                FROM commit_queue
+                WHERE pr_id = NEW.pr_id
+            )
+        ), 'waiting');
     END IF;
 
     IF NEW.base_ref IS NULL THEN

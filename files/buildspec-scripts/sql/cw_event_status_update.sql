@@ -69,6 +69,7 @@ RETURNS VOID AS $$
             ARRAY(
                 SELECT "status"
                 FROM commit_queue
+                WHERE pr_id = cw.pr_id
             )
         )
         WHERE pr_id = cw.pr_id
