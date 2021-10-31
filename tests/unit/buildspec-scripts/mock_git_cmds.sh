@@ -1,17 +1,17 @@
 #!/bin/bash
 
 git() {
-    for arg in "$@"; do
-        case "$arg" in 
-            fetch)
-                echo "MOCK: FUNCNAME=$FUNCNAME"
-                exit 0
-            ;;
-        esac
-    done
+    args=("$@")
 
-    # if none of the git args match, then run git as is
-    "$(which git)" "$@"
+    case "${args[0]}" in 
+        fetch)
+            echo "MOCK: FUNCNAME=$FUNCNAME"
+        ;;
+        *)
+            # if none of the git args match, then run git as is
+            "$(which git)" "$@"
+        ;;
+    esac
 }
 
 export -f git
