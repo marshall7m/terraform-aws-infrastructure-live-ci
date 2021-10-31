@@ -263,7 +263,7 @@ main() {
 		commit_item=$("$DIR/mock_tables.bash" \
 			--table "commit_queue" \
 			--items "$commit_item" \
-			--enable-defaults
+			--enable-defaults \
 		| jq '.[0]')
 		
 		log "Inserted commit record: " "DEBUG"
@@ -275,7 +275,7 @@ main() {
 			--items "$(echo "$commit_item" | jq --arg head_ref "$head_ref" '{
 				"pr_id": .pr_id,
 				"head_ref": $head_ref
-			}')"
+			}')" \
 		| jq '.[0]')
 		
 		log "Inserted pr record: " "DEBUG"
