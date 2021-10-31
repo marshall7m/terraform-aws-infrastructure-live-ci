@@ -45,7 +45,7 @@ teardown_file() {
 
 setup() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    run_only_test 1
+    # run_only_test 1
 
     bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
         --table "account_dim" \
@@ -53,8 +53,9 @@ setup() {
         --type-map "$(jq -n '{"account_deps": "TEXT[]"}')" \
         --items "$(jq -n '
             {
+                "account_name": "dev",
                 "account_path": "directory_dependency/dev-account",
-                "account_deps": []
+                "account_deps": [],
             }
         ')"
 
@@ -508,7 +509,8 @@ teardown() {
             "commit_id": .commit_id,
             "status": .status,
             "is_rollback": .is_rollback,
-            "is_base_rollback": .is_base_rollback
+            "is_base_rollback": .is_base_rollback,
+            "account_name": "dev"
         }
     ')
 
@@ -573,6 +575,8 @@ teardown() {
 
     cw_execution=$(jq -n '
         {
+            "account_name": "dev",
+            "account_path": "directory_dependency/dev-account",
             "status": "running",
             "is_base_rollback": true,
             "is_rollback": true
@@ -612,7 +616,6 @@ teardown() {
 
     run trigger_sf.sh
     assert_success
-    assert_output "zozoz"
 
     log "Assert mock Cloudwatch event status was updated" "INFO"
     psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"

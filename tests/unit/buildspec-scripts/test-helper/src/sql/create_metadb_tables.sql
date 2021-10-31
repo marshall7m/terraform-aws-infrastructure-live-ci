@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS pr_queue (
     pr_id INT,
     status VARCHAR,
     base_ref VARCHAR,
-    head_ref VARCHAR
+    head_ref VARCHAR,
+    PRIMARY KEY (id)
 );
 
 CREATE TABLE IF NOT EXISTS commit_queue (
@@ -39,7 +40,8 @@ CREATE TABLE IF NOT EXISTS commit_queue (
     is_rollback BOOL,
     is_base_rollback BOOL,
     pr_id INT,
-    status VARCHAR
+    status VARCHAR,
+    PRIMARY KEY (id)
 );
 
 CREATE TABLE IF NOT EXISTS account_dim (
