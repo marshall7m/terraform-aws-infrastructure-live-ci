@@ -70,6 +70,7 @@ parse_args() {
 }
 
 main() {
+	set -e
 	log "FUNCNAME=$FUNCNAME" "DEBUG"
 
 	DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
@@ -78,8 +79,8 @@ main() {
 
 	if [ -n "$enable_defaults" ]; then
 		log "Enabling default trigger for table: $table" "INFO"
-		psql -q -f "$DIR/mock_sql/trigger_defaults.sql"
-		psql -q -c "ALTER TABLE $table ENABLE TRIGGER ${table}_default"
+		psql -q -v ON_ERROR_STOP=1 -f "$DIR/mock_sql/trigger_defaults.sql"
+		psql -q -v ON_ERROR_STOP=1 -c "ALTER TABLE $table ENABLE TRIGGER ${table}_default"
 	fi
 
 	if [ -n "$count" ]; then
@@ -110,10 +111,11 @@ main() {
 
 	if [ -n "$update_parents" ]; then
 		log "Updating parent tables" "INFO"
-		psql -qt -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
+		psql -qt -v ON_ERROR_STOP=1 -f "$DIR/mock_sql/mock_update_${table}_parents.sql"
 	fi
 	
 	echo "$mock_output"
+	set +e
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
