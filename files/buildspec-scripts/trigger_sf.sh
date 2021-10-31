@@ -200,9 +200,13 @@ update_executions_with_new_deploy_stack() {
 
     log "Getting Account Stacks" "INFO"
     for account_path in "${account_paths[@]}"; do
-        psql -c "DROP TABLE IF EXISTS staging_cfg_stack;"
+        psql -q -c "DROP TABLE IF EXISTS staging_cfg_stack;"
 
         log "Account Path: $account_path" "DEBUG"
+        if [ ! -d "$account_path" ]; then
+            log "Account path doesn't exist within repo" "ERROR"
+            exit 1
+        fi
 
         stack=$(create_stack $account_path $git_root) || exit 1
         log "Stack: $(printf '\n%s' "$stack")" "DEBUG"
@@ -348,7 +352,7 @@ execution_finished() {
     commit_id=$( echo $sf_event | jq -r '.commit_id')
     new_providers=$( echo $sf_event | jq -r '.new_providers')
 
-    psql -q -v execution_id="$execution_id" -v status="$status" -f "$SQL_DIR/cw_event_status_update.sql"
+    psql -q -v ON_ERROR_STOP=1 -v execution_id="$execution_id" -v status="$status" -f "$SQL_DIR/cw_event_status_update.sql"
     
     if [ "$is_rollback" == false ]; then
         if [ "$(echo "$new_providers" | jq '. | length')" -gt 0 ]; then
@@ -398,15 +402,15 @@ dequeue_commit() {
         head_ref=$(echo "$pr_items" | jq -r '.head_ref')
         
         log "Fetching PR from remote" "DEBUG"
-        #TODO: fix issue of mock git() causes error for func (check error code on mock)
-        # git fetch origin "pull/$pr_id/head:$head_ref" > /dev/null
-        
+
+        git fetch origin "pull/$pr_id/head:$head_ref" > /dev/null
+         
         log "Checking out PR" "DEBUG"
-        git checkout "$head_ref" || exit 1
+        git checkout "$head_ref" > /dev/null
 
         head_commit_id=$(git log --pretty=format:'%H' -n 1)
         
-        psql -c """
+        psql -qt -c """
         INSERT INTO commit_queue (
             commit_id,
             is_rollback,
@@ -420,17 +424,18 @@ dequeue_commit() {
             false,
             '$pr_id',
             'running'
-        );
+        )
+        RETURNING row_to_json(commit_queue.*);
         """
 
         log "Switching back to default branch" "DEBUG"
-        git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" || exit 1
+        git checkout "$(git remote show $(git remote) | sed -n '/HEAD branch/s/.*: //p')" > /dev/null || exit 1
     else
         #TODO: narrow down reason
         log "Another PR is in progress or no PR is waiting" "INFO"
     fi
-
 }
+
 create_executions() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
     
