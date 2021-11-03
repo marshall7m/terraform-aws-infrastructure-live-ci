@@ -269,14 +269,28 @@ main() {
 		log "Inserted commit record: " "DEBUG"
 		log "$commit_item" "DEBUG"
 
-		pr_item=$("$DIR/mock_tables.bash" \
-			--table "pr_queue" \
-			--enable-defaults \
-			--items "$(echo "$commit_item" | jq --arg head_ref "$head_ref" '{
-				"pr_id": .pr_id,
-				"head_ref": $head_ref
-			}')" \
-		| jq '.[0]')
+		pr_id=$(echo "$commit_item" | jq -r '.pr_id')
+
+		pr_items=$(psql -c """
+		ALTER TABLE pr_queue ENABLE TRIGGER pr_queue_default;
+		INSERT INTO pr_queue (id, pr_id, head_ref)
+		OVERRIDING SYSTEM VALUE
+		SELECT
+			coalesce(id, nextval(pg_get_serial_sequence('pr_queue', 'id'))) AS id,
+			mock.pr_id,
+			mock.head_ref
+		FROM pr_queue queue
+		RIGHT JOIN (
+			SELECT
+				'$pr_id'::INT AS pr_id,
+				'$head_ref' AS head_ref
+		) mock
+		ON (
+			queue.pr_id = mock.pr_id
+		)
+		ON CONFLICT (id) DO NOTHING;
+		ALTER TABLE pr_queue DISABLE TRIGGER pr_queue_default;
+		""")
 		
 		log "Inserted pr record: " "DEBUG"
 		log "$pr_item" "DEBUG"
