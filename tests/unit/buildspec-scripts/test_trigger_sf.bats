@@ -45,7 +45,7 @@ teardown_file() {
 
 setup() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    # run_only_test 1
+    # run_only_test 2
 
     bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
         --table "account_dim" \
@@ -108,66 +108,78 @@ teardown() {
         ')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
-
+    
     cw_execution=$(echo "$cw_commit" | jq '
         {
+            "account_name": "dev",
             "cfg_path": .modify_items[0].cfg_path,
             "commit_id": .commit_id,
             "status": "running",
             "is_rollback": false,
-            "is_base_rollback": false
+            "is_base_rollback": false,
             "new_providers": [.modify_items[0].address]
         }
     ')
+    cw_finished_status="success"
+    mock_cloudwatch_execution "$cw_execution" "$cw_finished_status" 
 
-    mock_cloudwatch_execution "$cw_execution" "$success" 
-
-    
+    log "Mocking next PR's commit changes" "INFO"
+    target_head_ref="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --commit-item "$(jq -n '
-        {
-            "status": "waiting"
-        }')" \
         --modify-items "$(jq -n '
-            [
-                {
-                    "cfg_path": "directory_dependency/dev-account/global",
-                    "create_provider_resource": false,
-                    "apply_changes": false
-                }
-            ]
-        ')" \
-        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
-    )    
-
-    target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
+        [
+            {
+                "apply_changes": false,
+                "create_provider_resource": false,
+                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo"
+            }
+        ]')" \
+        --head-ref "$target_head_ref"
+    )
+    
+    log "Adding mock PR to pr_queue" "INFO"
+    target_pr=$(bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "pr_queue" \
+        --enable-defaults \
+        --items "$(jq -n --arg head_ref "$target_head_ref" '
+            {
+                "head_ref": $head_ref,
+                "status": "waiting"
+            }
+        ')" | jq '.[0]')
 
     run trigger_sf.sh
     assert_success
 
+    log "Assert mock Cloudwatch event status was updated" "INFO"
+    psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
     run assert_record_count --table "executions" --assert-count 1 \
         --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
+        --status "'$cw_finished_status'"
+    assert_success
+
+    log "Assert Cloudwatch event associated commit ID was updated within commit_queue" "INFO"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.commit_id')'" \
         --status "'success'"
     assert_success
 
-    log "Assert dequeued PR is running" "DEBUG"
+    log "Assert next in queue PR is running" "DEBUG"
     psql -c "SELECT * FROM pr_queue"
     run assert_record_count --table "pr_queue" --assert-count 1 \
-        --pr-id "'$(echo "$target_commit" | jq -r '.pr_id')'" \
+        --pr-id "'$(echo "$target_pr" | jq -r '.pr_id')'" \
         --status "'running'"
     assert_success
 
-    run assert_record_count --table "commit_queue" --assert-count 1 \
-        --commit-id "'$target_commit_id'" \
-        --status "'running'"
-    assert_success
-
+    log "Assert next PR's execution(s) are running" "INFO"
+    psql -x -c "select * from executions where commit_id = '$(echo "$target_commit" | jq -r '.commit_id')'"
     run assert_record_count --table "executions" --assert-count 1 \
-        --commit-id "'$target_commit_id'" \
+        --commit-id "'$(echo "$target_commit" | jq -r '.commit_id')'" \
         --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
-        --is-rollback "$(echo "$target_commit" | jq -r '.is_rollback')" \
-        --status "'running'"
+        --status "'running'" \
+        --is-rollback false \
+        --is-base-rollback false
     assert_success
 }
 
@@ -186,6 +198,7 @@ teardown() {
 
     cw_execution=$(echo "$cw_commit" | jq '
         {
+            "account_name": "dev",
             "cfg_path": "directory_dependency/dev-account/global",
             "pr_id": .pr_id,
             "commit_id": .commit_id,
@@ -200,54 +213,63 @@ teardown() {
     log "Mocking cloudwatch execution" "INFO"
     mock_cloudwatch_execution "$cw_execution" "$cw_finished_status" 
 
-    log "Creating mock commit and adding to queue" "INFO"
+    log "Mocking next PR's commit changes" "INFO"
+    target_head_ref="test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     target_commit=$(bash "$BATS_TEST_DIRNAME/test-helper/src/mock_commit.bash" \
         --abs-repo-dir "$TEST_CASE_REPO_DIR" \
-        --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)" \
         --modify-items "$(jq -n '
-            [
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
-                    "create_provider_resource": true,
-                    "apply_changes": false
-                }
-            ]
-        ')" \
-        --commit-item "$(jq -n '
+        [
             {
-                "is_rollback": false,
+                "apply_changes": false,
+                "create_provider_resource": true,
+                "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo"
+            }
+        ]')" \
+        --head-ref "$target_head_ref"
+    )
+    
+    log "Adding mock PR to pr_queue" "INFO"
+    target_pr=$(bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
+        --table "pr_queue" \
+        --enable-defaults \
+        --items "$(jq -n --arg head_ref "$target_head_ref" '
+            {
+                "head_ref": $head_ref,
                 "status": "waiting"
             }
-        ')"
-    )
+        ')" | jq '.[0]')
 
     run trigger_sf.sh
     assert_success
 
-    target_commit_id=$(echo "$target_commit" | jq -r '.commit_id')
-
+    log "Assert mock Cloudwatch event status was updated" "INFO"
+    psql -x -c "select * from executions where execution_id = '$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'"
     run assert_record_count --table "executions" --assert-count 1 \
         --execution-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.execution_id')'" \
+        --status "'$cw_finished_status'"
+    assert_success
+
+    log "Assert Cloudwatch event associated commit ID was updated within commit_queue" "INFO"
+    run assert_record_count --table "commit_queue" --assert-count 1 \
+        --commit-id "'$(echo "$EVENTBRIDGE_EVENT" | jq -r '.commit_id')'" \
         --status "'success'"
     assert_success
 
-    log "Assert dequeued PR is running" "DEBUG"
+    log "Assert next in queue PR is running" "DEBUG"
     psql -c "SELECT * FROM pr_queue"
     run assert_record_count --table "pr_queue" --assert-count 1 \
-        --pr-id "'$(echo "$target_commit" | jq -r '.pr_id')'" \
+        --pr-id "'$(echo "$target_pr" | jq -r '.pr_id')'" \
         --status "'running'"
     assert_success
 
-    run assert_record_count --table "commit_queue" --assert-count 1 \
-        --commit-id "'$target_commit_id'" \
-        --status "'running'"
-    assert_success
-
+    log "Assert next PR's execution(s) are running" "INFO"
+    psql -x -c "select * from executions where commit_id = '$(echo "$target_commit" | jq -r '.commit_id')'"
     run assert_record_count --table "executions" --assert-count 1 \
-        --commit-id "'$target_commit_id'" \
+        --commit-id "'$(echo "$target_commit" | jq -r '.commit_id')'" \
         --cfg-path "'$(echo "$target_commit" | jq -r '.modify_items[0].cfg_path')'" \
-        --new-providers "ARRAY['$(echo "$target_commit" | jq -r '.modify_items[0].address')']" \
-        --status "'running'"
+        --status "'running'" \
+        --is-rollback false \
+        --is-base-rollback false
     assert_success
 }
 
@@ -275,6 +297,7 @@ teardown() {
 
     cw_execution=$(echo "$target_commit" | jq '
         {
+            "account_name": "dev",
             "cfg_path": "directory_dependency/dev-account/global",
             "pr_id": .pr_id,
             "commit_id": .commit_id,
@@ -327,9 +350,6 @@ teardown() {
                 "status": "waiting"
             }
         ')"
-    psql -c """
-    SELECT * FROM commit_queue
-    """
     
     run trigger_sf.sh
     assert_success
@@ -398,6 +418,7 @@ teardown() {
 
     cw_execution=$(echo "$cw_commit" | jq '
         {
+            "account_name": "dev",
             "cfg_path": .modify_items[0].cfg_path,
             "pr_id": .pr_id,
             "commit_id": .commit_id,
@@ -430,7 +451,7 @@ teardown() {
         }')" \
         --head-ref "test-case-$BATS_TEST_NUMBER-$(openssl rand -base64 10 | tr -dc A-Za-z0-9)"
     )
-
+    
     run trigger_sf.sh
     assert_success
     
