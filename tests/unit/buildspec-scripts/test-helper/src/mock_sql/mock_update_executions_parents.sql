@@ -1,7 +1,7 @@
 INSERT INTO pr_queue (id, pr_id, base_ref, head_ref, "status")
 OVERRIDING SYSTEM VALUE
 SELECT
-    coalesce(id, nextval('pr_queue_id_seq')) AS id,
+    coalesce(id, nextval(pg_get_serial_sequence('pr_queue', 'id'))) AS id,
     e.pr_id,
     e.base_ref,
     e.head_ref,
@@ -23,7 +23,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO commit_queue (id, commit_id, is_rollback, is_base_rollback, pr_id, "status")
 OVERRIDING SYSTEM VALUE
 SELECT
-    coalesce(id, nextval('commit_queue_id_seq')) AS id,
+    coalesce(id, nextval(pg_get_serial_sequence('commit_queue', 'id'))) AS id,
     e.commit_id,
     e.is_rollback,
     e.is_base_rollback,
