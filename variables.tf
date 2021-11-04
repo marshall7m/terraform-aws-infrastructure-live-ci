@@ -36,12 +36,6 @@ variable "terra_img" {
   default     = null
 }
 
-variable "terra_run_build_name" {
-  description = "CodeBuild project name"
-  type        = string
-  default     = "infrastructure-live-ci-run"
-}
-
 variable "plan_role_name" {
   description = "Name of the IAM role used for running terr* plan commands"
   type        = string
@@ -203,6 +197,12 @@ variable "trigger_step_function_build_name" {
   type        = string
   default     = "infrastructure-live-ci-trigger-sf"
 }
+
+variable "terra_run_build_name" {
+  description = "Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions"
+  type        = string
+  default     = "infrastructure-live-ci-terra-run"
+}
 # S3 bucket #
 
 variable "artifact_bucket_name" {
@@ -227,4 +227,22 @@ variable "artifact_bucket_force_destroy" {
   description = "Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion)"
   type        = bool
   default     = false
+}
+
+# metadb
+
+variable "metadb_name" {
+  description = "Name of the AWS RDS db"
+  type        = string
+  default     = "infrastructure-live-ci-metadb"
+}
+
+variable "metadb_username" {
+  description = "Username for the AWS RDS db"
+  type        = string
+}
+variable "metadb_password" {
+  description = "Password for the AWS RDS db"
+  type        = string
+  sensitive   = true
 }
