@@ -52,6 +52,12 @@ VALUES (
     'waiting',
     false,
     false
+)
+WHERE 1 = (
+    SELECT COUNT(*)
+    FROM pr_queue
+    WHERE pr_id = '$pr_id'
+    AND status = 'running'
 );
 """
 
