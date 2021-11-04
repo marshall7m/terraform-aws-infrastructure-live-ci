@@ -1,3 +1,13 @@
+data "github_repository" "this" {
+  name = var.repo_name
+}
+
+data "github_repository" "build_scripts" {
+  full_name = "marshall7m/terraform-aws-infrastructure-live-ci"
+}
+
+data "aws_caller_identity" "current" {}
+
 module "terra_img" {
   count  = var.terra_img == null ? 1 : 0
   source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
@@ -38,61 +48,6 @@ module "apply_role" {
   ] : []
 }
 
-module "codebuild_terra_run" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
-  name   = var.build_name
-  assumable_role_arns = [
-    module.plan_role.role_arn,
-    module.apply_role.role_arn
-  ]
-  environment = {
-    compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
-    type         = "LINUX_CONTAINER"
-    environment_variables = concat(var.build_env_vars, [
-      {
-        name  = "TF_IN_AUTOMATION"
-        value = "true"
-        type  = "PLAINTEXT"
-      },
-      {
-        name  = "TF_INPUT"
-        value = "false"
-        type  = "PLAINTEXT"
-      },
-      {
-        name  = "SECONDARY_SOURCE_IDENTIFIER"
-        type  = "PLAINTEXT"
-        value = local.buildspec_scripts_source_identifier
-      }
-    ])
-  }
-
-  artifacts = {
-    type = "NO_ARTIFACTS"
-  }
-  build_source = {
-    type                = "GITHUB"
-    buildspec           = file("${path.module}/buildspec_ci.yaml")
-    git_clone_depth     = 1
-    insecure_ssl        = false
-    location            = data.github_repository.this.http_clone_url
-    report_build_status = false
-  }
-
-  secondary_build_source = {
-    source_identifier = local.buildspec_scripts_source_identifier
-    type              = "S3"
-    location          = "${aws_s3_bucket.artifacts.id}/${local.buildspec_scripts_key}"
-  }
-
-  role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
-
-  depends_on = [
-    aws_s3_bucket_object.build_scripts
-  ]
-}
-
 module "codebuild_queue_pr" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
@@ -122,17 +77,28 @@ module "codebuild_queue_pr" {
   name = var.queue_pr_build_name
   build_source = {
     type                = "GITHUB"
-    buildspec           = file("${path.module}/buildspec_queue.yaml")
     git_clone_depth     = 1
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
-    report_build_status = true
+    report_build_status = false
   }
 
   secondary_build_source = {
-    source_identifier = local.buildspec_scripts_source_identifier
-    type              = "S3"
-    location          = "${aws_s3_bucket.artifacts.id}/${local.buildspec_scripts_key}"
+    source_identifier   = local.buildspec_scripts_source_identifier
+    type                = "GITHUB"
+    git_clone_depth     = 1
+    report_build_status = false
+    insecure_ssl        = false
+    location            = data.github_repository.build_scripts.http_clone_url
+    buildspec           = <<-EOT
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - bash "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/queue_pr.sh"
+EOT
   }
 
   artifacts = {
@@ -163,10 +129,6 @@ module "codebuild_queue_pr" {
   }
 
   role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
-
-  depends_on = [
-    aws_s3_bucket_object.build_scripts
-  ]
 }
 
 module "codebuild_trigger_sf" {
@@ -181,7 +143,6 @@ module "codebuild_trigger_sf" {
 
   build_source = {
     type                = "GITHUB"
-    buildspec           = file("${path.module}/buildspec_trigger_sf.yaml")
     git_clone_depth     = 1
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
@@ -189,9 +150,21 @@ module "codebuild_trigger_sf" {
   }
 
   secondary_build_source = {
-    source_identifier = local.buildspec_scripts_source_identifier
-    type              = "S3"
-    location          = "${aws_s3_bucket.artifacts.id}/${local.buildspec_scripts_key}"
+    source_identifier   = local.buildspec_scripts_source_identifier
+    type                = "GITHUB"
+    git_clone_depth     = 1
+    report_build_status = false
+    insecure_ssl        = false
+    location            = data.github_repository.build_scripts.http_clone_url
+    buildspec           = <<-EOT
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - bash "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/trigger_sf.sh"
+EOT
   }
 
   artifacts = {
@@ -251,7 +224,10 @@ module "codebuild_trigger_sf" {
       }
     ]
   }
-  role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
+  role_policy_arns = [
+    aws_iam_policy.artifact_bucket_access.arn,
+    aws_iam_policy.metadb.arn
+  ]
 
   role_policy_statements = [
     {
@@ -262,14 +238,70 @@ module "codebuild_trigger_sf" {
     }
   ]
 
-  depends_on = [
-    aws_s3_bucket_object.build_scripts
+}
+
+
+module "codebuild_terra_run" {
+  source = "github.com/marshall7m/terraform-aws-codebuild"
+  name   = var.terra_run_build_name
+  assumable_role_arns = [
+    module.plan_role.role_arn,
+    module.apply_role.role_arn
   ]
+  environment = {
+    compute_type = "BUILD_GENERAL1_SMALL"
+    image        = "aws/codebuild/standard:3.0"
+    type         = "LINUX_CONTAINER"
+    environment_variables = concat(var.build_env_vars, [
+      {
+        name  = "TF_IN_AUTOMATION"
+        value = "true"
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "TF_INPUT"
+        value = "false"
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "SECONDARY_SOURCE_IDENTIFIER"
+        type  = "PLAINTEXT"
+        value = local.buildspec_scripts_source_identifier
+      }
+    ])
+  }
 
+  artifacts = {
+    type = "NO_ARTIFACTS"
+  }
+  build_source = {
+    type                = "GITHUB"
+    git_clone_depth     = 1
+    insecure_ssl        = false
+    location            = data.github_repository.this.http_clone_url
+    report_build_status = false
+  }
+
+  secondary_build_source = {
+    source_identifier   = local.buildspec_scripts_source_identifier
+    type                = "GITHUB"
+    git_clone_depth     = 1
+    report_build_status = false
+    insecure_ssl        = false
+    location            = data.github_repository.build_scripts.http_clone_url
+    buildspec           = <<-EOT
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - bash "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/terra_run.sh"
+EOT
+  }
+
+  role_policy_arns = [
+    aws_iam_policy.artifact_bucket_access.arn,
+    aws_iam_policy.metadb.arn
+  ]
 }
-
-data "github_repository" "this" {
-  name = var.repo_name
-}
-
-data "aws_caller_identity" "current" {}

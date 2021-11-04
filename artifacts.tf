@@ -68,24 +68,6 @@ data "aws_kms_key" "s3" {
   key_id = "alias/aws/s3"
 }
 
-resource "aws_s3_bucket_object" "build_scripts" {
-  for_each = fileset("${path.module}", "${path.module}/files/buildspec-scripts/*")
-  bucket   = aws_s3_bucket.artifacts.id
-  key      = "${local.buildspec_scripts_key}/${basename(each.value)}"
-  source   = each.value
-}
-
-resource "aws_s3_bucket_object" "pr_queue" {
-  bucket = aws_s3_bucket.artifacts.id
-  key    = local.pr_queue_key
-  content_base64 = base64encode(format("%v", {
-    ApprovalMapping = { for account in var.account_parent_cfg : account.name => account }
-    Queue           = []
-    InProgress      = {}
-    Finished        = []
-  }))
-}
-
 data "aws_iam_policy_document" "artifact_bucket_access" {
   statement {
     sid    = "GetS3ArtifactObjects"
