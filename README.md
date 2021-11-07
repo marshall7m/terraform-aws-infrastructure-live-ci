@@ -234,7 +234,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
-| metadb\_name | Name of the AWS RDS db | `string` | `"infrastructure-live-ci-metadb"` | no |
+| metadb\_name | Name of the AWS RDS db | `string` | `"infrastructure_live_ci"` | no |
 | metadb\_password | Password for the AWS RDS db | `string` | n/a | yes |
 | metadb\_username | Username for the AWS RDS db | `string` | n/a | yes |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
