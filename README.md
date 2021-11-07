@@ -234,6 +234,9 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
+| metadb\_name | Name of the AWS RDS db | `string` | `"infrastructure-live-ci-metadb"` | no |
+| metadb\_password | Password for the AWS RDS db | `string` | n/a | yes |
+| metadb\_username | Username for the AWS RDS db | `string` | n/a | yes |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
@@ -245,12 +248,14 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | rollout\_plan\_command | Terragrunt rollout command to run on target path | `string` | `"plan"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_img | Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects | `string` | `null` | no |
-| terra\_run\_build\_name | CodeBuild project name | `string` | `"infrastructure-live-ci-run"` | no |
+| terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions | `string` | `"infrastructure-live-ci-terra-run"` | no |
 | trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `"infrastructure-live-ci-trigger-sf"` | no |
 
 ## Outputs
 
-No output.
+| Name | Description |
+|------|-------------|
+| metadb\_endpoint | n/a |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
@@ -697,7 +702,3 @@ Reasons:
 
 path -> deployment flow mapping
 
-
-# TODO:
-- trigger_sf passing all BATS tests
-- Update pr/commit queue columns in buildspec

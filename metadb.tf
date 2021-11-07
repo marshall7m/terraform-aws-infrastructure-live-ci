@@ -16,8 +16,8 @@ resource "aws_iam_policy" "metadb" {
 }
 
 resource "aws_db_instance" "metadb" {
-  allocated_storage   = 1
-  engine              = "aurora-postgresql"
+  allocated_storage   = 16
+  engine              = "postgres"
   instance_class      = "db.t3.micro"
   name                = var.metadb_name
   username            = var.metadb_username

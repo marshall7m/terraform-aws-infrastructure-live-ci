@@ -234,7 +234,7 @@ variable "artifact_bucket_force_destroy" {
 variable "metadb_name" {
   description = "Name of the AWS RDS db"
   type        = string
-  default     = "infrastructure-live-ci-metadb"
+  default     = "infrastructure_live_ci"
 }
 
 variable "metadb_username" {
