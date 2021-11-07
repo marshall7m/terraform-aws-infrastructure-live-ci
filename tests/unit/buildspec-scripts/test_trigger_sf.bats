@@ -8,15 +8,15 @@ load "${BATS_TEST_DIRNAME}/../../../node_modules/bats-assert/load.bash"
 
 load "${BATS_TEST_DIRNAME}/../../../node_modules/psql-utils/load.bash"
 
+load "${BATS_TEST_DIRNAME}/mock_aws_cmds.bash"
+load "${BATS_TEST_DIRNAME}/mock_aws_cmds.bash"
+
 setup_file() {
     export script_logging_level="INFO"
 
     export BASE_REF=master
     export CODEBUILD_INITIATOR=rule/test
     export EVENTBRIDGE_FINISHED_RULE=rule/test
-
-    source mock_aws_cmds.sh
-    source mock_git_cmds.sh
     
     load 'common_setup.bash'
     _common_setup
@@ -45,7 +45,7 @@ teardown_file() {
 
 setup() {
     log "FUNCNAME=$FUNCNAME" "DEBUG"
-    # run_only_test 2
+    run_only_test 1
 
     bash "${BATS_TEST_DIRNAME}/test-helper/src/mock_tables.bash" \
         --table "account_dim" \

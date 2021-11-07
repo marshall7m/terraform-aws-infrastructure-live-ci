@@ -256,6 +256,10 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | Name | Description |
 |------|-------------|
 | metadb\_endpoint | n/a |
+| metadb\_name | n/a |
+| metadb\_password | n/a |
+| metadb\_port | n/a |
+| metadb\_username | n/a |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 

@@ -8,7 +8,7 @@ output "metadb_username" {
 
 output "metadb_password" {
   sensitive = true
-  value = aws_db_instance.metadb.password
+  value     = aws_db_instance.metadb.password
 }
 
 output "metadb_port" {

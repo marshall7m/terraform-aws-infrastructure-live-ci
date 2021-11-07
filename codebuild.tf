@@ -14,10 +14,10 @@ module "terra_img" {
 
   create_repo         = true
   codebuild_access    = true
-  source_path         = "${path.module}/modules/testing-img"
+  source_path         = "${path.module}/testing-img"
   repo_name           = "infrastructure-live-ci"
   tag                 = "latest"
-  trigger_build_paths = ["${path.module}/modules/testing-img"]
+  trigger_build_paths = ["${path.module}/testing-img"]
 }
 
 module "plan_role" {
