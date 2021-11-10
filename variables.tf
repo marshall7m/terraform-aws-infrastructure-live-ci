@@ -118,6 +118,16 @@ variable "get_rollback_providers_build_name" {
   default     = "infrastructure-live-ci-get-rollback-providers"
 }
 
+variable "codebuild_vpc_config" {
+  description = "AWS VPC configurations associated with CodeBuild projects"
+  type = object({
+    vpc_id             = string
+    subnets            = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
 # GITHUB-WEBHOOK #
 
 variable "repo_name" {
@@ -245,4 +255,22 @@ variable "metadb_password" {
   description = "Password for the AWS RDS db"
   type        = string
   sensitive   = true
+}
+
+variable "metadb_publicly_accessible" {
+  description = "Determines if metadb is publicly accessible outside of it's associated VPC"
+  type        = bool
+  default     = false
+}
+
+variable "metadb_security_group_ids" {
+  description = "AWS VPC security group to associate the metadb with. Security group must be publicly accessible and allow inbound/outbound traffic from local testing IP address"
+  type        = list(string)
+  default     = null
+}
+
+variable "metadb_subnets_group_name" {
+  description = "AWS VPC subnet group name to associate the metadb with"
+  type        = string
+  default     = null
 }

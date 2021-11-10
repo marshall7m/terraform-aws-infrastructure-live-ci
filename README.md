@@ -206,6 +206,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | archive | n/a |
 | aws | >= 3.44 |
 | github | ~> 4.0 |
+| null | n/a |
 | random | n/a |
 
 ## Inputs
@@ -226,6 +227,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_name | Name of the CloudWatch event that will monitor the Step Function | `string` | `"infrastructure-live-execution-event"` | no |
 | cmk\_arn | AWS KMS CMK (Customer Master Key) ARN used to encrypt Step Function artifacts | `string` | `null` | no |
+| codebuild\_vpc\_config | AWS VPC configurations associated with CodeBuild projects | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
@@ -236,6 +238,9 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
 | metadb\_name | Name of the AWS RDS db | `string` | `"infrastructure_live_ci"` | no |
 | metadb\_password | Password for the AWS RDS db | `string` | n/a | yes |
+| metadb\_publicly\_accessible | Determines if metadb is publicly accessible outside of it's associated VPC | `bool` | `false` | no |
+| metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Security group must be publicly accessible and allow inbound/outbound traffic from local testing IP address | `list(string)` | `null` | no |
+| metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
 | metadb\_username | Username for the AWS RDS db | `string` | n/a | yes |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
@@ -255,6 +260,8 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description |
 |------|-------------|
+| codebuild\_trigger\_sf\_arn | n/a |
+| metadb\_address | n/a |
 | metadb\_endpoint | n/a |
 | metadb\_name | n/a |
 | metadb\_password | n/a |

@@ -128,6 +128,8 @@ EOT
     ]
   }
 
+  vpc_config = var.codebuild_vpc_config
+
   role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
 }
 
@@ -188,11 +190,6 @@ EOT
         type  = "PLAINTEXT"
       },
       {
-        name  = "ARTIFACT_BUCKET_NAME"
-        type  = "PLAINTEXT"
-        value = aws_s3_bucket.artifacts.id
-      },
-      {
         name  = "SECONDARY_SOURCE_IDENTIFIER"
         type  = "PLAINTEXT"
         value = local.buildspec_scripts_source_identifier
@@ -201,29 +198,12 @@ EOT
         name  = "EVENTBRIDGE_RULE"
         type  = "PLAINTEXT"
         value = aws_cloudwatch_event_rule.this.id
-      },
-      {
-        name  = "ROLLOUT_PLAN_COMMAND"
-        type  = "PLAINTEXT"
-        value = var.rollout_plan_command
-      },
-      {
-        name  = "ROLLOUT_DEPLOY_COMMAND"
-        type  = "PLAINTEXT"
-        value = var.rollout_deploy_command
-      },
-      {
-        name  = "ROLLBACK_PLAN_COMMAND"
-        type  = "PLAINTEXT"
-        value = var.rollback_plan_command
-      },
-      {
-        name  = "ROLLBACK_DEPLOY_COMMAND"
-        type  = "PLAINTEXT"
-        value = var.rollback_deploy_command
       }
     ]
   }
+
+  vpc_config = var.codebuild_vpc_config
+
   role_policy_arns = [
     aws_iam_policy.artifact_bucket_access.arn,
     aws_iam_policy.metadb.arn
