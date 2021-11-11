@@ -22,6 +22,9 @@ mv /tmp/git-chglog /usr/local/bin/
 wget -q -O /tmp/semtag.tar.gz https://github.com/nico2sh/semtag/archive/refs/tags/v${SEMTAG_VERSION}.tar.gz
 tar -zxf /tmp/semtag.tar.gz -C /tmp
 mv /tmp/semtag-${SEMTAG_VERSION}/semtag /usr/local/bin/
+wget -q -O /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v2.2.0/gh_2.2.0_linux_amd64.tar.gz
+tar -zxf /tmp/gh.tar.gz -C /tmp
+mv /tmp/gh /usr/local/bin
 
 chmod u+x /usr/local/bin/*
 

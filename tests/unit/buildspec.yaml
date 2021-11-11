@@ -1,0 +1,21 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+    pre_build:
+      commands:
+        - echo Logging into Amazon ECR...
+        - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
+    build:
+      commands:
+        - export IMAGE_TAG=$CODEBUILD_BUILD_NUMBER-$CODEBUILD_RESOLVED_SOURCE_VERSION
+        - export FULL_IMG_URI=$ECR_REPO_URL:$IMAGE_TAG
+        - echo Build started on `date`
+        - docker build -t $FULL_IMG_URI .
+      on-failure: ABORT
+    post_build:
+      commands:
+        - echo Build completed on `date`
+        - echo Image URI $FULL_IMG_URI
+        - echo Pushing the Docker image...
+        - docker push $FULL_IMG_URI
