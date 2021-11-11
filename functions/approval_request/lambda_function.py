@@ -23,25 +23,15 @@ def lambda_handler(event, context):
 
     log.debug(f'Lambda Event: {event}')
 
-    execution_name = event['payload']['ExecutionName']
-    email_voters = event['payload']['EmailVoters']
-    path_approval = event['payload']['PathApproval']
     full_approval_api = event['payload']['ApprovalAPI']
-
-
-    log.debug(f'Path Approval: {path_approval}')
-
-    s3.put_object(
-        ACL='private',
-        Bucket=os.environ['ARTIFACT_BUCKET_NAME'],
-        Key=f'{execution_name}.json',
-        Body=json.dumps(path_approval)
-    )
+    voters = event['payload']['voters']
 
     log.debug(f'API Full URL: {full_approval_api}')
 
     destinations = []
-    for address in email_voters:
+
+    # need to create a separate destination object for each address since only the target address is interpolated into message template
+    for address in voters:
         destinations.append(
             {
                 'Destination': {
