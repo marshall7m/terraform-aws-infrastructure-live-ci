@@ -7,6 +7,9 @@ source $VIRTUAL_ENV/bin/activate
 pip3 install --upgrade pip
 pip3 install --no-cache-dir -r requirements.txt
 
+wget -q -O /tmp/tfenv.zip https://github.com/tfutils/tfenv/archive/refs/tags/v${TFENV_VERSION}.zip
+unzip -q /tmp/tfenv.zip -d /usr/local/.tfenv
+export PATH=$PATH:/usr/local/.tfenv/tf-env-${TFENV_VERSION}/bin
 wget -q -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
 unzip -q /tmp/terraform.zip
 mv $(unzip -qql /tmp/terraform.zip | head -n1 | tr -s ' ' | cut -d' ' -f5-) /usr/local/bin/
