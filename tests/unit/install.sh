@@ -1,8 +1,10 @@
 #!/bin/bash
+apk update
+apk add --no-cache --virtual .build-deps yarn musl-dev linux-headers libxml2 libxml2-dev gcc libxslt-dev postgresql-dev python3-dev
 
-apk add --no-cache --virtual .build-deps yarn wget unzip python3 py-pip python3-dev musl-dev linux-headers libxml2 libxml2-dev gcc libxslt-dev
+yarn install
 
-python3 -m venv $VIRTUAL_ENV
+python -m venv $VIRTUAL_ENV
 source $VIRTUAL_ENV/bin/activate
 pip3 install --upgrade pip
 pip3 install --no-cache-dir -r requirements.txt
@@ -22,9 +24,9 @@ mv /tmp/git-chglog /usr/local/bin/
 wget -q -O /tmp/semtag.tar.gz https://github.com/nico2sh/semtag/archive/refs/tags/v${SEMTAG_VERSION}.tar.gz
 tar -zxf /tmp/semtag.tar.gz -C /tmp
 mv /tmp/semtag-${SEMTAG_VERSION}/semtag /usr/local/bin/
-wget -q -O /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v2.2.0/gh_2.2.0_linux_amd64.tar.gz
+wget -q -O /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz
 tar -zxf /tmp/gh.tar.gz -C /tmp
-mv /tmp/gh /usr/local/bin
+mv /tmp/gh_${GH_VERSION}_linux_amd64/bin/gh /usr/local/bin/
 
 chmod u+x /usr/local/bin/*
 
