@@ -53,10 +53,6 @@ parse_args() {
 					exit 1
 				fi
 			;;
-			--create-pr)
-				create_pr=true
-				shift
-			;;
 			*)
 				log "Unknown Option: $1" "ERROR"
 				exit 1
@@ -255,14 +251,6 @@ main() {
 	git commit -m "$commit_msg" > /dev/null
 	commit_id=$(git log --pretty=format:'%H' -n 1)
 
-	if [ -z "$create_pr" ]; then
-		log "Creating PR" "INFO"
-		pr_id=$(gh pr create --title "bats-test-case-$BATS_TEST_NUMBER" --body "Testing Terragrunt changes with no dependencies" | xargs -I {} basename {})
-		log "PR ID: $pr_id" "INFO"
-	fi
-
-    log "Starting trigger SF codebuild manually" "INFO"
-
 	if [ -n "$commit_item" ]; then
 		log "Adding commit to queues" "INFO"
 
@@ -313,9 +301,14 @@ main() {
 			| $commit_item + {"modify_items": $modify_items}
 		'
 	else
-		jq -n --arg commit_id "$commit_id" --arg modify_items "$modify_items" '
+		jq -n 
+			--arg commit_id "$commit_id"
+			--arg modify_items "$modify_items" '
 			($modify_items | try fromjson // []) as $modify_items
-			| {"commit_id": $commit_id, "modify_items": $modify_items}
+			| {
+				"commit_id": $commit_id,
+				"modify_items": $modify_items
+			}
 		'
 	fi
 
