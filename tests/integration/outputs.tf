@@ -2,6 +2,10 @@ output "metadb_endpoint" {
   value = module.mut_infrastructure_live_ci.metadb_endpoint
 }
 
+output "metadb_address" {
+  value = module.mut_infrastructure_live_ci.metadb_address
+}
+
 output "metadb_username" {
   value = module.mut_infrastructure_live_ci.metadb_username
 }
