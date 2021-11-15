@@ -8,10 +8,10 @@ services:
     ports:
       - 5432:5432
     environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-      - TESTING_POSTGRES_USER
-      - TESTING_POSTGRES_DB
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testing_password
+      - TESTING_POSTGRES_USER=testing_user
+      - TESTING_POSTGRES_DB=testing_metadb
     deploy:
       restart_policy:
         condition: on-failure
@@ -23,18 +23,19 @@ services:
       retries: 50
   testing:
     build:
-      context: ./testing-img
+      context: ./
     container_name: metadb
-    image: ${REPO}-bats-testing:${TAG}
+    image: terraform-aws-infrastructure-live-ci-unit-testing:latest
     volumes:
-      - "$PWD:/src"
+      - "$PWD/../../:/src"
     environment:
-      - PGUSER
-      - PGPASSWORD
-      - PGDATABASE
-      - PGHOST
+      - PGUSER=testing_user
+      - PGPASSWORD=testing_password
+      - PGDATABASE=testing_metadb
+      - PGHOST=postgres
+      - ADDITIONAL_PATH=/src/node_modules/.bin
     command: ["/bin/bash"]
-    entrypoint: ["/bin/bash", "/src/scripts/entrypoint.bash"]
+    entrypoint: ["/bin/bash", "/src/tests/unit/entrypoint.sh"]
     depends_on: 
       - postgres
     
