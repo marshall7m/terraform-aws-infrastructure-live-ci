@@ -42,6 +42,8 @@ RUN apk add --virtual .runtime \
     python3 \
     postgresql \
     postgresql-contrib \
+    #needed for tfenv to download tf versions
+    curl \
 && git config --global advice.detachedHead false \
 && git config --global user.email testing_user@users.noreply.github.com \
 && git config --global user.name testing_user
