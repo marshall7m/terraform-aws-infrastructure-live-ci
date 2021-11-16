@@ -4,7 +4,7 @@ import os
 from unittest.mock import patch
 import psycopg2
 
-from functions.approval_response.lambda_function import lambda_handler
+from approval_response.lambda_function import lambda_handler
 
 class TestApprovalResponse(unittest.TestCase):
 

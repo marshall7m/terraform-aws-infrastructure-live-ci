@@ -315,10 +315,10 @@ teardown() {
     log "Mocking failed execution" "INFO"
 
     type_map=$(jq -n '
-    {
-        "new_providers": "TEXT[]", 
-        "new_resources": "TEXT[]"
-    }
+        {
+            "new_providers": "TEXT[]", 
+            "new_resources": "TEXT[]"
+        }
     ')
     
     failed_execution=$(echo "$target_commit" | jq '

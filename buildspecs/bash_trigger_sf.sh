@@ -504,7 +504,7 @@ start_sf_executions() {
         log "SF input: $(printf '\n\t%s' "$sf_input")" "DEBUG"
         
         if [ -z "$DRY_RUN" ]; then
-            log "DRY_RUN is not set -- starting sf executions" "DEBUG"
+            log "Starting sf executions" "DEBUG"
             aws stepfunctions start-execution \
                 --state-machine-arn "$STATE_MACHINE_ARN" \
                 --name "$id" \

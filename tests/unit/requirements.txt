@@ -6,3 +6,4 @@ moto==2.2.15
 lxml==4.6.2
 pytest==6.2.5
 psycopg2-binary==2.9.2
+GitPython==3.1.24

@@ -33,6 +33,7 @@ services:
       - PGPASSWORD=testing_password
       - PGDATABASE=testing_metadb
       - PGHOST=postgres
+      - PGPORT=5432
       - ADDITIONAL_PATH=/src/node_modules/.bin
     command: ["/bin/bash"]
     entrypoint: ["/bin/bash", "/src/tests/unit/entrypoint.sh"]
