@@ -372,8 +372,49 @@ WHEN (
 
 EXECUTE PROCEDURE trig_executions_default();
 
+CREATE TRIGGER executions_update_parents
+    AFTER UPDATE ON executions
+    FOR EACH ROW
+    EXECUTE PROCEDURE trig_executions_update_parents();
 
-ALTER TABLE account_dim DISABLE trigger account_dim_default;
-ALTER TABLE pr_queue DISABLE trigger pr_queue_default;
-ALTER TABLE commit_queue DISABLE trigger commit_queue_default;
-ALTER TABLE executions DISABLE trigger executions_default;
+CREATE TRIGGER commit_queue_update_parents
+    AFTER UPDATE ON executions
+    FOR EACH ROW
+    EXECUTE PROCEDURE trig_commit_queue_update_parents();
+
+CREATE OR REPLACE FUNCTION enable_mock_triggers() 
+    RETURNS VOID 
+    LANGUAGE plpgsql AS
+$$
+    DECLARE
+        _tbl VARCHAR;
+        enable_defaults BOOLEAN;
+        update_parents BOOLEAN;
+    BEGIN
+        IF enable_defaults = TRUE THEN
+            CASE 
+                WHEN _tbl = 'executions' THEN
+                    ALTER TABLE executions ENABLE trigger executions_default;
+                WHEN _tbl = 'account_dim' THEN
+                    ALTER TABLE account_dim ENABLE trigger account_dim_default;
+                WHEN _tbl = 'pr_queue' THEN
+                    ALTER TABLE pr_queue ENABLE trigger pr_queue_default;
+                WHEN _tbl = 'commit_queue' THEN
+                    ALTER TABLE commit_queue ENABLE trigger commit_queue_default;
+            END;
+        END IF;
+
+        IF update_parents = TRUE THEN
+            CASE 
+                WHEN _tbl = 'executions' THEN
+                    ALTER TABLE executions ENABLE trigger executions_update_parents;
+                WHEN _tbl = 'commit_queue' THEN
+                    ALTER TABLE commit_queue ENABLE trigger commit_queue_update_parents;
+                ELSE
+                    RAISE NOTICE 'Table does not have parent table(s): %', _tbl;
+            END;
+        END IF;
+
+        INSERT INTO _tble VALUES ();
+    END;
+$$;
