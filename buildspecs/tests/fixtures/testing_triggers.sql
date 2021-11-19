@@ -372,49 +372,105 @@ WHEN (
 
 EXECUTE PROCEDURE trig_executions_default();
 
+INSERT INTO pr_queue (id, pr_id, base_ref, head_ref, "status")
+OVERRIDING SYSTEM VALUE
+SELECT
+    coalesce(id, nextval(pg_get_serial_sequence('pr_queue', 'id'))) AS id,
+    e.pr_id,
+    e.base_ref,
+    e.head_ref,
+    e."status"
+FROM (
+    SELECT
+        pr_id,
+        base_ref,
+        head_ref,
+        "status"
+    FROM executions
+) e
+LEFT JOIN pr_queue p
+ON (
+    e.pr_id = p.pr_id
+)
+ON CONFLICT (id) DO NOTHING;
+
+
+CREATE OR REPLACE FUNCTION trig_executions_update_parents()
+RETURNS TRIGGER AS $$
+    BEGIN
+        INSERT INTO commit_queue (id, commit_id, is_rollback, is_base_rollback, pr_id, "status")
+        OVERRIDING SYSTEM VALUE
+        SELECT
+            coalesce(id, nextval(pg_get_serial_sequence('commit_queue', 'id'))) AS id,
+            e.commit_id,
+            e.is_rollback,
+            e.is_base_rollback,
+            e.pr_id,
+            e."status"
+        FROM (
+            SELECT
+                commit_id,
+                is_rollback,
+                is_base_rollback,
+                pr_id,
+                "status"
+            FROM executions
+        ) e
+        LEFT JOIN commit_queue c
+        ON (
+            e.commit_id = c.commit_id
+        )
+        ON CONFLICT (id) DO NOTHING;
+
+        INSERT INTO account_dim (
+            account_name,
+            account_path,
+            account_deps,
+            min_approval_count,
+            min_rejection_count,
+            voters
+        )
+        SELECT
+            account_name,
+            account_path,
+            account_deps,
+            min_approval_count,
+            min_rejection_count,
+            voters
+        FROM executions
+        ON CONFLICT (account_name) DO NOTHING;
+    END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS executions_update_parents ON public.executions;
 CREATE TRIGGER executions_update_parents
     AFTER UPDATE ON executions
     FOR EACH ROW
     EXECUTE PROCEDURE trig_executions_update_parents();
 
+CREATE OR REPLACE FUNCTION trig_commit_queue_update_parents()
+RETURNS TRIGGER AS $$
+    BEGIN
+        ALTER TABLE pr_queue ENABLE TRIGGER pr_queue_default;
+
+        INSERT INTO pr_queue (pr_id, id)
+        OVERRIDING SYSTEM VALUE
+        SELECT
+            DISTINCT c.pr_id,
+            coalesce(pr.id, nextval(pg_get_serial_sequence('pr_queue', 'id')))
+        FROM commit_queue c
+        LEFT JOIN pr_queue pr
+        ON (pr.pr_id = c.pr_id)
+        ON CONFLICT (id) DO NOTHING;
+
+        ALTER TABLE pr_queue DISABLE trigger pr_queue_default;
+
+        RETURN NEW;
+    END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS commit_queue_update_parents ON public.commit_queue;
 CREATE TRIGGER commit_queue_update_parents
-    AFTER UPDATE ON executions
+    AFTER UPDATE ON commit_queue
     FOR EACH ROW
     EXECUTE PROCEDURE trig_commit_queue_update_parents();
-
-CREATE OR REPLACE FUNCTION enable_mock_triggers() 
-    RETURNS VOID 
-    LANGUAGE plpgsql AS
-$$
-    DECLARE
-        _tbl VARCHAR;
-        enable_defaults BOOLEAN;
-        update_parents BOOLEAN;
-    BEGIN
-        IF enable_defaults = TRUE THEN
-            CASE 
-                WHEN _tbl = 'executions' THEN
-                    ALTER TABLE executions ENABLE trigger executions_default;
-                WHEN _tbl = 'account_dim' THEN
-                    ALTER TABLE account_dim ENABLE trigger account_dim_default;
-                WHEN _tbl = 'pr_queue' THEN
-                    ALTER TABLE pr_queue ENABLE trigger pr_queue_default;
-                WHEN _tbl = 'commit_queue' THEN
-                    ALTER TABLE commit_queue ENABLE trigger commit_queue_default;
-            END;
-        END IF;
-
-        IF update_parents = TRUE THEN
-            CASE 
-                WHEN _tbl = 'executions' THEN
-                    ALTER TABLE executions ENABLE trigger executions_update_parents;
-                WHEN _tbl = 'commit_queue' THEN
-                    ALTER TABLE commit_queue ENABLE trigger commit_queue_update_parents;
-                ELSE
-                    RAISE NOTICE 'Table does not have parent table(s): %', _tbl;
-            END;
-        END IF;
-
-        INSERT INTO _tble VALUES ();
-    END;
-$$;
