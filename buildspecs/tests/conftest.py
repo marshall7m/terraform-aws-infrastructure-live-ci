@@ -2,35 +2,28 @@ import pytest
 import os
 import psycopg2
 
-from buildspecs.trigger_sf import TriggerSF
 from buildspecs.postgres_helper import PostgresHelper
 
-pytest_plugins = ['buildspecs.tests.fixtures.mocks']
+pytest_plugins = ['buildspecs.tests.fixtures.mock_repo', 'buildspecs.tests.fixtures.mock_tables']
 
 @pytest.fixture(scope="session", autouse=True)
 def conn():
-    yield psycopg2.connect()
+    conn = psycopg2.connect()
+    yield conn
     conn.close()
 
 @pytest.fixture(scope="session", autouse=True)
 def cur(conn):
-    yield conn.cursor()
+    cur = conn.cursor()
+    yield cur
     cur.close()
 
-@pytest.fixture(scope="function", autouse=True)
-def instance():
-    trigger = TriggerSF()
+@pytest.fixture(scope="session", autouse=True)
+def create_metadb_tables(conn, cur):
+    cwd = os.getcwd()
+    yield cur.execute(open(f'{cwd}/../../sql/create_metadb_tables.sql').read())
 
-@pytest.fixture(scope="function", autouse=True)
-def codebuild_env():
-    os.environ['CODEBUILD_INITIATOR'] = 'rule/test'
-    os.environ['EVENTBRIDGE_FINISHED_RULE'] = 'rule/test'
-    os.environ['BASE_REF'] = 'master'
-
-def create_metadb_tables(cur):
-    yield cur.execute(open('../../sql/create_metadb_tables.sql').read())
-    
-    cur.execute(open('./fixtures/clear_metadb_tables.sql').read())
+    cur.execute(open(f'{cwd}/fixtures/clear_metadb_tables.sql').read())
     cur.execute("""
     DO $$
         DECLARE
@@ -48,4 +41,3 @@ def create_metadb_tables(cur):
         END
     $$ LANGUAGE plpgsql;
     """, {'schema': 'public', 'catalog': conn.info.dbname})
-
