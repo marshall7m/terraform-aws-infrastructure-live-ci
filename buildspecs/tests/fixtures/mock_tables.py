@@ -1,17 +1,12 @@
+import os
 import pytest
 import logging
 from psycopg2 import sql
 import git
+import os
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
-
-@pytest.fixture(scope="function", autouse=True)
-def mock_cloudwatch_execution(mock_commit=True, finished_status):
-
-    if mock_commit:
-
-    return finished_status
 
 @pytest.fixture
 def mock_commit(function_repo_dir, commit_items, remote, target_branch, source_branch='master'):
@@ -26,28 +21,68 @@ def mock_commit(function_repo_dir, commit_items, remote, target_branch, source_b
     repo.index.commit(commit_message)
     remote.push()
 
-def mock_table(cur, table, records, enable_defaults=False, update_parents=False):
-    cols = records.keys()
-    records = tuple(i for i in list(x))
+def toggle_testing_trigger(cur, table, trigger, enable=False):
+    log.info('Creating triggers for table')
+    cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/testing_triggers.sql').read())
 
-    log.info('Enabling triggers for table')
-    cur.execute(open('./fixtures/insert_mock_records.sql').read(), (enable=True))
+    if enable:
+        cur.execute(sql.SQL("""
+            DO $$
+                BEGIN
+                    ALTER TABLE {tbl} ENABLE TRIGGER {trigger};
+                END;
+            $$ LANGUAGE plpgsql;
+        """).format(
+            tbl=sql.Identifier(table),
+            trigger=sql.Identifier(trigger)
+        ))
+    else:
+        cur.execute(sql.SQL("""
+            DO $$
+                BEGIN
+                    ALTER TABLE {tbl} DISABLE TRIGGER {trigger};
+                END;
+            $$ LANGUAGE plpgsql;
+        """).format(
+            tbl=sql.Identifier(table),
+            trigger=sql.Identifier(trigger)
+        ))
+
+def mock_table(cur, conn, table, records, enable_defaults=False, update_parents=False):
+    cols = records.keys()
+
+    if type(records) == dict:
+        records = [records]
+    records = [tuple(r.values()) for r in records]
+
+    if enable_defaults:
+        toggle_testing_trigger(cur, table, f'{table}_default', enable=True)
+
+    if update_parents:
+        toggle_testing_trigger(cur, table, f'{table}_update_parents', enable=True)
 
     log.info('Inserting record(s)')
-    sql = ''.format(
-        table=sql.Identifier(table),
+    log.info(records)
+    query = sql.SQL('INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *').format(
+        tbl=sql.Identifier(table),
         fields=sql.SQL(', ').join(map(sql.Identifier, cols)),
-        values=sql.SQL(', ').join(sql.Placeholder() * len(cols))),
-        enable_defaults=sql.Literal(enable_defaults),
-        update_parents=sql.Literal(update_parents)
+        values=sql.SQL(', ').join(sql.Placeholder() * len(cols))
     )
 
-    log.debug(f'Running: {sql}')
-    results = cur.execute(sql, records)
+    log.debug(f'Running: {query.as_string(conn)}')
+    
+    results = []
+    for record in records:
+        cur.execute(query, record)
+        results.append(cur.fetchone())
 
-    cur.execute(open('./fixtures/insert_mock_records.sql').read(), (enable=False))
-    yield results
+    if enable_defaults:
+        toggle_testing_trigger(cur, table, f'{table}_default', enable=False)
+        
+    if update_parents:
+        toggle_testing_trigger(cur, table, f'{table}_update_parents', enable=False)
 
-    cur.execute(open('./fixtures/insert_mock_records.sql').read(), (enable=False))
+    return results
+
 
 
