@@ -1,3 +1,3 @@
 from setuptools import setup, find_packages
 
-setup(name="foo", packages=['buildspecs'])
+setup(name="terraform-aws-infrastructure-live", packages=find_packages())
