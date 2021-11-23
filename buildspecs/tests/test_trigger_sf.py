@@ -3,8 +3,8 @@ import os
 import logging
 from buildspecs.trigger_sf import TriggerSF
 from psycopg2.sql import SQL
-
-from buildspecs.tests.fixtures import mock_tables
+from helpers.utils import TestPRSetup
+import uuid
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -30,6 +30,10 @@ class TestTriggerSF:
                     'commits': [
                         {
                             'record_items': {'status': 'running'},
+                            'enable_defaults': True,
+                            'apply_changes': True,
+                            'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
+                            'create_provider_resource': False,
                             'executions': [
                                 {
                                     'record_items': {
@@ -38,9 +42,7 @@ class TestTriggerSF:
                                         'is_rollback': False,
                                         'account_name': 'dev'
                                     },
-                                    'apply_changes': True,
-                                    'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
-                                    'create_provider_resource': False,
+                                    'enable_defaults': True,
                                     'cw_finished_status': 'success'
                                 }
                             ]
@@ -57,6 +59,7 @@ class TestTriggerSF:
                     'commits': [
                         {
                             'record_items': {'status': 'waiting'},
+                            'enable_defaults': True,
                             'executions': [
                                 {
                                     'record_items': {
@@ -66,6 +69,7 @@ class TestTriggerSF:
                                         'account_name': 'dev'
                                     },
                                     'apply_changes': True,
+                                    'enable_defaults': True,
                                     'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/foo',
                                     'create_provider_resource': False,
                                     'cw_finished_status': 'success'
@@ -78,39 +82,35 @@ class TestTriggerSF:
         }
     ]
 
-    @pytest.fixture(params=test_data, autouse=True)
-    def mock_pr(self, cur, conn, request):
-        results = []
-        for pr in request.param['prs']:
-            results.extend(mock_tables.mock_table(
-                cur, 
-                conn,
-                'pr_queue', 
-                pr['record_items'],
-                enable_defaults=pr['enable_defaults'],
-                update_parents=False
-            ))
-        
-        yield results
-    
-    def test_record_item(self, mock_pr):
-        assert mock_pr == {}
-# def mock_commits(pr_data):
-#     for commit in pr_data.commits:
-#         results = mock_table(cur, 'commit_queue', commit.record_items, enable_defaults=commit.enable_defaults, update_parents=commit.update_parents)
-#         pr_data.commit_queue = pr_data.commit_queue.append(results)
+def test_record_item(test_id, conn, repo_url, function_repo_dir):
+    ts = TestPRSetup(conn, repo_url, function_repo_dir, os.environ['GITHUB_TOKEN'], base_ref=os.environ['BASE_REF'], head_ref=f'feature-{test_id}')
 
-# def mock_executions(pr_data):
-#     for commit in pr_data.commits:
-#         for execution in commit.execution:
-#             results = mock_table(cur, 'executions', execution.record_items, enable_defaults=execution.enable_defaults, update_parents=execution.update_parents)
-#             pr_data.executions = pr_data.executions.append(results)
+    ts.create_commit(
+        status='waiting',
+        modify_items=[
+            {
+                'apply_changes': True,
+                'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
+                'create_provider_resource': False,
+                'execution': {
+                    'status': 'running',
+                    'is_base_rollback': False,
+                    'is_rollback': False,
+                    'account_name': 'dev',
+                    'is_cw_event': True
+                }
+            }
+        ]
+    )
+    ts.create_pr(status='waiting')
 
-# @pytest.fixture(scope="function", autouse=True)
-# def run():
-#     trigger = TriggerSF()
+    ts.insert_records()
 
-# def record_exists_assertions(table, conditions, assertions):
-#     sql = SQL("".format())
-#     log.debug(f'Assertion: {sql}')
-#     assertions.append(sql)
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM commit_queue')
+
+    cur.execute('SELECT * FROM executions')
+    # trigger = TriggerSF()
+
+    # for assertion in mock_setup.assertions:
+    #     cur.execute(assertion)
