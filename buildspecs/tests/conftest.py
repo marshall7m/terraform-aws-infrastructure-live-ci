@@ -1,10 +1,15 @@
 import pytest
 import os
 import psycopg2
+import string
+import random
 
-from buildspecs.postgres_helper import PostgresHelper
 
 pytest_plugins = ['buildspecs.tests.fixtures.mock_repo', 'buildspecs.tests.fixtures.mock_tables']
+ 
+@pytest.fixture(scope="function", autouse=True)
+def test_id():
+    return ''.join(random.choice(string.ascii_lowercase) for _ in range(8))
 
 @pytest.fixture(scope="session", autouse=True)
 def conn():
@@ -20,10 +25,9 @@ def cur(conn):
 
 @pytest.fixture(scope="session", autouse=True)
 def create_metadb_tables(conn, cur):
-    cwd = os.getcwd()
-    yield cur.execute(open(f'{cwd}/../../sql/create_metadb_tables.sql').read())
+    yield cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql').read())
 
-    cur.execute(open(f'{cwd}/fixtures/clear_metadb_tables.sql').read())
+    cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/fixtures/clear_metadb_tables.sql').read())
     cur.execute("""
     DO $$
         DECLARE
