@@ -1,12 +1,12 @@
 #!/bin/bash
 apk update
-apk add --no-cache --virtual .build-deps yarn musl-dev linux-headers libffi-dev libxml2 libxml2-dev gcc libxslt-dev postgresql-dev python3-dev
+apk add --no-cache --virtual .build-deps make cmake yarn musl-dev linux-headers libffi-dev libxml2 libxml2-dev gcc libxslt-dev postgresql-dev python3-dev
 
 yarn install
 
 python -m venv $VIRTUAL_ENV
 source $VIRTUAL_ENV/bin/activate
-python3 -m pip install --user --upgrade pip
+python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 
 wget -q -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip

@@ -17,5 +17,5 @@ elif [ "$TESTING_ENV" == "remote" ]; then
     # skips creating local metadb container
     docker-compose run -e "$AWS_ACCESS_KEY_ID" -e "$AWS_SECRET_ACCESS_KEY" -e "$AWS_REGION" -e "$AWS_SESSION_TOKEN" testing /bin/bash
 else
-    echo '\$TESTING_ENV is not set -- (local | remote)' && exit 1
+    echo '$TESTING_ENV is not set -- (local | remote)' && exit 1
 fi
