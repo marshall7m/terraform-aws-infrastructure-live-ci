@@ -15,80 +15,17 @@ def codebuild_env():
     os.environ['EVENTBRIDGE_FINISHED_RULE'] = 'rule/test'
     os.environ['BASE_REF'] = 'master'
 
-class TestTriggerSF:
-    test_data = [
-        {
-            'prs': [
-                {
-                    'record_items': {
-                        'status': 'running',
-                    },
-                    #TODO incorporate assert status fixture that collects all assertions for testing
-                    'assert_status': 'success',
-                    'enable_defaults': True,
-                    'create_remote': False,
-                    'commits': [
-                        {
-                            'record_items': {'status': 'running'},
-                            'enable_defaults': True,
-                            'apply_changes': True,
-                            'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
-                            'create_provider_resource': False,
-                            'executions': [
-                                {
-                                    'record_items': {
-                                        'status': 'running',
-                                        'is_base_rollback': False,
-                                        'is_rollback': False,
-                                        'account_name': 'dev'
-                                    },
-                                    'enable_defaults': True,
-                                    'cw_finished_status': 'success'
-                                }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    'record_items': {
-                        'status': 'running',
-                        'head_ref': 'feature-2'
-                    }, 
-                    'enable_defaults': True,
-                    'create_remote': False,
-                    'commits': [
-                        {
-                            'record_items': {'status': 'waiting'},
-                            'enable_defaults': True,
-                            'executions': [
-                                {
-                                    'record_items': {
-                                        'status': 'waiting',
-                                        'is_base_rollback': False,
-                                        'is_rollback': False,
-                                        'account_name': 'dev'
-                                    },
-                                    'apply_changes': True,
-                                    'enable_defaults': True,
-                                    'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/foo',
-                                    'create_provider_resource': False,
-                                    'cw_finished_status': 'success'
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
 
-def test_record_item(test_id, conn, repo_url, function_repo_dir):
+def test_(test_id, conn, repo_url, function_repo_dir):
     ts = TestPRSetup(conn, repo_url, function_repo_dir, os.environ['GITHUB_TOKEN'], base_ref=os.environ['BASE_REF'], head_ref=f'feature-{test_id}')
 
     ts.create_commit(
         status='waiting',
         modify_items=[
             {
+                'assert_conditions': {
+                    'status': 'success',
+                },
                 'apply_changes': True,
                 'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
                 'create_provider_resource': False,
@@ -106,11 +43,7 @@ def test_record_item(test_id, conn, repo_url, function_repo_dir):
 
     ts.insert_records()
 
-    cur = conn.cursor()
-    cur.execute('SELECT * FROM commit_queue')
+    # TriggerSF()
 
-    cur.execute('SELECT * FROM executions')
-    # trigger = TriggerSF()
-
-    # for assertion in mock_setup.assertions:
-    #     cur.execute(assertion)
+    # ts.assert_record_count()
+    

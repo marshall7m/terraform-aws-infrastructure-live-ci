@@ -73,12 +73,11 @@ class TestPRSetup:
     @classmethod
     def create_records(cls, conn, table, records, enable_defaults=False, update_parents=False):
         cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-
+                        
         if type(records) == dict:
             records = [records]
 
         cols = set().union(*(r.keys() for r in records))
-        # records = [tuple(r.values()) for r in records]
 
         if enable_defaults:
             cls.toggle_trigger(conn, table, f'{table}_default', enable=True)
@@ -86,20 +85,23 @@ class TestPRSetup:
         if update_parents:
             cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=True)
 
-        log.info('Inserting record(s)')
-        log.info(records)
-        query = sql.SQL('INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *').format(
-            tbl=sql.Identifier(table),
-            fields=sql.SQL(', ').join(map(sql.Identifier, cols)),
-            values=sql.SQL(', ').join(map(sql.Placeholder, cols))
-        )
-
-        log.debug(f'Running: {query.as_string(conn)}')
-        
         results = []
         for record in records:
+            cols = record.keys()
+
+            log.info('Inserting record(s)')
+            log.info(record)
+            query = sql.SQL('INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *').format(
+                tbl=sql.Identifier(table),
+                fields=sql.SQL(', ').join(map(sql.Identifier, cols)),
+                values=sql.SQL(', ').join(map(sql.Placeholder, cols))
+            )
+
+            log.debug(f'Running: {query.as_string(conn)}')
+            
             cur.execute(query, record)
-            results.append(cur.fetchone())
+            record = cur.fetchone()
+            results.append(record)
 
         if enable_defaults:
             cls.toggle_trigger(conn, table, f'{table}_default', enable=False)
@@ -213,20 +215,44 @@ class TestPRSetup:
         return modify_items
 
     def create_execution(self, is_cw_event, **column_args):
-        self.execution_records.append(column_args)
         if is_cw_event:
             self.cw_event = column_args
+        else:
+            self.execution_records.append(column_args)
 
     def insert_records(self):
+    
         self.pr_record = self.create_records(self.conn, 'pr_queue', self.pr_record, enable_defaults=True)[0]
         self.commit_records = self.create_records(self.conn, 'commit_queue', self.commit_records, enable_defaults=True)
         self.execution_records = self.create_records(self.conn, 'executions', self.execution_records, enable_defaults=True)
 
         if self.cw_event:
-            self.cw_event = self.create_records(self.conn, 'executions', self.cw_event, enable_defaults=True)
+            self.cw_event = self.create_records(self.conn, 'executions', self.cw_event, enable_defaults=True)[0]
             os.environ['EVENTBRIDGE_EVENT'] = json.dumps(self.cw_event)
 
-    def record_exists_assertions(table, conditions, assertions):
-        sql = sql.SQL("".format())
-        log.debug(f'Assertion: {sql}')
-        assertions.append(sql)
+    @classmethod
+    def assert_record_count(cls, conn, table, conditions, count=1):
+
+        query = sql.SQL("""
+        DO $$
+            BEGIN
+                ASSERT (
+                    SELECT COUNT(*)
+                    FROM {tbl}
+                    WHERE
+                    {cond}
+                ) = {count};
+            END;
+        $$ LANGUAGE plpgsql;
+        """).format(
+            tbl=sql.Identifier(table),
+            count=sql.Literal(count),
+            cond=sql.SQL('\n\t\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
+        )
+
+        log.debug(f'Query: {query.as_string(conn)}')
+
+        cur = conn.cursor()
+        cur.execute(query.as_string(conn))
+
+        return True
