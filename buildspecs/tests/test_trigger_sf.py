@@ -3,7 +3,7 @@ import os
 import logging
 from buildspecs.trigger_sf import TriggerSF
 from psycopg2.sql import SQL
-from helpers.utils import TestPRSetup
+from helpers.utils import TestSetup
 import uuid
 
 log = logging.getLogger(__name__)
@@ -15,11 +15,14 @@ def codebuild_env():
     os.environ['EVENTBRIDGE_FINISHED_RULE'] = 'rule/test'
     os.environ['BASE_REF'] = 'master'
 
+@pytest.fixture()
+def scenario_1(conn, repo_url, function_repo_dir, test_id):
 
-def test_(test_id, conn, repo_url, function_repo_dir):
-    ts = TestPRSetup(conn, repo_url, function_repo_dir, os.environ['GITHUB_TOKEN'], base_ref=os.environ['BASE_REF'], head_ref=f'feature-{test_id}')
-
-    ts.create_commit(
+    """Successful CW event -- dequeue next commit -- start SF execution with 1/1 cfg path"""
+    ts = TestSetup(conn, repo_url, function_repo_dir, os.environ['GITHUB_TOKEN'])
+    
+    pr = ts.pr(base_ref=os.environ['BASE_REF'], head_ref=f'feature-{test_id}')
+    pr.create_commit(
         status='waiting',
         modify_items=[
             {
@@ -39,11 +42,25 @@ def test_(test_id, conn, repo_url, function_repo_dir):
             }
         ]
     )
-    ts.create_pr(status='waiting')
+    pr.create_pr(status='waiting')
 
-    ts.insert_records()
+    pr.collect_record_assertion('executions', os.environ['EVENTBRIDGE_EVENT'], {'status': 'success'})
+    pr.collect_record_assertion('commit_queue', pr.commit_records[0], {'status': 'success'})
 
-    # TriggerSF()
+    return ts
 
-    # ts.assert_record_count()
-    
+
+# @pytest.fixture
+# def run(scenario):
+#     # TriggerSF().run()
+#     pass
+
+@pytest.mark.parametrize("scenario", [
+    ("scenario_1")
+])
+# @pytest.mark.usefixtures("run")
+def test_record_exists(cur, scenario, request):
+    scenario = request.getfixturevalue(scenario)
+    for assertion in scenario.assertions:
+        log.debug(f'Query:\n{assertion}')
+        cur.execute(assertion)
