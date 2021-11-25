@@ -16,27 +16,39 @@ import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-class TestPRSetup:
-    def __init__(self, conn, git_url, git_dir, gh_token, base_ref, head_ref, remote_changes=False):
+class TestSetup:
+    assertions = []
+    def __init__(self, conn, git_url, git_dir, gh_token, remote_changes=False):
         self.remote_changes = remote_changes
         self.conn = conn
         self.git_url = git_url
         self.git_dir = str(git_dir)
-        self.base_ref = base_ref
-        self.head_ref = head_ref
         self.gh_repo_full_name = '/'.join(self.git_url.split('.git')[0].split('/')[-2:]) 
         self.gh = Github(login_or_token=gh_token)
         self.gh_token = gh_token
         self.gh_repo = self.gh.get_repo(self.gh_repo_full_name)
         self.git_repo = git.Repo(self.git_dir)
         self.user = self.gh.get_user()
-        self.pr_record = {'head_ref': self.head_ref, 'base_ref': self.base_ref}
-        self.commit_records = []
-        self.execution_records = []
-        self.head_branch = None
-        self.cw_event = {}
         self.remote = self.create_fork_remote()
-    
+
+    def create_fork_remote(self):
+        self.user.create_fork(self.gh_repo)
+        print(f'git dir : {self.git_dir}')
+
+        remotes = self.git_repo.remotes
+        log.debug(f'Remotes: {remotes}')
+
+        if self.remote_changes:
+            new_remote = 'remote'
+            if not git.remote.Remote(self.git_repo, new_remote).exists():
+                self.remote = git.Repo.create_remote(self.git_repo, new_remote, f"https://{self.user.login}:{self.gh_token}@github.com/{self.gh_repo_full_name}.git")
+        else:
+            new_remote = 'local'
+            if not git.remote.Remote(self.git_repo, new_remote).exists():
+                self.remote = git.Repo.create_remote(self.git_repo, new_remote, self.git_dir)
+
+        return self.remote
+
     @classmethod
     def toggle_trigger(cls, conn, table, trigger, enable=False):
         cur = conn.cursor()
@@ -69,7 +81,7 @@ class TestPRSetup:
                 tbl=sql.Identifier(table),
                 trigger=sql.Identifier(trigger)
             ))
-
+ 
     @classmethod
     def create_records(cls, conn, table, records, enable_defaults=False, update_parents=False):
         cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
@@ -110,28 +122,76 @@ class TestPRSetup:
             cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=False)
 
         return results
-        
-    def create_fork_remote(self):
-        self.user.create_fork(self.gh_repo)
-        print(f'git dir : {self.git_dir}')
 
-        remotes = self.git_repo.remotes
-        log.debug(f'Remotes: {remotes}')
+    def pr(self, base_ref, head_ref):
+        return PR(base_ref, head_ref, self)
 
-        if self.remote_changes:
-            new_remote = 'remote'
-            if not git.remote.Remote(self.git_repo, new_remote).exists():
-                self.remote = git.Repo.create_remote(self.git_repo, new_remote, f"https://{self.user.login}:{self.gh_token}@github.com/{self.gh_repo_full_name}.git")
-        else:
-            new_remote = 'local'
-            if not git.remote.Remote(self.git_repo, new_remote).exists():
-                self.remote = git.Repo.create_remote(self.git_repo, new_remote, self.git_dir)
+    def collect_record_assertion(self, table, conditions, count=1):
+        query = sql.SQL("""
+        DO $$
+            BEGIN
+                ASSERT (
+                    SELECT COUNT(*)
+                    FROM {tbl}
+                    WHERE
+                    {cond}
+                ) = {count};
+            END;
+        $$ LANGUAGE plpgsql;
+        """).format(
+            tbl=sql.Identifier(table),
+            count=sql.Literal(count),
+            cond=sql.SQL('\n\t\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
+        )
 
-        return self.remote
+        log.debug(f'Query: {query.as_string(self.conn)}')
+
+        self.assertions.append(query)
+
+    @classmethod
+    def assert_record_count(cls, conn, table, conditions, count=1):
+
+        query = sql.SQL("""
+        DO $$
+            BEGIN
+                ASSERT (
+                    SELECT COUNT(*)
+                    FROM {tbl}
+                    WHERE
+                    {cond}
+                ) = {count};
+            END;
+        $$ LANGUAGE plpgsql;
+        """).format(
+            tbl=sql.Identifier(table),
+            count=sql.Literal(count),
+            cond=sql.SQL('\n\t\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
+        )
+
+        log.debug(f'Query: {query.as_string(conn)}')
+
+        cur = conn.cursor()
+
+        try:
+            cur.execute(query.as_string(conn))
+            return True
+        except Exception as e:
+            print(e)
+            return False
 
 
+class PR(TestSetup):
+    def __init__(self, base_ref, head_ref, *args, **kwargs):
+        self.base_ref = base_ref
+        self.head_ref = head_ref
+        self.pr_record = {'head_ref': self.head_ref, 'base_ref': self.base_ref}
+        self.commit_records = []
+        self.execution_records = []
+        self.head_branch = None
+        self.cw_event = {}
+        super(PR,self).__init__(*args, **kwargs)
+    
     def create_pr(self, title='TestPRSetup Test PR', body='None', **column_args):
-
         if self.remote_changes:
             pr = self.gh_repo.create_pull(title=title, body=body, head=self.head_ref, base=self.base_ref)
             self.pr_record.update(**column_args, pr_id=pr.number)
@@ -229,30 +289,3 @@ class TestPRSetup:
         if self.cw_event:
             self.cw_event = self.create_records(self.conn, 'executions', self.cw_event, enable_defaults=True)[0]
             os.environ['EVENTBRIDGE_EVENT'] = json.dumps(self.cw_event)
-
-    @classmethod
-    def assert_record_count(cls, conn, table, conditions, count=1):
-
-        query = sql.SQL("""
-        DO $$
-            BEGIN
-                ASSERT (
-                    SELECT COUNT(*)
-                    FROM {tbl}
-                    WHERE
-                    {cond}
-                ) = {count};
-            END;
-        $$ LANGUAGE plpgsql;
-        """).format(
-            tbl=sql.Identifier(table),
-            count=sql.Literal(count),
-            cond=sql.SQL('\n\t\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
-        )
-
-        log.debug(f'Query: {query.as_string(conn)}')
-
-        cur = conn.cursor()
-        cur.execute(query.as_string(conn))
-
-        return True
