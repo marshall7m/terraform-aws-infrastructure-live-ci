@@ -124,7 +124,7 @@ class TestSetup:
         return results
 
     def pr(self, base_ref, head_ref):
-        return PR(base_ref, head_ref, self)
+        return PR(base_ref, head_ref, **self.__dict__)
 
     def collect_record_assertion(self, table, conditions, count=1):
         query = sql.SQL("""
@@ -143,8 +143,6 @@ class TestSetup:
             count=sql.Literal(count),
             cond=sql.SQL('\n\t\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
         )
-
-        log.debug(f'Query: {query.as_string(self.conn)}')
 
         self.assertions.append(query)
 
@@ -182,6 +180,7 @@ class TestSetup:
 
 class PR(TestSetup):
     def __init__(self, base_ref, head_ref, *args, **kwargs):
+        # self.test_setup = test_setup
         self.base_ref = base_ref
         self.head_ref = head_ref
         self.pr_record = {'head_ref': self.head_ref, 'base_ref': self.base_ref}
@@ -189,8 +188,9 @@ class PR(TestSetup):
         self.execution_records = []
         self.head_branch = None
         self.cw_event = {}
-        super(PR,self).__init__(*args, **kwargs)
-    
+        for k in kwargs.keys():
+          self.__setattr__(k, kwargs[k])
+
     def create_pr(self, title='TestPRSetup Test PR', body='None', **column_args):
         if self.remote_changes:
             pr = self.gh_repo.create_pull(title=title, body=body, head=self.head_ref, base=self.base_ref)
