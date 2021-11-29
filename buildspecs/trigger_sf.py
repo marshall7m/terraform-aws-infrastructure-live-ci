@@ -9,6 +9,7 @@ from psycopg2.extras import execute_values
 import re
 import json
 import boto3
+import pandas as pd
 
 
 log = logging.getLogger(__name__)
@@ -44,7 +45,8 @@ class TriggerSF:
     def execution_finished(self):
 
         event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
-        log.debug(f'Parsed CW event:\n{event}')
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+            log.debug(f'Parsed CW event:\n{pd.DataFrame.from_records([event]).T}')
         
         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/cw_event_status_update.sql', 'r') as f:
             self.cur.execute(sql.SQL(f.read()).format(
@@ -193,7 +195,7 @@ class TriggerSF:
 
         self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
 
-        target_execution_ids = [id[0] for id in self.cur.fetchall()]
+        target_execution_ids = [id[0] for id in self.cur.fetchall() if id[0] != None]
         log.debug(f'IDs: {target_execution_ids}')
         log.info(f'Count: {len(target_execution_ids)}')
 

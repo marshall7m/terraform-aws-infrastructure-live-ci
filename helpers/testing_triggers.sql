@@ -439,6 +439,8 @@ RETURNS TRIGGER AS $$
             voters
         FROM executions
         ON CONFLICT (account_name) DO NOTHING;
+
+        RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;
 
