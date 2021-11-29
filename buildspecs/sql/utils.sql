@@ -1,11 +1,11 @@
-CREATE OR REPLACE FUNCTION status_all_update(text[]) 
+CREATE OR REPLACE FUNCTION status_all_update(statuses text[]) 
     RETURNS VARCHAR AS $$
     DECLARE
         fail_count INT := 0;
         succcess_count INT := 0;
         i text;
     BEGIN
-        FOREACH i IN ARRAY $1 LOOP
+        FOREACH i IN ARRAY statuses LOOP
             CASE
                 WHEN i = ANY('{running, waiting}'::TEXT[]) THEN
                     RETURN 'running';
@@ -24,7 +24,7 @@ CREATE OR REPLACE FUNCTION status_all_update(text[])
             WHEN succcess_count > 0 THEN
                 RETURN 'success';
             ELSE
-                RAISE EXCEPTION 'Array is empty: %', $1; 
+                RAISE EXCEPTION 'Array is empty: %', statuses; 
         END CASE;
     END;
 $$ LANGUAGE plpgsql;

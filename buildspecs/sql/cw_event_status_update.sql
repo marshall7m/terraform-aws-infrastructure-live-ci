@@ -48,4 +48,5 @@ RETURNS VOID AS $$
     END;
 $$ LANGUAGE plpgsql;
 
-SELECT pg_temp.cw_event_status_update(:'execution_id', :'status');
+
+SELECT pg_temp.cw_event_status_update({execution_id}, {status});

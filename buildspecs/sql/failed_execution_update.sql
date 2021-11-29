@@ -62,4 +62,4 @@ CREATE OR REPLACE FUNCTION pg_temp.failed_execution_update(_commit_id VARCHAR, _
     END;
 $$ LANGUAGE plpgsql;
 
-SELECT pg_temp.failed_execution_update(:'commit_id', :'base_commit_id', :'pr_id');
+SELECT pg_temp.failed_execution_update({commit_id}, {base_commit_id}, {pr_id});
