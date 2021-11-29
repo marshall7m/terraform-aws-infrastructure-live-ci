@@ -1,3 +1,4 @@
+import psycopg2
 import pytest
 import os
 import logging
@@ -15,13 +16,13 @@ def codebuild_env():
     os.environ['CODEBUILD_INITIATOR'] = 'rule/test'
     os.environ['EVENTBRIDGE_FINISHED_RULE'] = 'rule/test'
     os.environ['BASE_REF'] = 'master'
+    os.environ['AWS_DEFAULT_REGION'] = 'us-west-2'
 
-@pytest.fixture(scope="function", autouse=True)
-def ts(conn, repo_url, function_repo_dir):
-    return TestSetup(conn, repo_url, function_repo_dir, os.environ['GITHUB_TOKEN'])
+    os.environ['DRY_RUN'] = 'true'
+    os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
 
 @pytest.fixture()
-def scenario_1(ts, test_id):
+def scenario_1(test_id, repo_url, function_repo_dir):
     '''
     CW Event: 
         status: success
@@ -36,62 +37,67 @@ def scenario_1(ts, test_id):
         is_base_rollback: false
         cfg_path: 2/2
     '''
-    
-    pr = ts.pr(base_ref=os.environ['BASE_REF'], head_ref=f'feature-{test_id}')
+    log.debug('Running scenario')
+    conn = psycopg2.connect()
+    with TestSetup(conn, repo_url, function_repo_dir, os.environ['GITHUB_TOKEN']) as ts:
+        pr = ts.pr(base_ref=os.environ['BASE_REF'], head_ref=f'feature-{test_id}')
 
-    pr.create_pr(status='running')
+        pr.create_pr(status='running')
 
-    pr.create_commit(
-        status='waiting',
-        modify_items=[
-            {
-                'apply_changes': True,
-                'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
-                'create_provider_resource': False,
-                'execution': {
-                    'status': 'running',
-                    'is_base_rollback': False,
-                    'is_rollback': False,
-                    'account_name': 'dev',
-                    'is_cw_event': True
+        pr.create_commit(
+            status='waiting',
+            modify_items=[
+                {
+                    'apply_changes': True,
+                    'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
+                    'create_provider_resource': False,
+                    'execution': {
+                        'is_base_rollback': False,
+                        'is_rollback': False,
+                        'account_name': 'dev',
+                        'cw_event_finished_status': 'success'
+                    }
+                },
+                {
+                    'apply_changes': False,
+                    'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/bar',
+                    'create_provider_resource': False,
+                    'execution': {
+                        'status': 'waiting',
+                        'is_base_rollback': False,
+                        'is_rollback': False,
+                        'account_name': 'dev'
+                    }
                 }
-            },
-            {
-                'apply_changes': False,
-                'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/bar',
-                'create_provider_resource': False,
-                'execution': {
-                    'status': 'waiting',
-                    'is_base_rollback': False,
-                    'is_rollback': False,
-                    'account_name': 'dev'
-                }
-            }
-        ]
-    )
+            ]
+        )
 
-    pr.insert_records()
+        pr.insert_records()
 
-    pr.collect_record_assertion('executions', {**json.loads(os.environ['EVENTBRIDGE_EVENT']), **{'status': 'success'}})
-    pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'running'}})
-    pr.collect_record_assertion('commit_queue', {**pr.pr_record, **{'status': 'running'}})
-
+        pr.collect_record_assertion('executions', {**json.loads(os.environ['EVENTBRIDGE_EVENT']), **{'status': 'success'}})
+        pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'running'}})
+        pr.collect_record_assertion('pr_queue', {**pr.pr_record, **{'status': 'running'}})
+        
     return ts
-
-@pytest.fixture
-def run(scenario):
-    log.debug(f"Scenario: {scenario}")
-    TriggerSF().run()
-    pass
 
 @pytest.mark.parametrize("scenario", [
     ("scenario_1")
 ])
-@pytest.mark.usefixtures("run")
-def test_record_exists(cur, conn, scenario, request):
+def test_record_exists(scenario, request):
+    log.debug(f"Scenario: {scenario}")
     scenario = request.getfixturevalue(scenario)
 
+
+    #TODO: Figure out how to put trigger.main() within fixture thats dependent on scenario and calls .cleanup() yielding .main()
+    trigger = TriggerSF()
+    try:
+        trigger.main()
+    except Exception as e:
+        log.error(e)
+        raise
+    finally:
+        trigger.cleanup()
+
     log.info("Running record assertions:")
-    for assertion in scenario.assertions:
-        log.debug(f'Query:\n{assertion.as_string(conn)}')
-        cur.execute(assertion)
+    with psycopg2.connect() as conn:
+        scenario.run_collected_assertions(conn)
