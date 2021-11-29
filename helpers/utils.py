@@ -11,6 +11,8 @@ import random
 import string
 import inspect
 import json
+import pandas
+import pandas.io.sql as psql
 
 import logging
 
@@ -22,6 +24,8 @@ class TestSetup:
     def __init__(self, conn, git_url, git_dir, gh_token, remote_changes=False):
         self.remote_changes = remote_changes
         self.conn = conn
+        self.conn.set_session(autocommit=True)
+
         self.git_url = git_url
         self.git_dir = str(git_dir)
         self.gh_repo_full_name = '/'.join(self.git_url.split('.git')[0].split('/')[-2:]) 
@@ -41,6 +45,9 @@ class TestSetup:
         log.debug('Closing metadb connection')
         self.conn.close()
 
+    def get_base_commit_id(self):
+        return git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF'])
+
     def init_sql_utils(self):
         cur = self.conn.cursor()
         log.debug('Creating postgres utility functions')
@@ -49,9 +56,7 @@ class TestSetup:
         for file in files:
             log.debug(f'File: {file}')
             with open(file, 'r') as f:
-                content = f.read()
-                log.debug(f'Content: {content}')
-                cur.execute(content)
+                cur.execute(f.read())
 
     def create_fork_remote(self):
         self.user.create_fork(self.gh_repo)
@@ -114,6 +119,7 @@ class TestSetup:
                 cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=True)
 
             results = []
+            # TODO: use COPY command to insert in one go?
             for record in records:
                 cols = record.keys()
 
@@ -142,8 +148,8 @@ class TestSetup:
     def pr(self, base_ref, head_ref):
         return PR(base_ref, head_ref, **self.__dict__)
 
-    def collect_record_assertion(self, table, conditions, count=1):
-        query = sql.SQL("""
+    def collect_record_assertion(self, table, conditions, debug_conditions=[], count=1):
+        assertion = sql.SQL("""
         DO $$
             BEGIN
                 ASSERT (
@@ -160,21 +166,39 @@ class TestSetup:
             cond=sql.SQL('\n\t\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
         ).as_string(self.conn)
 
-        self.assertions.append(query)
+        debug = []
+        for conditions in debug_conditions:
+            query = sql.SQL("""
+            SELECT * 
+            FROM {tbl} 
+            WHERE 
+            {cond}
+            """).format(
+                tbl=sql.Identifier(table),
+                cond=sql.SQL('\n\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
+            ).as_string(self.conn)
+            
+            debug.append(query)
+        self.assertions.append({'assertion': assertion, 'debug': debug})
 
     def run_collected_assertions(self, conn):
         count = 0
         total = len(self.assertions)
         with conn.cursor() as cur:
-            for assertion in self.assertions:
-                log.debug(f'Query:\n{assertion}')
+            for item in self.assertions:
+                log.debug(f'Assertion query:\n{item["assertion"]}')
                 try:
-                    cur.execute(assertion)
+                    cur.execute(item['assertion'])
                     conn.commit()
                     count += 1
                 except psycopg2.errors.lookup("P0004"):
-                    log.error('Assertion failed')
                     conn.rollback()
+                    log.error('Assertion failed')
+                    with pandas.option_context('display.max_rows', None, 'display.max_columns', None):
+                        for query in item['debug']:
+                            log.debug(f'Debug query:\n{query}')
+                            log.debug(psql.read_sql(query, conn))
+                            conn.commit()
 
         log.info(f'{count}/{total} assertions were successful')
         if count != total:
@@ -319,8 +343,8 @@ class PR(TestSetup):
         self.pr_record = self.create_records(self.conn, 'pr_queue', self.pr_record, enable_defaults=True)[0]
         self.commit_records = self.create_records(self.conn, 'commit_queue', self.commit_records, enable_defaults=True)
         self.execution_records = self.create_records(self.conn, 'executions', self.execution_records, enable_defaults=True)
-        
-        if self.cw_execution:
+
+        if self.cw_execution != None:
             self.cw_execution = self.create_records(self.conn, 'executions', self.cw_execution, enable_defaults=True)[0]
             cw_event = dict(self.cw_execution)
             cw_event['status'] = self.cw_event_finished_status
