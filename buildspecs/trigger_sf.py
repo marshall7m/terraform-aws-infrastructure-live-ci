@@ -2,47 +2,78 @@ import os
 import sys
 import logging
 import subprocess
-# import git
+import git
 import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import execute_values
 import re
+import json
+import boto3
 
-from buildspecs.postgres_helper import PostgresHelper
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+sf = boto3.client('stepfunctions', region_name='us-west-2')
 
-class TriggerSF(PostgresHelper):
+class TriggerSF:
     def __init__(self):
-        super().__init__()
-    def execution_finished(self):
-        if not os.environ['EVENTBRIDGE_EVENT']:
-            log.error('EVENTBRIDGE_EVENT is not set')
-        
-        event = os.environ['EVENTBRIDGE_EVENT']
-        self.cur.execute(
-            open('./sql/cw_event_status_update.sql', 'r').read(),
-            {
-                'execution_id': event['execution_id'], 
-                'status': event['status']
-            }
-        )
+        self.conn = psycopg2.connect()
+        self.conn.set_session(autocommit=True)
 
+        self.cur = self.conn.cursor()
+        self.git_repo = git.Repo(search_parent_directories=True)
+
+    def create_sql_utils(self):
+        log.debug('Creating postgres utility functions')
+        files = [f'{os.path.dirname(os.path.realpath(__file__))}/sql/utils.sql']
+
+        for file in files:
+            log.debug(f'File: {file}')
+            with open(file, 'r') as f:
+                content = f.read()
+                log.debug(f'Content: {content}')
+                self.cur.execute(content)
+    
+    def get_new_provider_resources(self, tg_dir, commit_id, new_providers):
+        self.git_repo.git.checkout(commit_id)
+
+        out = json.load(subprocess.run(f'terragrunt state pull --terragrunt-working-dir {tg_dir}'.split(' ')))
+        
+        return [resource['type'] + '.' + resource['name'] for resource in out['resources'] if resource['provider'] in new_providers]
+
+    def execution_finished(self):
+
+        event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
+        log.debug(f'Parsed CW event:\n{event}')
+        
+        with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/cw_event_status_update.sql', 'r') as f:
+            self.cur.execute(sql.SQL(f.read()).format(
+                execution_id=sql.Literal(event['execution_id']),
+                status=sql.Literal(event['status'])
+            ))
+
+            log.debug(f'Notices:\n{self.conn.notices}')
+        
         if not event['is_rollback']:
             if len(event['new_providers']) > 0:
                 log.info('Adding new provider resources to associated execution record')
-                update_execution_with_new_resources()
+                resources = self.get_new_provider_resources(event['cfg_path'], event['commit_id'], event['new_providers'])
+                self.cur.execute(sql.SQL(
+                    "UPDATE EXECUTION SET new_resources = % WHERE execution_id = %"
+                ), (resources, event['execution_id']))
 
             if event['status'] == 'failed':
                 log.info('Updating commit queue and executions to reflect failed execution')
+                base_commit_id = git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF'])
+
                 self.cur.execute(
-                    open('./sql/failed_execution_update.sql', 'r').read(),
-                    {
-                        'commit_id': event['commit_id'],
-                        'base_commit_id': base_commit_id,
-                        'pr_id': event['pr_id']
-                    }
+                    sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/failed_execution_update.sql', 'r').read()).format(
+                        commit_id=sql.Literal(event['commit_id']),
+                        base_commit_id=sql.Literal(base_commit_id),
+                        pr_id=sql.Literal(event['pr_id'])
+                    )
                 )
-            elif event['is_rollback'] == true and event['status'] == 'failed':
+            elif event['is_rollback'] == True and event['status'] == 'failed':
                 log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
                 exit(1)
         
@@ -93,8 +124,51 @@ class TriggerSF(PostgresHelper):
             log.info('Another PR is in progress or no PR is waiting')
         
         return commit_item
+    
+    def update_executions_with_new_deploy_stack(self, commit_id):
+        self.cur('SELECT account_path FROM account_dim')
 
-    def create_executions():
+        account_paths = self.cur.fetch_all()
+
+        if len(account_paths) == 0:
+            log.error('No account paths are defined in account_dim')
+        
+        log.info(f'Checking out target commit ID: {commit_id}')
+        self.git_repo.checkout(commit_id)
+        git_root = self.git_repo()
+        log.debug(f'Git root: {git_root}')
+
+        base_commit_id = git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF'])
+
+        log.info('Getting account stacks')
+        for path in account_paths:
+            log.info(f'Account path: {path}')
+            self.cur('DROP TABLE IF EXISTS staging_cfg_stack')
+
+            if not os.path.isdir(path):
+                log.error('Account path does not exist within repo')
+            
+            stack = self.create_stack(path, git_root)
+
+            log.debug(f'Stack:\n{stack}')
+
+            if stack == None:
+                log.debug('Stack is empty -- skipping')
+                continue
+            
+            query = sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r').read()).format(
+                base_commit_id=base_commit_id,
+                commit_id=sql.Literal(commit_id),
+                account_path=path
+            )
+
+            log.debug(f'Query:\n{query.as_string(self.conn)}')
+            values = [[value for value in s.values()] for s in stack]
+
+            res = execute_values(self.cur, query, values, fetch=True)
+            log.debug(f'Inserted executions:\n{res}')
+
+    def create_executions(self):
         commit_item = self.dequeue_commit()
 
         if commit_item is None:
@@ -104,41 +178,58 @@ class TriggerSF(PostgresHelper):
         is_rollback = commit_item['is_rollback']
         is_base_rollback = commit_item['is_base_rollback']
 
-        if is_rollback == true and is_base_rollback == false:
+        if is_rollback == True and is_base_rollback == False:
             log.info('Adding commit rollbacks to executions')
             self.cur('./sql/update_executions_with_new_rollback_stack.sql', (commit_id))
-        elif (is_rollback == true and is_base_rollback == true) or is_rollback == false:
+        elif (is_rollback == True and is_base_rollback == True) or is_rollback == False:
             log.info('Adding commit deployments to executions')
-            update_executions_with_new_deploy_stack()
+            self.update_executions_with_new_deploy_stack(commit_id)
         else:
             log.error('Could not identitfy commit type')
             log.error('is_rollback: {is_rollback} -- is_base_rollback: {is_base_rollback}')
             
-    def start_sf_execution(self):
+    def start_sf_executions(self):
         log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
 
-        target_execution_ids = self.cur.execute(open('./sql/select_target_execution_ids.sql').read())
+        self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
 
+        target_execution_ids = [id[0] for id in self.cur.fetchall()]
+        log.debug(f'IDs: {target_execution_ids}')
         log.info(f'Count: {len(target_execution_ids)}')
 
-        if os.environ['DRY_RUN']:
+        if 'DRY_RUN' in os.environ:
             log.info('DRY_RUN was set -- skip starting sf executions')
+        elif len(target_execution_ids) == 0:
+            log.info('No executions are ready')
         else:
-            for record in target_executions:
-                execution_id = record['execution_id']
-                log.info(f'Execution ID: {execution_id}')
-                
-                log.debug('Starting sf execution')
-                sf.start_execution()
+            with self.conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor) as cur:
+                for id in target_execution_ids:
+                    log.info(f'Execution ID: {id}')
 
-                log.debug('Updating execution status to running')
-                self.cur.execute(f"""
-                    UPDATE executions
-                    SET status = 'running'
-                    WHERE execution_id = '{execution_id}'
-                """)
+                    cur.execute(sql.SQL("""
+                        SELECT *
+                        FROM queued_executions 
+                        WHERE execution_id = %s
+                        ) sub
+                    """).format(sql.Literal(id)))
 
-    def execute(self):   
+                    sf_input = cur.fetchone()
+                    
+                    log.debug(f'SF input:\n{sf_input}')
+                    log.debug('Starting sf execution')
+                    
+                    sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=json.dumps(sf_input))
+
+                    log.debug('Updating execution status to running')
+                    cur.execute(sql.SQL("""
+                        UPDATE executions
+                        SET status = 'running'
+                        WHERE execution_id = %s
+                    """).format(sql.Literal(id)))
+            
+    def main(self):   
+        self.create_sql_utils()
+
         if 'CODEBUILD_INITIATOR' not in os.environ:
             sys.exit('CODEBUILD_INITIATOR is not set')
         elif 'EVENTBRIDGE_FINISHED_RULE' not in os.environ:
@@ -147,17 +238,25 @@ class TriggerSF(PostgresHelper):
         log.info('Checking if build was triggered via a finished Step Function execution')
         if os.environ['CODEBUILD_INITIATOR'] == os.environ['EVENTBRIDGE_FINISHED_RULE']:
             log.info('Triggered via Step Function Event')
-            self.execution_finished
+            self.execution_finished()
         
         log.info('Checking if any Step Function executions are running')
         self.cur.execute("SELECT COUNT(*) FROM executions WHERE status = 'running'")
         if self.cur.rowcount == 0:
             log.info('No deployment or rollback executions in progress')
-            self.create_executions
+            self.create_executions()
         
         log.info('Starting Step Function Deployment Flow')
         self.start_sf_executions()
 
+    def cleanup(self):
+
+        log.debug('Closing metadb cursor')
+        self.cur.close()
+
+        log.debug('Closing metadb connection')
+        self.conn.close()
+
 if __name__ == '__main__':
     trigger = TriggerSF()
-    trigger.execute()
+    trigger.main()
