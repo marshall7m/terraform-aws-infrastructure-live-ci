@@ -10,30 +10,28 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 @pytest.fixture(scope="session", autouse=True)
-def session_repo_dir(tmpdir_factory):
-    dir = tmpdir_factory.mktemp('test-repo')
-    git.Repo.clone_from('https://github.com/marshall7m/infrastructure-live-testing-template.git', dir)
+def repo_url():
+    url = 'https://oauth2:{}@github.com/marshall7m/infrastructure-live-testing-template.git'.format(os.environ['GITHUB_TOKEN'])
+    return url
+
+@pytest.fixture(scope="session", autouse=True)
+def session_repo_dir(tmp_path_factory, repo_url):
+    dir = str(tmp_path_factory.mktemp('test-repo'))
+    log.debug(f'Session repo dir: {dir}')
+
+    git.Repo.clone_from(repo_url, dir)
 
     return dir
 
 @pytest.fixture(scope="function", autouse=True)
 def function_repo_dir(session_repo_dir, tmp_path):
     dir = tmp_path / 'test-repo'
-    dir.mkdir()
-    repo = git.Repo.clone_from(session_repo_dir, dir)
+    str(dir.mkdir())
+    log.debug(f'Function repo dir: {dir}')
+
+    git.Repo.clone_from(session_repo_dir, dir)
 
     return dir
-
-def function_repo_remote(function_repo_dir, remote_fork=False):
-    if remote_fork:
-        gh = git.Github().get_user()
-        testing_fork = gh.create_fork(repo)
-        yield dir
-        testing_fork.delete()
-    else:
-        # figure out how to add `dir` to local remote source (like git add remote local ./$dir)
-        local = repo.remote('local')
-        return dir
 
 @pytest.fixture(scope="session", autouse=True)
 def apply_session_mock_repo(session_repo_dir):
