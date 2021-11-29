@@ -3,9 +3,17 @@ import os
 import psycopg2
 import string
 import random
+import logging
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 
-pytest_plugins = ['buildspecs.tests.fixtures.mock_repo', 'buildspecs.tests.fixtures.mock_tables']
+pytest_plugins = [
+    'buildspecs.tests.fixtures.mock_repo',
+    'buildspecs.tests.fixtures.mock_tables',
+    'buildspecs.tests.fixtures.scenarios'
+]
  
 @pytest.fixture(scope="function", autouse=True)
 def test_id():
@@ -14,6 +22,8 @@ def test_id():
 @pytest.fixture(scope="session", autouse=True)
 def conn():
     conn = psycopg2.connect()
+    conn.set_session(autocommit=True)
+
     yield conn
     conn.close()
 
@@ -23,25 +33,8 @@ def cur(conn):
     yield cur
     cur.close()
 
-@pytest.fixture(scope="session", autouse=True)
-def create_metadb_tables(conn, cur):
+@pytest.fixture(scope="function", autouse=True)
+def create_metadb_tables(cur):
     yield cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql').read())
 
-    cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/fixtures/clear_metadb_tables.sql').read())
-    cur.execute("""
-    DO $$
-        DECLARE
-            _tbl VARCHAR;
-            clear_tables TEXT[] := ARRAY['executions', 'account_dim', 'commit_queue', 'pr_queue'];
-            reset_tables TEXT[] := ARRAY['pr_queue', 'commit_queue'];
-        BEGIN
-            FOREACH _tbl IN ARRAY clear_tables LOOP
-                PERFORM truncate_if_exists(%(schema)s, %(catalog)s, _tbl);
-            END LOOP;
-
-            FOREACH _tbl IN ARRAY reset_tables LOOP
-                PERFORM truncate_if_exists(%(schema)s, %(catalog)s, _tbl);
-            END LOOP;
-        END
-    $$ LANGUAGE plpgsql;
-    """, {'schema': 'public', 'catalog': conn.info.dbname})
+    cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../helpers/cleanup_metadb_tables.sql').read())
