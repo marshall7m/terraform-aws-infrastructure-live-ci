@@ -51,3 +51,13 @@ LANGUAGE plpgsql AS $$
         END IF;
     END;
 $$;
+
+
+SELECT truncate_if_exists({table_schema}, {table_catalog}, 'executions');
+SELECT truncate_if_exists({table_schema}, {table_catalog}, 'account_dim');
+SELECT truncate_if_exists({table_schema}, {table_catalog}, 'commit_queue');
+SELECT truncate_if_exists({table_schema}, {table_catalog}, 'pr_queue');
+
+SELECT reset_identity_col({table_schema}, {table_catalog}, 'pr_queue', 'id');
+SELECT reset_identity_col({table_schema}, {table_catalog}, 'commit_queue', 'id');
+
