@@ -3,6 +3,7 @@ import pytest
 from github import Github
 import os
 from psycopg2 import sql
+from psycopg2.errors import AssertFailure
 import psycopg2
 import psycopg2.extras
 import subprocess
@@ -31,6 +32,27 @@ class TestSetup:
         self.user = self.gh.get_user()
         self.remote = self.create_fork_remote()
 
+        self.init_sql_utils()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        log.debug('Closing metadb connection')
+        self.conn.close()
+
+    def init_sql_utils(self):
+        cur = self.conn.cursor()
+        log.debug('Creating postgres utility functions')
+        files = [f'{os.path.dirname(os.path.realpath(__file__))}/../buildspecs/sql/utils.sql']
+
+        for file in files:
+            log.debug(f'File: {file}')
+            with open(file, 'r') as f:
+                content = f.read()
+                log.debug(f'Content: {content}')
+                cur.execute(content)
+
     def create_fork_remote(self):
         self.user.create_fork(self.gh_repo)
         print(f'git dir : {self.git_dir}')
@@ -51,75 +73,69 @@ class TestSetup:
 
     @classmethod
     def toggle_trigger(cls, conn, table, trigger, enable=False):
-        cur = conn.cursor()
+        with conn.cursor() as cur:
+            log.info('Creating triggers for table')
+            cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/testing_triggers.sql').read())
 
-        log.debug('Creating trigger depedency functions if not created')
-        cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../buildspecs/sql/utils.sql').read())
-
-        log.info('Creating triggers for table')
-        cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/testing_triggers.sql').read())
-
-        if enable:
-            cur.execute(sql.SQL("""
-                DO $$
-                    BEGIN
-                        ALTER TABLE {tbl} ENABLE TRIGGER {trigger};
-                    END;
-                $$ LANGUAGE plpgsql;
-            """).format(
-                tbl=sql.Identifier(table),
-                trigger=sql.Identifier(trigger)
-            ))
-        else:
-            cur.execute(sql.SQL("""
-                DO $$
-                    BEGIN
-                        ALTER TABLE {tbl} DISABLE TRIGGER {trigger};
-                    END;
-                $$ LANGUAGE plpgsql;
-            """).format(
-                tbl=sql.Identifier(table),
-                trigger=sql.Identifier(trigger)
-            ))
- 
+            if enable:
+                cur.execute(sql.SQL("""
+                    DO $$
+                        BEGIN
+                            ALTER TABLE {tbl} ENABLE TRIGGER {trigger};
+                        END;
+                    $$ LANGUAGE plpgsql;
+                """).format(
+                    tbl=sql.Identifier(table),
+                    trigger=sql.Identifier(trigger)
+                ))
+            else:
+                cur.execute(sql.SQL("""
+                    DO $$
+                        BEGIN
+                            ALTER TABLE {tbl} DISABLE TRIGGER {trigger};
+                        END;
+                    $$ LANGUAGE plpgsql;
+                """).format(
+                    tbl=sql.Identifier(table),
+                    trigger=sql.Identifier(trigger)
+                ))
     @classmethod
     def create_records(cls, conn, table, records, enable_defaults=False, update_parents=False):
-        cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
-                        
-        if type(records) == dict:
-            records = [records]
+        with conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor) as cur:
+            if type(records) == dict:
+                records = [records]
 
-        cols = set().union(*(r.keys() for r in records))
+            cols = set().union(*(r.keys() for r in records))
 
-        if enable_defaults:
-            cls.toggle_trigger(conn, table, f'{table}_default', enable=True)
+            if enable_defaults:
+                cls.toggle_trigger(conn, table, f'{table}_default', enable=True)
 
-        if update_parents:
-            cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=True)
+            if update_parents:
+                cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=True)
 
-        results = []
-        for record in records:
-            cols = record.keys()
+            results = []
+            for record in records:
+                cols = record.keys()
 
-            log.info('Inserting record(s)')
-            log.info(record)
-            query = sql.SQL('INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *').format(
-                tbl=sql.Identifier(table),
-                fields=sql.SQL(', ').join(map(sql.Identifier, cols)),
-                values=sql.SQL(', ').join(map(sql.Placeholder, cols))
-            )
+                log.info('Inserting record(s)')
+                log.info(record)
+                query = sql.SQL('INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *').format(
+                    tbl=sql.Identifier(table),
+                    fields=sql.SQL(', ').join(map(sql.Identifier, cols)),
+                    values=sql.SQL(', ').join(map(sql.Placeholder, cols))
+                )
 
-            log.debug(f'Running: {query.as_string(conn)}')
-            
-            cur.execute(query, record)
-            record = cur.fetchone()
-            results.append(record)
+                log.debug(f'Running: {query.as_string(conn)}')
+                
+                cur.execute(query, record)
+                record = cur.fetchone()
+                results.append(record)
 
-        if enable_defaults:
-            cls.toggle_trigger(conn, table, f'{table}_default', enable=False)
-            
-        if update_parents:
-            cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=False)
+            if enable_defaults:
+                cls.toggle_trigger(conn, table, f'{table}_default', enable=False)
+                
+            if update_parents:
+                cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=False)
 
         return results
 
@@ -142,9 +158,27 @@ class TestSetup:
             tbl=sql.Identifier(table),
             count=sql.Literal(count),
             cond=sql.SQL('\n\t\t\tAND ').join([sql.SQL(' = ').join(sql.Identifier(key) + sql.Literal(val)) for key,val in conditions.items()])
-        )
+        ).as_string(self.conn)
 
         self.assertions.append(query)
+
+    def run_collected_assertions(self, conn):
+        count = 0
+        total = len(self.assertions)
+        with conn.cursor() as cur:
+            for assertion in self.assertions:
+                log.debug(f'Query:\n{assertion}')
+                try:
+                    cur.execute(assertion)
+                    conn.commit()
+                    count += 1
+                except psycopg2.errors.lookup("P0004"):
+                    log.error('Assertion failed')
+                    conn.rollback()
+
+        log.info(f'{count}/{total} assertions were successful')
+        if count != total:
+            raise
 
     @classmethod
     def assert_record_count(cls, conn, table, conditions, count=1):
@@ -168,18 +202,15 @@ class TestSetup:
 
         log.debug(f'Query: {query.as_string(conn)}')
 
-        cur = conn.cursor()
-
-        try:
-            cur.execute(query.as_string(conn))
-            return True
-        except Exception as e:
-            print(e)
-            return False
-
-
+        with conn.cursor() as cur:
+            try:
+                cur.execute(query.as_string(conn))
+                return True
+            except AssertFailure:
+                log.error('Assertion was not met')
+                return False
 class PR(TestSetup):
-    def __init__(self, base_ref, head_ref, *args, **kwargs):
+    def __init__(self, base_ref, head_ref, **kwargs):
         # self.test_setup = test_setup
         self.base_ref = base_ref
         self.head_ref = head_ref
@@ -187,7 +218,7 @@ class PR(TestSetup):
         self.commit_records = []
         self.execution_records = []
         self.head_branch = None
-        self.cw_event = {}
+        self.cw_execution = None
         for k in kwargs.keys():
           self.__setattr__(k, kwargs[k])
 
@@ -274,9 +305,12 @@ class PR(TestSetup):
 
         return modify_items
 
-    def create_execution(self, is_cw_event, **column_args):
-        if is_cw_event:
-            self.cw_event = column_args
+    def create_execution(self, cw_event_finished_status=None, **column_args):
+
+        #TODO: Create remote_changes option that actually creates a SF finished execution
+        if cw_event_finished_status != None and self.cw_execution == None:
+            self.cw_execution = column_args
+            self.cw_event_finished_status = cw_event_finished_status
         else:
             self.execution_records.append(column_args)
 
@@ -285,7 +319,15 @@ class PR(TestSetup):
         self.pr_record = self.create_records(self.conn, 'pr_queue', self.pr_record, enable_defaults=True)[0]
         self.commit_records = self.create_records(self.conn, 'commit_queue', self.commit_records, enable_defaults=True)
         self.execution_records = self.create_records(self.conn, 'executions', self.execution_records, enable_defaults=True)
+        
+        if self.cw_execution:
+            self.cw_execution = self.create_records(self.conn, 'executions', self.cw_execution, enable_defaults=True)[0]
+            cw_event = dict(self.cw_execution)
+            cw_event['status'] = self.cw_event_finished_status
+            os.environ['EVENTBRIDGE_EVENT'] = json.dumps(cw_event)
 
-        if self.cw_event:
-            self.cw_event = self.create_records(self.conn, 'executions', self.cw_event, enable_defaults=True)[0]
-            os.environ['EVENTBRIDGE_EVENT'] = json.dumps(self.cw_event)
+    def cleanup(self):
+        log.debug('Closing PR')
+
+        log.debug('Removing PR branch')
+
