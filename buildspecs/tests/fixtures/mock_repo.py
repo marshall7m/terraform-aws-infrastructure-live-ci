@@ -1,4 +1,4 @@
-from pathlib import Path
+import glob
 import git
 import pytest
 import os
@@ -26,7 +26,9 @@ def session_repo_dir(tmp_path_factory, repo_url):
 @pytest.fixture(scope="function", autouse=True)
 def function_repo_dir(session_repo_dir, tmp_path):
     dir = tmp_path / 'test-repo'
-    str(dir.mkdir())
+    dir.mkdir()
+    
+    dir = str(dir)
     log.debug(f'Function repo dir: {dir}')
 
     git.Repo.clone_from(session_repo_dir, dir)
@@ -47,17 +49,22 @@ def apply_session_mock_repo(session_repo_dir):
     subprocess.run(cmd, capture_output=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 @pytest.fixture(scope="function", autouse=True)
-def create_test_function_tf_state(tmpdir):
-    test_case_tf_state_parent_dir = tmpdir.mkdir('tf-state')
-    os.chdir(os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR'])
-    for path in Path('.').rglob('*.tfstate'):
-        new_path = os.path.join('../doo', path)
+def create_test_function_tf_state(tmp_path):
+    dir = tmp_path / 'tf-state'
+    dir.mkdir()
+    
+    dir = str(dir)
+    log.debug(f'Function tf-state dir: {dir}')
+
+    src = os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR']
+    for path in glob.glob(os.path.join(src, '**', '*.tfstate'), recursive=True):
+        new_path = os.path.join(dir, os.path.relpath(path, src))
         os.makedirs(os.path.dirname(new_path))
         shutil.copy(path, new_path)
 
     # changing TESTING_LOCAL_PARENT_TF_STATE_DIR to test case tf-state dir to create persistant local tf-state
     # prevents loss of local tf-state when new github branches are created/checked out for mocking commits
-    os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR'] = str(test_case_tf_state_parent_dir)
+    os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR'] = str(dir)
 
 def setup_terragrunt_branch_tracking():
     pass
