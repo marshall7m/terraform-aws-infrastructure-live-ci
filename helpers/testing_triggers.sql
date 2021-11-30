@@ -69,6 +69,7 @@ WHEN (
     OR NEW.voters IS NULL
 )
 EXECUTE PROCEDURE trig_account_dim_default();
+ALTER TABLE account_dim DISABLE TRIGGER account_dim_default;
 
 --commit_queue
 
@@ -126,6 +127,7 @@ WHEN (
     OR NEW.commit_id IS NULL
 )
 EXECUTE PROCEDURE trig_commit_queue_default();
+ALTER TABLE commit_queue DISABLE TRIGGER commit_queue_default;
 
 
 CREATE OR REPLACE FUNCTION trig_pr_queue_default()
@@ -173,6 +175,7 @@ WHEN (
     OR NEW.head_ref IS NULL
 )
 EXECUTE PROCEDURE trig_pr_queue_default();
+ALTER TABLE pr_queue DISABLE TRIGGER pr_queue_default;
 
 -- executions
 
@@ -371,33 +374,34 @@ WHEN (
 )
 
 EXECUTE PROCEDURE trig_executions_default();
-
-INSERT INTO pr_queue (id, pr_id, base_ref, head_ref, "status")
-OVERRIDING SYSTEM VALUE
-SELECT
-    coalesce(id, nextval(pg_get_serial_sequence('pr_queue', 'id'))) AS id,
-    e.pr_id,
-    e.base_ref,
-    e.head_ref,
-    e."status"
-FROM (
-    SELECT
-        pr_id,
-        base_ref,
-        head_ref,
-        "status"
-    FROM executions
-) e
-LEFT JOIN pr_queue p
-ON (
-    e.pr_id = p.pr_id
-)
-ON CONFLICT (id) DO NOTHING;
-
+ALTER TABLE executions DISABLE TRIGGER executions_default;
 
 CREATE OR REPLACE FUNCTION trig_executions_update_parents()
 RETURNS TRIGGER AS $$
     BEGIN
+
+        INSERT INTO pr_queue (id, pr_id, base_ref, head_ref, "status")
+        OVERRIDING SYSTEM VALUE
+        SELECT
+            coalesce(id, nextval(pg_get_serial_sequence('pr_queue', 'id'))) AS id,
+            e.pr_id,
+            e.base_ref,
+            e.head_ref,
+            e."status"
+        FROM (
+            SELECT
+                pr_id,
+                base_ref,
+                head_ref,
+                "status"
+            FROM executions
+        ) e
+        LEFT JOIN pr_queue p
+        ON (
+            e.pr_id = p.pr_id
+        )
+        ON CONFLICT (id) DO NOTHING;
+
         INSERT INTO commit_queue (id, commit_id, is_rollback, is_base_rollback, pr_id, "status")
         OVERRIDING SYSTEM VALUE
         SELECT
@@ -449,6 +453,7 @@ CREATE TRIGGER executions_update_parents
     AFTER UPDATE ON executions
     FOR EACH ROW
     EXECUTE PROCEDURE trig_executions_update_parents();
+ALTER TABLE executions DISABLE TRIGGER executions_update_parents;
 
 CREATE OR REPLACE FUNCTION trig_commit_queue_update_parents()
 RETURNS TRIGGER AS $$
@@ -476,3 +481,4 @@ CREATE TRIGGER commit_queue_update_parents
     AFTER UPDATE ON commit_queue
     FOR EACH ROW
     EXECUTE PROCEDURE trig_commit_queue_update_parents();
+ALTER TABLE commit_queue DISABLE TRIGGER commit_queue_update_parents;
