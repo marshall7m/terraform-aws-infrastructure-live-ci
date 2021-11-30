@@ -1,6 +1,7 @@
 import pytest
 import os
 import psycopg2
+from psycopg2 import sql
 import string
 import random
 import logging
@@ -34,7 +35,12 @@ def cur(conn):
     cur.close()
 
 @pytest.fixture(scope="function", autouse=True)
-def create_metadb_tables(cur):
+def create_metadb_tables(cur, conn):
     yield cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql').read())
 
-    cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../helpers/cleanup_metadb_tables.sql').read())
+    cur.execute(
+        sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../helpers/cleanup_metadb_tables.sql').read()).format(
+            table_schema=sql.Literal('public'),
+            table_catalog=sql.Literal(conn.info.dbname)
+        )
+    )

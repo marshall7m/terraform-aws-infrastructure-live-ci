@@ -6,6 +6,7 @@ import git
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import execute_values
+import pandas.io.sql as psql
 import re
 import json
 import boto3
