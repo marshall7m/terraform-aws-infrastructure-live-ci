@@ -46,7 +46,7 @@ class TestSetup:
         self.conn.close()
 
     def get_base_commit_id(self):
-        return git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF'])
+        return str(git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF']))
 
     def init_sql_utils(self):
         cur = self.conn.cursor()
@@ -82,66 +82,53 @@ class TestSetup:
             log.info('Creating triggers for table')
             cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/testing_triggers.sql').read())
 
-            if enable:
-                cur.execute(sql.SQL("""
-                    DO $$
-                        BEGIN
-                            ALTER TABLE {tbl} ENABLE TRIGGER {trigger};
-                        END;
-                    $$ LANGUAGE plpgsql;
-                """).format(
-                    tbl=sql.Identifier(table),
-                    trigger=sql.Identifier(trigger)
-                ))
-            else:
-                cur.execute(sql.SQL("""
-                    DO $$
-                        BEGIN
-                            ALTER TABLE {tbl} DISABLE TRIGGER {trigger};
-                        END;
-                    $$ LANGUAGE plpgsql;
-                """).format(
-                    tbl=sql.Identifier(table),
-                    trigger=sql.Identifier(trigger)
-                ))
+            cur.execute(sql.SQL("ALTER TABLE {tbl} {action} TRIGGER {trigger}").format(
+                tbl=sql.Identifier(table),
+                action=sql.SQL('ENABLE' if enable else 'DISABLE'),
+                trigger=sql.Identifier(trigger)
+            ))
+
     @classmethod
-    def create_records(cls, conn, table, records, enable_defaults=False, update_parents=False):
-        with conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor) as cur:
+    def create_records(cls, conn, table, records, enable_defaults=None, update_parents=None):
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             if type(records) == dict:
                 records = [records]
 
             cols = set().union(*(r.keys() for r in records))
 
-            if enable_defaults:
-                cls.toggle_trigger(conn, table, f'{table}_default', enable=True)
-
-            if update_parents:
-                cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=True)
-
             results = []
-            # TODO: use COPY command to insert in one go?
-            for record in records:
-                cols = record.keys()
-
-                log.info('Inserting record(s)')
-                log.info(record)
-                query = sql.SQL('INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *').format(
-                    tbl=sql.Identifier(table),
-                    fields=sql.SQL(', ').join(map(sql.Identifier, cols)),
-                    values=sql.SQL(', ').join(map(sql.Placeholder, cols))
-                )
-
-                log.debug(f'Running: {query.as_string(conn)}')
+            try:
+                if enable_defaults != None:
+                    cls.toggle_trigger(conn, table, f'{table}_default', enable=enable_defaults)
                 
-                cur.execute(query, record)
-                record = cur.fetchone()
-                results.append(record)
+                if update_parents != None:
+                    cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=update_parents)
 
-            if enable_defaults:
-                cls.toggle_trigger(conn, table, f'{table}_default', enable=False)
-                
-            if update_parents:
-                cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=False)
+                for record in records:
+                    cols = record.keys()
+
+                    log.info('Inserting record(s)')
+                    log.info(record)
+                    query = sql.SQL('INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *').format(
+                        tbl=sql.Identifier(table),
+                        fields=sql.SQL(', ').join(map(sql.Identifier, cols)),
+                        values=sql.SQL(', ').join(map(sql.Placeholder, cols))
+                    )
+
+                    log.debug(f'Running: {query.as_string(conn)}')
+                    
+                    cur.execute(query, record)
+                    record = cur.fetchone()
+                    results.append(dict(record))
+            except Exception as e:
+                log.error(e)
+                raise
+            finally:
+                if enable_defaults != None:
+                    cls.toggle_trigger(conn, table, f'{table}_default', enable=False)
+
+                if update_parents != None:
+                    cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=False)
 
         return results
 
@@ -322,7 +309,7 @@ class PR(TestSetup):
         for item in modify_items:
             if 'execution' in item:
                 # merges commit record with execution record except on status since commit status != execution status
-                record = {**item['execution'], **{col: val for col,val in column_args.items() if col != 'status'}}
+                record = {**item['execution'], **{'cfg_path': item['cfg_path']}, **{col: val for col,val in column_args.items() if col != 'status'}}
                 self.create_execution(**record)
 
         self.remote.push()
@@ -333,25 +320,33 @@ class PR(TestSetup):
 
         #TODO: Create remote_changes option that actually creates a SF finished execution
         if cw_event_finished_status != None and self.cw_execution == None:
-            self.cw_execution = column_args
+            self.cw_execution = {**column_args, **{'status': 'running'}}
             self.cw_event_finished_status = cw_event_finished_status
         else:
             self.execution_records.append(column_args)
 
     def insert_records(self):
-    
+
         self.pr_record = self.create_records(self.conn, 'pr_queue', self.pr_record, enable_defaults=True)[0]
-        self.commit_records = self.create_records(self.conn, 'commit_queue', self.commit_records, enable_defaults=True)
-        self.execution_records = self.create_records(self.conn, 'executions', self.execution_records, enable_defaults=True)
+        self.commit_records = self.create_records(self.conn, 'commit_queue', [{**record, **{'pr_id': self.pr_record['pr_id']}} for record in self.commit_records], enable_defaults=True)
+        self.execution_records = self.create_records(self.conn, 'executions', [{**record, **{'pr_id': self.pr_record['pr_id']}} for record in self.execution_records], enable_defaults=True)
 
         if self.cw_execution != None:
-            self.cw_execution = self.create_records(self.conn, 'executions', self.cw_execution, enable_defaults=True)[0]
+            self.cw_execution = self.create_records(self.conn, 'executions', {**self.cw_execution, **{'pr_id': self.pr_record['pr_id']}}, enable_defaults=True)[0]
             cw_event = dict(self.cw_execution)
             cw_event['status'] = self.cw_event_finished_status
             os.environ['EVENTBRIDGE_EVENT'] = json.dumps(cw_event)
+        
+
+        log.debug('All records')
+        log.debug('pr_queue')
+        log.debug(psql.read_sql("SELECT * FROM pr_queue", self.conn).T)
+        log.debug('commit_queue')
+        log.debug(psql.read_sql("SELECT * FROM commit_queue", self.conn).T)
+        log.debug('executions')
+        log.debug(psql.read_sql("SELECT * FROM executions", self.conn).T)
 
     def cleanup(self):
         log.debug('Closing PR')
 
         log.debug('Removing PR branch')
-

@@ -126,7 +126,7 @@ def scenario_2(test_id, repo_url, function_repo_dir):
         pr.collect_record_assertion('executions', {**cw_event, **{'status': 'success'}}, [cw_event])
         pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'success'}}, [pr.commit_records[0]])
         pr.collect_record_assertion('commit_queue', {**pr.commit_records[1], **{'status': 'running'}}, [pr.commit_records[1]])
-        pr.collect_record_assertion('executions', {'status': 'running', 'cfg_path': next_commit_path}, [pr.execution_records[0]])
+        pr.collect_record_assertion('executions', {'status': 'running', 'cfg_path': next_commit_path}, [{'commit_id': pr.commit_records[1]['commit_id']}])
         pr.collect_record_assertion('pr_queue', {**pr.pr_record, **{'status': 'running'}}, [pr.pr_record])
         
     return ts
@@ -197,7 +197,7 @@ def scenario_3(test_id, repo_url, function_repo_dir):
             'commit_id': pr.get_base_commit_id(),
             'is_rollback': True,
             'is_base_rollback': True
-        }, [pr.execution_records[0]])
+        }, [pr.cw_execution])
 
         pr.collect_record_assertion('pr_queue', {**pr.pr_record, **{'status': 'running'}}, [pr.pr_record])
         

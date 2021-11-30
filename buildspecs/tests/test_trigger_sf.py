@@ -4,6 +4,7 @@ import os
 import logging
 from buildspecs.trigger_sf import TriggerSF
 from psycopg2.sql import SQL
+import pandas.io.sql as psql
 from helpers.utils import TestSetup
 
 import uuid
@@ -23,7 +24,9 @@ def codebuild_env():
     os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
 
 @pytest.mark.parametrize("scenario", [
-    ("scenario_1")
+    ("scenario_1"),
+    ("scenario_2"),
+    ("scenario_3")
 ])
 def test_record_exists(scenario, request):
     log.debug(f"Scenario: {scenario}")
@@ -41,6 +44,5 @@ def test_record_exists(scenario, request):
         trigger.cleanup()
 
     log.info("Running record assertions:")
-    with psycopg2.connect() as conn:        
+    with psycopg2.connect() as conn:     
         scenario.run_collected_assertions(conn)
-
