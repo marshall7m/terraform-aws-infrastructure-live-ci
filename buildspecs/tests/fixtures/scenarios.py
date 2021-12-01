@@ -123,11 +123,13 @@ def scenario_2(test_id, repo_url, function_repo_dir):
         pr.insert_records()
 
         cw_event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
-        pr.collect_record_assertion('executions', {**cw_event, **{'status': 'success'}}, [cw_event])
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'success'}}, [pr.commit_records[0]])
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[1], **{'status': 'running'}}, [pr.commit_records[1]])
-        pr.collect_record_assertion('executions', {'status': 'running', 'cfg_path': next_commit_path}, [{'commit_id': pr.commit_records[1]['commit_id']}])
         pr.collect_record_assertion('pr_queue', {**pr.pr_record, **{'status': 'running'}}, [pr.pr_record])
+
+        pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'success'}}, [pr.commit_records[0]])
+        pr.collect_record_assertion('executions', {**{'execution_id': cw_event['execution_id']}, **{'status': 'success'}}, [{'status': 'success'}])
+
+        pr.collect_record_assertion('commit_queue', {**pr.commit_records[1], **{'status': 'running'}}, [pr.commit_records[1], {'status': 'running'}])
+        pr.collect_record_assertion('executions', {'status': 'running', 'cfg_path': next_commit_path}, [{'commit_id': pr.commit_records[1]['commit_id']}, {'status': 'running'}])
         
     return ts
 
