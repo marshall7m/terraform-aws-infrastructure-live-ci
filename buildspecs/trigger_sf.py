@@ -22,7 +22,7 @@ class TriggerSF:
         self.conn = psycopg2.connect()
         self.conn.set_session(autocommit=True)
 
-        self.cur = self.conn.cursor()
+        self.cur = self.conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
         self.git_repo = git.Repo(search_parent_directories=True)
 
     def create_sql_utils(self):
@@ -32,9 +32,7 @@ class TriggerSF:
         for file in files:
             log.debug(f'File: {file}')
             with open(file, 'r') as f:
-                content = f.read()
-                log.debug(f'Content: {content}')
-                self.cur.execute(content)
+                self.cur.execute(f.read())
     
     def get_new_provider_resources(self, tg_dir, commit_id, new_providers):
         self.git_repo.git.checkout(commit_id)
@@ -67,7 +65,7 @@ class TriggerSF:
 
             if event['status'] == 'failed':
                 log.info('Updating commit queue and executions to reflect failed execution')
-                base_commit_id = git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF'])
+                base_commit_id = str(git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF']))
 
                 self.cur.execute(
                     sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/failed_execution_update.sql', 'r').read()).format(
@@ -81,13 +79,15 @@ class TriggerSF:
                 exit(1)
         
     def dequeue_commit(self):
-        commit_item = self.cur.execute(open('dequeue_rollback_commit.sql', 'r').read())
+        self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_commit.sql', 'r').read())
+
+        commit_item = dict(self.cur.fetchone())
 
         if commit_item:
             return commit_item
         
         log.info('Dequeuing next PR if commit queue is empty')
-        pr_items = self.cur.execute(open('dequeue_pr.sql', 'r').read())
+        pr_items = self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_pr.sql', 'r').read())
 
         if pr_items:
             log.info("Updating commit queue with dequeued PR's most recent commit")
@@ -176,6 +176,8 @@ class TriggerSF:
 
         if commit_item is None:
             log.info('No commits to dequeue -- skipping execution creation')
+        else:
+            log.debug(f'Dequeued commit record:\n{commit_item}')
 
         commit_id = commit_item['commit_id']
         is_rollback = commit_item['is_rollback']
@@ -183,7 +185,7 @@ class TriggerSF:
 
         if is_rollback == True and is_base_rollback == False:
             log.info('Adding commit rollbacks to executions')
-            self.cur('./sql/update_executions_with_new_rollback_stack.sql', (commit_id))
+            self.cur(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r').read(), (commit_id))
         elif (is_rollback == True and is_base_rollback == True) or is_rollback == False:
             log.info('Adding commit deployments to executions')
             self.update_executions_with_new_deploy_stack(commit_id)
@@ -205,30 +207,29 @@ class TriggerSF:
         elif len(target_execution_ids) == 0:
             log.info('No executions are ready')
         else:
-            with self.conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor) as cur:
-                for id in target_execution_ids:
-                    log.info(f'Execution ID: {id}')
+            for id in target_execution_ids:
+                log.info(f'Execution ID: {id}')
 
-                    cur.execute(sql.SQL("""
-                        SELECT *
-                        FROM queued_executions 
-                        WHERE execution_id = %s
-                        ) sub
-                    """).format(sql.Literal(id)))
+                self.cur.execute(sql.SQL("""
+                    SELECT *
+                    FROM queued_executions 
+                    WHERE execution_id = %s
+                    ) sub
+                """).format(sql.Literal(id)))
 
-                    sf_input = cur.fetchone()
-                    
-                    log.debug(f'SF input:\n{sf_input}')
-                    log.debug('Starting sf execution')
-                    
-                    sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=json.dumps(sf_input))
+                sf_input = self.cur.fetchone()
+                
+                log.debug(f'SF input:\n{sf_input}')
+                log.debug('Starting sf execution')
+                
+                sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=json.dumps(sf_input))
 
-                    log.debug('Updating execution status to running')
-                    cur.execute(sql.SQL("""
-                        UPDATE executions
-                        SET status = 'running'
-                        WHERE execution_id = %s
-                    """).format(sql.Literal(id)))
+                log.debug('Updating execution status to running')
+                self.cur.execute(sql.SQL("""
+                    UPDATE executions
+                    SET status = 'running'
+                    WHERE execution_id = %s
+                """).format(sql.Literal(id)))
             
     def main(self):   
         self.create_sql_utils()
@@ -244,10 +245,14 @@ class TriggerSF:
             self.execution_finished()
         
         log.info('Checking if any Step Function executions are running')
-        self.cur.execute("SELECT COUNT(*) FROM executions WHERE status = 'running'")
-        if self.cur.rowcount == 0:
+        self.cur.execute("SELECT * FROM executions WHERE status = 'running'")
+        running_execution_count = self.cur.rowcount
+
+        if running_execution_count == 0:
             log.info('No deployment or rollback executions in progress')
             self.create_executions()
+        else:
+            log.info(f'Running executions: {running_execution_count} -- skipping execution creation')
         
         log.info('Starting Step Function Deployment Flow')
         self.start_sf_executions()
