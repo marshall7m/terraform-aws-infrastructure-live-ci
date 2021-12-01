@@ -173,7 +173,6 @@ class TestSetup:
         total = len(self.assertions)
         with conn.cursor() as cur:
             for item in self.assertions:
-                log.debug(f'Assertion query:\n{item["assertion"]}')
                 try:
                     cur.execute(item['assertion'])
                     conn.commit()
@@ -181,10 +180,11 @@ class TestSetup:
                 except psycopg2.errors.lookup("P0004"):
                     conn.rollback()
                     log.error('Assertion failed')
+                    log.debug(f'Query:\n{item["assertion"]}')
                     with pandas.option_context('display.max_rows', None, 'display.max_columns', None):
                         for query in item['debug']:
                             log.debug(f'Debug query:\n{query}')
-                            log.debug(psql.read_sql(query, conn))
+                            log.debug(psql.read_sql(query, conn).T)
                             conn.commit()
 
         log.info(f'{count}/{total} assertions were successful')
