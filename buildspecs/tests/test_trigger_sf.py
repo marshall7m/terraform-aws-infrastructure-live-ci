@@ -24,9 +24,9 @@ def codebuild_env():
     os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
 
 @pytest.mark.parametrize("scenario", [
-    ("scenario_1"),
-    ("scenario_2"),
-    ("scenario_3")
+    # ("scenario_1"),
+    ("scenario_2")
+    # ("scenario_3")
 ])
 def test_record_exists(scenario, request):
     log.debug(f"Scenario: {scenario}")
@@ -37,9 +37,6 @@ def test_record_exists(scenario, request):
     trigger = TriggerSF()
     try:
         trigger.main()
-    except Exception as e:
-        log.error(e)
-        raise
     finally:
         trigger.cleanup()
 
