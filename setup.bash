@@ -11,7 +11,7 @@ if [ "$TESTING_ENV" == "local" ]; then
     export PGPORT=5432
     export ADDITIONAL_PATH=/src/node_modules/.bin
     
-    docker-compose up --detach
+    [[ $(docker ps -f "name=metadb" --format '{{.Names}}') == $name ]] || docker-compose run metadb --detach
     docker-compose run testing /bin/bash
 elif [ "$TESTING_ENV" == "remote" ]; then
     # skips creating local metadb container
