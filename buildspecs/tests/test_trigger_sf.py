@@ -28,11 +28,13 @@ def codebuild_env():
     ("scenario_2")
     # ("scenario_3")
 ])
-def test_record_exists(scenario, request):
+def test_record_exists(scenario, function_repo_dir, request):
     log.debug(f"Scenario: {scenario}")
     scenario = request.getfixturevalue(scenario)
 
-
+    os.chdir(function_repo_dir)
+    log.debug(f'CWD: {os.getcwd()}')
+    
     #TODO: Figure out how to put trigger.main() within fixture thats dependent on scenario and calls .cleanup() yielding .main()
     trigger = TriggerSF()
     try:
