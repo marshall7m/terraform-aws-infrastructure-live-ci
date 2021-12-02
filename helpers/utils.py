@@ -79,7 +79,7 @@ class TestSetup:
     @classmethod
     def toggle_trigger(cls, conn, table, trigger, enable=False):
         with conn.cursor() as cur:
-            log.info('Creating triggers for table')
+            log.debug('Creating triggers for table')
             cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/testing_triggers.sql').read())
 
             cur.execute(sql.SQL("ALTER TABLE {tbl} {action} TRIGGER {trigger}").format(
@@ -87,6 +87,8 @@ class TestSetup:
                 action=sql.SQL('ENABLE' if enable else 'DISABLE'),
                 trigger=sql.Identifier(trigger)
             ))
+
+            conn.commit()
 
     @classmethod
     def create_records(cls, conn, table, records, enable_defaults=None, update_parents=None):
@@ -118,6 +120,8 @@ class TestSetup:
                     log.debug(f'Running: {query.as_string(conn)}')
                     
                     cur.execute(query, record)
+                    conn.commit()
+
                     record = cur.fetchone()
                     results.append(dict(record))
             except Exception as e:
