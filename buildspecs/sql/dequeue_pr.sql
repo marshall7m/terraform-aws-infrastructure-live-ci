@@ -1,7 +1,7 @@
 UPDATE
     pr_queue
 SET
-    status = 'running'
+    "status" = 'running'
 WHERE 
     id = (
         SELECT id
@@ -16,4 +16,4 @@ AND
         FROM commit_queue 
         WHERE "status" = 'waiting'
     )
-RETURNING row_to_json(pr_queue.*);
+RETURNING *;
