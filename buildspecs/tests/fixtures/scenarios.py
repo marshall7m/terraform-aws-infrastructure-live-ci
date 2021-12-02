@@ -8,6 +8,18 @@ from helpers.utils import TestSetup
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+@pytest.fixture(scope='session', autouse=True)
+def account_dim(conn):
+    return TestSetup.create_records(conn, 'account_dim', [
+        {
+            'account_name': 'dev',
+            'account_path': 'directory_dependency/dev-account',
+            'account_deps': [],
+            'min_approval_count': 1,
+            'min_rejection_count': 1,
+            'voters': ['test-voter-1']
+        }
+    ])
 
 @pytest.fixture()
 def scenario_1(test_id, repo_url, function_repo_dir):
