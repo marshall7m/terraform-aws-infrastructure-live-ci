@@ -11,6 +11,7 @@ import re
 import json
 import boto3
 import pandas as pd
+import sys
 
 
 log = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ class TriggerSF:
                 )
             elif event['is_rollback'] == True and event['status'] == 'failed':
                 log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
-                exit(1)
+                sys.exit(1)
         
     def dequeue_commit(self):
         self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_commit.sql', 'r').read())
@@ -128,17 +129,57 @@ class TriggerSF:
         
         return commit_item
     
-    def update_executions_with_new_deploy_stack(self, commit_id):
-        self.cur('SELECT account_path FROM account_dim')
+    def create_stack(path, git_root):
+        cmd = f"""
+        terragrunt run-all plan
+            --terragrunt-working-dir {path}
+            --terragrunt-non-interactive
+            -detailed-exitcode
+        """
 
-        account_paths = self.cur.fetch_all()
+        out = subprocess.run(cmd.split(' '), capture_output=True, text=True).stdout
+
+        diff_paths = out
+
+        if len(diff_paths) == 0:
+            log.info('Detected no Terragrunt paths with difference')
+            return
+        
+        #TODO parse tg out with re
+        stack = out
+
+        log.debug(f'Terragrunt Dependency Stack:\n{stack}')
+
+        log.debug('Filtering out Terragrunt paths with no difference in plan')
+        stack = stack
+
+        log.debug(f'Filtered Stack:\n{stack}')
+
+        log.info('Getting New Providers within Stack')
+        for x in stack:
+            log.debug(f'Path: {path}')
+            new_providers = x
+
+            log.debug(f'Provider: {provider}')
+            stack[key]['new_providers'] = y
+        
+        return stack
+        
+        
+    def update_executions_with_new_deploy_stack(self, commit_id):
+        with self.conn.cursor() as cur:
+            cur.execute('SELECT account_path FROM account_dim')
+            account_paths = [path for t in cur.fetchall() for path in t]
+
+        log.debug(f'Account Paths:\n{account_paths}')
 
         if len(account_paths) == 0:
-            log.error('No account paths are defined in account_dim')
+            log.fatal('No account paths are defined in account_dim')
+            sys.exit(1)
         
         log.info(f'Checking out target commit ID: {commit_id}')
-        self.git_repo.checkout(commit_id)
-        git_root = self.git_repo()
+        self.git_repo.git.checkout(commit_id)
+        git_root = self.git_repo.git.rev_parse('--show-toplevel')
         log.debug(f'Git root: {git_root}')
 
         base_commit_id = git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF'])
@@ -146,10 +187,10 @@ class TriggerSF:
         log.info('Getting account stacks')
         for path in account_paths:
             log.info(f'Account path: {path}')
-            self.cur('DROP TABLE IF EXISTS staging_cfg_stack')
 
             if not os.path.isdir(path):
                 log.error('Account path does not exist within repo')
+                sys.exit(1)
             
             stack = self.create_stack(path, git_root)
 
@@ -185,13 +226,14 @@ class TriggerSF:
 
         if is_rollback == True and is_base_rollback == False:
             log.info('Adding commit rollbacks to executions')
-            self.cur(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r').read(), (commit_id))
+            self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r').read(), (commit_id))
         elif (is_rollback == True and is_base_rollback == True) or is_rollback == False:
             log.info('Adding commit deployments to executions')
             self.update_executions_with_new_deploy_stack(commit_id)
         else:
             log.error('Could not identitfy commit type')
             log.error('is_rollback: {is_rollback} -- is_base_rollback: {is_base_rollback}')
+            sys.exit(1)
             
     def start_sf_executions(self):
         log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
