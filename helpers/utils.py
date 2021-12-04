@@ -271,7 +271,7 @@ class PR(TestSetup):
 
                 value = 'test'
                 file_content = inspect.cleandoc(f"""
-                output "{filepath}" {{
+                output "{filename}" {{
                     value = "{value}"
                 }}
                 """)
