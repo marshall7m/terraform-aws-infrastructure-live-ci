@@ -128,41 +128,49 @@ class TriggerSF:
             log.info('Another PR is in progress or no PR is waiting')
         
         return commit_item
-    
-    def create_stack(path, git_root):
-        cmd = f"""
-        terragrunt run-all plan
-            --terragrunt-working-dir {path}
-            --terragrunt-non-interactive
-            -detailed-exitcode
-        """
+    def get_new_providers(path):
+        log.debug(f'Path: {path}')
 
-        out = subprocess.run(cmd.split(' '), capture_output=True, text=True).stdout
+        out = subprocess.run(f"terragrunt providers --terragrunt-working-dir {path}".split(' '), capture_output=True, text=True).stdout
+        cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', out, re.MULTILINE)
+        state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', out, re.MULTILINE)
+        
+        log.debug(f'Config providers:\n{cfg_providers}')
+        log.debug(f'State providers:\n{state_providers}')
 
-        diff_paths = out
+        return list(set(cfg_providers).difference(state_providers))
 
+    def create_stack(self, path, git_root):
+        cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
+
+        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
+        out = run.stderr
+        return_code = run.returncode
+
+        if return_code not in [0, 2]:
+            log.fatal('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
+            log.debug(f'Return code: {return_code}')
+            log.debug(out)
+            sys.exit(1)
+        
+        diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+(?=\])', out, re.DOTALL)
         if len(diff_paths) == 0:
-            log.info('Detected no Terragrunt paths with difference')
+            log.debug('Detected no Terragrunt paths with difference')
             return
+        else:
+            log.debug(f'Detected new/modified Terragrunt paths:\n{diff_paths}')
         
-        #TODO parse tg out with re
-        stack = out
+        stack = []
+        for m in re.finditer(r'=>\sModule\s(?P<cfg_path>.+?)\s\(excluded:.+dependencies:\s\[(?P<cfg_deps>.+|)\]', out, re.MULTILINE):
+            if m.group(1) in diff_paths:
+                cfg = m.groupdict()
 
-        log.debug(f'Terragrunt Dependency Stack:\n{stack}')
+                cfg['cfg_path'] = os.path.relpath(cfg['cfg_path'], git_root)
+                cfg['cfg_deps'] = [os.path.relpath(path, git_root) for path in cfg['cfg_deps'].replace(',', '').split()]
+                cfg['new_providers'] = self.get_new_providers(cfg['cfg_path'])
 
-        log.debug('Filtering out Terragrunt paths with no difference in plan')
-        stack = stack
+                stack.append(cfg)
 
-        log.debug(f'Filtered Stack:\n{stack}')
-
-        log.info('Getting New Providers within Stack')
-        for x in stack:
-            log.debug(f'Path: {path}')
-            new_providers = x
-
-            log.debug(f'Provider: {provider}')
-            stack[key]['new_providers'] = y
-        
         return stack
         
         
@@ -238,9 +246,11 @@ class TriggerSF:
     def start_sf_executions(self):
         log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
 
-        self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
+        with self.conn.cursor() as cur:
+            cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
+            log.debug(cur.fetchall())
+            target_execution_ids = [id[0] for id in cur.fetchall() if id[0] != None]
 
-        target_execution_ids = [id[0] for id in self.cur.fetchall() if id[0] != None]
         log.debug(f'IDs: {target_execution_ids}')
         log.info(f'Count: {len(target_execution_ids)}')
 
