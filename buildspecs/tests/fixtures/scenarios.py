@@ -8,7 +8,7 @@ from helpers.utils import TestSetup
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='function', autouse=True)
 def account_dim(conn):
     return TestSetup.create_records(conn, 'account_dim', [
         {
