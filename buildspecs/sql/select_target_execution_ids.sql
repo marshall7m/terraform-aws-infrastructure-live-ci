@@ -15,7 +15,7 @@ CREATE OR REPLACE FUNCTION arr_in_arr_count(TEXT[], TEXT[]) RETURNS INT AS $$
     END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS JSON AS $$
+CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
     DECLARE
         _is_rollback BOOLEAN;
     BEGIN
@@ -44,7 +44,7 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS JSON AS $$
             RAISE NOTICE 'Getting target rollback executions';
             -- selects executions where all account/terragrunt config dependencies are successful
             RETURN (
-                SELECT json_agg(execution_id)
+                SELECT array_agg(execution_id::TEXT)
                 FROM queued_executions
                 WHERE account_path NOT IN (
                     SELECT c.account_deps
@@ -67,7 +67,7 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS JSON AS $$
             RAISE NOTICE 'Getting target deployment executions';
             -- selects executions where all account/terragrunt config dependencies are successful
             RETURN (
-                SELECT json_agg(execution_id)
+                SELECT array_agg(execution_id::TEXT)
                 FROM queued_executions
                 -- where count of dependency array == the count of successful dependencies
                 WHERE cardinality(account_deps) = arr_in_arr_count(

@@ -128,7 +128,8 @@ class TriggerSF:
             log.info('Another PR is in progress or no PR is waiting')
         
         return commit_item
-    def get_new_providers(path):
+
+    def get_new_providers(self, path):
         log.debug(f'Path: {path}')
 
         out = subprocess.run(f"terragrunt providers --terragrunt-working-dir {path}".split(' '), capture_output=True, text=True).stdout
@@ -153,7 +154,7 @@ class TriggerSF:
             log.debug(out)
             sys.exit(1)
         
-        diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+(?=\])', out, re.DOTALL)
+        diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', out, re.DOTALL)
         if len(diff_paths) == 0:
             log.debug('Detected no Terragrunt paths with difference')
             return
@@ -166,14 +167,13 @@ class TriggerSF:
                 cfg = m.groupdict()
 
                 cfg['cfg_path'] = os.path.relpath(cfg['cfg_path'], git_root)
-                cfg['cfg_deps'] = [os.path.relpath(path, git_root) for path in cfg['cfg_deps'].replace(',', '').split()]
+                cfg['cfg_deps'] = [os.path.relpath(path, git_root) for path in cfg['cfg_deps'].replace(',', '').split() if path in diff_paths]
                 cfg['new_providers'] = self.get_new_providers(cfg['cfg_path'])
 
                 stack.append(cfg)
 
         return stack
-        
-        
+
     def update_executions_with_new_deploy_stack(self, commit_id):
         with self.conn.cursor() as cur:
             cur.execute('SELECT account_path FROM account_dim')
@@ -190,7 +190,7 @@ class TriggerSF:
         git_root = self.git_repo.git.rev_parse('--show-toplevel')
         log.debug(f'Git root: {git_root}')
 
-        base_commit_id = git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF'])
+        base_commit_id = str(git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF']))
 
         log.info('Getting account stacks')
         for path in account_paths:
@@ -204,21 +204,27 @@ class TriggerSF:
 
             log.debug(f'Stack:\n{stack}')
 
-            if stack == None:
+            if len(stack) == 0:
                 log.debug('Stack is empty -- skipping')
                 continue
             
+            stack_cols = set().union(*(s.keys() for s in stack))
+            
             query = sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r').read()).format(
-                base_commit_id=base_commit_id,
+                base_commit_id=sql.Literal(base_commit_id),
                 commit_id=sql.Literal(commit_id),
-                account_path=path
+                account_path=sql.Literal(path),
+                cols=sql.SQL(', ').join(map(sql.Identifier, stack_cols))
             )
-
             log.debug(f'Query:\n{query.as_string(self.conn)}')
-            values = [[value for value in s.values()] for s in stack]
 
-            res = execute_values(self.cur, query, values, fetch=True)
-            log.debug(f'Inserted executions:\n{res}')
+            col_tpl = '(' + ', '.join([f'%({col})s' for col in stack_cols]) + ')'
+            log.debug(f'Stack column template: {col_tpl}')
+
+            res = execute_values(self.cur, query, stack, template=col_tpl, fetch=True)
+            
+            with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+                log.debug(f'Inserted executions:\n{pd.DataFrame([dict(r) for r in res]).T}')
 
     def create_executions(self):
         commit_item = self.dequeue_commit()
@@ -240,7 +246,7 @@ class TriggerSF:
             self.update_executions_with_new_deploy_stack(commit_id)
         else:
             log.error('Could not identitfy commit type')
-            log.error('is_rollback: {is_rollback} -- is_base_rollback: {is_base_rollback}')
+            log.error(f'is_rollback: {is_rollback} -- is_base_rollback: {is_base_rollback}')
             sys.exit(1)
             
     def start_sf_executions(self):
@@ -248,8 +254,7 @@ class TriggerSF:
 
         with self.conn.cursor() as cur:
             cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
-            log.debug(cur.fetchall())
-            target_execution_ids = [id[0] for id in cur.fetchall() if id[0] != None]
+            target_execution_ids = [id for id in cur.fetchone()[0] if id != None]
 
         log.debug(f'IDs: {target_execution_ids}')
         log.info(f'Count: {len(target_execution_ids)}')
@@ -265,8 +270,7 @@ class TriggerSF:
                 self.cur.execute(sql.SQL("""
                     SELECT *
                     FROM queued_executions 
-                    WHERE execution_id = %s
-                    ) sub
+                    WHERE execution_id = {}
                 """).format(sql.Literal(id)))
 
                 sf_input = self.cur.fetchone()
@@ -280,7 +284,7 @@ class TriggerSF:
                 self.cur.execute(sql.SQL("""
                     UPDATE executions
                     SET status = 'running'
-                    WHERE execution_id = %s
+                    WHERE execution_id = {}
                 """).format(sql.Literal(id)))
             
     def main(self):   
