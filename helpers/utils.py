@@ -19,6 +19,9 @@ import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+class AssertionFailures(Exception):
+    pass
+
 class TestSetup:
     assertions = []
     def __init__(self, conn, git_url, git_dir, gh_token, remote_changes=False):
@@ -193,7 +196,7 @@ class TestSetup:
 
         log.info(f'{count}/{total} assertions were successful')
         if count != total:
-            raise
+            raise AssertionFailures(f'{total-count} assertions failed')
 
     @classmethod
     def assert_record_count(cls, conn, table, conditions, count=1):
@@ -354,3 +357,4 @@ class PR(TestSetup):
         log.debug('Closing PR')
 
         log.debug('Removing PR branch')
+
