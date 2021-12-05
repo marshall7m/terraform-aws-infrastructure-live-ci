@@ -1,5 +1,6 @@
 import psycopg2
 import pytest
+import mock
 import os
 import logging
 from buildspecs.trigger_sf import TriggerSF
@@ -19,22 +20,25 @@ def codebuild_env():
     os.environ['EVENTBRIDGE_FINISHED_RULE'] = 'rule/test'
     os.environ['BASE_REF'] = 'master'
     os.environ['AWS_DEFAULT_REGION'] = 'us-west-2'
+    os.environ['STATE_MACHINE_ARN'] = 'mock-sf-arn'
 
-    os.environ['DRY_RUN'] = 'true'
     os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
 
+# mock step function client
+@mock.patch('buildspecs.trigger_sf.sf')
 @pytest.mark.parametrize("scenario", [
-    # ("scenario_1"),
-    ("scenario_2")
-    # ("scenario_3")
+    ("scenario_1"),
+    ("scenario_2"),
+    ("scenario_3")
 ])
-def test_record_exists(scenario, function_repo_dir, request):
+def test_record_exists(mock_aws, scenario, function_repo_dir, request):
     log.debug(f"Scenario: {scenario}")
     scenario = request.getfixturevalue(scenario)
 
     os.chdir(function_repo_dir)
+
     log.debug(f'CWD: {os.getcwd()}')
-    
+
     #TODO: Figure out how to put trigger.main() within fixture thats dependent on scenario and calls .cleanup() yielding .main()
     trigger = TriggerSF()
     try:
