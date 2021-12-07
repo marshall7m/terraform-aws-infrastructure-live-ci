@@ -1,7 +1,6 @@
 INSERT INTO executions (
         execution_id,
         is_rollback,
-        is_base_rollback,
         pr_id,
         commit_id,
         base_ref,
@@ -26,14 +25,13 @@ INSERT INTO executions (
     )
 SELECT
     'run-' || substr(md5(random()::text), 0, 8),
-    "commit".is_rollback,
-    "commit".is_base_rollback,
-    "commit".pr_id,
-    "commit".commit_id,
-    COALESCE({base_ref}, "commit".base_ref),
-    COALESCE({head_ref}, "commit".head_ref),
-    'refs/heads/' || "commit".base_ref || '^{{' || {base_commit_id} || '}}',
-    'refs/pull/' || "commit".pr_id || '/head^{{' || "commit".commit_id || '}}',
+    false,
+    {pr_id},
+    {commit_id},
+    {base_ref},
+    {head_ref},
+    'refs/heads/' || {base_ref} || '^{{' || {base_commit_id} || '}}',
+    'refs/pull/' || {pr_id} || '/head^{{' || {commit_id} || '}}',
     stack.cfg_path,
     stack.cfg_deps::TEXT[],
     'waiting',
@@ -51,19 +49,6 @@ SELECT
     0,
     account.min_rejection_count
 FROM (
-    SELECT
-        base_ref,
-        head_ref,
-        commit_queue.pr_id,
-        commit_id,
-        is_rollback,
-        is_base_rollback
-    FROM commit_queue
-    JOIN pr_queue
-    ON pr_queue.pr_id = commit_queue.pr_id
-    WHERE commit_queue.commit_id = {commit_id}
-) "commit",
-(
     SELECT
         account_dim.account_name,
         account_dim.account_path,

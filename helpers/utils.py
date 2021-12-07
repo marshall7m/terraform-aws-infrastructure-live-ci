@@ -334,8 +334,6 @@ class PR(TestSetup):
 
     def insert_records(self):
 
-        self.pr_record = self.create_records(self.conn, 'pr_queue', self.pr_record, enable_defaults=True)[0]
-        self.commit_records = self.create_records(self.conn, 'commit_queue', [{**record, **{'pr_id': self.pr_record['pr_id']}} for record in self.commit_records], enable_defaults=True)
         self.execution_records = self.create_records(self.conn, 'executions', [{**record, **{'pr_id': self.pr_record['pr_id']}} for record in self.execution_records], enable_defaults=True)
 
         if self.cw_execution != None:
@@ -343,13 +341,9 @@ class PR(TestSetup):
             cw_event = dict(self.cw_execution)
             cw_event['status'] = self.cw_event_finished_status
             os.environ['EVENTBRIDGE_EVENT'] = json.dumps(cw_event)
-        
+    
 
         log.debug('All records')
-        log.debug('pr_queue')
-        log.debug(psql.read_sql("SELECT * FROM pr_queue", self.conn).T)
-        log.debug('commit_queue')
-        log.debug(psql.read_sql("SELECT * FROM commit_queue", self.conn).T)
         log.debug('executions')
         log.debug(psql.read_sql("SELECT * FROM executions", self.conn).T)
 

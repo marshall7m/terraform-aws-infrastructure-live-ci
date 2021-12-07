@@ -25,25 +25,6 @@ CREATE TABLE IF NOT EXISTS executions (
     min_rejection_count INT CHECK (min_rejection_count >= 0)
 );
 
-CREATE TABLE IF NOT EXISTS pr_queue (
-    id INT GENERATED ALWAYS AS IDENTITY,
-    pr_id INT,
-    status VARCHAR,
-    base_ref VARCHAR,
-    head_ref VARCHAR,
-    PRIMARY KEY (id)
-);
-
-CREATE TABLE IF NOT EXISTS commit_queue (
-    id INT GENERATED ALWAYS AS IDENTITY,
-    commit_id VARCHAR,
-    is_rollback BOOL,
-    is_base_rollback BOOL,
-    pr_id INT,
-    status VARCHAR,
-    PRIMARY KEY (id)
-);
-
 CREATE TABLE IF NOT EXISTS account_dim (
     account_name VARCHAR PRIMARY KEY,
     account_path VARCHAR,

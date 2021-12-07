@@ -40,19 +40,13 @@ def scenario_1(test_id, repo_url, function_repo_dir):
     log.debug('Running scenario')
 
     with TestSetup(psycopg2.connect(), repo_url, function_repo_dir, os.environ['GITHUB_TOKEN']) as ts:
-        pr = ts.pr(base_ref=os.environ['BASE_REF'], head_ref=f'feature-{test_id}')
-
-        pr.create_pr(status='running')
-
-        pr.create_commit(
-            status='running',
+        ts.create_commit(
             modify_items=[
                 {
                     'apply_changes': True,
                     'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
                     'create_provider_resource': False,
                     'execution': {
-                        'is_base_rollback': False,
                         'is_rollback': False,
                         'account_name': 'dev',
                         'cw_event_finished_status': 'success'
@@ -64,7 +58,6 @@ def scenario_1(test_id, repo_url, function_repo_dir):
                     'create_provider_resource': False,
                     'execution': {
                         'status': 'waiting',
-                        'is_base_rollback': False,
                         'is_rollback': False,
                         'account_name': 'dev'
                     }
@@ -72,11 +65,8 @@ def scenario_1(test_id, repo_url, function_repo_dir):
             ]
         )
 
-        pr.insert_records()
         cw_event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
-        pr.collect_record_assertion('executions', {**cw_event, **{'status': 'success'}}, [cw_event])
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'running'}}, [pr.commit_records[0]])
-        pr.collect_record_assertion('pr_queue', {**pr.pr_record, **{'status': 'running'}}, [{'pr_id': pr.pr_record['pr_id']}])
+        ts.collect_record_assertion('executions', {**cw_event, **{'status': 'success'}}, [cw_event])
         
     return ts
 
@@ -135,12 +125,8 @@ def scenario_2(test_id, repo_url, function_repo_dir):
         pr.insert_records()
 
         cw_event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
-        pr.collect_record_assertion('pr_queue', {**pr.pr_record, **{'status': 'running'}}, [pr.pr_record])
 
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'success'}}, [pr.commit_records[0]])
         pr.collect_record_assertion('executions', {**{'execution_id': cw_event['execution_id']}, **{'status': 'success'}}, [{'status': 'success'}])
-
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[1], **{'status': 'running'}}, [pr.commit_records[1], {'status': 'running'}])
         pr.collect_record_assertion('executions', {'status': 'running', 'cfg_path': next_commit_path}, [{'commit_id': pr.commit_records[1]['commit_id']}, {'status': 'running'}])
         
     return ts
@@ -200,10 +186,6 @@ def scenario_3(test_id, repo_url, function_repo_dir):
 
         cw_event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
         pr.collect_record_assertion('executions', {**cw_event, **{'status': 'failed'}}, [cw_event])
-        
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'failed'}}, [pr.commit_records[0]])
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[0], **{'status': 'running', 'is_rollback': True}}, [pr.commit_records[0]])
-        pr.collect_record_assertion('commit_queue', {**pr.commit_records[1], **{'status': 'waiting'}}, [pr.commit_records[1]])
 
         pr.collect_record_assertion('executions', {
             'status': 'running',
@@ -212,7 +194,5 @@ def scenario_3(test_id, repo_url, function_repo_dir):
             'is_rollback': True,
             'is_base_rollback': True
         }, [pr.cw_execution])
-
-        pr.collect_record_assertion('pr_queue', {**pr.pr_record, **{'status': 'running'}}, [pr.pr_record])
         
     return ts
