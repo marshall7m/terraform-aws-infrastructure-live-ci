@@ -13,7 +13,6 @@ import boto3
 import pandas as pd
 import sys
 
-
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 sf = boto3.client('stepfunctions', region_name='us-west-2')
@@ -81,16 +80,17 @@ class TriggerSF:
         
     def dequeue_commit(self):
         self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_commit.sql', 'r').read())
+        commit_item = self.cur.fetchone()
 
-        commit_item = dict(self.cur.fetchone())
-
-        if commit_item:
-            return commit_item
+        if commit_item != None:
+            return dict(commit_item)
         
         log.info('Dequeuing next PR if commit queue is empty')
-        pr_items = self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_pr.sql', 'r').read())
+        self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_pr.sql', 'r').read())
+        pr_items = self.cur.fetchone()
 
-        if pr_items:
+        if pr_items != None:
+            pr_items = dict(pr_items)
             log.info("Updating commit queue with dequeued PR's most recent commit")
 
             log.debug('Dequeued pr items:')
@@ -99,12 +99,12 @@ class TriggerSF:
             pr_id = pr_items['pr_id']
             head_ref = pr_items['head_ref']
             log.debug('Fetching PR from remote')
-            cmd = f'git fetch origin pull/{pr_id}/head:{head_ref} && git checkout {head_ref}'
-            subprocess.run(cmd, capture_output=False)
+            git.remote.Remote(self.git_repo, 'new_remote').fetch(f'pull/{pr_id}/head:{head_ref}')
+            self.git_repo.git.checkout(head_ref)
+
+            head_commit_id = self.git_repo.head.object.hexsha
             
-            head_commit_id = subprocess.run("git log --pretty=format:'%H' -n ".split(' '), capture_output=True, text=True).stdout
-            
-            commit_item = self.cur.execute(f"""
+            self.cur.execute(sql.SQL("""
             INSERT INTO commit_queue (
                 commit_id,
                 is_rollback,
@@ -113,21 +113,27 @@ class TriggerSF:
                 status
             )
             VALUES (
-                '{head_commit_id}',
+                {},
                 false,
                 false,
-                '{pr_id}',
+                {},
                 'running'
             )
-            RETURNING row_to_json(commit_queue.*);
-            """)
+            RETURNING *;
+            """).format(
+                sql.Literal(head_commit_id),
+                sql.Literal(pr_id)
+            ))
+
+            commit_item = dict(self.cur.fetchone())
             
             log.info('Switching back to default branch')
             subprocess.run('git switch -', capture_output=False)
+
+            return commit_item
         else:
             log.info('Another PR is in progress or no PR is waiting')
-        
-        return commit_item
+            return
 
     def get_new_providers(self, path):
         log.debug(f'Path: {path}')
@@ -174,7 +180,7 @@ class TriggerSF:
 
         return stack
 
-    def update_executions_with_new_deploy_stack(self, commit_id):
+    def update_executions_with_new_deploy_stack(self, commit_id, is_base_rollback):
         with self.conn.cursor() as cur:
             cur.execute('SELECT account_path FROM account_dim')
             account_paths = [path for t in cur.fetchall() for path in t]
@@ -209,12 +215,20 @@ class TriggerSF:
                 continue
             
             stack_cols = set().union(*(s.keys() for s in stack))
+            if is_base_rollback:
+                base_ref = os.environ['BASE_REF']
+                head_ref = os.environ['BASE_REF']
+            else:
+                base_ref = None
+                head_ref = None
             
             query = sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r').read()).format(
                 base_commit_id=sql.Literal(base_commit_id),
                 commit_id=sql.Literal(commit_id),
                 account_path=sql.Literal(path),
-                cols=sql.SQL(', ').join(map(sql.Identifier, stack_cols))
+                cols=sql.SQL(', ').join(map(sql.Identifier, stack_cols)),
+                base_ref=sql.Literal(base_ref),
+                head_ref=sql.Literal(head_ref)
             )
             log.debug(f'Query:\n{query.as_string(self.conn)}')
 
@@ -231,6 +245,7 @@ class TriggerSF:
 
         if commit_item is None:
             log.info('No commits to dequeue -- skipping execution creation')
+            return
         else:
             log.debug(f'Dequeued commit record:\n{commit_item}')
 
@@ -243,7 +258,7 @@ class TriggerSF:
             self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r').read(), (commit_id))
         elif (is_rollback == True and is_base_rollback == True) or is_rollback == False:
             log.info('Adding commit deployments to executions')
-            self.update_executions_with_new_deploy_stack(commit_id)
+            self.update_executions_with_new_deploy_stack(commit_id, is_base_rollback)
         else:
             log.error('Could not identitfy commit type')
             log.error(f'is_rollback: {is_rollback} -- is_base_rollback: {is_base_rollback}')
@@ -253,8 +268,13 @@ class TriggerSF:
         log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
 
         with self.conn.cursor() as cur:
-            cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
-            target_execution_ids = [id for id in cur.fetchone()[0] if id != None]
+            try:
+                cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
+                target_execution_ids = [id for id in cur.fetchone()[0] if id != None]
+            except psycopg2.errors.CardinalityViolation:
+                log.error('More than one commit ID is running')
+                log.debug(psql.read_sql("SELECT * FROM commit_queue WHERE status = 'running'", self.conn).T)
+                sys.exit(1)
 
         log.debug(f'IDs: {target_execution_ids}')
         log.info(f'Count: {len(target_execution_ids)}')

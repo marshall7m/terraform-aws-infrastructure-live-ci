@@ -30,8 +30,8 @@ SELECT
     "commit".is_base_rollback,
     "commit".pr_id,
     "commit".commit_id,
-    "commit".base_ref,
-    "commit".head_ref,
+    COALESCE({base_ref}, "commit".base_ref),
+    COALESCE({head_ref}, "commit".head_ref),
     'refs/heads/' || "commit".base_ref || '^{{' || {base_commit_id} || '}}',
     'refs/pull/' || "commit".pr_id || '/head^{{' || "commit".commit_id || '}}',
     stack.cfg_path,
@@ -52,9 +52,9 @@ SELECT
     account.min_rejection_count
 FROM (
     SELECT
-        pr_queue.pr_id,
         base_ref,
         head_ref,
+        commit_queue.pr_id,
         commit_id,
         is_rollback,
         is_base_rollback

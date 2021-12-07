@@ -191,7 +191,7 @@ def scenario_3(test_id, repo_url, function_repo_dir):
                 {
                     'apply_changes': False,
                     'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/bar',
-                    'create_provider_resource': False,
+                    'create_provider_resource': False
                 }
             ]
         )
