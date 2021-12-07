@@ -41,19 +41,16 @@ class TriggerSF:
         
         return [resource['type'] + '.' + resource['name'] for resource in out['resources'] if resource['provider'] in new_providers]
 
-    def execution_finished(self):
-
-        event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
-        with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-            log.debug(f'Parsed CW event:\n{pd.DataFrame.from_records([event]).T}')
+    def execution_finished(self, event):
         
-        with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/cw_event_status_update.sql', 'r') as f:
-            self.cur.execute(sql.SQL(f.read()).format(
-                execution_id=sql.Literal(event['execution_id']),
-                status=sql.Literal(event['status'])
-            ))
-
-            log.debug(f'Notices:\n{self.conn.notices}')
+        self.cur.execute(sql.SQL("""
+        UPDATE executions
+        SET "status" = {}
+        WHERE execution_id = {}
+        """).format(
+            sql.Literal(event['status']),
+            sql.Literal(event['execution_id'])
+        ))
         
         if not event['is_rollback']:
             if len(event['new_providers']) > 0:
@@ -64,76 +61,22 @@ class TriggerSF:
                 ), (resources, event['execution_id']))
 
             if event['status'] == 'failed':
-                log.info('Updating commit queue and executions to reflect failed execution')
-                base_commit_id = str(git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF']))
+                log.info('Aborting deployments depending on failed execution')
 
                 self.cur.execute(
-                    sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/failed_execution_update.sql', 'r').read()).format(
-                        commit_id=sql.Literal(event['commit_id']),
-                        base_commit_id=sql.Literal(base_commit_id),
-                        pr_id=sql.Literal(event['pr_id'])
+                    sql.SQL("""
+                    UPDATE executions
+                    SET "status" = 'aborted'
+                    WHERE "status" = 'waiting'
+                    AND commit_id = {}
+                    AND is_rollback = false;
+                    """).format(
+                        commit_id=sql.Literal(event['commit_id'])
                     )
                 )
             elif event['is_rollback'] == True and event['status'] == 'failed':
                 log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
                 sys.exit(1)
-        
-    def dequeue_commit(self):
-        self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_commit.sql', 'r').read())
-        commit_item = self.cur.fetchone()
-
-        if commit_item != None:
-            return dict(commit_item)
-        
-        log.info('Dequeuing next PR if commit queue is empty')
-        self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/dequeue_pr.sql', 'r').read())
-        pr_items = self.cur.fetchone()
-
-        if pr_items != None:
-            pr_items = dict(pr_items)
-            log.info("Updating commit queue with dequeued PR's most recent commit")
-
-            log.debug('Dequeued pr items:')
-            log.debug(pr_items)
-
-            pr_id = pr_items['pr_id']
-            head_ref = pr_items['head_ref']
-            log.debug('Fetching PR from remote')
-            git.remote.Remote(self.git_repo, 'new_remote').fetch(f'pull/{pr_id}/head:{head_ref}')
-            self.git_repo.git.checkout(head_ref)
-
-            head_commit_id = self.git_repo.head.object.hexsha
-            
-            self.cur.execute(sql.SQL("""
-            INSERT INTO commit_queue (
-                commit_id,
-                is_rollback,
-                is_base_rollback,
-                pr_id,
-                status
-            )
-            VALUES (
-                {},
-                false,
-                false,
-                {},
-                'running'
-            )
-            RETURNING *;
-            """).format(
-                sql.Literal(head_commit_id),
-                sql.Literal(pr_id)
-            ))
-
-            commit_item = dict(self.cur.fetchone())
-            
-            log.info('Switching back to default branch')
-            subprocess.run('git switch -', capture_output=False)
-
-            return commit_item
-        else:
-            log.info('Another PR is in progress or no PR is waiting')
-            return
 
     def get_new_providers(self, path):
         log.debug(f'Path: {path}')
@@ -180,7 +123,7 @@ class TriggerSF:
 
         return stack
 
-    def update_executions_with_new_deploy_stack(self, commit_id, is_base_rollback):
+    def update_executions_with_new_deploy_stack(self):
         with self.conn.cursor() as cur:
             cur.execute('SELECT account_path FROM account_dim')
             account_paths = [path for t in cur.fetchall() for path in t]
@@ -190,13 +133,10 @@ class TriggerSF:
         if len(account_paths) == 0:
             log.fatal('No account paths are defined in account_dim')
             sys.exit(1)
-        
-        log.info(f'Checking out target commit ID: {commit_id}')
-        self.git_repo.git.checkout(commit_id)
+
         git_root = self.git_repo.git.rev_parse('--show-toplevel')
         log.debug(f'Git root: {git_root}')
-
-        base_commit_id = str(git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF']))
+        pr_id = os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]
 
         log.info('Getting account stacks')
         for path in account_paths:
@@ -215,20 +155,14 @@ class TriggerSF:
                 continue
             
             stack_cols = set().union(*(s.keys() for s in stack))
-            if is_base_rollback:
-                base_ref = os.environ['BASE_REF']
-                head_ref = os.environ['BASE_REF']
-            else:
-                base_ref = None
-                head_ref = None
             
             query = sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r').read()).format(
-                base_commit_id=sql.Literal(base_commit_id),
-                commit_id=sql.Literal(commit_id),
+                pr_id=sql.Literal(pr_id),
+                commit_id=sql.Literal(os.environ['CODEBUILD_SOURCE_VERSION']),
                 account_path=sql.Literal(path),
                 cols=sql.SQL(', ').join(map(sql.Identifier, stack_cols)),
-                base_ref=sql.Literal(base_ref),
-                head_ref=sql.Literal(head_ref)
+                base_ref=sql.Literal(os.environ['CODEBUILD_WEBHOOK_BASE_REF']),
+                head_ref=sql.Literal(os.environ['CODEBUILD_WEBHOOK_HEAD_REF'])
             )
             log.debug(f'Query:\n{query.as_string(self.conn)}')
 
@@ -239,42 +173,14 @@ class TriggerSF:
             
             with pd.option_context('display.max_rows', None, 'display.max_columns', None):
                 log.debug(f'Inserted executions:\n{pd.DataFrame([dict(r) for r in res]).T}')
-
-    def create_executions(self):
-        commit_item = self.dequeue_commit()
-
-        if commit_item is None:
-            log.info('No commits to dequeue -- skipping execution creation')
-            return
-        else:
-            log.debug(f'Dequeued commit record:\n{commit_item}')
-
-        commit_id = commit_item['commit_id']
-        is_rollback = commit_item['is_rollback']
-        is_base_rollback = commit_item['is_base_rollback']
-
-        if is_rollback == True and is_base_rollback == False:
-            log.info('Adding commit rollbacks to executions')
-            self.cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r').read(), (commit_id))
-        elif (is_rollback == True and is_base_rollback == True) or is_rollback == False:
-            log.info('Adding commit deployments to executions')
-            self.update_executions_with_new_deploy_stack(commit_id, is_base_rollback)
-        else:
-            log.error('Could not identitfy commit type')
-            log.error(f'is_rollback: {is_rollback} -- is_base_rollback: {is_base_rollback}')
-            sys.exit(1)
             
     def start_sf_executions(self):
         log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
 
         with self.conn.cursor() as cur:
-            try:
-                cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql').read())
-                target_execution_ids = [id for id in cur.fetchone()[0] if id != None]
-            except psycopg2.errors.CardinalityViolation:
-                log.error('More than one commit ID is running')
-                log.debug(psql.read_sql("SELECT * FROM commit_queue WHERE status = 'running'", self.conn).T)
-                sys.exit(1)
+            with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
+                cur.execute(f.read())
+            target_execution_ids = [id for id in cur.fetchone()[0] if id != None]
 
         log.debug(f'IDs: {target_execution_ids}')
         log.info(f'Count: {len(target_execution_ids)}')
@@ -314,22 +220,41 @@ class TriggerSF:
             sys.exit('CODEBUILD_INITIATOR is not set')
         elif 'EVENTBRIDGE_FINISHED_RULE' not in os.environ:
             sys.exit('EVENTBRIDGE_FINISHED_RULE is not set')
+
+        log.info('Locking merge actions within target branch')
+        #TODO: Set commit status to pending for all PR commits
         
         log.info('Checking if build was triggered via a finished Step Function execution')
         if os.environ['CODEBUILD_INITIATOR'] == os.environ['EVENTBRIDGE_FINISHED_RULE']:
+            event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
+            with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+                log.debug(f'Parsed CW event:\n{pd.DataFrame.from_records([event]).T}')
+    
             log.info('Triggered via Step Function Event')
-            self.execution_finished()
-        
-        log.info('Checking if any Step Function executions are running')
-        self.cur.execute("SELECT * FROM executions WHERE status = 'running'")
-        running_execution_count = self.cur.rowcount
+            self.execution_finished(event)
 
-        if running_execution_count == 0:
-            log.info('No deployment or rollback executions in progress')
-            self.create_executions()
-        else:
-            log.info(f'Running executions: {running_execution_count} -- skipping execution creation')
+            log.info('Checking if any Step Function executions are running')
+            self.cur.execute("SELECT * FROM executions WHERE status = 'running'")
+            running_execution_count = self.cur.rowcount
+            
+            if running_execution_count == 0:
+                log.info('No deployment or rollback executions in progress')
+                if event['status'] == 'failed' and event['is_rollback'] == False:
+                    log.info('Adding commit rollbacks to executions')
+                    with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
+                        self.cur.execute(sql.SQL(f.read()).format(event['commit_id']))
+
+                    log.debug(f'Rollback Providers execution records:\n{pd.Dataframe([dict(r) for r in self.cur.fetchall()]).T}')
+            else:
+                log.info(f'Running executions: {running_execution_count} -- skipping execution creation')
+
+        elif os.environ['CODEBUILD_WEBHOOK_TRIGGER'] != None:
+            self.update_executions_with_new_deploy_stack()
         
+        else:
+            log.error('Codebuild triggered action not handled')
+            sys.exit(1)
+    
         log.info('Starting Step Function Deployment Flow')
         self.start_sf_executions()
 
