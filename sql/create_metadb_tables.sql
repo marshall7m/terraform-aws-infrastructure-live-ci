@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS executions (
     commit_id VARCHAR,
     base_ref VARCHAR,
     head_ref VARCHAR,
-    base_source_version VARCHAR,
     head_source_version VARCHAR,
     cfg_path VARCHAR,
     cfg_deps TEXT[],

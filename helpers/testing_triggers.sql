@@ -163,10 +163,6 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
             FROM executions e;
         END IF;
 
-        IF NEW.base_source_version IS NULL THEN
-            NEW.base_source_version := 'refs/heads/' || NEW.base_ref || '^{' || substr(md5(random()::text), 0, 40) || '}';
-        END IF;
-
         IF NEW.head_source_version IS NULL THEN
             NEW.head_source_version := 'refs/pull/' || NEW.pr_id || '/head^{' || NEW.commit_id || '}';
         END IF;
@@ -235,7 +231,6 @@ WHEN (
     OR NEW.status IS NULL
     OR NEW.base_ref IS NULL
     OR NEW.head_ref IS NULL
-    OR NEW.base_source_version IS NULL
     OR NEW.head_source_version IS NULL
     OR NEW.is_rollback IS NULL
     OR NEW.is_base_rollback IS NULL

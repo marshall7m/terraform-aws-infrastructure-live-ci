@@ -30,8 +30,7 @@ $$
             EXECUTE 'TRUNCATE ' || _full_table ;
             RETURN 'Table truncated: ' || _full_table;
         ELSE
-            RETURN 'res: ' || table_exists(_schema, _catalog, _table);
-            -- RETURN 'Table does not exists: ' || _full_table;
+            RETURN 'Table does not exists: ' || _full_table;
         END IF;
     END;
 $$;
