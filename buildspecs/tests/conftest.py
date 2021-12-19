@@ -14,9 +14,9 @@ pytest_plugins = [
     'buildspecs.tests.fixtures.mock_repo',
     'buildspecs.tests.fixtures.scenarios'
 ]
- 
-@pytest.fixture(scope="function", autouse=True)
-def test_id():
+
+@pytest.fixture(scope="class", autouse=True)
+def scenario_id():
     return ''.join(random.choice(string.ascii_lowercase) for _ in range(8))
 
 @pytest.fixture(scope="session", autouse=True)
@@ -33,7 +33,7 @@ def cur(conn):
     yield cur
     cur.close()
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="class", autouse=True)
 def create_metadb_tables(cur, conn):
     yield cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql').read())
 
