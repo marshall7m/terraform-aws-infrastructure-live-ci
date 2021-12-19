@@ -1,7 +1,6 @@
 CREATE TABLE IF NOT EXISTS executions (
     execution_id VARCHAR PRIMARY KEY,
     is_rollback BOOL,
-    is_base_rollback BOOL,
     pr_id INT,
     commit_id VARCHAR,
     base_ref VARCHAR,

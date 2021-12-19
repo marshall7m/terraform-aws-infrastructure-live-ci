@@ -167,13 +167,9 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
             NEW.head_source_version := 'refs/pull/' || NEW.pr_id || '/head^{' || NEW.commit_id || '}';
         END IF;
 
-        IF NEW.is_base_rollback IS NULL THEN
-            NEW.is_base_rollback := false;
-        END IF;
-
         IF NEW.plan_command IS NULL THEN
             NEW.plan_command := CASE
-                WHEN NEW.is_rollback = 't' AND NEW.is_base_rollback = 'f' THEN 
+                WHEN NEW.is_rollback = 't' THEN 
                     'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path
                 ELSE
                     'terragrunt plan ' || '--terragrunt-working-dir ' || NEW.cfg_path
@@ -182,7 +178,7 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
 
         IF NEW.deploy_command IS NULL THEN
             NEW.deploy_command := CASE
-                WHEN NEW.is_rollback = 't' AND NEW.is_base_rollback = 'f' THEN 
+                WHEN NEW.is_rollback = 't' THEN 
                     'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
                 ELSE
                     'terragrunt apply ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
@@ -233,7 +229,6 @@ WHEN (
     OR NEW.head_ref IS NULL
     OR NEW.head_source_version IS NULL
     OR NEW.is_rollback IS NULL
-    OR NEW.is_base_rollback IS NULL
     OR NEW.commit_id IS NULL
     OR NEW.account_name IS NULL
     OR NEW.account_path IS NULL
