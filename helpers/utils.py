@@ -94,6 +94,33 @@ class TestSetup:
             conn.commit()
 
     @classmethod
+    def truncate_if_exists(cls, conn, schema, catalog, table):
+        with conn.cursor() as cur:
+            query = sql.SQL("""
+            DO $$
+                DECLARE 
+                    _full_table TEXT := concat_ws('.', quote_ident({schema}), quote_ident({table}));
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 
+                        FROM  INFORMATION_SCHEMA.TABLES 
+                        WHERE table_schema = {schema} 
+                        AND table_catalog = {catalog} 
+                        AND table_name = {table}
+                    ) THEN
+                        EXECUTE 'TRUNCATE ' || _full_table ;
+                    END IF;
+                END;
+            $$ LANGUAGE plpgsql;
+            """).format(
+                schema=sql.Literal(schema),
+                catalog=sql.Literal(catalog),
+                table=sql.Literal(table)
+            )
+            log.debug(f'Query:\n{query.as_string(conn)}')
+            cur.execute(query)
+
+    @classmethod
     def create_records(cls, conn, table, records, enable_defaults=None, update_parents=None):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             if type(records) == dict:
@@ -175,24 +202,25 @@ class TestSetup:
             debug.append(query)
         self.assertions.append({'assertion': assertion, 'debug': debug})
 
-    def run_collected_assertions(self, conn):
+    def run_collected_assertions(self):
         count = 0
         total = len(self.assertions)
-        with conn.cursor() as cur:
+        with self.conn.cursor() as cur:
             for item in self.assertions:
                 try:
                     cur.execute(item['assertion'])
-                    conn.commit()
+                    self.conn.commit()
                     count += 1
                 except psycopg2.errors.lookup("P0004"):
-                    conn.rollback()
+                    self.conn.rollback()
                     log.error('Assertion failed')
                     log.debug(f'Query:\n{item["assertion"]}')
                     with pandas.option_context('display.max_rows', None, 'display.max_columns', None):
+                        
                         for query in item['debug']:
                             log.debug(f'Debug query:\n{query}')
-                            log.debug(psql.read_sql(query, conn).T)
-                            conn.commit()
+                            log.debug(psql.read_sql(query, self.conn).T)
+                            self.conn.commit()
 
         log.info(f'{count}/{total} assertions were successful')
         if count != total:
@@ -232,120 +260,116 @@ class PR(TestSetup):
         # self.test_setup = test_setup
         self.base_ref = base_ref
         self.head_ref = head_ref
-        self.pr_record = {'head_ref': self.head_ref, 'base_ref': self.base_ref}
-        self.commit_records = []
-        self.execution_records = []
-        self.head_branch = None
-        self.cw_execution = None
+        self.commit_ids = []
         for k in kwargs.keys():
           self.__setattr__(k, kwargs[k])
 
     def create_pr(self, title='TestPRSetup Test PR', body='None', **column_args):
         if self.remote_changes:
-            pr = self.gh_repo.create_pull(title=title, body=body, head=self.head_ref, base=self.base_ref)
-            self.pr_record.update(**column_args, pr_id=pr.number)
+            return self.gh_repo.create_pull(title=title, body=body, head=self.head_ref, base=self.base_ref)
         else:
-            self.pr_record.update(**column_args)
+            log.info('remote_changes set to False -- skip creating remote PR')
 
-    def create_commit_changes(self, modify_items):
 
-        for idx, item in enumerate(modify_items):
-            abs_cfg_path = self.git_dir + '/' + item['cfg_path']
-            filename = ''.join(random.choice(string.ascii_lowercase) for _ in range(8))
-            filepath = abs_cfg_path + '/' + filename + '.tf'
+    def create_commit_changes(self, apply_changes, create_provider_resource, cfg_path):
+        abs_cfg_path = self.git_dir + '/' + cfg_path
+        filename = ''.join(random.choice(string.ascii_lowercase) for _ in range(8))
+        filepath = abs_cfg_path + '/' + filename + '.tf'
 
-            if item['create_provider_resource']:
-                log.debug('Creating null provider resource config file')
-                # for simplicity, assume null provider isn't in repo
-                file_content = inspect.cleandoc("""
-                provider "null" {}
+        if create_provider_resource:
+            log.debug('Creating null provider resource config file')
+            # for simplicity, assume null provider isn't in repo
+            file_content = inspect.cleandoc("""
+            provider "null" {}
 
-                resource "null_resource" "this" {}
-                """)
-                
-                modify_items[idx].update({
-                    "type": "provider",
-                    "address": "registry.terraform.io/hashicorp/null",
-                    "content": file_content,
-                    "resource_spec": "null_resource.this"
-                })
-            else:
-                log.debug('Creating random output file')
-
-                value = 'test'
-                file_content = inspect.cleandoc(f"""
-                output "{filename}" {{
-                    value = "{value}"
-                }}
-                """)
-
-                modify_items[idx].update({
-                    "type": "output",
-                    "resource_spec": f'output.{filename}',
-                    "value": value,
-                    "file_path": filepath
-                })
+            resource "null_resource" "this" {}
+            """)
             
-            with open(filepath, "w") as text_file:
-                text_file.write(file_content)
+            res = {
+                "type": "provider",
+                "address": "registry.terraform.io/hashicorp/null",
+                "content": file_content,
+                "resource_spec": "null_resource.this"
+            }
 
-            if item['apply_changes']:
-                subprocess.run(f'terragrunt apply --terragrunt-working-dir {item["cfg_path"]} -auto-approve'.split(' '), capture_output=False)
-            
-            log.debug(f'Adding file to commit: {filepath}')
-            self.git_repo.index.add(filepath)
+        else:
+            log.debug('Creating random output file')
 
-        return modify_items
-    
-    def create_commit(self, modify_items, commit_message='TestPRSetup().create_commit test', **column_args):
+            value = 'test'
+            file_content = inspect.cleandoc(f"""
+            output "{filename}" {{
+                value = "{value}"
+            }}
+            """)
+
+            res = {
+                "type": "output",
+                "resource_spec": f'output.{filename}',
+                "value": value,
+                "file_path": filepath
+            }
+        
+        with open(filepath, "w") as text_file:
+            text_file.write(file_content)
+
+        if apply_changes:
+            subprocess.run(f'terragrunt apply --terragrunt-working-dir {cfg_path} -auto-approve'.split(' '), capture_output=False)
+        
+        log.debug(f'Adding file to commit: {filepath}')
+        self.git_repo.index.add(filepath)
+
+        return res
+
+    def merge(self):
+        log.info(f'Merging {self.head_ref} into {self.base_ref}')
+
+        self.git_repo.git.checkout('-B', self.base_ref)
+        self.git_repo.git.merge(self.head_ref)
+
+        self.git_repo.git.switch('-')
+
+    def create_commit(self, modify_items, commit_message='TestPRSetup.create_commit() test'):
 
         log.debug(f'Checking out branch: {self.head_ref}')
         self.git_repo.git.checkout('-B', self.head_ref)
 
-        modify_items = self.create_commit_changes(modify_items)
+        for idx, item in enumerate(modify_items):
+            modify_items[idx].update(self.create_commit_changes(item['apply_changes'], item['create_provider_resource'], item['cfg_path']))
+            if 'record' in item:
+                modify_items[idx]['record'].update({'new_providers': [modify_items[idx]['address']]})
 
-        commit_id = self.git_repo.index.commit(commit_message)
-
-        if 'pr_id' in self.pr_record:
-            column_args.update(pr_id=self.pr_record['pr_id'], commit_id=commit_id.hexsha)
-        else:
-            column_args.update(commit_id=commit_id.hexsha)
-    
-        self.commit_records.append(column_args)
-
-        for item in modify_items:
-            if 'execution' in item:
-                # merges commit record with execution record except on status since commit status != execution status
-                record = {**item['execution'], **{'cfg_path': item['cfg_path']}, **{col: val for col,val in column_args.items() if col != 'status'}}
-                self.create_execution(**record)
-
+        commit_id = self.git_repo.index.commit(commit_message).hexsha
+        self.commit_ids.append(commit_id)
         self.remote.push()
 
+        for idx, item in enumerate(modify_items):
+            if 'record' in item:
+                modify_items[idx].update({'record': self.create_commit_record({**item['record'], **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}})})
+            elif 'record_assertion' in item:
+                assertion = {}
+                if 'new_provider_resources' in item['record_assertion']:
+                    assertion['new_providers'] = [modify_items[idx]['address']]
+                    assertion['new_resources'] = [modify_items[idx]['resource_spec']]
+                if 'status' in item['record_assertion']:
+                    assertion['status'] = item['record_assertion']['status']
+
+                assertion = {**assertion, **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}}
+                self.collect_record_assertion('executions', assertion, )
+
         return modify_items
+    def create_commit_record(self, cw_event_finished_status=None, **column_args):
+        record = self.create_records(
+                    self.conn, 
+                    'executions', 
+                    {**column_args, **{'base_ref': self.base_ref, 'head_ref': self.head_ref}}, 
+                    enable_defaults=True
+                )[0]
 
-    def create_execution(self, cw_event_finished_status=None, **column_args):
-
-        #TODO: Create remote_changes option that actually creates a SF finished execution
-        if cw_event_finished_status != None and self.cw_execution == None:
-            self.cw_execution = {**column_args, **{'status': 'running'}}
-            self.cw_event_finished_status = cw_event_finished_status
-        else:
-            self.execution_records.append(column_args)
-
-    def insert_records(self):
-
-        self.execution_records = self.create_records(self.conn, 'executions', [{**record, **{'pr_id': self.pr_record['pr_id']}} for record in self.execution_records], enable_defaults=True)
-
-        if self.cw_execution != None:
-            self.cw_execution = self.create_records(self.conn, 'executions', {**self.cw_execution, **{'pr_id': self.pr_record['pr_id']}}, enable_defaults=True)[0]
-            cw_event = dict(self.cw_execution)
-            cw_event['status'] = self.cw_event_finished_status
-            os.environ['EVENTBRIDGE_EVENT'] = json.dumps(cw_event)
-    
-
-        log.debug('All records')
-        log.debug('executions')
-        log.debug(psql.read_sql("SELECT * FROM executions", self.conn).T)
+        if cw_event_finished_status != None:
+            record = {**record, **{'status': cw_event_finished_status}}
+            os.environ['EVENTBRIDGE_EVENT'] = json.dumps(record)
+        
+        return record
 
     def cleanup(self):
         log.debug('Closing PR')
