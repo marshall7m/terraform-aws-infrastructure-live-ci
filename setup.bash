@@ -10,9 +10,9 @@ if [ "$TESTING_ENV" == "local" ]; then
     export PGHOST=postgres
     export PGPORT=5432
     export ADDITIONAL_PATH=/src/node_modules/.bin
-    
-    [[ $(docker ps -f "name=metadb" --format '{{.Names}}') == $name ]] || docker-compose run metadb --detach
-    docker-compose run testing /bin/bash
+
+    docker-compose up --detach
+    docker-compose exec testing /bin/bash
 elif [ "$TESTING_ENV" == "remote" ]; then
     # skips creating local metadb container
     docker-compose run -e "$AWS_ACCESS_KEY_ID" -e "$AWS_SECRET_ACCESS_KEY" -e "$AWS_REGION" -e "$AWS_SESSION_TOKEN" testing /bin/bash
