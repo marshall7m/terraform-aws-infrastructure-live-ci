@@ -1,7 +1,7 @@
 #!/bin/bash
 apk update
 apk add --no-cache --virtual .build-deps \
-    make g++ subversion cmake yarn musl-dev linux-headers \
+    make g++ automake subversion cmake yarn musl-dev linux-headers \
     libffi-dev libxml2 libxml2-dev gcc libxslt-dev postgresql-dev python3-dev
 
 yarn install
