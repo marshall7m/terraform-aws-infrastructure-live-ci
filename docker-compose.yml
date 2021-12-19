@@ -2,7 +2,7 @@ version: "3.8"
 services:
   postgres:
     image: postgres:10.18-alpine
-    container_name: metadb
+    container_name: postgres
     volumes:
       - "$PWD/docker-pgsql-entrypoint:/docker-entrypoint-initdb.d"
       - "$PWD/docker-pgsql-volume:/var/lib/postgresql/data" 
@@ -25,6 +25,8 @@ services:
   testing:
     build:
       context: ./
+    stdin_open: true
+    tty: true
     container_name: testing_env
     image: terraform-aws-infrastructure-live-ci-testing:latest
     volumes:
@@ -38,4 +40,3 @@ services:
       - ADDITIONAL_PATH
     command: ["/bin/bash"]
     entrypoint: ["/bin/bash", "/src/entrypoint.sh"]
-    

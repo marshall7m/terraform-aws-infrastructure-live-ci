@@ -47,6 +47,9 @@ RUN apk update \
     pcre-tools \
     coreutils \
     postgresql-client \
+    libgcc \
+    libstdc++ \
+    ncurses-libs \
 && ln -sf python3 /usr/local/bin/python \
 && git config --global advice.detachedHead false \
 && git config --global user.email testing_user@users.noreply.github.com \
