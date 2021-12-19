@@ -23,13 +23,10 @@ def session_repo_dir(tmp_path_factory, repo_url):
 
     return dir
 
-@pytest.fixture(scope="function", autouse=True)
-def function_repo_dir(session_repo_dir, tmp_path):
-    dir = tmp_path / 'test-repo'
-    dir.mkdir()
-    
-    dir = str(dir)
-    log.debug(f'Function repo dir: {dir}')
+@pytest.fixture(scope="class", autouse=True)
+def class_repo_dir(session_repo_dir, tmp_path_factory):
+    dir = str(tmp_path_factory.mktemp('test-repo'))
+    log.debug(f'Class repo dir: {dir}')
 
     git.Repo.clone_from(session_repo_dir, dir)
 
