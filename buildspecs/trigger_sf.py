@@ -106,7 +106,8 @@ class TriggerSF:
         diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', out, re.DOTALL)
         if len(diff_paths) == 0:
             log.debug('Detected no Terragrunt paths with difference')
-            return
+            # log.debug(out)
+            return []
         else:
             log.debug(f'Detected new/modified Terragrunt paths:\n{diff_paths}')
         
@@ -180,15 +181,18 @@ class TriggerSF:
         with self.conn.cursor() as cur:
             with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
                 cur.execute(f.read())
-            target_execution_ids = [id for id in cur.fetchone()[0] if id != None]
+                ids = cur.fetchone()[0]
+            if ids == None:
+                log.info('No executions are ready')
+                return
+            else:
+                target_execution_ids = [id for id in ids]
 
         log.debug(f'IDs: {target_execution_ids}')
         log.info(f'Count: {len(target_execution_ids)}')
 
         if 'DRY_RUN' in os.environ:
             log.info('DRY_RUN was set -- skip starting sf executions')
-        elif len(target_execution_ids) == 0:
-            log.info('No executions are ready')
         else:
             for id in target_execution_ids:
                 log.info(f'Execution ID: {id}')
@@ -199,12 +203,11 @@ class TriggerSF:
                     WHERE execution_id = {}
                 """).format(sql.Literal(id)))
 
-                sf_input = self.cur.fetchone()
-                
+                sf_input = json.dumps(self.cur.fetchone())
                 log.debug(f'SF input:\n{sf_input}')
+
                 log.debug('Starting sf execution')
-                
-                sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=json.dumps(sf_input))
+                sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
 
                 log.debug('Updating execution status to running')
                 self.cur.execute(sql.SQL("""
@@ -215,22 +218,14 @@ class TriggerSF:
             
     def main(self):   
         self.create_sql_utils()
-
-        if 'CODEBUILD_INITIATOR' not in os.environ:
-            sys.exit('CODEBUILD_INITIATOR is not set')
-        elif 'EVENTBRIDGE_FINISHED_RULE' not in os.environ:
-            sys.exit('EVENTBRIDGE_FINISHED_RULE is not set')
-
-        log.info('Locking merge actions within target branch')
-        #TODO: Set commit status to pending for all PR commits
         
-        log.info('Checking if build was triggered via a finished Step Function execution')
-        if os.environ['CODEBUILD_INITIATOR'] == os.environ['EVENTBRIDGE_FINISHED_RULE']:
+        if os.environ['CODEBUILD_INITIATOR'] == os.getenv('EVENTBRIDGE_FINISHED_RULE'):
+            log.info('Triggered via Step Function Event')
+
             event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
             with pd.option_context('display.max_rows', None, 'display.max_columns', None):
                 log.debug(f'Parsed CW event:\n{pd.DataFrame.from_records([event]).T}')
     
-            log.info('Triggered via Step Function Event')
             self.execution_finished(event)
 
             log.info('Checking if any Step Function executions are running')
@@ -242,13 +237,15 @@ class TriggerSF:
                 if event['status'] == 'failed' and event['is_rollback'] == False:
                     log.info('Adding commit rollbacks to executions')
                     with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
-                        self.cur.execute(sql.SQL(f.read()).format(event['commit_id']))
+                        self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
 
                     log.debug(f'Rollback Providers execution records:\n{pd.Dataframe([dict(r) for r in self.cur.fetchall()]).T}')
             else:
                 log.info(f'Running executions: {running_execution_count} -- skipping execution creation')
 
-        elif os.environ['CODEBUILD_WEBHOOK_TRIGGER'] != None:
+        elif os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
+            log.info('Locking merge actions within target branch')
+            #TODO: Set commit status to pending for all PR commits
             self.update_executions_with_new_deploy_stack()
         
         else:
