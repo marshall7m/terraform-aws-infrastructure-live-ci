@@ -11,8 +11,7 @@ log.setLevel(logging.DEBUG)
 
 
 pytest_plugins = [
-    'buildspecs.tests.fixtures.mock_repo',
-    'buildspecs.tests.fixtures.scenarios'
+    'buildspecs.tests.fixtures.mock_repo'
 ]
 
 @pytest.fixture(scope="class", autouse=True)
