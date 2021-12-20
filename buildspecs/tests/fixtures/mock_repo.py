@@ -23,14 +23,20 @@ def session_repo_dir(tmp_path_factory, repo_url):
 
     return dir
 
-@pytest.fixture(scope="class", autouse=True)
+@pytest.fixture(scope='class', autouse=True)
 def class_repo_dir(session_repo_dir, tmp_path_factory):
     dir = str(tmp_path_factory.mktemp('test-repo'))
     log.debug(f'Class repo dir: {dir}')
 
     git.Repo.clone_from(session_repo_dir, dir)
 
-    return dir
+    yield dir
+
+    shutil.rmtree(dir)
+
+#A: parametrize with repo class dir (scenario, repo_Class_dir)
+#B: add repo class dir clean up to scenario results
+#C: cycle dependencies with repo class dir and scenario
 
 @pytest.fixture(scope="session", autouse=True)
 def apply_session_mock_repo(session_repo_dir):
@@ -45,22 +51,19 @@ def apply_session_mock_repo(session_repo_dir):
     log.debug(f'Command: {cmd}')
     subprocess.run(cmd, capture_output=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-@pytest.fixture(scope="function", autouse=True)
-def create_test_function_tf_state(tmp_path):
-    dir = tmp_path / 'tf-state'
-    dir.mkdir()
+@pytest.fixture(scope="class", autouse=True)
+def class_tf_state_dir(apply_session_mock_repo, tmp_path_factory):
+    dir = str(tmp_path_factory.mktemp('tf-state'))
+    log.debug(f'Class tf-state dir: {dir}')
     
-    dir = str(dir)
-    log.debug(f'Function tf-state dir: {dir}')
-
     src = os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR']
     for path in glob.glob(os.path.join(src, '**', '*.tfstate'), recursive=True):
         new_path = os.path.join(dir, os.path.relpath(path, src))
         os.makedirs(os.path.dirname(new_path))
         shutil.copy(path, new_path)
 
-    # changing TESTING_LOCAL_PARENT_TF_STATE_DIR to test case tf-state dir to create persistant local tf-state
-    # prevents loss of local tf-state when new github branches are created/checked out for mocking commits
+    # changing TESTING_LOCAL_PARENT_TF_STATE_DIR to class tf-state dir to create persistant local tf-state
+    # prevents loss of local tf-state when new github branches are created/checked out during the creation of scenario commits
     os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR'] = str(dir)
 
 def setup_terragrunt_branch_tracking():
