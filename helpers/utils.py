@@ -215,7 +215,7 @@ class TestSetup:
                     self.conn.rollback()
                     log.error('Assertion failed')
                     log.debug(f'Query:\n{item["assertion"]}')
-                    with pandas.option_context('display.max_rows', None, 'display.max_columns', None):
+                    with pandas.option_context('display.max_rows', None, 'display.max_columns', None, 'display.max_colwidth', None):
                         
                         for query in item['debug']:
                             log.debug(f'Debug query:\n{query}')
@@ -345,16 +345,17 @@ class PR(TestSetup):
         for idx, item in enumerate(modify_items):
             if 'record' in item:
                 modify_items[idx].update({'record': self.create_commit_record({**item['record'], **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}})})
-            elif 'record_assertion' in item:
+            if 'record_assertion' in item:
                 assertion = {}
-                if 'new_provider_resources' in item['record_assertion']:
-                    assertion['new_providers'] = [modify_items[idx]['address']]
+                if 'assert_new_provider' in item['record_assertion']:
+                    assertion['new_providers'] = [modify_items[idx]['address']]  
+                if 'assert_new_resource' in item['record_assertion']:
                     assertion['new_resources'] = [modify_items[idx]['resource_spec']]
                 if 'status' in item['record_assertion']:
                     assertion['status'] = item['record_assertion']['status']
 
                 assertion = {**assertion, **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}}
-                self.collect_record_assertion('executions', assertion, )
+                self.collect_record_assertion('executions', assertion, item.get('debug_conditions', []))
 
         return modify_items
     def create_commit_record(self, cw_event_finished_status=None, **column_args):
