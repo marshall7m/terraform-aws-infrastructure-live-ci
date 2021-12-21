@@ -69,15 +69,16 @@ class TestSetup:
         log.debug(f'Remotes: {remotes}')
 
         if self.remote_changes:
-            new_remote = 'remote'
-            if not git.remote.Remote(self.git_repo, new_remote).exists():
-                self.remote = git.Repo.create_remote(self.git_repo, new_remote, f"https://{self.user.login}:{self.gh_token}@github.com/{self.gh_repo_full_name}.git")
+            remote_name = 'remote'
+            location = f"https://{self.user.login}:{self.gh_token}@github.com/{self.gh_repo_full_name}.git"
         else:
-            new_remote = 'local'
-            if not git.remote.Remote(self.git_repo, new_remote).exists():
-                self.remote = git.Repo.create_remote(self.git_repo, new_remote, self.git_dir)
+            remote_name = 'local'
+            location = self.git_dir
 
-        return self.remote
+        if not git.remote.Remote(self.git_repo, remote_name).exists():
+            return git.Repo.create_remote(self.git_repo, remote_name, location)
+        else:
+            return git.remote.Remote(self.git_repo, remote_name)
 
     @classmethod
     def toggle_trigger(cls, conn, table, trigger, enable=False):
