@@ -9,36 +9,34 @@ import shutil
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def repo_url():
     url = 'https://oauth2:{}@github.com/marshall7m/infrastructure-live-testing-template.git'.format(os.environ['GITHUB_TOKEN'])
     return url
 
 @pytest.fixture(scope="session", autouse=True)
 def session_repo_dir(tmp_path_factory, repo_url):
-    dir = str(tmp_path_factory.mktemp('test-repo'))
+    dir = str(tmp_path_factory.mktemp('session-repo'))
     log.debug(f'Session repo dir: {dir}')
 
     git.Repo.clone_from(repo_url, dir)
-
-    return dir
-
-@pytest.fixture(scope='class', autouse=True)
-def class_repo_dir(session_repo_dir, tmp_path_factory):
-    dir = str(tmp_path_factory.mktemp('test-repo'))
-    log.debug(f'Class repo dir: {dir}')
-
-    git.Repo.clone_from(session_repo_dir, dir)
 
     yield dir
 
     shutil.rmtree(dir)
 
-#A: parametrize with repo class dir (scenario, repo_Class_dir)
-#B: add repo class dir clean up to scenario results
-#C: cycle dependencies with repo class dir and scenario
+# @pytest.fixture(scope='class')
+# def class_repo_dir(session_repo_dir, tmp_path_factory):
+#     dir = str(tmp_path_factory.mktemp('test-repo'))
+#     log.debug(f'Class repo dir: {dir}')
 
-@pytest.fixture(scope="session", autouse=True)
+#     git.Repo.clone_from(session_repo_dir, dir)
+
+#     yield dir
+
+#     shutil.rmtree(dir)
+
+@pytest.fixture(scope="session")
 def apply_session_mock_repo(session_repo_dir):
     os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR'] = f'{session_repo_dir}/tf-state'
     log.info('Applying mock repo Terraform resources')
