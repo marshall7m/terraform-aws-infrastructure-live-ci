@@ -1,4 +1,5 @@
 import git
+import sys
 import pytest
 from github import Github
 import os
@@ -63,7 +64,6 @@ class TestSetup:
 
     def create_fork_remote(self):
         self.user.create_fork(self.gh_repo)
-        print(f'git dir : {self.git_dir}')
 
         remotes = self.git_repo.remotes
         log.debug(f'Remotes: {remotes}')
@@ -274,6 +274,7 @@ class PR(TestSetup):
 
     def create_commit_changes(self, apply_changes, create_provider_resource, cfg_path):
         abs_cfg_path = self.git_dir + '/' + cfg_path
+        
         filename = ''.join(random.choice(string.ascii_lowercase) for _ in range(8))
         filepath = abs_cfg_path + '/' + filename + '.tf'
 
@@ -314,7 +315,16 @@ class PR(TestSetup):
             text_file.write(file_content)
 
         if apply_changes:
-            subprocess.run(f'terragrunt apply --terragrunt-working-dir {cfg_path} -auto-approve'.split(' '), capture_output=False)
+            cmd = f'terragrunt apply --terragrunt-working-dir {abs_cfg_path} -auto-approve'
+            run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
+            return_code = run.returncode
+
+            if return_code not in [0, 2]:
+                log.fatal(f'Command failed: {cmd} -- Aborting CodeBuild run')  
+                log.debug(f'Return code: {return_code}')
+                log.debug(f'Stdout:\n{run.stdout}')
+                log.debug(f'Stderr:\n{run.stderr}')
+                sys.exit(1)
         
         log.debug(f'Adding file to commit: {filepath}')
         self.git_repo.index.add(filepath)
@@ -336,7 +346,7 @@ class PR(TestSetup):
 
         for idx, item in enumerate(modify_items):
             modify_items[idx].update(self.create_commit_changes(item['apply_changes'], item['create_provider_resource'], item['cfg_path']))
-            if 'record' in item:
+            if 'record' in item and item['create_provider_resource']:
                 modify_items[idx]['record'].update({'new_providers': [modify_items[idx]['address']]})
 
         commit_id = self.git_repo.index.commit(commit_message).hexsha
@@ -345,36 +355,33 @@ class PR(TestSetup):
 
         for idx, item in enumerate(modify_items):
             if 'record' in item:
-                modify_items[idx].update({'record': self.create_commit_record({**item['record'], **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}})})
-            if 'record_assertion' in item:
-                assertion = {}
-                if 'assert_new_provider' in item['record_assertion']:
-                    assertion['new_providers'] = [modify_items[idx]['address']]  
-                if 'assert_new_resource' in item['record_assertion']:
-                    assertion['new_resources'] = [modify_items[idx]['resource_spec']]
-                if 'status' in item['record_assertion']:
-                    assertion['status'] = item['record_assertion']['status']
-
-                assertion = {**assertion, **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}}
-                self.collect_record_assertion('executions', assertion, item.get('debug_conditions', []))
-
-        return modify_items
-    def create_commit_record(self, cw_event_finished_status=None, **column_args):
-        record = self.create_records(
+                record = self.create_records(
                     self.conn, 
                     'executions', 
-                    {**column_args, **{'base_ref': self.base_ref, 'head_ref': self.head_ref}}, 
+                    {**item['record'], **{'cfg_path': item['cfg_path'], 'commit_id': commit_id, 'base_ref': self.base_ref, 'head_ref': self.head_ref}},
                     enable_defaults=True
                 )[0]
+                modify_items[idx].update({'record': record})
 
-        if cw_event_finished_status != None:
-            record = {**record, **{'status': cw_event_finished_status}}
-            os.environ['EVENTBRIDGE_EVENT'] = json.dumps(record)
-        
-        return record
+            if 'cw_event_finished_status' in item:
+                record = {**record, **{'status': item['cw_event_finished_status']}}
+                os.environ['EVENTBRIDGE_EVENT'] = json.dumps(record)
+
+                if 'record_assertion' in item:
+                    assertion = {}
+                    if 'assert_new_provider' in item['record_assertion']:
+                        assertion['new_providers'] = [modify_items[idx]['address']]  
+                    if 'assert_new_resource' in item['record_assertion']:
+                        assertion['new_resources'] = [modify_items[idx]['resource_spec']]
+                    if 'status' in item['record_assertion']:
+                        assertion['status'] = item['record_assertion']['status']
+
+                    assertion = {**assertion, **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}}
+                    self.collect_record_assertion('executions', assertion, item.get('debug_conditions', []))
+
+        return modify_items
 
     def cleanup(self):
         log.debug('Closing PR')
 
         log.debug('Removing PR branch')
-
