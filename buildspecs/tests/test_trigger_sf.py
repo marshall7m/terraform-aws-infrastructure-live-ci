@@ -8,16 +8,17 @@ from buildspecs.trigger_sf import TriggerSF
 from psycopg2.sql import SQL
 import pandas.io.sql as psql
 from helpers.utils import TestSetup
-
+import shutil
 import uuid
 import json
+import git
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 @pytest.fixture(scope='class')
-def account_dim(ts, conn):
-    yield ts.create_records(conn, 'account_dim', [
+def account_dim(conn):
+    yield TestSetup.create_records(conn, 'account_dim', [
         {
             'account_name': 'dev',
             'account_path': 'directory_dependency/dev-account',
@@ -28,13 +29,14 @@ def account_dim(ts, conn):
         }
     ])
 
-    ts.truncate_if_exists(conn, 'public', conn.info.dbname, 'account_dim')
+    TestSetup.truncate_if_exists(conn, 'public', conn.info.dbname, 'account_dim')
 
 # mock step function boto3 client
 @pytest.fixture(scope='class')
 @mock.patch('buildspecs.trigger_sf.sf')
-def run(mock_aws, class_repo_dir, account_dim, scenario, request):
-    os.chdir(class_repo_dir)
+@pytest.mark.usefixtures("scenario")
+def run(mock_aws, scenario):
+    os.chdir(scenario.git_dir)
     log.debug(f'CWD: {os.getcwd()}')
 
     trigger = TriggerSF()
@@ -42,13 +44,16 @@ def run(mock_aws, class_repo_dir, account_dim, scenario, request):
 
     trigger.cleanup()
 
-@pytest.fixture(scope='class')
-def ts(repo_url, class_repo_dir):
-    return TestSetup(psycopg2.connect(), repo_url, class_repo_dir, os.environ['GITHUB_TOKEN'])
-    
+# @pytest.fixture(scope='class')
+# def ts(repo_url, class_repo_dir):
+#     yield TestSetup(psycopg2.connect(), repo_url, class_repo_dir, os.environ['GITHUB_TOKEN'])    
 
 # @pytest.mark.skip(reason="Marked on a class, the entire class and the methods in the class will not be executed!")
-@pytest.mark.parametrize("scenario", [
+# @pytest.fixture(params=["scenario_1", "scenario_2", "scenario_3"], scope='class')
+# def scenario(request, class_repo_dir):
+#     return request.getfixturevalue(request.param)
+
+@pytest.mark.parametrize("scenario_param", [
     ("scenario_1"),
     ("scenario_2"),
     ("scenario_3")
@@ -56,11 +61,12 @@ def ts(repo_url, class_repo_dir):
 
 @pytest.mark.usefixtures("account_dim", "run")
 class TestMergeTrigger:
-        
+    @pytest.fixture(scope="class")
+    def scenario(self, request, scenario_param):
+        return request.getfixturevalue(scenario_param)
+
     @pytest.fixture(scope="class", autouse=True)
-    def codebuild_env(self, scenario, request):
-        scenario = request.getfixturevalue(scenario)
-        
+    def codebuild_env(self, scenario):
         os.environ['CODEBUILD_WEBHOOK_TRIGGER'] = 'pr/1'
         os.environ['CODEBUILD_WEBHOOK_BASE_REF'] = scenario.base_ref
         os.environ['CODEBUILD_WEBHOOK_HEAD_REF'] = scenario.head_ref
@@ -70,14 +76,34 @@ class TestMergeTrigger:
         
         os.environ['AWS_DEFAULT_REGION'] = 'us-west-2'
         os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
+
+    # WA: Remove repeated class repo dir creation within scenarios and use fixture below if individual parametrized class fixtures teardowns are possible
+    # see SO post: https://stackoverflow.com/questions/70427392/pytest-run-class-scoped-parametrized-fixtures-dependency-fixtures-teardown-af?noredirect=1#comment124494514_70427392
+    # @pytest.fixture(scope='class')
+    # def class_repo_dir(self, session_repo_dir, tmp_path_factory):
+    #     dir = str(tmp_path_factory.mktemp('class-repo'))
+    #     log.debug(f'Class repo dir: {dir}')
+
+    #     git.Repo.clone_from(session_repo_dir, dir)
+
+    #     yield dir
+
+    #     shutil.rmtree(dir)
     
     @pytest.fixture(scope="class")
-    def scenario_1(self, scenario_id, ts):
+    def scenario_1(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
         'Leaf execution is running with no new provider resources'
+
+        dir = str(tmp_path_factory.mktemp('class-repo'))
+        log.debug(f'Class repo dir: {dir}')
+
+        git.Repo.clone_from(session_repo_dir, dir)
+        
+        ts = TestSetup(psycopg2.connect(), repo_url, dir, os.environ['GITHUB_TOKEN'])
 
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
-        commit = pr.create_commit(
+        pr.create_commit(
             modify_items=[
                 {
                     'apply_changes': False,
@@ -90,11 +116,19 @@ class TestMergeTrigger:
 
         pr.merge()
 
-        return pr
+        yield pr
+        shutil.rmtree(dir)
 
     @pytest.fixture(scope="class")
-    def scenario_2(self, scenario_id, ts):
+    def scenario_2(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory, request):
         'Leaf execution is running with new provider resource'
+
+        dir = str(tmp_path_factory.mktemp('class-repo'))
+        log.debug(f'Class repo dir: {dir}')
+
+        git.Repo.clone_from(session_repo_dir, dir)
+        
+        ts = TestSetup(psycopg2.connect(), repo_url, dir, os.environ['GITHUB_TOKEN'])
 
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
@@ -104,18 +138,26 @@ class TestMergeTrigger:
                     'apply_changes': False,
                     'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
                     'create_provider_resource': True,
-                    'record_assertion': {'status': 'running', 'new_provider_resources': True}
+                    'record_assertion': {'status': 'running', 'assert_new_provider': True}
                 }
             ]
         )
 
         pr.merge()
         
-        return pr
+        yield pr
+        shutil.rmtree(dir)
     
     @pytest.fixture(scope="class")
-    def scenario_3(self, scenario_id, ts):
+    def scenario_3(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
         'Root dependency execution is running and leaf execution is waiting'
+
+        dir = str(tmp_path_factory.mktemp('class-repo'))
+        log.debug(f'Class repo dir: {dir}')
+        
+        git.Repo.clone_from(session_repo_dir, dir)
+
+        ts = TestSetup(psycopg2.connect(), repo_url, dir, os.environ['GITHUB_TOKEN'])
 
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
@@ -131,22 +173,20 @@ class TestMergeTrigger:
                     'apply_changes': False,
                     'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
                     'create_provider_resource': True,
-                    'record_assertion': {'status': 'waiting', 'new_provider_resources': True}
+                    'record_assertion': {'status': 'waiting', 'assert_new_provider': True},
+                    'debug_conditions': [{'status': 'waiting'}]
                 }
             ]
         )
 
         pr.merge()
         
-        return pr
+        yield pr
+        shutil.rmtree(dir)
 
-    def test_execution_record_exists(self, scenario, conn, request):
-        log.debug(f"Scenario: {scenario}")
-        scenario = request.getfixturevalue(scenario)
-        
+    def test_execution_record_exists(self, scenario):
+        log.debug(f"Scenario: {scenario}")        
         scenario.run_collected_assertions()
-
-
 
 @pytest.mark.skip(reason="Not implemented")
 @pytest.mark.parametrize("scenario", [
@@ -228,7 +268,7 @@ class TestCloudWatchEvent(object):
                         'account_name': 'dev',
                         'cw_event_finished_status': 'success'
                     },
-                    'record_assertion': {'status': 'success', 'new_provider_resources': True}
+                    'record_assertion': {'status': 'success', 'assert_new_provider': True, 'assert_new_resource': True}
                 }
             ]
         )
@@ -254,7 +294,7 @@ class TestCloudWatchEvent(object):
                         'account_name': 'dev',
                         'cw_event_finished_status': 'failed'
                     },
-                    'record_assertion': {'status': 'failed', 'new_provider_resources': True}
+                    'record_assertion': {'status': 'failed', 'assert_new_provider': True, 'assert_new_resource': True}
                 }
             ]
         )
