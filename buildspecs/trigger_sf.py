@@ -80,11 +80,23 @@ class TriggerSF:
 
     def get_new_providers(self, path):
         log.debug(f'Path: {path}')
+        cmd = f"terragrunt providers --terragrunt-working-dir {path}"
+        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
+        out = run.stdout
+        return_code = run.returncode
 
-        out = subprocess.run(f"terragrunt providers --terragrunt-working-dir {path}".split(' '), capture_output=True, text=True).stdout
+        log.debug(f'Terragrunt providers cmd out:\n{out}')
+        log.debug(f'Terragrunt providers cmd stderr:\n{run.stderr}')
+
+        if return_code not in [0, 2]:
+            log.fatal(f'Command failed: {cmd} -- Aborting CodeBuild run')  
+            log.debug(f'Return code: {return_code}')
+            log.debug(out)
+            sys.exit(1)
+        
         cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', out, re.MULTILINE)
         state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', out, re.MULTILINE)
-        
+    
         log.debug(f'Config providers:\n{cfg_providers}')
         log.debug(f'State providers:\n{state_providers}')
 
