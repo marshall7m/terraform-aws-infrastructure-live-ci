@@ -37,9 +37,19 @@ class TriggerSF:
     def get_new_provider_resources(self, tg_dir, commit_id, new_providers):
         self.git_repo.git.checkout(commit_id)
 
-        out = json.load(subprocess.run(f'terragrunt state pull --terragrunt-working-dir {tg_dir}'.split(' ')))
-        
-        return [resource['type'] + '.' + resource['name'] for resource in out['resources'] if resource['provider'] in new_providers]
+        cmd = f'terragrunt state pull --terragrunt-working-dir {tg_dir}'
+
+        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
+        out = json.loads(run.stdout)
+        return_code = run.returncode
+
+        if return_code not in [0, 2]:
+            log.fatal('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
+            log.debug(f'Return code: {return_code}')
+            log.debug(run.stderr)
+            sys.exit(1)
+    
+        return [resource['type'] + '.' + resource['name'] for resource in out['resources'] if resource['provider'].split('\"')[1] in new_providers]
 
     def execution_finished(self, event):
         
@@ -56,9 +66,17 @@ class TriggerSF:
             if len(event['new_providers']) > 0:
                 log.info('Adding new provider resources to associated execution record')
                 resources = self.get_new_provider_resources(event['cfg_path'], event['commit_id'], event['new_providers'])
-                self.cur.execute(sql.SQL(
-                    "UPDATE EXECUTION SET new_resources = % WHERE execution_id = %"
-                ), (resources, event['execution_id']))
+                self.cur.execute(sql.SQL("""
+                UPDATE executions 
+                SET new_resources = {} 
+                WHERE execution_id = {}
+                RETURNING new_resources
+                """).format(
+                    sql.Literal(resources),
+                    sql.Literal(event['execution_id'])
+                ))
+
+                log.debug(self.cur.fetchall())
 
             if event['status'] == 'failed':
                 log.info('Aborting deployments depending on failed execution')
@@ -70,9 +88,7 @@ class TriggerSF:
                     WHERE "status" = 'waiting'
                     AND commit_id = {}
                     AND is_rollback = false;
-                    """).format(
-                        commit_id=sql.Literal(event['commit_id'])
-                    )
+                    """).format(sql.Literal(event['commit_id']))
                 )
             elif event['is_rollback'] == True and event['status'] == 'failed':
                 log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
@@ -251,7 +267,7 @@ class TriggerSF:
                     with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
                         self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
 
-                    log.debug(f'Rollback Providers execution records:\n{pd.Dataframe([dict(r) for r in self.cur.fetchall()]).T}')
+                    log.debug(f'Rollback Providers execution records:\n{pd.DataFrame([dict(r) for r in self.cur.fetchall()]).T}')
             else:
                 log.info(f'Running executions: {running_execution_count} -- skipping execution creation')
 
