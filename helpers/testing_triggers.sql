@@ -154,13 +154,17 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
         
         IF NEW.base_ref IS NULL THEN
-            SELECT COALESCE(DISTINCT(e.base_ref), 'master')
-            FROM executions e;
+            SELECT DISTINCT(e.base_ref) INTO NEW.base_ref FROM executions e;
+            IF NEW.base_ref IS NULL THEN
+                NEW.base_ref := 'master';
+            END IF;
         END IF;
 
         IF NEW.head_ref IS NULL THEN
-            SELECT COALESCE(DISTINCT(e.base_ref), 'feature-' || substr(md5(random()::text), 0, 5))
-            FROM executions e;
+            SELECT DISTINCT(e.head_ref) INTO NEW.head_ref FROM executions e;
+            IF NEW.head_ref IS NULL THEN
+                NEW.head_ref := 'feature-' || substr(md5(random()::text), 0, 5);
+            END IF;
         END IF;
 
         IF NEW.head_source_version IS NULL THEN
