@@ -24,7 +24,6 @@ class AssertionFailures(Exception):
     pass
 
 class TestSetup:
-    assertions = []
     def __init__(self, conn, git_url, git_dir, gh_token, remote_changes=False):
         self.remote_changes = remote_changes
         self.conn = conn
@@ -262,6 +261,7 @@ class PR(TestSetup):
         self.base_ref = base_ref
         self.head_ref = head_ref
         self.commit_ids = []
+        self.assertions = []
         for k in kwargs.keys():
           self.__setattr__(k, kwargs[k])
 
@@ -367,17 +367,17 @@ class PR(TestSetup):
                 record = {**record, **{'status': item['cw_event_finished_status']}}
                 os.environ['EVENTBRIDGE_EVENT'] = json.dumps(record)
 
-                if 'record_assertion' in item:
-                    assertion = {}
-                    if 'assert_new_provider' in item['record_assertion']:
-                        assertion['new_providers'] = [modify_items[idx]['address']]  
-                    if 'assert_new_resource' in item['record_assertion']:
-                        assertion['new_resources'] = [modify_items[idx]['resource_spec']]
-                    if 'status' in item['record_assertion']:
-                        assertion['status'] = item['record_assertion']['status']
+            if 'record_assertion' in item:
+                assertion = {}
+                if 'assert_new_provider' in item['record_assertion']:
+                    assertion['new_providers'] = [modify_items[idx]['address']]  
+                if 'assert_new_resource' in item['record_assertion']:
+                    assertion['new_resources'] = [modify_items[idx]['resource_spec']]
+                if 'status' in item['record_assertion']:
+                    assertion['status'] = item['record_assertion']['status']
 
-                    assertion = {**assertion, **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}}
-                    self.collect_record_assertion('executions', assertion, item.get('debug_conditions', []))
+                assertion = {**assertion, **{'cfg_path': item['cfg_path'], 'commit_id': commit_id}}
+                self.collect_record_assertion('executions', assertion, item.get('debug_conditions', []))
 
         return modify_items
 

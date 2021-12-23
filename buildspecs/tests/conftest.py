@@ -32,7 +32,7 @@ def cur(conn):
     yield cur
     cur.close()
 
-@pytest.fixture(scope="class", autouse=True)
+@pytest.fixture(scope="class")
 def create_metadb_tables(cur, conn):
     yield cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql').read())
 

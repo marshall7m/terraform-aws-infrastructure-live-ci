@@ -1,4 +1,5 @@
 import psycopg2
+from psycopg2 import sql
 import pytest
 import mock
 import os
@@ -34,25 +35,19 @@ def account_dim(conn):
 # mock step function boto3 client
 @pytest.fixture(scope='class')
 @mock.patch('buildspecs.trigger_sf.sf')
-@pytest.mark.usefixtures("scenario")
 def run(mock_aws, scenario):
     os.chdir(scenario.git_dir)
     log.debug(f'CWD: {os.getcwd()}')
 
     trigger = TriggerSF()
+
     return trigger.main()
 
-    trigger.cleanup()
+@pytest.fixture(scope='class')
+def ts(repo_url, class_repo_dir):
+    return TestSetup(psycopg2.connect(), repo_url, class_repo_dir, os.environ['GITHUB_TOKEN'])
 
-# @pytest.fixture(scope='class')
-# def ts(repo_url, class_repo_dir):
-#     yield TestSetup(psycopg2.connect(), repo_url, class_repo_dir, os.environ['GITHUB_TOKEN'])    
-
-# @pytest.mark.skip(reason="Marked on a class, the entire class and the methods in the class will not be executed!")
-# @pytest.fixture(params=["scenario_1", "scenario_2", "scenario_3"], scope='class')
-# def scenario(request, class_repo_dir):
-#     return request.getfixturevalue(request.param)
-
+@pytest.mark.skip(reason="Not implemented")
 @pytest.mark.parametrize("scenario_param", [
     ("scenario_1"),
     ("scenario_2"),
@@ -96,9 +91,7 @@ class TestMergeTrigger:
 
         dir = str(tmp_path_factory.mktemp('class-repo'))
         log.debug(f'Class repo dir: {dir}')
-
         git.Repo.clone_from(session_repo_dir, dir)
-        
         ts = TestSetup(psycopg2.connect(), repo_url, dir, os.environ['GITHUB_TOKEN'])
 
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
@@ -120,7 +113,7 @@ class TestMergeTrigger:
         shutil.rmtree(dir)
 
     @pytest.fixture(scope="class")
-    def scenario_2(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory, request):
+    def scenario_2(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
         'Leaf execution is running with new provider resource'
 
         dir = str(tmp_path_factory.mktemp('class-repo'))
@@ -188,14 +181,20 @@ class TestMergeTrigger:
         log.debug(f"Scenario: {scenario}")        
         scenario.run_collected_assertions()
 
-@pytest.mark.skip(reason="Not implemented")
-@pytest.mark.parametrize("scenario", [
-    ("scenario_1")
-    # ("scenario_2"),
-    # ("scenario_3")
-])
-class TestCloudWatchEvent(object):
-    @pytest.fixture(scope="function", autouse=True)
+
+scenarios = ["scenario_1", "scenario_2", "scenario_3"]
+indirect_params = "class_repo_dir,class_tf_state_dir,create_metadb_tables"
+scenario_params = [tuple([scenario] + [[]] * len(indirect_params.split(','))) for scenario in scenarios]
+
+@pytest.mark.parametrize("scenario," + indirect_params, scenario_params, indirect=True)
+@pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run")
+class TestCloudWatchEvent:
+
+    @pytest.fixture(scope="class")
+    def scenario(self, request):
+        return request.getfixturevalue(request.param)
+
+    @pytest.fixture(scope="class", autouse=True)
     def codebuild_env(self):
         os.environ['CODEBUILD_INITIATOR'] = 'rule/test'
         os.environ['EVENTBRIDGE_FINISHED_RULE'] = 'rule/test'
@@ -218,17 +217,20 @@ class TestCloudWatchEvent(object):
                     'cfg_path': 'directory_dependency/dev-account/global',
                     'create_provider_resource': False,
                     'record': {
+                        'status': 'running',
                         'is_rollback': False,
                         'account_name': 'dev',
-                        'cw_event_finished_status': 'success'
                     },
-                    'record_assertion': {'status': 'success'}
+                    'cw_event_finished_status': 'success',
+                    'record_assertion': {'status': 'success'},
+                    'debug_conditions': [{'cfg_path': 'directory_dependency/dev-account/global'}]
                 },
                 {
                     'apply_changes': False,
                     'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/baz',
                     'create_provider_resource': False,
                     'record': {
+                        'status': 'waiting',
                         'is_rollback': False,
                         'account_name': 'dev'
                     },
@@ -239,6 +241,8 @@ class TestCloudWatchEvent(object):
                     'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/bar',
                     'create_provider_resource': False,
                     'record': {
+                        'status': 'waiting',
+                        'cfg_deps': ['directory_dependency/dev-account/us-west-2/env-one/baz'],
                         'is_rollback': False,
                         'account_name': 'dev'
                     },
@@ -249,7 +253,7 @@ class TestCloudWatchEvent(object):
 
         pr.merge()
         
-        return pr
+        yield pr
     
     @pytest.fixture(scope="class")
     def scenario_2(self, scenario_id, ts):
@@ -264,23 +268,25 @@ class TestCloudWatchEvent(object):
                     'cfg_path': 'directory_dependency/dev-account/global',
                     'create_provider_resource': True,
                     'record': {
+                        'status': 'running',
                         'is_rollback': False,
-                        'account_name': 'dev',
-                        'cw_event_finished_status': 'success'
+                        'account_name': 'dev'
                     },
-                    'record_assertion': {'status': 'success', 'assert_new_provider': True, 'assert_new_resource': True}
+                    'cw_event_finished_status': 'success',
+                    'record_assertion': {'status': 'success', 'assert_new_provider': True, 'assert_new_resource': True},
+                    'debug_conditions': [{'cfg_path': 'directory_dependency/dev-account/global'}]
                 }
             ]
         )
 
         pr.merge()
         
-        return pr
-    
+        yield pr
+
     @pytest.fixture(scope="class")
     def scenario_3(self, scenario_id, ts):
         'CW root dependency execution with new provider resource was failed and no target executions are waiting'
-
+        
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
         pr.create_commit(
@@ -290,21 +296,20 @@ class TestCloudWatchEvent(object):
                     'cfg_path': 'directory_dependency/dev-account/global',
                     'create_provider_resource': True,
                     'record': {
+                        'status': 'running',
                         'is_rollback': False,
-                        'account_name': 'dev',
-                        'cw_event_finished_status': 'failed'
+                        'account_name': 'dev'
                     },
-                    'record_assertion': {'status': 'failed', 'assert_new_provider': True, 'assert_new_resource': True}
+                    'cw_event_finished_status': 'failed',
+                    'record_assertion': {'status': 'failed', 'assert_new_provider': True, 'assert_new_resource': True},
+                    'debug_conditions': [{'cfg_path': 'directory_dependency/dev-account/global'}]
                 }
             ]
         )
 
         pr.merge()
         
-        return pr
-    
-    def test_execution_record_exists(self, scenario, conn, request):
+        yield pr
+    def test_execution_record_exists(self, scenario):
         log.debug(f"Scenario: {scenario}")
-        scenario = request.getfixturevalue(scenario)
-        
         scenario.run_collected_assertions()
