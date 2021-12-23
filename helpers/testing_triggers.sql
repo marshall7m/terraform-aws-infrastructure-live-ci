@@ -21,31 +21,19 @@ BEGIN
     END IF;
 
     IF NEW.account_deps IS NULL THEN
-        NEW.account_deps := ARRAY(
-            SELECT DISTINCT account_name 
-            FROM account_dim
-            WHERE account_name != NEW.account_name
-            LIMIT random_between(0, (
-                SELECT COUNT(*)
-                FROM (
-                    SELECT DISTINCT account_name 
-                    FROM account_dim
-                    WHERE account_name != NEW.account_name
-                ) n
-            ))
-        );
+        NEW.account_deps := ARRAY[]::TEXT[];
     END IF;
 
     IF NEW.min_approval_count IS NULL THEN
-        NEW.min_approval_count := random_between(1, 5);
+        NEW.min_approval_count := random_between(1, 2);
     END IF;
 
     IF NEW.min_rejection_count IS NULL THEN
-        NEW.min_rejection_count := random_between(1, 5);
+        NEW.min_rejection_count := random_between(1, 2);
     END IF;
 
     IF NEW.voters IS NULL THEN
-        NEW.voters := ARRAY['voter-' || substr(md5(random()::text), 0, 4)];
+        NEW.voters := ARRAY[]::TEXT[];
     END IF;
 
    RETURN NEW;
@@ -84,19 +72,11 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
 
         IF NEW.account_path IS NULL THEN
-            IF account_dim_ref.account_path IS NULL THEN
-                NEW.account_path := NEW.account_name || '/' || substr(md5(random()::text), 0, 8);
-            ELSE
-                NEW.account_path := account_dim_ref.account_path;
-            END IF;
+            NEW.account_path := account_dim_ref.account_path;
         END IF;
 
         IF NEW.account_deps IS NULL THEN
-            NEW.account_deps := COALESCE(account_dim_ref.account_deps, ARRAY(
-                SELECT account_name 
-                FROM account_dim
-                LIMIT random_between(0, 1)
-            ));
+            NEW.account_deps := ARRAY[]::TEXT[];
         END IF;
 
         IF NEW.min_approval_count IS NULL THEN
@@ -104,7 +84,10 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
     
         IF NEW.approval_count IS NULL THEN
-            NEW.approval_count := random_between(0, NEW.min_approval_count);
+            NEW.approval_count := CASE 
+                WHEN NEW.status = 'success' THEN NEW.min_approval_count
+                ELSE 0
+            END;
         END IF;
 
         IF NEW.min_rejection_count IS NULL THEN
@@ -112,23 +95,18 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
 
         IF NEW.rejection_count IS NULL THEN
-            NEW.rejection_count := random_between(0, NEW.min_rejection_count);
+            NEW.rejection_count := CASE 
+                WHEN NEW.status = 'failed' THEN NEW.min_rejection_count
+                ELSE 0
+            END;
         END IF;
 
         IF NEW.voters IS NULL THEN
-            NEW.voters := COALESCE(account_dim_ref.voters, ARRAY['voter-' || substr(md5(random()::text), 0, 4)]);
-        END IF;
-
-        IF NEW.cfg_path IS NULL THEN
-            NEW.cfg_path := NEW.account_path || '/' || substr(md5(random()::text), 0, 8);
+            NEW.voters := ARRAY[]::TEXT[];
         END IF;
 
         IF NEW.cfg_deps IS NULL THEN
-            NEW.cfg_deps := ARRAY(
-                SELECT cfg_path 
-                FROM executions
-                LIMIT random_between(0, 1)
-            );
+            NEW.cfg_deps := ARRAY[]::TEXT[];
         END IF;
 
         IF NEW.execution_id IS NULL THEN
@@ -147,24 +125,18 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
 
         IF NEW.status IS NULL THEN
             NEW.status := CASE
-                WHEN NEW.approval_count = NEW.min_approval_count THEN 'success'
-                WHEN NEW.rejection_count = NEW.min_rejection_count  THEN 'failed'
-                ELSE 'running'
+                WHEN NEW.approval_count IS NOT NULL AND NEW.approval_count = NEW.min_approval_count THEN 'success'
+                WHEN NEW.rejection_count IS NOT NULL AND NEW.rejection_count = NEW.min_rejection_count  THEN 'failed'
+                ELSE NULL
             END;
         END IF;
         
         IF NEW.base_ref IS NULL THEN
             SELECT DISTINCT(e.base_ref) INTO NEW.base_ref FROM executions e;
-            IF NEW.base_ref IS NULL THEN
-                NEW.base_ref := 'master';
-            END IF;
         END IF;
 
         IF NEW.head_ref IS NULL THEN
             SELECT DISTINCT(e.head_ref) INTO NEW.head_ref FROM executions e;
-            IF NEW.head_ref IS NULL THEN
-                NEW.head_ref := 'feature-' || substr(md5(random()::text), 0, 5);
-            END IF;
         END IF;
 
         IF NEW.head_source_version IS NULL THEN
@@ -172,42 +144,35 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
 
         IF NEW.plan_command IS NULL THEN
-            NEW.plan_command := CASE
-                WHEN NEW.is_rollback = 't' THEN 
-                    'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path
-                ELSE
-                    'terragrunt plan ' || '--terragrunt-working-dir ' || NEW.cfg_path
-            END;
+            IF NEW.cfg_path IS NOT NULL THEN
+                NEW.plan_command := CASE
+                    WHEN NEW.is_rollback = 't' THEN 
+                        'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path
+                    WHEN NEW.is_rollback = 'f' THEN 
+                        'terragrunt plan ' || '--terragrunt-working-dir ' || NEW.cfg_path
+                    ELSE NULL
+                END;
+            END IF;
         END IF;
 
         IF NEW.deploy_command IS NULL THEN
-            NEW.deploy_command := CASE
-                WHEN NEW.is_rollback = 't' THEN 
-                    'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
-                ELSE
-                    'terragrunt apply ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
-            END;
-        END IF;
-
-        IF NEW.is_rollback IS NULL THEN
-            NEW.is_rollback := CASE (RANDOM() * .5)::INT
-                WHEN 0 THEN false
-                WHEN 1 THEN true
-            END;
+            IF NEW.cfg_path IS NOT NULL THEN
+                NEW.deploy_command := CASE
+                    WHEN NEW.is_rollback = 't' THEN 
+                        'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
+                    WHEN NEW.is_rollback = 'f' THEN 
+                        'terragrunt apply ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
+                    ELSE NULL
+                END;
+            END IF;
         END IF;
 
         IF NEW.new_providers IS NULL THEN
-            NEW.new_providers := CASE
-                WHEN NEW.is_rollback = 'f' THEN ARRAY[]::TEXT[]
-                WHEN NEW.is_rollback = 't' THEN ARRAY['provider/' || substr(md5(random()::text), 0, 5)]
-            END;
+            NEW.new_providers := ARRAY[]::TEXT[];
         END IF;
 
         IF NEW.new_resources IS NULL THEN
-            NEW.new_resources := CASE
-                WHEN NEW.is_rollback = 'f' THEN ARRAY[]::TEXT[]
-                WHEN NEW.is_rollback = 't' THEN ARRAY['resource.' || substr(md5(random()::text), 0, 5)]
-            END;
+            NEW.new_resources := ARRAY[]::TEXT[];
         END IF;
 
         RETURN NEW;
