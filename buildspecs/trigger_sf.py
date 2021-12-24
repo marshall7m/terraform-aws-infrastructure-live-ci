@@ -38,18 +38,13 @@ class TriggerSF:
         self.git_repo.git.checkout(commit_id)
 
         cmd = f'terragrunt state pull --terragrunt-working-dir {tg_dir}'
-
-        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
-        out = json.loads(run.stdout)
-        return_code = run.returncode
-
-        if return_code not in [0, 2]:
-            log.fatal('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
-            log.debug(f'Return code: {return_code}')
-            log.debug(run.stderr)
-            sys.exit(1)
-    
-        return [resource['type'] + '.' + resource['name'] for resource in out['resources'] if resource['provider'].split('\"')[1] in new_providers]
+        run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=True)
+        
+        if not run.stdout:
+            # empty config
+            return []
+        
+        return [resource['type'] + '.' + resource['name'] for resource in json.loads(run.stdout)['resources'] if resource['provider'].split('\"')[1] in new_providers]
 
     def execution_finished(self, event):
         
@@ -97,21 +92,13 @@ class TriggerSF:
     def get_new_providers(self, path):
         log.debug(f'Path: {path}')
         cmd = f"terragrunt providers --terragrunt-working-dir {path}"
-        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
-        out = run.stdout
-        return_code = run.returncode
+        run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=True)
 
-        log.debug(f'Terragrunt providers cmd out:\n{out}')
+        log.debug(f'Terragrunt providers cmd out:\n{run.stdout}')
         log.debug(f'Terragrunt providers cmd stderr:\n{run.stderr}')
-
-        if return_code not in [0, 2]:
-            log.fatal(f'Command failed: {cmd} -- Aborting CodeBuild run')  
-            log.debug(f'Return code: {return_code}')
-            log.debug(out)
-            sys.exit(1)
         
-        cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', out, re.MULTILINE)
-        state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', out, re.MULTILINE)
+        cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
+        state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
     
         log.debug(f'Config providers:\n{cfg_providers}')
         log.debug(f'State providers:\n{state_providers}')
@@ -122,25 +109,23 @@ class TriggerSF:
         cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
 
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
-        out = run.stderr
         return_code = run.returncode
 
         if return_code not in [0, 2]:
             log.fatal('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
             log.debug(f'Return code: {return_code}')
-            log.debug(out)
+            log.debug(run.stderr)
             sys.exit(1)
         
-        diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', out, re.DOTALL)
+        diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', run.stderr, re.DOTALL)
         if len(diff_paths) == 0:
             log.debug('Detected no Terragrunt paths with difference')
-            # log.debug(out)
             return []
         else:
             log.debug(f'Detected new/modified Terragrunt paths:\n{diff_paths}')
         
         stack = []
-        for m in re.finditer(r'=>\sModule\s(?P<cfg_path>.+?)\s\(excluded:.+dependencies:\s\[(?P<cfg_deps>.+|)\]', out, re.MULTILINE):
+        for m in re.finditer(r'=>\sModule\s(?P<cfg_path>.+?)\s\(excluded:.+dependencies:\s\[(?P<cfg_deps>.+|)\]', run.stderr, re.MULTILINE):
             if m.group(1) in diff_paths:
                 cfg = m.groupdict()
 
@@ -267,7 +252,7 @@ class TriggerSF:
                     with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
                         self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
 
-                    log.debug(f'Rollback Providers execution records:\n{pd.DataFrame([dict(r) for r in self.cur.fetchall()]).T}')
+                    log.debug(f'Rollback new providers execution records:\n{pd.DataFrame([dict(r) for r in self.cur.fetchall()]).T}')
             else:
                 log.info(f'Running executions: {running_execution_count} -- skipping execution creation')
 

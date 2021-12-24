@@ -54,7 +54,7 @@ def apply_session_mock_repo(session_repo_dir):
 
 @pytest.fixture(scope="class")
 def class_tf_state_dir(apply_session_mock_repo, tmp_path_factory):
-    dir = str(tmp_path_factory.mktemp('tf-state'))
+    dir = str(tmp_path_factory.mktemp('tf-state-'))
     log.debug(f'Class tf-state dir: {dir}')
     
     src = os.environ['TESTING_LOCAL_PARENT_TF_STATE_DIR']

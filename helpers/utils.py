@@ -315,17 +315,10 @@ class PR(TestSetup):
             text_file.write(file_content)
 
         if apply_changes:
+            log.debug('Applying changes')
             cmd = f'terragrunt apply --terragrunt-working-dir {abs_cfg_path} -auto-approve'
-            run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
-            return_code = run.returncode
+            subprocess.run(cmd.split(' '), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-            if return_code not in [0, 2]:
-                log.fatal(f'Command failed: {cmd} -- Aborting CodeBuild run')  
-                log.debug(f'Return code: {return_code}')
-                log.debug(f'Stdout:\n{run.stdout}')
-                log.debug(f'Stderr:\n{run.stderr}')
-                sys.exit(1)
-        
         log.debug(f'Adding file to commit: {filepath}')
         self.git_repo.index.add(filepath)
 
