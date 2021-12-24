@@ -17,9 +17,21 @@ import git
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+def pytest_generate_tests(metafunc):
+    scenarios = []
+    for attr in metafunc.cls.__dict__.keys():
+        parse_attr = attr.split('_')
+        id = parse_attr[1] if parse_attr[1:] else ''
+        if parse_attr[0] == 'scenario' and id.isdigit():
+            scenarios.append(attr)
+    
+    scenario_fixt = "scenario,class_repo_dir,class_tf_state_dir,create_metadb_tables"
+    scenario_params = [pytest.param(*[scenario] * len(scenario_fixt.split(',')), id=scenario) for scenario in scenarios]
+    metafunc.parametrize(scenario_fixt, scenario_params, indirect=True)
+
 @pytest.fixture(scope='class')
 def account_dim(conn):
-    yield TestSetup.create_records(conn, 'account_dim', [
+    TestSetup.create_records(conn, 'account_dim', [
         {
             'account_name': 'dev',
             'account_path': 'directory_dependency/dev-account',
@@ -29,6 +41,8 @@ def account_dim(conn):
             'voters': ['test-voter-1']
         }
     ])
+
+    yield
 
     TestSetup.truncate_if_exists(conn, 'public', conn.info.dbname, 'account_dim')
 
@@ -47,19 +61,13 @@ def run(mock_aws, scenario):
 def ts(repo_url, class_repo_dir):
     return TestSetup(psycopg2.connect(), repo_url, class_repo_dir, os.environ['GITHUB_TOKEN'])
 
-@pytest.mark.skip(reason="Not implemented")
-@pytest.mark.parametrize("scenario_param", [
-    ("scenario_1"),
-    ("scenario_2"),
-    ("scenario_3")
-], scope='class')
+@pytest.fixture(scope="class")
+def scenario(request, account_dim, class_repo_dir, class_tf_state_dir, create_metadb_tables, ts):
+    return request.getfixturevalue(request.param)
 
-@pytest.mark.usefixtures("account_dim", "run")
+# @pytest.mark.skip(reason="Not implemented")
+@pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run")
 class TestMergeTrigger:
-    @pytest.fixture(scope="class")
-    def scenario(self, request, scenario_param):
-        return request.getfixturevalue(scenario_param)
-
     @pytest.fixture(scope="class", autouse=True)
     def codebuild_env(self, scenario):
         os.environ['CODEBUILD_WEBHOOK_TRIGGER'] = 'pr/1'
@@ -71,19 +79,6 @@ class TestMergeTrigger:
         
         os.environ['AWS_DEFAULT_REGION'] = 'us-west-2'
         os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
-
-    # WA: Remove repeated class repo dir creation within scenarios and use fixture below if individual parametrized class fixtures teardowns are possible
-    # see SO post: https://stackoverflow.com/questions/70427392/pytest-run-class-scoped-parametrized-fixtures-dependency-fixtures-teardown-af?noredirect=1#comment124494514_70427392
-    # @pytest.fixture(scope='class')
-    # def class_repo_dir(self, session_repo_dir, tmp_path_factory):
-    #     dir = str(tmp_path_factory.mktemp('class-repo'))
-    #     log.debug(f'Class repo dir: {dir}')
-
-    #     git.Repo.clone_from(session_repo_dir, dir)
-
-    #     yield dir
-
-    #     shutil.rmtree(dir)
     
     @pytest.fixture(scope="class")
     def scenario_1(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
@@ -110,7 +105,6 @@ class TestMergeTrigger:
         pr.merge()
 
         yield pr
-        shutil.rmtree(dir)
 
     @pytest.fixture(scope="class")
     def scenario_2(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
@@ -139,7 +133,6 @@ class TestMergeTrigger:
         pr.merge()
         
         yield pr
-        shutil.rmtree(dir)
     
     @pytest.fixture(scope="class")
     def scenario_3(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
@@ -173,27 +166,15 @@ class TestMergeTrigger:
         )
 
         pr.merge()
-        
+
         yield pr
-        shutil.rmtree(dir)
 
     def test_execution_record_exists(self, scenario):
         log.debug(f"Scenario: {scenario}")        
         scenario.run_collected_assertions()
 
-
-scenarios = ["scenario_1", "scenario_2", "scenario_3"]
-indirect_params = "class_repo_dir,class_tf_state_dir,create_metadb_tables"
-scenario_params = [tuple([scenario] + [[]] * len(indirect_params.split(','))) for scenario in scenarios]
-
-@pytest.mark.parametrize("scenario," + indirect_params, scenario_params, indirect=True)
 @pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run")
 class TestCloudWatchEvent:
-
-    @pytest.fixture(scope="class")
-    def scenario(self, request):
-        return request.getfixturevalue(request.param)
-
     @pytest.fixture(scope="class", autouse=True)
     def codebuild_env(self):
         os.environ['CODEBUILD_INITIATOR'] = 'rule/test'
@@ -285,7 +266,7 @@ class TestCloudWatchEvent:
 
     @pytest.fixture(scope="class")
     def scenario_3(self, scenario_id, ts):
-        'CW root dependency execution with new provider resource was failed and no target executions are waiting'
+        'CW root dependency execution with new provider resource failed and associated rollback execution is running'
         
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
@@ -306,6 +287,8 @@ class TestCloudWatchEvent:
                 }
             ]
         )
+
+        #TODO: assert rollback execution is running
 
         pr.merge()
         
