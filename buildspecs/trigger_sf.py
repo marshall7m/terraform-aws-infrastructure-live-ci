@@ -3,6 +3,7 @@ import sys
 import logging
 import subprocess
 import git
+from github import Github
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import execute_values
@@ -16,6 +17,7 @@ import sys
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 sf = boto3.client('stepfunctions', region_name='us-west-2')
+ssm = boto3.client('ssm', region_name='us-west-2')
 
 class TriggerSF:
     def __init__(self):
@@ -85,9 +87,9 @@ class TriggerSF:
                     AND is_rollback = false;
                     """).format(sql.Literal(event['commit_id']))
                 )
-            elif event['is_rollback'] == True and event['status'] == 'failed':
-                log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
-                sys.exit(1)
+        elif event['is_rollback'] == True and event['status'] == 'failed':
+            log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
+            sys.exit(1)
 
     def get_new_providers(self, path):
         log.debug(f'Path: {path}')
@@ -241,24 +243,33 @@ class TriggerSF:
     
             self.execution_finished(event)
 
-            log.info('Checking if any Step Function executions are running')
-            self.cur.execute("SELECT * FROM executions WHERE status = 'running'")
-            running_execution_count = self.cur.rowcount
+            log.info('Checking if any deployment executions are running')
+            self.cur.execute("SELECT * FROM executions WHERE status = 'running' AND is_rollback = False")
+            running_deployment_count = self.cur.rowcount
             
-            if running_execution_count == 0:
-                log.info('No deployment or rollback executions in progress')
-                if event['status'] == 'failed' and event['is_rollback'] == False:
-                    log.info('Adding commit rollbacks to executions')
-                    with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
-                        self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
+            if running_deployment_count == 0:
+                log.info('No deployment executions in progress')
+            
+                with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
+                    self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
+                    rollback_records = [dict(r) for r in self.cur.fetchall()]
+                    rollback_count = len(rollback_records)
 
-                    log.debug(f'Rollback new providers execution records:\n{pd.DataFrame([dict(r) for r in self.cur.fetchall()]).T}')
+                log.info(f'Rollback count: {rollback_count}')
+                if rollback_count > 0:
+                    log.debug(f'Rollback records:\n{pd.DataFrame(rollback_records).T}')
+                else:
+                    log.info('Unlocking merge action within target branch')
+                    ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=False, Type='String', Overwrite=True)
+                    return
             else:
-                log.info(f'Running executions: {running_execution_count} -- skipping execution creation')
+                log.info(f'Running executions: {running_deployment_count} -- skipping execution creation')
 
         elif os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
-            log.info('Locking merge actions within target branch')
-            #TODO: Set commit status to pending for all PR commits
+            log.info('Locking merge action within target branch')
+            ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=True, Type='String', Overwrite=True)
+
+            log.info('Creating deployment execution records')
             self.update_executions_with_new_deploy_stack()
         
         else:

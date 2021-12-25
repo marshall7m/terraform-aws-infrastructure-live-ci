@@ -30,7 +30,8 @@ def pytest_generate_tests(metafunc):
     metafunc.parametrize(scenario_fixt, scenario_params, indirect=True)
 
 @pytest.fixture(scope='class')
-def account_dim(conn):
+def account_dim(conn, create_metadb_tables):
+    log.debug('Creating account_dim records')
     TestSetup.create_records(conn, 'account_dim', [
         {
             'account_name': 'dev',
@@ -44,12 +45,14 @@ def account_dim(conn):
 
     yield
 
+    log.debug('Truncating account_dim table')
     TestSetup.truncate_if_exists(conn, 'public', conn.info.dbname, 'account_dim')
 
 # mock step function boto3 client
 @pytest.fixture(scope='class')
 @mock.patch('buildspecs.trigger_sf.sf')
-def run(mock_aws, scenario):
+@mock.patch('buildspecs.trigger_sf.ssm')
+def run(mock_aws, mock_ssm, scenario):
     os.chdir(scenario.git_dir)
     log.debug(f'CWD: {os.getcwd()}')
 
@@ -81,13 +84,8 @@ class TestMergeTrigger:
         os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
     
     @pytest.fixture(scope="class")
-    def scenario_1(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
+    def scenario_1(self, scenario_id, ts):
         'Leaf execution is running with no new provider resources'
-
-        dir = str(tmp_path_factory.mktemp('class-repo'))
-        log.debug(f'Class repo dir: {dir}')
-        git.Repo.clone_from(session_repo_dir, dir)
-        ts = TestSetup(psycopg2.connect(), repo_url, dir, os.environ['GITHUB_TOKEN'])
 
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
@@ -107,15 +105,8 @@ class TestMergeTrigger:
         yield pr
 
     @pytest.fixture(scope="class")
-    def scenario_2(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
+    def scenario_2(self, scenario_id, ts):
         'Leaf execution is running with new provider resource'
-
-        dir = str(tmp_path_factory.mktemp('class-repo'))
-        log.debug(f'Class repo dir: {dir}')
-
-        git.Repo.clone_from(session_repo_dir, dir)
-        
-        ts = TestSetup(psycopg2.connect(), repo_url, dir, os.environ['GITHUB_TOKEN'])
 
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
@@ -135,15 +126,8 @@ class TestMergeTrigger:
         yield pr
     
     @pytest.fixture(scope="class")
-    def scenario_3(self, scenario_id, session_repo_dir, repo_url, tmp_path_factory):
+    def scenario_3(self, scenario_id, ts):
         'Root dependency execution is running and leaf execution is waiting'
-
-        dir = str(tmp_path_factory.mktemp('class-repo'))
-        log.debug(f'Class repo dir: {dir}')
-        
-        git.Repo.clone_from(session_repo_dir, dir)
-
-        ts = TestSetup(psycopg2.connect(), repo_url, dir, os.environ['GITHUB_TOKEN'])
 
         pr = ts.pr(base_ref='master', head_ref=f'feature-{scenario_id}')
 
@@ -173,6 +157,14 @@ class TestMergeTrigger:
         log.debug(f"Scenario: {scenario}")        
         scenario.run_collected_assertions()
 
+    def test_merge_lock(self, mock_ssm, scenario):
+        if scenario.assert_merge_lock:
+            log.debug('Assert merge lock')
+            mock_ssm.assert_called_once_with(Value=True)
+        else:
+            pytest.skip('Skipping merge lock assertion')
+
+@pytest.mark.skip(reason="Not implemented")
 @pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run")
 class TestCloudWatchEvent:
     @pytest.fixture(scope="class", autouse=True)
@@ -182,8 +174,10 @@ class TestCloudWatchEvent:
 
         os.environ['AWS_DEFAULT_REGION'] = 'us-west-2'
         os.environ['STATE_MACHINE_ARN'] = 'mock-sf-arn'
+        os.environ['GITHUB_MERGE_LOCK_SSM_KEY'] = 'test-infrastructure-live-ci-github-merge-lock'
 
         os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
+        
 
     @pytest.fixture(scope="class")
     def scenario_1(self, scenario_id, ts):
@@ -296,3 +290,8 @@ class TestCloudWatchEvent:
     def test_execution_record_exists(self, scenario):
         log.debug(f"Scenario: {scenario}")
         scenario.run_collected_assertions()
+
+    def test_merge_unlock(self, mock_ssm):
+        log.debug('Assert merge lock ')
+        mock_ssm.assert_called_once_with(Value=False)
+    
