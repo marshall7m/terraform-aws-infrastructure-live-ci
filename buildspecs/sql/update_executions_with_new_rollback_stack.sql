@@ -89,10 +89,10 @@ FROM (
         min_approval_count,
         0 as rejection_count,
         min_rejection_count
-    FROM
-        executions
-    WHERE
-        commit_id = {commit_id} 
-        AND cardinality(new_resources) > 0
+    FROM executions
+    WHERE commit_id = {commit_id} 
+    AND cardinality(new_resources) > 0
+    -- ensures that duplicate rollback executions are not created
+    AND cfg_path NOT IN (SELECT cfg_path FROM executions WHERE commit_id = {commit_id} AND is_rollback = true)
 ) d
 RETURNING *;
