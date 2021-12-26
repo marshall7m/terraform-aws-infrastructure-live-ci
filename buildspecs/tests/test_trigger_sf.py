@@ -1,7 +1,7 @@
 import psycopg2
 from psycopg2 import sql
 import pytest
-import mock
+from unittest.mock import patch
 import os
 import logging
 import sys
@@ -25,7 +25,7 @@ def pytest_generate_tests(metafunc):
         if parse_attr[0] == 'scenario' and id.isdigit():
             scenarios.append(attr)
     
-    scenario_fixt = "scenario,class_repo_dir,class_tf_state_dir,create_metadb_tables"
+    scenario_fixt = "scenario,class_repo_dir,class_tf_state_dir,create_metadb_tables,mock_ssm"
     scenario_params = [pytest.param(*[scenario] * len(scenario_fixt.split(',')), id=scenario) for scenario in scenarios]
     metafunc.parametrize(scenario_fixt, scenario_params, indirect=True)
 
@@ -48,11 +48,20 @@ def account_dim(conn, create_metadb_tables):
     log.debug('Truncating account_dim table')
     TestSetup.truncate_if_exists(conn, 'public', conn.info.dbname, 'account_dim')
 
-# mock step function boto3 client
+
 @pytest.fixture(scope='class')
-@mock.patch('buildspecs.trigger_sf.sf')
-@mock.patch('buildspecs.trigger_sf.ssm')
-def run(mock_aws, mock_ssm, scenario):
+def mock_ssm():
+    with patch('buildspecs.trigger_sf.ssm.put_parameter') as _patched:
+        yield _patched
+
+@pytest.fixture(scope='class')
+def mock_sf():
+    with patch('buildspecs.trigger_sf.sf') as _patched:
+        yield _patched
+    
+    _patched.reset_mock()
+@pytest.fixture(scope='class')
+def run(mock_sf, mock_ssm, scenario):
     os.chdir(scenario.git_dir)
     log.debug(f'CWD: {os.getcwd()}')
 
@@ -69,7 +78,7 @@ def scenario(request, account_dim, class_repo_dir, class_tf_state_dir, create_me
     return request.getfixturevalue(request.param)
 
 # @pytest.mark.skip(reason="Not implemented")
-@pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run")
+@pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run", "mock_ssm")
 class TestMergeTrigger:
     @pytest.fixture(scope="class", autouse=True)
     def codebuild_env(self, scenario):
@@ -82,6 +91,8 @@ class TestMergeTrigger:
         
         os.environ['AWS_DEFAULT_REGION'] = 'us-west-2'
         os.environ['PGOPTIONS'] = '-c statement_timeout=100000'
+
+        os.environ['GITHUB_MERGE_LOCK_SSM_KEY'] = 'test-infrastructure-live-ci-github-merge-lock'
     
     @pytest.fixture(scope="class")
     def scenario_1(self, scenario_id, ts):
@@ -157,14 +168,11 @@ class TestMergeTrigger:
         log.debug(f"Scenario: {scenario}")        
         scenario.run_collected_assertions()
 
-    def test_merge_lock(self, mock_ssm, scenario):
-        if scenario.assert_merge_lock:
-            log.debug('Assert merge lock')
-            mock_ssm.assert_called_once_with(Value=True)
-        else:
-            pytest.skip('Skipping merge lock assertion')
+    def test_merge_lock(self, mock_ssm):
+        log.debug('Assert merge lock')
+        mock_ssm.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=True, Type='String', Overwrite=True)
 
-@pytest.mark.skip(reason="Not implemented")
+# @pytest.mark.skip(reason="Not implemented")
 @pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run")
 class TestCloudWatchEvent:
     @pytest.fixture(scope="class", autouse=True)
@@ -209,7 +217,8 @@ class TestCloudWatchEvent:
                         'is_rollback': False,
                         'account_name': 'dev'
                     },
-                    'record_assertion': {'status': 'running'}
+                    'record_assertion': {'status': 'running'},
+                    'debug_conditions': [{'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/baz'}]
                 },
                 {
                     'apply_changes': False,
@@ -221,7 +230,8 @@ class TestCloudWatchEvent:
                         'is_rollback': False,
                         'account_name': 'dev'
                     },
-                    'record_assertion': {'status': 'waiting'}
+                    'record_assertion': {'status': 'waiting'},
+                    'debug_conditions': [{'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/bar'}]
                 }
             ]
         )
@@ -291,7 +301,14 @@ class TestCloudWatchEvent:
         log.debug(f"Scenario: {scenario}")
         scenario.run_collected_assertions()
 
-    def test_merge_unlock(self, mock_ssm):
-        log.debug('Assert merge lock ')
-        mock_ssm.assert_called_once_with(Value=False)
+    def test_merge_unlock(self, mock_ssm, conn):
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM executions WHERE status = 'running'")
+            results = cur.fetchone()
+        if results == None:
+            log.debug('Assert merge unlock')
+            mock_ssm.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=False, Type='String', Overwrite=True)
+        else:
+            pytest.mark.skip('Executions are runnning -- skip merge unlock assertion')
     
