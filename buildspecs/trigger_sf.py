@@ -50,6 +50,7 @@ class TriggerSF:
 
     def execution_finished(self, event):
         
+        log.info('Updating execution record status')
         self.cur.execute(sql.SQL("""
         UPDATE executions
         SET "status" = {}
@@ -76,17 +77,27 @@ class TriggerSF:
                 log.debug(self.cur.fetchall())
 
             if event['status'] == 'failed':
-                log.info('Aborting deployments depending on failed execution')
-
+                log.info('Aborting all deployments for commit')
                 self.cur.execute(
                     sql.SQL("""
                     UPDATE executions
                     SET "status" = 'aborted'
-                    WHERE "status" = 'waiting'
+                    WHERE "status" IN ('waiting', 'running')
                     AND commit_id = {}
                     AND is_rollback = false;
                     """).format(sql.Literal(event['commit_id']))
                 )
+
+                log.info('Creating rollback executions if needed')
+                with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
+                    self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
+                    rollback_records = [dict(r) for r in self.cur.fetchall()]
+        
+                rollback_count = len(rollback_records)
+                log.info(f'Rollback count: {rollback_count}')
+                if rollback_count > 0:
+                    log.debug(f'Rollback records:\n{pd.DataFrame(rollback_records).T}')
+    
         elif event['is_rollback'] == True and event['status'] == 'failed':
             log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
             sys.exit(1)
@@ -236,34 +247,11 @@ class TriggerSF:
         
         if os.environ['CODEBUILD_INITIATOR'] == os.getenv('EVENTBRIDGE_FINISHED_RULE'):
             log.info('Triggered via Step Function Event')
-
             event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
             with pd.option_context('display.max_rows', None, 'display.max_columns', None):
                 log.debug(f'Parsed CW event:\n{pd.DataFrame.from_records([event]).T}')
-    
+
             self.execution_finished(event)
-
-            log.info('Checking if any deployment executions are running')
-            self.cur.execute("SELECT * FROM executions WHERE status = 'running' AND is_rollback = False")
-            running_deployment_count = self.cur.rowcount
-            
-            if running_deployment_count == 0:
-                log.info('No deployment executions in progress')
-            
-                with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
-                    self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
-                    rollback_records = [dict(r) for r in self.cur.fetchall()]
-                    rollback_count = len(rollback_records)
-
-                log.info(f'Rollback count: {rollback_count}')
-                if rollback_count > 0:
-                    log.debug(f'Rollback records:\n{pd.DataFrame(rollback_records).T}')
-                else:
-                    log.info('Unlocking merge action within target branch')
-                    ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=False, Type='String', Overwrite=True)
-                    return
-            else:
-                log.info(f'Running executions: {running_deployment_count} -- skipping execution creation')
 
         elif os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
             log.info('Locking merge action within target branch')
@@ -275,9 +263,16 @@ class TriggerSF:
         else:
             log.error('Codebuild triggered action not handled')
             sys.exit(1)
-    
-        log.info('Starting Step Function Deployment Flow')
-        self.start_sf_executions()
+
+        log.info('Checking if commit executions are in progress')
+        self.cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
+
+        if self.cur.rowcount > 0:
+            log.info('Starting Step Function Deployment Flow')
+            self.start_sf_executions()
+        else:
+            log.info('No executions are waiting or running -- unlocking merge action within target branch')
+            ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=False, Type='String', Overwrite=True)
 
     def cleanup(self):
 
