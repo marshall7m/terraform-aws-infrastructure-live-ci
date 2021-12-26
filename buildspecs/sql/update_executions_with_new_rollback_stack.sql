@@ -67,8 +67,8 @@ SELECT
     min_rejection_count
 FROM (
     SELECT
-        'run-' || substr(md5(random()::text), 0, 8) as execution_id,
-        true as is_rollback,
+        'run-' || substr(md5(random()::TEXT), 0, 8) AS execution_id,
+        true AS is_rollback,
         pr_id,
         commit_id,
         base_ref,
@@ -76,23 +76,28 @@ FROM (
         head_source_version,
         cfg_path,
         cfg_deps,
-        'waiting' as status,
-        'terragrunt destroy' || target_resources(new_resources) as plan_command,
-        'terragrunt destroy' || target_resources(new_resources) || ' -auto-approve' as deploy_command,
+        'waiting' AS "status",
+        'terragrunt destroy' || target_resources(new_resources) AS plan_command,
+        'terragrunt destroy' || target_resources(new_resources) || ' -auto-approve' AS deploy_command,
         new_providers,
         new_resources,
         account_name,
         account_path,
         account_deps,
         voters,
-        0 as approval_count,
+        0 AS approval_count,
         min_approval_count,
-        0 as rejection_count,
+        0 AS rejection_count,
         min_rejection_count
     FROM executions
     WHERE commit_id = {commit_id} 
     AND cardinality(new_resources) > 0
     -- ensures that duplicate rollback executions are not created
-    AND cfg_path NOT IN (SELECT cfg_path FROM executions WHERE commit_id = {commit_id} AND is_rollback = true)
+    AND NOT exists (
+        SELECT 1 
+        FROM executions 
+        WHERE is_rollback = true
+        AND commit_id = {commit_id}
+    )
 ) d
 RETURNING *;
