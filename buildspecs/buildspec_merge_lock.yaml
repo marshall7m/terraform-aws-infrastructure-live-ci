@@ -1,0 +1,9 @@
+version: 0.2
+env:
+  shell: bash
+  parameter-store:
+    MERGE_LOCK: GITHUB_MERGE_LOCK_SSM_KEY
+phases:
+  build:
+    commands:
+      - bash merge_lock.bash
