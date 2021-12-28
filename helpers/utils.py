@@ -280,7 +280,7 @@ class PR(TestSetup):
 
         if create_provider_resource:
             log.debug('Creating null provider resource config file')
-            # for simplicity, assume null provider isn't in repo
+            # for simplicity, assume null provider isn't in cfg directory
             file_content = inspect.cleandoc("""
             provider "null" {}
 

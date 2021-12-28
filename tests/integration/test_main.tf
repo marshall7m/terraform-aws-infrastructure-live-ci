@@ -21,15 +21,8 @@ resource "github_repository" "test" {
   }
 }
 
-data "aws_ssm_parameter" "metadb_password" {
-  name = "metadb-password"
-}
-
-data "aws_caller_identity" "current" {}
-
-
 module "mut_infrastructure_live_ci" {
-  source = "../..//"
+  source = "..//"
 
   plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
   apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
@@ -48,11 +41,10 @@ module "mut_infrastructure_live_ci" {
   #incorporate other account for testing (e.g. prod)
   account_parent_cfg = [
     {
-      name         = "dev"
-      path         = "dev-account"
-      dependencies = []
-      voters       = ["success@simulator.amazonses.com"]
-      # voters                   = [data.aws_ssm_parameter.testing_email.value]
+      name                     = "dev"
+      path                     = "dev-account"
+      dependencies             = []
+      voters                   = ["success@simulator.amazonses.com"]
       approval_count_required  = 1
       rejection_count_required = 1
     }
@@ -60,21 +52,5 @@ module "mut_infrastructure_live_ci" {
 
   depends_on = [
     github_repository.test
-  ]
-}
-
-module "bats_testing" {
-  source        = "github.com/marshall7m/terraform-bats-testing//"
-  bats_filepath = "${path.module}/test_integration.bats"
-  env_vars = {
-    PGUSER     = module.mut_infrastructure_live_ci.metadb_username
-    PGPASSWORD = module.mut_infrastructure_live_ci.metadb_password
-    PGHOST     = module.mut_infrastructure_live_ci.metadb_address
-    PGDATABASE = module.mut_infrastructure_live_ci.metadb_name
-
-    TRIGGER_SF_CODEBUILD_ARN = module.mut_infrastructure_live_ci.codebuild_trigger_sf_arn
-  }
-  depends_on = [
-    module.mut_infrastructure_live_ci
   ]
 }
