@@ -1,3 +1,5 @@
+#!/bin/bash
+
 if [ "$MERGE_LOCK" == "true" ]; then
     running_pr=$(psql -qtAX -c "SELECT DISTINCT pr_id FROM executions WHERE status = 'running'")
     data=$(cat <<EOF
