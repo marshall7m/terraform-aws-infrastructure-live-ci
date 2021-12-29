@@ -162,13 +162,11 @@ module "lambda_approval_request" {
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
   env_vars = {
-    ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
     SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
     SES_TEMPLATE         = aws_ses_template.approval.name
   }
   custom_role_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.artifact_bucket_access.arn
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   ]
   statements = [
     {
@@ -200,13 +198,9 @@ module "lambda_approval_response" {
       principal = "apigateway.amazonaws.com"
     }
   ]
-  env_vars = {
-    ARTIFACT_BUCKET_NAME = aws_s3_bucket.artifacts.id
-  }
 
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.artifact_bucket_access.arn
   ]
 }
 

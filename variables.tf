@@ -154,7 +154,7 @@ variable "api_name" {
 variable "github_token_ssm_description" {
   description = "Github token SSM parameter description"
   type        = string
-  default     = "Github token used to give read access to the payload validator function to get file that differ between commits" #tfsec:ignore:GEN001
+  default     = "Github token used for setting PR merge locks for live infrastructure repo"
 }
 
 variable "github_token_ssm_key" {
@@ -196,12 +196,6 @@ variable "cloudwatch_event_name" {
   default     = "infrastructure-live-execution-event"
 }
 
-variable "queue_pr_build_name" {
-  description = "AWS CodeBuild project name for the build that queues PRs for the Step Function deployment"
-  type        = string
-  default     = "infrastructure-live-ci-queue-pr"
-}
-
 variable "trigger_step_function_build_name" {
   description = "Name of AWS CodeBuild project that will trigger the AWS Step Function"
   type        = string
@@ -212,31 +206,6 @@ variable "terra_run_build_name" {
   description = "Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions"
   type        = string
   default     = "infrastructure-live-ci-terra-run"
-}
-# S3 bucket #
-
-variable "artifact_bucket_name" {
-  description = "Name of the AWS S3 bucket to store AWS Step Function execution artifacts under"
-  type        = string
-  default     = null
-}
-
-variable "cmk_arn" {
-  description = "AWS KMS CMK (Customer Master Key) ARN used to encrypt Step Function artifacts"
-  type        = string
-  default     = null
-}
-
-variable "artifact_bucket_tags" {
-  description = "Tags for AWS S3 bucket used to store step function artifacts"
-  type        = map(string)
-  default     = {}
-}
-
-variable "artifact_bucket_force_destroy" {
-  description = "Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion)"
-  type        = bool
-  default     = false
 }
 
 # metadb
