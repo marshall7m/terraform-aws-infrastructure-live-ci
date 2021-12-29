@@ -3,6 +3,7 @@ env:
   shell: bash
   parameter-store:
     MERGE_LOCK: GITHUB_MERGE_LOCK_SSM_KEY
+    GITHUB_TOKEN: GITHUB_TOKEN_SSM_KEY
 phases:
   build:
     commands:

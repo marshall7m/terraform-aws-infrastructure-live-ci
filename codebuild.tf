@@ -8,6 +8,31 @@ data "github_repository" "build_scripts" {
 
 data "aws_caller_identity" "current" {}
 
+resource "aws_ssm_parameter" "merge_lock" {
+  name        = coalesce(var.merge_lock_ssm_key, "${var.repo_name}-tf-merge-lock")
+  description = "Locks PRs with infrastructure changes from being merged into base branch"
+  type        = "String"
+  value       = false
+}
+
+data "aws_iam_policy_document" "merge_lock_ssm_param_access" {
+  statement {
+    sid    = "GetMergeLockSSMParam"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameters"
+    ]
+    resources = [
+      aws_ssm_parameter.merge_lock.arn
+    ]
+  }
+}
+resource "aws_iam_policy" "merge_lock_ssm_param_access" {
+  name        = "${aws_ssm_parameter.merge_lock.name}-access"
+  description = "Allows read access to merge lock ssm param"
+  policy      = data.aws_iam_policy_document.merge_lock_ssm_param_access.json
+}
+
 module "terra_img" {
   count  = var.terra_img == null ? 1 : 0
   source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
@@ -48,9 +73,23 @@ module "apply_role" {
   ] : []
 }
 
-module "codebuild_queue_pr" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
 
+module "codebuild_merge_lock" {
+  source = "github.com/marshall7m/terraform-aws-codebuild"
+  name   = var.merge_lock_build_name
+
+  environment = {
+    compute_type = "BUILD_GENERAL1_SMALL"
+    image        = "aws/codebuild/standard:3.0"
+    type         = "LINUX_CONTAINER"
+    environment_variables = concat(var.build_env_vars, [
+      {
+        name  = "REPO_FULL_NAME"
+        value = var.repo_name
+        type  = "PLAINTEXT"
+      }
+    ])
+  }
 
   webhook_filter_groups = [
     [
@@ -69,68 +108,32 @@ module "codebuild_queue_pr" {
     ]
   ]
 
-  create_source_auth         = true
-  source_auth_ssm_param_name = var.github_token_ssm_key
-  source_auth_type           = "PERSONAL_ACCESS_TOKEN"
-  source_auth_server_type    = "GITHUB"
-
-  name = var.queue_pr_build_name
-  build_source = {
-    type                = "GITHUB"
-    git_clone_depth     = 1
-    insecure_ssl        = false
-    location            = data.github_repository.this.http_clone_url
-    report_build_status = false
-  }
-
-  secondary_build_source = {
-    source_identifier   = local.buildspec_scripts_source_identifier
-    type                = "GITHUB"
-    git_clone_depth     = 1
-    report_build_status = false
-    insecure_ssl        = false
-    location            = data.github_repository.build_scripts.http_clone_url
-    buildspec           = <<-EOT
-version: 0.2
-env:
-  shell: bash
-phases:
-  build:
-    commands:
-      - bash "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/queue_pr.sh"
-EOT
-  }
 
   artifacts = {
     type = "NO_ARTIFACTS"
   }
 
-  environment = {
-    compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
-    type         = "LINUX_CONTAINER"
-    environment_variables = [
-      {
-        name  = "ARTIFACT_BUCKET_NAME"
-        type  = "PLAINTEXT"
-        value = aws_s3_bucket.artifacts.id
-      },
-      {
-        name  = "ARTIFACT_BUCKET_PR_QUEUE_KEY"
-        type  = "PLAINTEXT"
-        value = local.pr_queue_key
-      },
-      {
-        name  = "SECONDARY_SOURCE_IDENTIFIER"
-        type  = "PLAINTEXT"
-        value = local.buildspec_scripts_source_identifier
-      }
-    ]
+  build_source = {
+    type                = "NO_SOURCE"
+    buildspec           = <<-EOT
+version: 0.2
+env:
+  shell: bash
+  parameter-store:
+    MERGE_LOCK: ${aws_ssm_parameter.merge_lock.name}
+    GITHUB_TOKEN: ${var.github_token_ssm_key}
+phases:
+  build:
+    commands:
+      - |
+      ${file("${path.module}/buildspecs/merge_lock.bash")}
+EOT
   }
 
-  vpc_config = var.codebuild_vpc_config
-
-  role_policy_arns = [aws_iam_policy.artifact_bucket_access.arn]
+  role_policy_arns = [
+    aws_iam_policy.merge_lock_ssm_param_access.arn,
+    aws_iam_policy.metadb.arn
+  ]
 }
 
 module "codebuild_trigger_sf" {
@@ -217,7 +220,6 @@ EOT
       resources = [aws_sfn_state_machine.this.arn]
     }
   ]
-
 }
 
 
@@ -242,11 +244,6 @@ module "codebuild_terra_run" {
         name  = "TF_INPUT"
         value = "false"
         type  = "PLAINTEXT"
-      },
-      {
-        name  = "SECONDARY_SOURCE_IDENTIFIER"
-        type  = "PLAINTEXT"
-        value = local.buildspec_scripts_source_identifier
       }
     ])
   }
@@ -260,15 +257,6 @@ module "codebuild_terra_run" {
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
     report_build_status = false
-  }
-
-  secondary_build_source = {
-    source_identifier   = local.buildspec_scripts_source_identifier
-    type                = "GITHUB"
-    git_clone_depth     = 1
-    report_build_status = false
-    insecure_ssl        = false
-    location            = data.github_repository.build_scripts.http_clone_url
     buildspec           = <<-EOT
 version: 0.2
 env:
@@ -276,12 +264,12 @@ env:
 phases:
   build:
     commands:
-      - bash "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/terra_run.sh"
+      - "${TG_COMMAND}"
 EOT
   }
 
+
   role_policy_arns = [
-    aws_iam_policy.artifact_bucket_access.arn,
     aws_iam_policy.metadb.arn
   ]
 }
