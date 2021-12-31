@@ -5,6 +5,12 @@ variable "common_tags" {
   default     = {}
 }
 
+variable "region" {
+  description = "AWS region name to create module within. Defaults to AWS provider's region."
+  type        = string
+  default     = null
+}
+
 variable "account_parent_cfg" {
   description = "Any modified child filepath of the parent path will be processed within the parent path associated Map task"
   type = list(object({
@@ -29,6 +35,12 @@ variable "base_branch" {
 }
 
 # CODEBUILD #
+
+variable "merge_lock_build_name" {
+  description = "Codebuild project name used for determine if infrastructure related PR can be merged into base branch"
+  type        = string
+  default     = null
+}
 
 variable "terra_img" {
   description = "Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects"
@@ -72,8 +84,8 @@ variable "apply_role_policy_arns" {
   default     = []
 }
 
-variable "build_env_vars" {
-  description = "Base environment variables that will be provided for tf plan/apply builds"
+variable "terra_run_env_vars" {
+  description = "Environment variables that will be provided for tf plan/apply builds"
   type = list(object({
     name  = string
     value = string
@@ -82,40 +94,10 @@ variable "build_env_vars" {
   default = []
 }
 
-variable "rollout_plan_command" {
-  description = "Terragrunt rollout command to run on target path"
-  type        = string
-  default     = "plan"
-}
-
-variable "rollout_deploy_command" {
-  description = "Terragrunt rollout command to run on target path"
-  type        = string
-  default     = "apply -auto-approve"
-}
-
-variable "rollback_plan_command" {
-  description = "Terragrunt rollback command to run on target path"
-  type        = string
-  default     = "plan -destroy"
-}
-
-variable "rollback_deploy_command" {
-  description = "Terragrunt rollback command to run on target path"
-  type        = string
-  default     = "apply -destroy -auto-approve"
-}
-
 variable "build_tags" {
   description = "Tags to attach to AWS CodeBuild project"
   type        = map(string)
   default     = {}
-}
-
-variable "get_rollback_providers_build_name" {
-  description = "CodeBuild project name for getting new provider resources to destroy on deployment rollback"
-  type        = string
-  default     = "infrastructure-live-ci-get-rollback-providers"
 }
 
 variable "codebuild_vpc_config" {
@@ -148,6 +130,14 @@ variable "api_name" {
 }
 
 ## SSM ##
+
+### MERGE-LOCK ##
+
+variable "merge_lock_ssm_key" {
+  description = "SSM Parameter Store key used for locking infrastructure related PR merges"
+  type        = string
+  default     = null
+}
 
 ### GITHUB-TOKEN ###
 
@@ -226,6 +216,12 @@ variable "metadb_password" {
   sensitive   = true
 }
 
+variable "metadb_port" {
+  description = "Port for AWS RDS Postgres db"
+  type        = number
+  default     = 5432
+}
+
 variable "metadb_publicly_accessible" {
   description = "Determines if metadb is publicly accessible outside of it's associated VPC"
   type        = bool
@@ -242,4 +238,10 @@ variable "metadb_subnets_group_name" {
   description = "AWS VPC subnet group name to associate the metadb with"
   type        = string
   default     = null
+}
+
+variable "metadb_ci_user" {
+  description = "Metadb username used to authenticate CI services via IAM policies"
+  type        = string
+  default     = "ci_user"
 }

@@ -207,7 +207,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | aws | >= 3.44 |
 | github | ~> 4.0 |
 | null | n/a |
-| random | n/a |
 
 ## Inputs
 
@@ -219,20 +218,16 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `"infrastructure-live-apply"` | no |
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
 | approval\_request\_sender\_email | Email address to use for sending approval requests | `string` | n/a | yes |
-| artifact\_bucket\_force\_destroy | Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion) | `bool` | `false` | no |
-| artifact\_bucket\_name | Name of the AWS S3 bucket to store AWS Step Function execution artifacts under | `string` | `null` | no |
-| artifact\_bucket\_tags | Tags for AWS S3 bucket used to store step function artifacts | `map(string)` | `{}` | no |
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_env\_vars | Base environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_name | Name of the CloudWatch event that will monitor the Step Function | `string` | `"infrastructure-live-execution-event"` | no |
-| cmk\_arn | AWS KMS CMK (Customer Master Key) ARN used to encrypt Step Function artifacts | `string` | `null` | no |
 | codebuild\_vpc\_config | AWS VPC configurations associated with CodeBuild projects | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
 | get\_rollback\_providers\_build\_name | CodeBuild project name for getting new provider resources to destroy on deployment rollback | `string` | `"infrastructure-live-ci-get-rollback-providers"` | no |
-| github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used to give read access to the payload validator function to get file that differ between commits"` | no |
+| github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used for setting PR merge locks for live infrastructure repo"` | no |
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
@@ -245,7 +240,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
-| queue\_pr\_build\_name | AWS CodeBuild project name for the build that queues PRs for the Step Function deployment | `string` | `"infrastructure-live-ci-queue-pr"` | no |
 | repo\_name | Name of the GitHub repository | `string` | n/a | yes |
 | rollback\_deploy\_command | Terragrunt rollback command to run on target path | `string` | `"apply -destroy -auto-approve"` | no |
 | rollback\_plan\_command | Terragrunt rollback command to run on target path | `string` | `"plan -destroy"` | no |

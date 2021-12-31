@@ -1,3 +1,6 @@
+locals {
+  merge_lock_name = coalesce(var.merge_lock_build_name, "${var.repo_name}-tf-merge-lock")
+}
 data "github_repository" "this" {
   name = var.repo_name
 }
@@ -9,7 +12,7 @@ data "github_repository" "build_scripts" {
 data "aws_caller_identity" "current" {}
 
 resource "aws_ssm_parameter" "merge_lock" {
-  name        = coalesce(var.merge_lock_ssm_key, "${var.repo_name}-tf-merge-lock")
+  name        = local.merge_lock_name
   description = "Locks PRs with infrastructure changes from being merged into base branch"
   type        = "String"
   value       = false
@@ -31,6 +34,24 @@ resource "aws_iam_policy" "merge_lock_ssm_param_access" {
   name        = "${aws_ssm_parameter.merge_lock.name}-access"
   description = "Allows read access to merge lock ssm param"
   policy      = data.aws_iam_policy_document.merge_lock_ssm_param_access.json
+}
+
+data "aws_iam_policy_document" "ci_metadb_access" {
+  statement {
+    sid    = "MetaDBConnectAccess"
+    effect = "Allow"
+    actions = [
+      "rds-db:connect"
+    ]
+    resources = [
+      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${var.metadb_name}/${var.metadb_ci_user}"
+    ]
+  }
+}
+resource "aws_iam_policy" "ci_metadb_access" {
+  name        = "${var.metadb_name}-access"
+  description = "Allows CI services to connect to metadb"
+  policy      = data.aws_iam_policy_document.ci_metadb_access.json
 }
 
 module "terra_img" {
@@ -76,19 +97,39 @@ module "apply_role" {
 
 module "codebuild_merge_lock" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
-  name   = var.merge_lock_build_name
+  name   = local.merge_lock_name
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
     image        = "aws/codebuild/standard:3.0"
     type         = "LINUX_CONTAINER"
-    environment_variables = concat(var.build_env_vars, [
+    environment_variables = [
       {
         name  = "REPO_FULL_NAME"
         value = var.repo_name
         type  = "PLAINTEXT"
+      },
+      {
+        name  = "PGUSER"
+        type  = "PLAINTEXT"
+        value = var.metadb_ci_user
+      },
+      {
+        name  = "PGPORT"
+        type  = "PLAINTEXT"
+        value = var.metadb_port
+      },
+      {
+        name  = "PGDATABASE"
+        type  = "PLAINTEXT"
+        value = var.metadb_name
+      },
+      {
+        name  = "PGHOST"
+        type  = "PLAINTEXT"
+        value = aws_db_instance.metadb.address
       }
-    ])
+    ]
   }
 
   webhook_filter_groups = [
@@ -114,8 +155,8 @@ module "codebuild_merge_lock" {
   }
 
   build_source = {
-    type                = "NO_SOURCE"
-    buildspec           = <<-EOT
+    type      = "NO_SOURCE"
+    buildspec = <<-EOT
 version: 0.2
 env:
   shell: bash
@@ -201,6 +242,26 @@ EOT
         name  = "EVENTBRIDGE_RULE"
         type  = "PLAINTEXT"
         value = aws_cloudwatch_event_rule.this.id
+      },
+      {
+        name  = "PGUSER"
+        type  = "PLAINTEXT"
+        value = var.metadb_ci_user
+      },
+      {
+        name  = "PGPORT"
+        type  = "PLAINTEXT"
+        value = var.metadb_port
+      },
+      {
+        name  = "PGDATABASE"
+        type  = "PLAINTEXT"
+        value = var.metadb_name
+      },
+      {
+        name  = "PGHOST"
+        type  = "PLAINTEXT"
+        value = aws_db_instance.metadb.address
       }
     ]
   }
@@ -208,7 +269,6 @@ EOT
   vpc_config = var.codebuild_vpc_config
 
   role_policy_arns = [
-    aws_iam_policy.artifact_bucket_access.arn,
     aws_iam_policy.metadb.arn
   ]
 
@@ -234,7 +294,7 @@ module "codebuild_terra_run" {
     compute_type = "BUILD_GENERAL1_SMALL"
     image        = "aws/codebuild/standard:3.0"
     type         = "LINUX_CONTAINER"
-    environment_variables = concat(var.build_env_vars, [
+    environment_variables = concat(var.terra_run_env_vars, [
       {
         name  = "TF_IN_AUTOMATION"
         value = "true"
@@ -264,7 +324,7 @@ env:
 phases:
   build:
     commands:
-      - "${TG_COMMAND}"
+      - "$${TG_COMMAND}"
 EOT
   }
 
