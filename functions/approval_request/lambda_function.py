@@ -9,14 +9,7 @@ ses = boto3.client('ses')
 log = logging.getLogger(__name__)
 
 def lambda_handler(event, context):
-    """
-    Creates approval object for input path and uploads to S3 execution artifact. Sends approval request email to
-    email addresses asssociated with path.
-
-    Individual path approval objects are created here and not within the trigger step function CodeBuild project 
-    to prevent unnecessary cluttering of the execution artifact and prevent any confusion on what paths are awaiting
-    approval. 
-    """
+    """Sends approval request email to email addresses asssociated with Terragrunt path."""
     
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)

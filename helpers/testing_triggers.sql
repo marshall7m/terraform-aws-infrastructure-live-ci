@@ -105,6 +105,14 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
             NEW.voters := ARRAY[]::TEXT[];
         END IF;
 
+        IF NEW.approval_voters IS NULL THEN
+            NEW.approval_voters := (SELECT (NEW.voters)[:NEW.min_approval_count]);
+        END IF;
+
+        IF NEW.rejection_voters IS NULL THEN
+            NEW.rejection_voters := (SELECT (NEW.voters)[:NEW.min_rejection_count]);
+        END IF;
+
         IF NEW.cfg_deps IS NULL THEN
             NEW.cfg_deps := ARRAY[]::TEXT[];
         END IF;

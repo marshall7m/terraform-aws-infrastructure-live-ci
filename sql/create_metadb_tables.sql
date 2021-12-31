@@ -17,9 +17,11 @@ CREATE TABLE IF NOT EXISTS executions (
     account_path VARCHAR,
     account_deps TEXT[],
     voters TEXT[],
-    approval_count INT CHECK (approval_count >= 0),
+    approval_voters TEXT[],
+    approval_count INT CHECK (approval_count >= 0) GENERATED ALWAYS AS (cardinality(approval_voters)) STORED,
     min_approval_count INT CHECK (min_approval_count >= 0),
-    rejection_count INT CHECK (rejection_count >= 0),
+    rejection_voters TEXT[],
+    rejection_count INT CHECK (rejection_count >= 0) GENERATED ALWAYS AS (cardinality(rejection_voters)) STORED,
     min_rejection_count INT CHECK (min_rejection_count >= 0)
 );
 

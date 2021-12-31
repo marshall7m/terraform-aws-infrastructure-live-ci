@@ -17,8 +17,10 @@ INSERT INTO executions (
         account_path,
         account_deps,
         voters,
+        approval_voters,
         approval_count,
         min_approval_count,
+        rejection_voters,
         rejection_count,
         min_rejection_count
     )
@@ -42,8 +44,10 @@ SELECT
     account.account_path,
     account.account_deps,
     account.voters,
+    ARRAY[]::TEXT[],
     0,
     account.min_approval_count,
+    ARRAY[]::TEXT[],
     0,
     account.min_rejection_count
 FROM (

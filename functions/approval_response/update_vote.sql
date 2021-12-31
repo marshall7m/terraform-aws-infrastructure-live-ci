@@ -1,19 +1,22 @@
 UPDATE executions
 SET
-    approval_count = CASE WHEN "action" == 'approve' THEN approval_count + 1
     approval_voters = CASE 
-        WHEN "action" == 'approve' THEN
-            RAISE NOTICE 'Adding vote';
-            add
+        WHEN {action} == 'approve' THEN
+            (
+                SELECT array_agg(DISTINCT e)
+                FROM unnest(approval_voters || ARRAY[{voter}]) e
+            )
         WHEN "action" == 'reject' THEN 
-            RAISE NOTICE 'Updating vote';
-            array_remove(approval_voters, recipient)
-        ELSE 
-            RAISE ...
-    
-    approval_voters = CASE 
-        WHEN "action" == 'approve' THEN add
-        WHEN "action" == 'reject' THEN array_remove(approval_voters, recipient)
-        ELSE approval_voters
-WHERE execution_id = _execution_id
+            array_remove(approval_voters, {recipient})
+    END,
+    rejection_voters = CASE 
+        WHEN {action} == 'approve' THEN
+            array_remove(rejection_voters, {recipient})
+        WHEN "action" == 'reject' THEN 
+            (
+                SELECT array_agg(DISTINCT e)
+                FROM unnest(rejection_voters || ARRAY[{voter}]) e
+            )
+    END
+WHERE execution_id = {execution_id}
 RETURNING *;
