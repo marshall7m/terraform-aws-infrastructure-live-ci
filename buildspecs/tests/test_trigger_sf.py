@@ -18,6 +18,9 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 def pytest_generate_tests(metafunc):
+    # dynamically parametrizes fixtures within `scenario_fixt` that the class scenario depends on 
+    # this results in pytest to require each fixture within scenario_fixt to call their respective teardown on each scenario iteration
+    # run pytest with --setup-plan to see ordering
     scenarios = []
     for attr in metafunc.cls.__dict__.keys():
         parse_attr = attr.split('_')
