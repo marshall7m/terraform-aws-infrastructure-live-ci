@@ -18,10 +18,13 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 sf = boto3.client('stepfunctions', region_name='us-west-2')
 ssm = boto3.client('ssm', region_name='us-west-2')
+session = boto3.Session(profile_name='RDSCreds')
+rds = session.client('rds')
+token = rds.generate_db_auth_token(DBHostname=os.environ["PGHOST"], Port=os.environ["PGPORT"], DBUsername=os.environ["PGUSER"], Region=os.environ["AWS_REGION"])
 
 class TriggerSF:
     def __init__(self):
-        self.conn = psycopg2.connect()
+        self.conn = psycopg2.connect(password=token)
         self.conn.set_session(autocommit=True)
 
         self.cur = self.conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)

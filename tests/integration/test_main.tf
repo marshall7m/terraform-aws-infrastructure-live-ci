@@ -22,7 +22,7 @@ resource "github_repository" "test" {
 }
 
 module "mut_infrastructure_live_ci" {
-  source = "..//"
+  source = "../.."
 
   plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
   apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
@@ -32,7 +32,7 @@ module "mut_infrastructure_live_ci" {
 
   metadb_publicly_accessible = true
   metadb_username            = "mut_user"
-  metadb_password            = data.aws_ssm_parameter.metadb_password.value
+  metadb_password            = uuid()
 
   create_github_token_ssm_param = false
   github_token_ssm_key          = "admin-github-token"
@@ -53,4 +53,20 @@ module "mut_infrastructure_live_ci" {
   depends_on = [
     github_repository.test
   ]
+}
+
+data "testing_tap" "integration" {
+  program = ["bash", "${path.module}/test_integration.py"]
+  environment = {
+    REPO_NAME                 = github_repository.test.name
+    STATE_MACHINE_ARN         = module.mut_infrastructure_live_ci.sf_arn
+    MERGE_LOCK_CODEBUILD_NAME = module.mut_infrastructure_live_ci.codebuild_trigger_sf_arn
+    TRIGGER_SF_CODEBUILD_NAME = module.mut_infrastructure_live_ci.codebuild_merge_lock_arn
+
+    #TODO: create separate db user for testing?
+    PGUSER     = module.mut_infrastructure_live_ci.metadb_username
+    PGPASSWORD = module.mut_infrastructure_live_ci.metadb_password
+    PGDATABASE = module.mut_infrastructure_live_ci.metadb_name
+    PGHOST     = module.mut_infrastructure_live_ci.metadb_address
+  }
 }

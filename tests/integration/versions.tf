@@ -16,5 +16,9 @@ terraform {
       source  = "integrations/github"
       version = "4.9.3"
     }
+    testing = {
+      source  = "apparentlymart/testing"
+      version = "0.0.2"
+    }
   }
 }
