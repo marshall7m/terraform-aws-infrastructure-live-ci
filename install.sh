@@ -29,7 +29,9 @@ mv /tmp/semtag-${SEMTAG_VERSION}/semtag /usr/local/bin/
 wget -q -O /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz
 tar -zxf /tmp/gh.tar.gz -C /tmp
 mv /tmp/gh_${GH_VERSION}_linux_amd64/bin/gh /usr/local/bin/
-
+wget -q -O /tmp/tfenv.tar.gz https://github.com/tfutils/tfenv/archive/refs/tags/v${TFENV_VERSION}.tar.gz
+tar -zxf /tmp/tfenv.tar.gz -C /tmp
+mkdir /usr/local/.tfenv && mv /tmp/tfenv-${TFENV_VERSION}/* /usr/local/.tfenv && chmod u+x /usr/local/.tfenv/bin/tfenv
 chmod u+x /usr/local/bin/*
 
 apk del .build-deps
