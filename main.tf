@@ -1,8 +1,10 @@
 locals {
-  buildspec_scripts_source_identifier = "helpers"
-  buildspec_scripts_key               = "build-scripts"
-  pr_queue_key                        = "pr_queue.json"
+  cloudwatch_event_rule_name = coalesce(var.cloudwatch_event_rule_name, "${var.step_function_name}-finished-execution")
+  state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${var.step_function_name}"
+  cw_event_terra_run_rule    = "${local.terra_run_build_name}-rule"
 }
+
+data "aws_region" "current" {}
 
 resource "aws_sfn_state_machine" "this" {
   name     = var.step_function_name
@@ -33,19 +35,19 @@ resource "aws_sfn_state_machine" "this" {
           Payload = {
             PathApproval = {
               "Approval" = {
-                Required = "$.ApprovalCountRequired"
+                Required = "$.min_approval_count"
                 Count    = 0
                 Voters   = []
               },
               "Rejection" = {
-                "Required" = "$.RejectionCountRequired"
+                "Required" = "$.min_rejection_count"
                 "Count"    = 0
                 "Voters"   = []
               },
-              "AwaitingApprovals" = "$.EmailVoters"
+              "AwaitingApprovals" = "$.voters"
               "TaskToken"         = "$$.Task.Token"
             }
-            EmailVoters   = "$.EmailVoters"
+            Voters        = "$.voters"
             ApprovalAPI   = "States.Format('${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}?ex={}&sm={}&taskToken={}, $$.Execution.Name, $$.StateMachine.Id, $$.Task.Token)"
             ExecutionName = "$$.Execution.Name"
           }
@@ -58,12 +60,12 @@ resource "aws_sfn_state_machine" "this" {
           {
             Next         = "Apply"
             StringEquals = "Approve"
-            Variable     = "$.Status"
+            Variable     = "$.status"
           },
           {
             Next         = "Reject"
             StringEquals = "Reject"
-            Variable     = "$.Status"
+            Variable     = "$.status"
           }
         ]
         Type = "Choice"
@@ -76,10 +78,10 @@ resource "aws_sfn_state_machine" "this" {
             {
               Name      = "DEPLOY_COMMAND"
               Type      = "PLAINTEXT"
-              "Value.$" = "$.DeployCommand"
+              "Value.$" = "$.deploy_command"
             }
           ]
-          ProjectName = module.codebuild_terra_run.name
+          ProjectName = local.terra_run_build_name
         }
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Type     = "Task"
@@ -93,54 +95,19 @@ resource "aws_sfn_state_machine" "this" {
   })
 }
 
-data "aws_region" "current" {}
-
-resource "aws_cloudwatch_event_rule" "this" {
-  name        = var.cloudwatch_event_name
-  description = "Captures execution-level events for AWS Step Function: ${var.step_function_name}"
-
-  event_pattern = jsonencode(
-    {
-      source      = ["aws.states"]
-      detail-type = ["Step Functions Execution Status Change"]
-      detail = {
-        stateMachineArn = [aws_sfn_state_machine.this.arn]
-        state           = ["SUCCEEDED"]
-      }
-    }
-  )
-}
-
-module "cw_target_role" {
-  source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name        = "CodeBuildTriggerStepFunction"
-  trusted_services = ["events.amazonaws.com"]
-  statements = [
-    {
-      sid       = "CodeBuildInvokeAccess"
-      effect    = "Allow"
-      actions   = ["codebuild:StartBuild"]
-      resources = [module.codebuild_trigger_sf.arn]
-    }
-  ]
-}
-
-resource "aws_cloudwatch_event_target" "sf" {
-  rule      = aws_cloudwatch_event_rule.this.name
-  target_id = "CodeBuildTriggerStepFunction"
-  arn       = module.codebuild_trigger_sf.arn
-  role_arn  = module.cw_target_role.role_arn
-}
-
 module "sf_role" {
   source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name        = var.step_function_name
   trusted_services = ["states.amazonaws.com"]
   statements = [
     {
-      sid     = "CodeBuildInvokeAccess"
-      effect  = "Allow"
-      actions = ["codebuild:StartBuild"]
+      sid    = "CodeBuildInvokeAccess"
+      effect = "Allow"
+      actions = [
+        "codebuild:StartBuild",
+        "codebuild:StopBuild",
+        "codebuild:BatchGetBuilds"
+      ]
       resources = [
         module.codebuild_terra_run.arn
       ]
@@ -148,7 +115,7 @@ module "sf_role" {
     {
       sid     = "LambdaInvokeAccess"
       effect  = "Allow"
-      actions = ["lambda:Invoke"]
+      actions = ["lambda:InvokeFunction"]
       resources = [
         module.lambda_approval_request.function_arn
       ]
@@ -161,38 +128,39 @@ module "sf_role" {
         "events:PutRule",
         "events:DescribeRule"
       ]
-      resources = ["*"]
+      resources = [
+        "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:rule/StepFunctionsGetEventForCodeBuildStartBuildRule"
+      ]
     }
   ]
 }
 
+resource "aws_cloudwatch_event_target" "sf_execution" {
+  rule      = aws_cloudwatch_event_rule.sf_execution.name
+  target_id = "CodeBuildTriggerStepFunction"
+  arn       = module.codebuild_trigger_sf.arn
+  role_arn  = module.cw_event_rule_role.role_arn
+}
 
 resource "aws_cloudwatch_event_rule" "sf_execution" {
-  name        = "${var.step_function_name}-finished-execution"
+  name        = local.cloudwatch_event_rule_name
   description = "Triggers Codebuild project when Step Function execution is complete"
-  role_arn    = module.cw_event_role.role_arn
+  role_arn    = module.cw_event_rule_role.role_arn
 
   event_pattern = jsonencode({
     source      = ["aws.states"]
     detail-type = ["Step Functions Execution Status Change"],
     detail = {
       status          = ["SUCCESS", "FAILED"],
-      stateMachineArn = [aws_sfn_state_machine.this.arn]
+      stateMachineArn = [local.state_machine_arn]
     }
   })
 }
 
-resource "aws_cloudwatch_event_target" "sns" {
-  rule      = aws_cloudwatch_event_rule.sf_execution.name
-  target_id = "SendToCodebuildTriggerSF"
-  role_arn  = module.cw_event_role.role_arn
-  arn       = module.codebuild_trigger_sf.arn
-}
-
-module "cw_event_role" {
+module "cw_event_rule_role" {
   source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
 
-  role_name        = "${var.step_function_name}-finished-execution"
+  role_name        = local.cloudwatch_event_rule_name
   trusted_services = ["events.amazonaws.com"]
   statements = [
     {
@@ -201,6 +169,56 @@ module "cw_event_role" {
         "codebuild:StartBuild"
       ]
       resources = [module.codebuild_trigger_sf.arn]
+    }
+  ]
+}
+
+resource "aws_cloudwatch_event_target" "codebuild_terra_run" {
+  rule      = aws_cloudwatch_event_rule.codebuild_terra_run.name
+  target_id = "StepFunctionsGetEventForCodeBuildStartBuildRule"
+  arn       = local.state_machine_arn
+  role_arn  = module.cw_event_terra_run.role_arn
+}
+
+resource "aws_cloudwatch_event_rule" "codebuild_terra_run" {
+  name        = local.cw_event_terra_run_rule
+  description = "This rule is used to notify Step Function regarding AWS CodeBuild build"
+
+  event_pattern = jsonencode({
+    source      = ["aws.codebuild"]
+    detail-type = ["CodeBuild Build State Change"]
+    detail = {
+      build-status = [
+        "SUCCEEDED",
+        "FAILED",
+        "FAULT",
+        "TIMED_OUT",
+        "STOPPED"
+      ],
+      additional-information = {
+        initiator = [{
+          prefix = "states/"
+        }]
+      }
+    }
+  })
+}
+
+module "cw_event_terra_run" {
+  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+
+  role_name        = local.cw_event_terra_run_rule
+  trusted_services = ["events.amazonaws.com"]
+  statements = [
+    {
+      effect = "Allow"
+      actions = [
+        "states:SendTaskSuccess",
+        "states:SendTaskFailure",
+        "states:SendTaskHeartbeat",
+        "states:GetActivityTask"
+      ]
+      resources = [local.state_machine_arn]
     }
   ]
 }
