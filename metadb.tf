@@ -1,29 +1,15 @@
-#TODO: Add vars for VPC config (vpc_id, security_group) associated with CodeBuild projects and RDS metadb
-# Add docs to remind user to make sure security groups allow inbound/outbound traffic from testing env for psql access
-# if testing locally, make sure metadb is publicly available
-
-data "aws_iam_policy_document" "metadb" {
-  statement {
-    effect    = "Allow"
-    resources = [aws_db_instance.metadb.arn]
-    #TODO: narrow permissions for cb to read/write
-    actions = [
-      "rds:*"
-    ]
-  }
-}
-
-resource "aws_iam_policy" "metadb" {
-  name        = var.metadb_name
-  description = "Read/write permissions for Codebuild"
-  policy      = data.aws_iam_policy_document.metadb.json
+locals {
+  metadb_name    = coalesce(var.merge_lock_build_name, replace("${var.step_function_name}", "-", "_"))
+  metadb_ci_user = coalesce(var.merge_lock_build_name, replace("${var.step_function_name}_user", "-", "_"))
 }
 
 resource "aws_db_instance" "metadb" {
-  allocated_storage                   = 16
-  engine                              = "postgres"
+  allocated_storage = 16
+  engine            = "postgres"
+  # must be >= 12.0 to allow `GENERATED AS ALWAYS` for execution table columns
+  engine_version                      = "13.3"
   instance_class                      = "db.t3.micro"
-  name                                = var.metadb_name
+  name                                = local.metadb_name
   username                            = var.metadb_username
   password                            = var.metadb_password
   port                                = var.metadb_port
@@ -36,11 +22,11 @@ resource "aws_db_instance" "metadb" {
 
 resource "null_resource" "metadb_setup" {
   provisioner "local-exec" {
-    command = "psql -f ${path.module}/sql/create_metadb_tables.sql; psql -c \"CREATE USER ${var.metadb_ci_user}; GRANT rds_iam TO ${var.metadb_ci_user};\""
+    command = "psql -f ${path.module}/sql/create_metadb_tables.sql; psql -c \"CREATE USER ${local.metadb_ci_user}; GRANT rds_iam TO ${local.metadb_ci_user};\""
     environment = {
       PGUSER     = var.metadb_username
       PGPASSWORD = var.metadb_password
-      PGDATABASE = var.metadb_name
+      PGDATABASE = local.metadb_name
       PGHOST     = aws_db_instance.metadb.address
       PGPORT     = var.metadb_port
     }
