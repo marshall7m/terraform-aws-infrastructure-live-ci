@@ -82,23 +82,9 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         IF NEW.min_approval_count IS NULL THEN
             NEW.min_approval_count := COALESCE(account_dim_ref.min_approval_count, random_between(1, 2));
         END IF;
-    
-        IF NEW.approval_count IS NULL THEN
-            NEW.approval_count := CASE 
-                WHEN NEW.status = 'success' THEN NEW.min_approval_count
-                ELSE 0
-            END;
-        END IF;
 
         IF NEW.min_rejection_count IS NULL THEN
             NEW.min_rejection_count := COALESCE(account_dim_ref.min_rejection_count, random_between(1, 2));
-        END IF;
-
-        IF NEW.rejection_count IS NULL THEN
-            NEW.rejection_count := CASE 
-                WHEN NEW.status = 'failed' THEN NEW.min_rejection_count
-                ELSE 0
-            END;
         END IF;
 
         IF NEW.voters IS NULL THEN
@@ -121,7 +107,6 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
             NEW.execution_id := 'run-' || substr(md5(random()::text), 0, 8);
         END IF;
 
-        --use other table triggers and union updated NEW results?
         IF NEW.pr_id IS NULL THEN
             SELECT COALESCE(MAX(e.pr_id), 0) + 1 INTO NEW.pr_id
             FROM executions e;
@@ -211,9 +196,7 @@ WHEN (
     OR NEW.account_path IS NULL
     OR NEW.account_deps IS NULL
     OR NEW.min_approval_count IS NULL
-    OR NEW.approval_count IS NULL
     OR NEW.min_rejection_count IS NULL
-    OR NEW.rejection_count IS NULL
     OR NEW.voters IS NULL
 )
 
