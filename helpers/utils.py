@@ -12,8 +12,7 @@ import random
 import string
 import inspect
 import json
-import pandas
-import pandas.io.sql as psql
+from pprint import pprint
 
 import logging
 
@@ -39,8 +38,6 @@ class TestSetup:
         self.user = self.gh.get_user()
         self.remote = self.create_fork_remote()
 
-        self.init_sql_utils()
-
     def __enter__(self):
         return self
 
@@ -50,16 +47,6 @@ class TestSetup:
 
     def get_base_commit_id(self):
         return str(git.repo.fun.rev_parse(self.git_repo, os.environ['BASE_REF']))
-
-    def init_sql_utils(self):
-        cur = self.conn.cursor()
-        log.debug('Creating postgres utility functions')
-        files = [f'{os.path.dirname(os.path.realpath(__file__))}/../buildspecs/sql/utils.sql']
-
-        for file in files:
-            log.debug(f'File: {file}')
-            with open(file, 'r') as f:
-                cur.execute(f.read())
 
     def create_fork_remote(self):
         self.user.create_fork(self.gh_repo)
@@ -215,12 +202,12 @@ class TestSetup:
                     self.conn.rollback()
                     log.error('Assertion failed')
                     log.debug(f'Query:\n{item["assertion"]}')
-                    with pandas.option_context('display.max_rows', None, 'display.max_columns', None, 'display.max_colwidth', None):
                         
-                        for query in item['debug']:
-                            log.debug(f'Debug query:\n{query}')
-                            log.debug(psql.read_sql(query, self.conn).T)
-                            self.conn.commit()
+                    for query in item['debug']:
+                        log.debug(f'Debug query:\n{query}')
+                        cur.execute(query)
+                        log.debug(pprint([dict(rec) for rec in cur.fetchall()]))
+                        self.conn.commit()
 
         log.info(f'{count}/{total} assertions were successful')
         if count != total:
