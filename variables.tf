@@ -5,12 +5,6 @@ variable "common_tags" {
   default     = {}
 }
 
-variable "region" {
-  description = "AWS region name to create module within. Defaults to AWS provider's region."
-  type        = string
-  default     = null
-}
-
 variable "account_parent_cfg" {
   description = "Any modified child filepath of the parent path will be processed within the parent path associated Map task"
   type = list(object({
@@ -42,16 +36,28 @@ variable "merge_lock_build_name" {
   default     = null
 }
 
-variable "terra_img" {
-  description = "Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects"
+variable "terra_run_img" {
+  description = "Docker, ECR or AWS CodeBuild managed image to use for the terra_run CodeBuild project that runs plan/apply commands"
   type        = string
   default     = null
+}
+
+variable "terraform_version" {
+  description = "Terraform version used for trigger_sf and terra_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended"
+  type        = string
+  default     = "1.0.2"
+}
+
+variable "terragrunt_version" {
+  description = "Terragrunt version used for trigger_sf and terra_run builds"
+  type        = string
+  default     = "0.31.0"
 }
 
 variable "plan_role_name" {
   description = "Name of the IAM role used for running terr* plan commands"
   type        = string
-  default     = "infrastructure-live-plan"
+  default     = null
 }
 
 variable "plan_role_assumable_role_arns" {
@@ -69,7 +75,7 @@ variable "plan_role_policy_arns" {
 variable "apply_role_name" {
   description = "Name of the IAM role used for running terr* apply commands"
   type        = string
-  default     = "infrastructure-live-apply"
+  default     = null
 }
 
 variable "apply_role_assumable_role_arns" {
@@ -126,7 +132,7 @@ variable "file_path_pattern" {
 variable "api_name" {
   description = "Name of AWS Rest API"
   type        = string
-  default     = "infrastructure-live"
+  default     = null
 }
 
 ## SSM ##
@@ -180,22 +186,22 @@ variable "step_function_name" {
   default     = "infrastructure-live-ci"
 }
 
-variable "cloudwatch_event_name" {
-  description = "Name of the CloudWatch event that will monitor the Step Function"
+variable "cloudwatch_event_rule_name" {
+  description = "Name of the CloudWatch event rule that detects when the Step Function completes an execution"
   type        = string
-  default     = "infrastructure-live-execution-event"
+  default     = null
 }
 
 variable "trigger_step_function_build_name" {
   description = "Name of AWS CodeBuild project that will trigger the AWS Step Function"
   type        = string
-  default     = "infrastructure-live-ci-trigger-sf"
+  default     = null
 }
 
 variable "terra_run_build_name" {
   description = "Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions"
   type        = string
-  default     = "infrastructure-live-ci-terra-run"
+  default     = null
 }
 
 # metadb
@@ -203,13 +209,14 @@ variable "terra_run_build_name" {
 variable "metadb_name" {
   description = "Name of the AWS RDS db"
   type        = string
-  default     = "infrastructure_live_ci"
+  default     = null
 }
 
 variable "metadb_username" {
   description = "Username for the AWS RDS db"
   type        = string
 }
+
 variable "metadb_password" {
   description = "Password for the AWS RDS db"
   type        = string
@@ -241,7 +248,7 @@ variable "metadb_subnets_group_name" {
 }
 
 variable "metadb_ci_user" {
-  description = "Metadb username used to authenticate CI services via IAM policies"
+  description = "Username used to authenticate CI services to connect to the metadb via IAM policy"
   type        = string
-  default     = "ci_user"
+  default     = null
 }
