@@ -38,7 +38,6 @@ module "mut_infrastructure_live_ci" {
   github_token_ssm_key          = "admin-github-token"
 
   approval_request_sender_email = "success@simulator.amazonses.com"
-  #incorporate other account for testing (e.g. prod)
   account_parent_cfg = [
     {
       name                     = "dev"
@@ -56,7 +55,7 @@ module "mut_infrastructure_live_ci" {
 }
 
 data "testing_tap" "integration" {
-  program = ["bash", "${path.module}/test_integration.py"]
+  program = ["python", "${path.module}/test_integration.py"]
   environment = {
     REPO_NAME                 = github_repository.test.name
     STATE_MACHINE_ARN         = module.mut_infrastructure_live_ci.sf_arn
