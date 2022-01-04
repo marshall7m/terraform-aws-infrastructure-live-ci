@@ -5,14 +5,15 @@ from unittest.mock import patch
 import os
 import logging
 import sys
-from buildspecs.trigger_sf import TriggerSF
+from buildspecs.trigger_sf.trigger_sf import TriggerSF
 from psycopg2.sql import SQL
-import pandas.io.sql as psql
 from helpers.utils import TestSetup
 import shutil
 import uuid
 import json
 import git
+from pprint import pprint
+
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -28,7 +29,7 @@ def pytest_generate_tests(metafunc):
         if parse_attr[0] == 'scenario' and id.isdigit():
             scenarios.append(attr)
     
-    scenario_fixt = "scenario,class_repo_dir,class_tf_state_dir,create_metadb_tables,mock_ssm"
+    scenario_fixt = "scenario,class_repo_dir,class_tf_state_dir,create_metadb_tables"
     scenario_params = [pytest.param(*[scenario] * len(scenario_fixt.split(',')), id=scenario) for scenario in scenarios]
     metafunc.parametrize(scenario_fixt, scenario_params, indirect=True)
 
@@ -53,18 +54,15 @@ def account_dim(conn, create_metadb_tables):
 
 
 @pytest.fixture(scope='class')
-def mock_ssm():
-    with patch('buildspecs.trigger_sf.ssm.put_parameter') as _patched:
-        yield _patched
-
-@pytest.fixture(scope='class')
-def mock_sf():
-    with patch('buildspecs.trigger_sf.sf') as _patched:
+def mock_aws_client():
+    with patch('boto3.client') as _patched:
         yield _patched
     
     _patched.reset_mock()
+
 @pytest.fixture(scope='class')
-def run(mock_sf, mock_ssm, scenario):
+@patch('psycopg2.connect', return_value=psycopg2.connect())
+def run(mock_conn, mock_aws_client, scenario):
     os.chdir(scenario.git_dir)
     log.debug(f'CWD: {os.getcwd()}')
 
@@ -80,8 +78,8 @@ def ts(repo_url, class_repo_dir):
 def scenario(request, account_dim, class_repo_dir, class_tf_state_dir, create_metadb_tables, ts):
     return request.getfixturevalue(request.param)
 
-# @pytest.mark.skip(reason="Not implemented")
-@pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run", "mock_ssm")
+@pytest.mark.skip(reason="Not implemented")
+@pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run", "mock_aws_client")
 class TestMergeTrigger:
     @pytest.fixture(scope="class", autouse=True)
     def codebuild_env(self, scenario):
@@ -171,9 +169,9 @@ class TestMergeTrigger:
         log.debug(f"Scenario: {scenario}")        
         scenario.run_collected_assertions()
 
-    def test_merge_lock(self, mock_ssm):
+    def test_merge_lock(self, mock_aws_client):
         log.debug('Assert merge lock')
-        mock_ssm.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=True, Type='String', Overwrite=True)
+        mock_aws_client.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=True, Type='String', Overwrite=True)
 
 # @pytest.mark.skip(reason="Not implemented")
 @pytest.mark.usefixtures("account_dim", "scenario", "class_repo_dir", "class_tf_state_dir", "create_metadb_tables", "ts", "run")
@@ -304,14 +302,15 @@ class TestCloudWatchEvent:
         log.debug(f"Scenario: {scenario}")
         scenario.run_collected_assertions()
 
-    def test_merge_unlock(self, mock_ssm, conn):
+    def test_merge_unlock(self, mock_aws_client, conn):
 
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM executions WHERE status = 'running'")
             results = cur.fetchone()
+            log.debug(f'Running execution:\n{pprint(results)}')
         if results == None:
             log.debug('Assert merge unlock')
-            mock_ssm.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=False, Type='String', Overwrite=True)
+            log.debug(f'AWS client calls():\n{mock_aws_client.mock_calls}')
+            mock_aws_client().put_parameter.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=False, Type='String', Overwrite=True)
         else:
             pytest.mark.skip('Executions are runnning -- skip merge unlock assertion')
-    
