@@ -1,8 +1,10 @@
 locals {
-  approval_resources_name = "${var.step_function_name}-approval"
+  approval_request_name  = "${var.step_function_name}-request"
+  approval_response_name = "${var.step_function_name}-response"
+  approval_logs          = "${var.step_function_name}-approval"
 }
 resource "aws_api_gateway_rest_api" "approval" {
-  name        = local.approval_resources_name
+  name        = local.approval_logs
   description = "HTTP Endpoint backed by API Gateway and Lambda used for Step Function approval"
 }
 
@@ -97,7 +99,7 @@ resource "aws_api_gateway_account" "approval" {
 module "agw_role" {
   source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
 
-  role_name        = "agw-logs"
+  role_name        = local.approval_logs
   trusted_services = ["apigateway.amazonaws.com"]
 
   statements = [
@@ -119,7 +121,7 @@ module "agw_role" {
 }
 
 resource "aws_cloudwatch_log_group" "agw" {
-  name = local.approval_resources_name
+  name = local.approval_logs
 }
 
 resource "aws_api_gateway_deployment" "approval" {
@@ -158,7 +160,7 @@ module "lambda_approval_request" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
   filename         = data.archive_file.lambda_approval_request.output_path
   source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
-  function_name    = "${var.step_function_name}-request"
+  function_name    = local.approval_request_name
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
   env_vars = {
@@ -190,7 +192,7 @@ module "lambda_approval_response" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
   filename         = data.archive_file.lambda_approval_response.output_path
   source_code_hash = data.archive_file.lambda_approval_response.output_base64sha256
-  function_name    = "${var.step_function_name}-response"
+  function_name    = local.approval_response_name
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
   allowed_to_invoke = [
@@ -198,6 +200,13 @@ module "lambda_approval_response" {
       principal = "apigateway.amazonaws.com"
     }
   ]
+
+  env_vars = {
+    PGUSER     = local.metadb_ci_user
+    PGPORT     = var.metadb_port
+    PGDATABASE = local.metadb_name
+    PGHOST     = aws_db_instance.metadb.address
+  }
 
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
@@ -227,7 +236,7 @@ resource "aws_ses_identity_policy" "approval" {
 }
 
 resource "aws_ses_template" "approval" {
-  name    = "${var.step_function_name}-approval"
+  name    = local.approval_request_name
   subject = "${var.step_function_name} Approval for path: {{path}}"
   html    = <<EOF
 <form action="{{full_approval_api}}" method="post">

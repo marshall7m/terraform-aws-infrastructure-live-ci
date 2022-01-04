@@ -1,5 +1,12 @@
 locals {
-  merge_lock_name = coalesce(var.merge_lock_build_name, "${var.repo_name}-tf-merge-lock")
+  plan_role_name  = coalesce(var.plan_role_name, "${var.step_function_name}-tf-plan")
+  apply_role_name = coalesce(var.apply_role_name, "${var.step_function_name}-tf-apply")
+  merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
+
+  trigger_step_function_build_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-trigger-sf")
+  terra_run_build_name             = coalesce(var.merge_lock_build_name, "${var.step_function_name}-terra-run")
+
+  buildspec_scripts_source_identifier = "helpers"
 }
 data "github_repository" "this" {
   name = var.repo_name
@@ -44,31 +51,54 @@ data "aws_iam_policy_document" "ci_metadb_access" {
       "rds-db:connect"
     ]
     resources = [
-      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${var.metadb_name}/${var.metadb_ci_user}"
+      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${local.metadb_name}/${local.metadb_ci_user}"
     ]
   }
 }
 resource "aws_iam_policy" "ci_metadb_access" {
-  name        = "${var.metadb_name}-access"
+  name        = "${local.metadb_name}-access"
   description = "Allows CI services to connect to metadb"
   policy      = data.aws_iam_policy_document.ci_metadb_access.json
 }
 
-module "terra_img" {
-  count  = var.terra_img == null ? 1 : 0
+module "ecr_terra_run" {
+  count  = var.terra_run_img == null ? 1 : 0
   source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
 
-  create_repo         = true
-  codebuild_access    = true
-  source_path         = "${path.module}/testing-img"
-  repo_name           = "infrastructure-live-ci"
-  tag                 = "latest"
-  trigger_build_paths = ["${path.module}/testing-img"]
+  create_repo      = true
+  codebuild_access = true
+  source_path      = "${path.module}/buildspecs/terra_run"
+  repo_name        = local.terra_run_build_name
+  tag              = "latest"
+  trigger_build_paths = [
+    "${path.module}/buildspecs/terra_run"
+  ]
+  build_args = {
+    TERRAFORM_VERSION  = var.terraform_version
+    TERRAGRUNT_VERSION = var.terragrunt_version
+  }
+}
+
+module "ecr_trigger_sf" {
+  source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
+
+  create_repo      = true
+  codebuild_access = true
+  source_path      = "${path.module}/buildspecs/trigger_sf"
+  repo_name        = local.trigger_step_function_build_name
+  tag              = "latest"
+  trigger_build_paths = [
+    "${path.module}/buildspecs/trigger_sf"
+  ]
+  build_args = {
+    TERRAFORM_VERSION  = var.terraform_version
+    TERRAGRUNT_VERSION = var.terragrunt_version
+  }
 }
 
 module "plan_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = var.plan_role_name
+  role_name               = local.plan_role_name
   trusted_services        = ["codebuild.amazonaws.com"]
   custom_role_policy_arns = var.plan_role_policy_arns
   statements = length(var.plan_role_assumable_role_arns) > 0 ? [
@@ -82,7 +112,7 @@ module "plan_role" {
 
 module "apply_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = var.apply_role_name
+  role_name               = local.apply_role_name
   trusted_services        = ["codebuild.amazonaws.com"]
   custom_role_policy_arns = var.apply_role_policy_arns
   statements = length(var.apply_role_assumable_role_arns) > 0 ? [
@@ -112,7 +142,7 @@ module "codebuild_merge_lock" {
       {
         name  = "PGUSER"
         type  = "PLAINTEXT"
-        value = var.metadb_ci_user
+        value = local.metadb_ci_user
       },
       {
         name  = "PGPORT"
@@ -122,7 +152,7 @@ module "codebuild_merge_lock" {
       {
         name  = "PGDATABASE"
         type  = "PLAINTEXT"
-        value = var.metadb_name
+        value = local.metadb_name
       },
       {
         name  = "PGHOST"
@@ -149,13 +179,15 @@ module "codebuild_merge_lock" {
     ]
   ]
 
+  vpc_config = var.codebuild_vpc_config
 
   artifacts = {
     type = "NO_ARTIFACTS"
   }
 
   build_source = {
-    type      = "NO_SOURCE"
+    type      = "GITHUB"
+    location  = data.github_repository.this.http_clone_url
     buildspec = <<-EOT
 version: 0.2
 env:
@@ -167,20 +199,20 @@ phases:
   build:
     commands:
       - |
-      ${file("${path.module}/buildspecs/merge_lock.bash")}
+      ${file("${path.module}/buildspecs/merge_lock/merge_lock.bash")}
 EOT
   }
 
   role_policy_arns = [
     aws_iam_policy.merge_lock_ssm_param_access.arn,
-    aws_iam_policy.metadb.arn
+    aws_iam_policy.ci_metadb_access.arn
   ]
 }
 
 module "codebuild_trigger_sf" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
-  name = var.trigger_step_function_build_name
+  name = local.trigger_step_function_build_name
 
   source_auth_token          = var.github_token_ssm_value
   source_auth_server_type    = "GITHUB"
@@ -209,7 +241,7 @@ env:
 phases:
   build:
     commands:
-      - bash "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/trigger_sf.sh"
+      - python "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/buildspecs/trigger_sf/trigger_sf.py"
 EOT
   }
 
@@ -218,19 +250,13 @@ EOT
   }
 
   environment = {
-    compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = coalesce(var.terra_img, module.terra_img[0].full_image_url)
-    image_pull_credentials_type = "SERVICE_ROLE"
-    type                        = "LINUX_CONTAINER"
+    compute_type = "BUILD_GENERAL1_SMALL"
+    image        = module.ecr_trigger_sf.full_image_url
+    type         = "LINUX_CONTAINER"
     environment_variables = [
       {
-        name  = "BUILD_NAME"
-        value = var.trigger_step_function_build_name
-        type  = "PLAINTEXT"
-      },
-      {
         name  = "STATE_MACHINE_ARN"
-        value = aws_sfn_state_machine.this.arn
+        value = local.state_machine_arn
         type  = "PLAINTEXT"
       },
       {
@@ -241,12 +267,12 @@ EOT
       {
         name  = "EVENTBRIDGE_RULE"
         type  = "PLAINTEXT"
-        value = aws_cloudwatch_event_rule.this.id
+        value = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:rule/${local.cloudwatch_event_rule_name}"
       },
       {
         name  = "PGUSER"
         type  = "PLAINTEXT"
-        value = var.metadb_ci_user
+        value = local.metadb_ci_user
       },
       {
         name  = "PGPORT"
@@ -256,7 +282,7 @@ EOT
       {
         name  = "PGDATABASE"
         type  = "PLAINTEXT"
-        value = var.metadb_name
+        value = local.metadb_name
       },
       {
         name  = "PGHOST"
@@ -269,15 +295,24 @@ EOT
   vpc_config = var.codebuild_vpc_config
 
   role_policy_arns = [
-    aws_iam_policy.metadb.arn
+    aws_iam_policy.ci_metadb_access.arn
   ]
 
   role_policy_statements = [
     {
-      sid       = "StepFunctionTriggerAccess"
+      sid    = "StepFunctionTriggerAccess"
+      effect = "Allow"
+      actions = [
+        "states:StartExecution",
+        "states:StopExecution"
+      ]
+      resources = [local.state_machine_arn]
+    },
+    {
+      sid       = "SSMParamMergeLockAccess"
       effect    = "Allow"
-      actions   = ["states:StartExecution"]
-      resources = [aws_sfn_state_machine.this.arn]
+      actions   = ["ssm:PutParameter"]
+      resources = [aws_ssm_parameter.merge_lock.arn]
     }
   ]
 }
@@ -285,14 +320,14 @@ EOT
 
 module "codebuild_terra_run" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
-  name   = var.terra_run_build_name
+  name   = local.terra_run_build_name
   assumable_role_arns = [
     module.plan_role.role_arn,
     module.apply_role.role_arn
   ]
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
+    image        = coalesce(var.terra_run_img, module.ecr_terra_run[0].full_image_url)
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.terra_run_env_vars, [
       {
@@ -307,6 +342,8 @@ module "codebuild_terra_run" {
       }
     ])
   }
+
+  vpc_config = var.codebuild_vpc_config
 
   artifacts = {
     type = "NO_ARTIFACTS"
@@ -327,9 +364,4 @@ phases:
       - "$${TG_COMMAND}"
 EOT
   }
-
-
-  role_policy_arns = [
-    aws_iam_policy.metadb.arn
-  ]
 }

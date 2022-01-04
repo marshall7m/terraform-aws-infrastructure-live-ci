@@ -219,20 +219,22 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
 | approval\_request\_sender\_email | Email address to use for sending approval requests | `string` | n/a | yes |
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
-| build\_env\_vars | Base environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_name | Name of the CloudWatch event that will monitor the Step Function | `string` | `"infrastructure-live-execution-event"` | no |
 | codebuild\_vpc\_config | AWS VPC configurations associated with CodeBuild projects | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
-| get\_rollback\_providers\_build\_name | CodeBuild project name for getting new provider resources to destroy on deployment rollback | `string` | `"infrastructure-live-ci-get-rollback-providers"` | no |
 | github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used for setting PR merge locks for live infrastructure repo"` | no |
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
+| merge\_lock\_build\_name | Codebuild project name used for determine if infrastructure related PR can be merged into base branch | `string` | `null` | no |
+| merge\_lock\_ssm\_key | SSM Parameter Store key used for locking infrastructure related PR merges | `string` | `null` | no |
+| metadb\_ci\_user | Metadb username used to authenticate CI services via IAM policies | `string` | `"ci_user"` | no |
 | metadb\_name | Name of the AWS RDS db | `string` | `"infrastructure_live_ci"` | no |
 | metadb\_password | Password for the AWS RDS db | `string` | n/a | yes |
+| metadb\_port | Port for AWS RDS Postgres db | `number` | `5432` | no |
 | metadb\_publicly\_accessible | Determines if metadb is publicly accessible outside of it's associated VPC | `bool` | `false` | no |
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Security group must be publicly accessible and allow inbound/outbound traffic from local testing IP address | `list(string)` | `null` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
@@ -240,20 +242,19 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `"infrastructure-live-plan"` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
+| region | AWS region name to create module within. Defaults to AWS provider's region. | `string` | `null` | no |
 | repo\_name | Name of the GitHub repository | `string` | n/a | yes |
-| rollback\_deploy\_command | Terragrunt rollback command to run on target path | `string` | `"apply -destroy -auto-approve"` | no |
-| rollback\_plan\_command | Terragrunt rollback command to run on target path | `string` | `"plan -destroy"` | no |
-| rollout\_deploy\_command | Terragrunt rollout command to run on target path | `string` | `"apply -auto-approve"` | no |
-| rollout\_plan\_command | Terragrunt rollout command to run on target path | `string` | `"plan"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_img | Docker, ECR or AWS CodeBuild managed image to use for Terraform build projects | `string` | `null` | no |
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions | `string` | `"infrastructure-live-ci-terra-run"` | no |
+| terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `"infrastructure-live-ci-trigger-sf"` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
+| codebuild\_merge\_lock\_arn | n/a |
 | codebuild\_trigger\_sf\_arn | n/a |
 | metadb\_address | n/a |
 | metadb\_endpoint | n/a |
@@ -261,6 +262,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | metadb\_password | n/a |
 | metadb\_port | n/a |
 | metadb\_username | n/a |
+| sf\_arn | n/a |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
