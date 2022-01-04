@@ -17,7 +17,7 @@ def lambda_handler(event, context):
     log.debug(f'Lambda Event: {event}')
 
     full_approval_api = event['payload']['ApprovalAPI']
-    voters = event['payload']['voters']
+    voters = event['payload']['Voters']
 
     log.debug(f'API Full URL: {full_approval_api}')
 
@@ -50,13 +50,12 @@ def lambda_handler(event, context):
     except ClientError as e:
         print(e.response['Error']['Message'])
     else:
-        
         for msg in response['Status']:
             if msg['Status'] == 'Success':
-                print("Email was succesfully sent")
-                print(f"Message ID: {msg['MessageId']}\n")
+                log.info("Email was succesfully sent")
+                log.debug(f"Message ID: {msg['MessageId']}\n")
             else:
-                print("Email was not sent")
-                print(f"Message ID: {msg['MessageId']}")
-                print(f"Status: {msg['Status']}")
-                print(f"Error: {msg['Error']}\n")
+                log.debug(f"Message ID: {msg['MessageId']}")
+                log.debug(f"Status: {msg['Status']}")
+                log.debug(f"Error: {msg['Error']}\n")
+                log.fatal("Email was not sent")
