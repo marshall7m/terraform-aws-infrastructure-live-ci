@@ -40,6 +40,7 @@ RUN apk update \
     && apk add --virtual .runtime \
     bash \
     git \
+    curl \
     jq \
     # needed for bats --pretty formatter
     ncurses \

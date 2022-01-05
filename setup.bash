@@ -21,6 +21,7 @@ elif [ "$TESTING_ENV" == "remote" ]; then
         -e AWS_REGION="$AWS_REGION" \
         -e AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN" \
         -v /var/run/docker.sock:/var/run/docker.sock \
+        --entrypoint="bash /src/entrypoint.sh" \
         testing /bin/bash
 else
     echo '$TESTING_ENV is not set -- (local | remote)' && exit 1

@@ -39,4 +39,3 @@ services:
       - PGPORT
       - ADDITIONAL_PATH
     command: ["/bin/bash"]
-    entrypoint: ["/bin/bash", "/src/entrypoint.sh"]
