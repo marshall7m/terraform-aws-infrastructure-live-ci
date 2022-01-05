@@ -1,4 +1,5 @@
 import pytest
+import psycopg2
 
 @pytest.fixture(scope="session", autouse=True)
 def conn():

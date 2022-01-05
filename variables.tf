@@ -1,4 +1,3 @@
-
 variable "common_tags" {
   description = "Tags to add to all resources"
   type        = map(string)

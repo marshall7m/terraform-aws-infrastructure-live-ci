@@ -13,12 +13,16 @@ resource "random_string" "this" {
 resource "github_repository" "test" {
   name        = local.mut_id
   description = "Test repo for mut: ${local.mut_id}"
-  auto_init   = true
   visibility  = "public"
   template {
     owner      = "marshall7m"
     repository = "infrastructure-live-testing-template"
   }
+}
+
+resource "random_password" "metadb" {
+  length  = 16
+  special = false
 }
 
 module "mut_infrastructure_live_ci" {
@@ -32,7 +36,7 @@ module "mut_infrastructure_live_ci" {
 
   metadb_publicly_accessible = true
   metadb_username            = "mut_user"
-  metadb_password            = uuid()
+  metadb_password            = random_password.metadb.result
 
   create_github_token_ssm_param = false
   github_token_ssm_key          = "admin-github-token"
@@ -55,7 +59,7 @@ module "mut_infrastructure_live_ci" {
 }
 
 data "testing_tap" "integration" {
-  program = ["python", "${path.module}/test_integration.py"]
+  program = ["pytest", "${path.module}/test_integration.py"]
   environment = {
     REPO_NAME                 = github_repository.test.name
     STATE_MACHINE_ARN         = module.mut_infrastructure_live_ci.sf_arn

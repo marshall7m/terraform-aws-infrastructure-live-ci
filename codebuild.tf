@@ -16,6 +16,7 @@ data "github_repository" "build_scripts" {
   full_name = "marshall7m/terraform-aws-infrastructure-live-ci"
 }
 
+data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 resource "aws_ssm_parameter" "merge_lock" {
