@@ -7,156 +7,152 @@ import os
 import logging
 import sys
 from psycopg2.sql import SQL
-import pandas.io.sql as psql
-from helpers.utils import TestSetup
 import shutil
 import uuid
 import json
 import time
-import boto3
-import git
 import github
+import timeout_decorator
+import random
+import string
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-@pytest.fixture(scope='session')
-def cb():
-    return boto3.client('codebuild')
+class TestIntegration:
 
-@pytest.fixture(scope='module')
-def gh():
-    return github.Github(os.environ['GITHUB_TOKEN'])
+    # list of PRs with directory to create test files within
+    # explicitly defining execution testing order until fixture list return values can be used to parametrize fixtures/tests
+    # at the execution phase of pytest
+    # see: https://stackoverflow.com/questions/50231627/python-pytest-unpack-fixture/56865893#56865893
+    @pytest.fixture(scope='class')
+    def pr(self, repo, scenario):
+        os.environ['BASE_REF'] = 'master'
+        os.environ['HEAD_REF'] = f'feature-{uuid.uuid4()}'
 
-@pytest.fixture(scope='module')
-def repo(gh):
-    repo = gh.get_user().create_repo(f'mut-terraform-aws-infrastructure-merge-lock-{uuid.uuid4()}', auto_init=True)
-    os.environ['REPO_FULL_NAME'] = repo.full_name
-    repo.edit(default_branch='master')
+        base_commit = repo.get_branch(os.environ['BASE_REF'])
+        head_ref = repo.create_git_ref(ref='refs/heads/' + os.environ['HEAD_REF'], sha=base_commit.commit.sha)
+        elements = []
+        for item in scenario['modify_items']:
+            filepath = item['cfg_path'] + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
+            log.debug(f'Creating file: {filepath}')
+            blob = repo.create_git_blob(item['content'], "utf-8")
+            elements.append(github.InputGitTreeElement(path=filepath, mode='100644', type='blob', sha=blob.sha))
 
-    yield repo
-    repo.delete()
-test_null_resource = """
-provider "null" {}
+        head_sha = repo.get_branch(os.environ['HEAD_REF']).commit.sha
+        base_tree = repo.get_git_tree(sha=head_sha)
+        tree = repo.create_git_tree(elements, base_tree)
+        parent = repo.get_git_commit(sha=head_sha)
+        commit_id = repo.create_git_commit("commit_message", tree, [parent]).sha
+        head_ref.edit(sha=commit_id)
 
-resource "null_resource" "this" {}
-"""
+        
+        log.info('Creating PR')
+        pr = repo.create_pull(title=f"test-{os.environ['HEAD_REF']}", body='test', base=os.environ['BASE_REF'], head=os.environ['HEAD_REF'])
+        
+        log.debug(f'head ref commit: {commit_id}')
+        log.debug(f'pr commits: {pr.commits}')
 
-test_output = """
-output "{random}" {{
-    value = "{random}"
-}}
-"""
+        yield {
+            'number': pr.number,
+            'head_commit_id': commit_id
+        }
 
-# list of PRs with directory to create test files within
-@pytest.fixture(scope='module', params=[
-    {
-        'directory_dependency/dev-account/us-west-2/env-one/doo': test_null_resource
-    }
-])
-def pr_head_commit(repo, request):
-    os.environ['BASE_REF'] = 'master'
-    os.environ['HEAD_REF'] = f'feature-{uuid.uuid4()}'
-
-    base_commit = repo.get_branch(os.environ['BASE_REF'])
-    head_ref = repo.create_git_ref(ref='refs/heads/' + os.environ['HEAD_REF'], sha=base_commit.commit.sha)
-    elements = []
-    for path, content in request.param.items():
-        blob = repo.create_git_blob(content, "utf-8")
-        elements.append(github.InputGitTreeElement(path=path, mode='100644', type='blob', sha=blob.sha))
-
-    head_sha = repo.get_branch(os.environ['HEAD_REF']).commit.sha
-    base_tree = repo.get_git_tree(sha=head_sha)
-    tree = repo.create_git_tree(elements, base_tree)
-    parent = repo.get_git_commit(sha=head_sha)
-    commit_id = repo.create_git_commit("commit_message", tree, [parent]).sha
-    head_ref.edit(sha=commit_id)
-
-    repo.create_pull(title=f"test-{os.environ['HEAD_REF']}", body='test', base=os.environ['BASE_REF'], head=os.environ['HEAD_REF'])
-
-    yield commit_id
-
-@pytest.fixture(scope='module')
-def merge_lock_status(cb, pr_head_commit):
-    id = cb.list_builds_for_project(
-        projectName=os.environ['MERGE_LOCK_CODEBUILD_NAME'],
-        sortOrder='DESCENDING'
-    )['ids'][0]
+        try:
+            log.info('Closing PR')
+            pr.edit(state='closed')
+        except Exception:
+            pass
     
-    status = 'IN_PROGRESS'
-    log.info('Waiting on merge lock Codebuild execution to finish')
-    while status == 'IN_PROGRESS':
-        time.sleep(60)
-        status = cb.batch_get_builds(ids=[id])['builds'][0]['buildStatus']
-        log.debug(f'Status: {status}')
+
+    @pytest.fixture(scope="class")
+    def scenario(self, request):
+        return request.param
+
+    @pytest.fixture(scope="class")
+    def execution(self, request):
+        return request.param
     
-    return status
+    @pytest.fixture(scope='class')
+    @timeout_decorator.timeout(300)
+    def merge_lock_status(self, cb, mut_output, pr):
+        id = cb.list_builds_for_project(
+            projectName=mut_output['codebuild_merge_lock_name'],
+            sortOrder='DESCENDING'
+        )['ids'][0]
+        
+        status = 'IN_PROGRESS'
+        log.info('Waiting on merge lock Codebuild execution to finish')
+        log.debug(f'Codebuild ID: {id}')
+        
+        while status == 'IN_PROGRESS':
+            time.sleep(60)
+            status = cb.batch_get_builds(ids=[id])['builds'][0]['buildStatus']
+            log.debug(f'Status: {status}')
+        return status
 
-@pytest.fixture(scope='module')
-def merge_pr(repo, merge_lock_status):
-    return repo.merge(os.environ['BASE_REF'], os.environ['HEAD_REF'])
+    # @pytest.mark.dependency()
+    def test_merge_lock_codebuild(self, merge_lock_status):        
+        log.info('Assert build succeeded')
+        assert merge_lock_status == 'SUCCEEDED'
 
-@pytest.fixture(scope='module')
-def trigger_sf_status():
-    id = cb.list_builds_for_project(
-        projectName=os.environ['TRIGGER_SF_CODEBUILD_NAME'],
-        sortOrder='DESCENDING'
-    )['ids'][0]
+    # @pytest.mark.dependency(depends=["test_merge_lock_codebuild"])
+    def test_merge_lock_pr_status(self, repo, pr):
+        log.info('Assert PR head commit status is successful')
+        log.debug(f'PR head commit: {pr["head_commit_id"]}')
+        
+        assert repo.get_commit(pr["head_commit_id"]).get_statuses()[0].state == 'success'
+
+    @pytest.fixture(scope='class')
+    def trigger_sf_status(self, cb, mut_output, merge_pr):
+        id = cb.list_builds_for_project(
+            projectName=mut_output['codebuild_trigger_sf_name'],
+            sortOrder='DESCENDING'
+        )['ids'][0]
+        
+        status = 'IN_PROGRESS'
+        log.info('Waiting on merge lock Codebuild execution to finish')
+        while status == 'IN_PROGRESS':
+            time.sleep(60)
+            status = cb.batch_get_builds(ids=[id])['builds'][0]['buildStatus']
+            log.debug(f'Status: {status}')
+        
+        return status
+
+    # @pytest.mark.dependency()
+    def test_trigger_sf_codebuild(self, trigger_sf_status):
+
+        log.info('Assert build succeeded')
+        assert trigger_sf_status == 'SUCCEEDED'
     
-    status = 'IN_PROGRESS'
-    log.info('Waiting on merge lock Codebuild execution to finish')
-    while status == 'IN_PROGRESS':
-        time.sleep(60)
-        status = cb.batch_get_builds(ids=[id])['builds'][0]['buildStatus']
-        log.debug(f'Status: {status}')
-    
-    return status
+    # @pytest.mark.dependency(depends=["test_trigger_sf_codebuild"])
+    def test_executions_exists(self, conn, scenario, pr):
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("SELECT array_agg(cfg_path::TEXT) FROM executions WHERE commit_id = {}").format(pr["head_commit_id"]))
+            ids = cur.fetchone()[0]
+        if ids == None:
+            target_execution_ids = []
+        else:
+            target_execution_ids = [id for id in ids]
+        
+        assert len(scenario['executions']) == len(target_execution_ids)
 
-@pytest.fixture(scope='module')
-def target_execution_ids(conn, trigger_sf_status):
-    with conn.cursor() as cur:
-        cur.execute(sql.SQL("SELECT array_agg(execution_id::TEXT) FROM executions WHERE commit_id = {}").format(pr_head_commit))
-        ids = cur.fetchone()[0]
-    if ids == None:
-        target_execution_ids = []
-    else:
-        target_execution_ids = [id for id in ids]
-    
-    return target_execution_ids
+    @pytest.fixture(scope="class")
+    def execution_record(self, conn, request, pr, trigger_sf_status):
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("SELECT 1 FROM executions WHERE commit_id = {} AND status = 'running'").format(pr["head_commit_id"]))
+            record = cur.fetchone()[0]
+        yield record
 
-@pytest.mark.dependency()
-def test_merge_lock_codebuild(merge_lock_status):
-    log.info('Assert build succeeded')
-    assert merge_lock_status == 'SUCCEEDED'
-
-@pytest.mark.dependency(depends=["test_merge_lock_codebuild"])
-def test_merge_lock_pr_status(repo, pr_head_commit, merge_lock_status):
-    log.info('Assert PR head commit status is successful')
-    log.debug(f'PR head commit: {pr_head_commit}')
-    
-    assert repo.get_commit(pr_head_commit).get_statuses()[0].state == 'success'
-
-@pytest.mark.dependency()
-def test_trigger_sf_codebuild(trigger_sf_status):
-    log.info('Assert build succeeded')
-    assert trigger_sf_status == 'SUCCEEDED'
-
-#TODO: Figure out how to pass flatten list of target cfg_paths in relation to tg dependency tree
-# OPTION A: 
-# create get_running_execution() fixture factory that gets 1 running execution cfg_path to run test on
-# parametrize class with the range of 0 to length of total target execution ids
-
-@pytest.mark.parametrize("cfg_path", [])
-class TestSF:
-
-    def test_sf_execution_running(self, sf, id):
+    # @pytest.mark.dependency(depends=["test_executions_exists"])
+    def test_sf_execution_running(self, mut_output, sf, execution_record, scenario):
         executions = sf.list_executions(
-            stateMachineArn=os.environ['STATE_MACHINE_ARN'],
+            stateMachineArn=mut_output['state_machine_arn'],
             statusFilter='RUNNING'
         )['executions']
         running_ids = [execution['name'] for execution in executions]
 
-        assert id in running_ids
+    #     assert execution_record['execution_id'] in running_ids
         
     # def test_approval_request(cfg, s3):
     #     #while running executions' approval response is not finished, check if s3 bucket received requests
@@ -165,9 +161,9 @@ class TestSF:
         
     #     out = subprocess.run(["ping", "-c", action_url], capture_output=True, check=True)
 
-    def test_applied_changes(self, cfg_path):
-        # run tg plan -detailed-exitcode and assert return code is == 0
-        pass
+    # def test_applied_changes(self, execution):
+    #     # run tg plan -detailed-exitcode and assert return code is == 0
+    #     pass
 
-    def test_cw_event_sent():
-        pass
+    # def test_cw_event_sent(self):
+    #     pass
