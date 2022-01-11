@@ -4,8 +4,6 @@ locals {
   cw_event_terra_run_rule    = "${local.terra_run_build_name}-rule"
 }
 
-data "aws_region" "current" {}
-
 resource "aws_sfn_state_machine" "this" {
   name     = var.step_function_name
   role_arn = module.sf_role.role_arn
