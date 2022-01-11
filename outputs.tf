@@ -23,8 +23,16 @@ output "metadb_name" {
   value = aws_db_instance.metadb.name
 }
 
+output "codebuild_trigger_sf_name" {
+  value = module.codebuild_trigger_sf.name
+}
+
 output "codebuild_trigger_sf_arn" {
   value = module.codebuild_trigger_sf.arn
+}
+
+output "codebuild_merge_lock_name" {
+  value = module.codebuild_merge_lock.name
 }
 
 output "codebuild_merge_lock_arn" {
