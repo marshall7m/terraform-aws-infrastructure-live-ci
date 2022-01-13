@@ -26,18 +26,24 @@ resource "aws_ssm_parameter" "merge_lock" {
   value       = false
 }
 
+data "aws_ssm_parameter" "github_token" {
+  name = var.github_token_ssm_key
+}
+
 data "aws_iam_policy_document" "merge_lock_ssm_param_access" {
   statement {
-    sid    = "GetMergeLockSSMParam"
+    sid    = "GetSSMParams"
     effect = "Allow"
     actions = [
       "ssm:GetParameters"
     ]
     resources = [
-      aws_ssm_parameter.merge_lock.arn
+      aws_ssm_parameter.merge_lock.arn,
+      data.aws_ssm_parameter.github_token.arn
     ]
   }
 }
+
 resource "aws_iam_policy" "merge_lock_ssm_param_access" {
   name        = "${aws_ssm_parameter.merge_lock.name}-access"
   description = "Allows read access to merge lock ssm param"
@@ -137,7 +143,7 @@ module "codebuild_merge_lock" {
     environment_variables = [
       {
         name  = "REPO_FULL_NAME"
-        value = var.repo_name
+        value = data.github_repository.this.full_name
         type  = "PLAINTEXT"
       },
       {
@@ -185,7 +191,7 @@ module "codebuild_merge_lock" {
   artifacts = {
     type = "NO_ARTIFACTS"
   }
-
+  # use inline buildspec with formatted bash script instead of downloading secondary source resulting in longer download phase
   build_source = {
     type      = "GITHUB"
     location  = data.github_repository.this.http_clone_url
@@ -200,7 +206,7 @@ phases:
   build:
     commands:
       - |
-      ${file("${path.module}/buildspecs/merge_lock/merge_lock.bash")}
+        ${replace(replace(file("${path.module}/buildspecs/merge_lock/merge_lock.bash"), "\t", "  "), "\n", "\n        ")}
 EOT
   }
 
