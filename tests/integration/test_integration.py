@@ -76,27 +76,32 @@ class TestIntegration:
     @pytest.fixture(scope='class')
     @timeout_decorator.timeout(300)
     def merge_lock_status(self, cb, mut_output, pr):
-        id = cb.list_builds_for_project(
+        ids = cb.list_builds_for_project(
             projectName=mut_output['codebuild_merge_lock_name'],
             sortOrder='DESCENDING'
-        )['ids'][0]
+        )['ids']
         
-        status = 'IN_PROGRESS'
-        log.info('Waiting on merge lock Codebuild execution to finish')
-        log.debug(f'Codebuild ID: {id}')
         
-        while status == 'IN_PROGRESS':
-            time.sleep(60)
-            status = cb.batch_get_builds(ids=[id])['builds'][0]['buildStatus']
-            log.debug(f'Status: {status}')
-        return status
+        log.info('Waiting on merge lock Codebuild executions to finish')
+        log.debug(f'Codebuild IDs: {ids}')
 
-    # @pytest.mark.dependency()
+        statuses = ['IN_PROGRESS']
+        wait = 60
+        while 'IN_PROGRESS' in statuses:
+            time.sleep(wait)
+            statuses = [build['buildStatus'] for build in cb.batch_get_builds(ids=ids)['builds'] if build.get('sourceVersion', None) == f'pr/{pr["number"]}']
+            log.debug(f'Statuses: {statuses}')
+            if len(statuses) == 0:
+                log.error(f'No build have been triggered for PR: {pr["number"]} within {wait} secs')
+                sys.exit(1)
+        return statuses
+
+    @pytest.mark.dependency()
     def test_merge_lock_codebuild(self, merge_lock_status):        
         log.info('Assert build succeeded')
-        assert merge_lock_status == 'SUCCEEDED'
+        assert all(status == 'SUCCEEDED' for status in merge_lock_status)
 
-    # @pytest.mark.dependency(depends=["test_merge_lock_codebuild"])
+    @pytest.mark.dependency(depends=["test_merge_lock_codebuild"])
     def test_merge_lock_pr_status(self, repo, pr):
         log.info('Assert PR head commit status is successful')
         log.debug(f'PR head commit: {pr["head_commit_id"]}')
@@ -111,7 +116,7 @@ class TestIntegration:
         )['ids'][0]
         
         status = 'IN_PROGRESS'
-        log.info('Waiting on merge lock Codebuild execution to finish')
+        log.info('Waiting on trigger sf Codebuild execution to finish')
         while status == 'IN_PROGRESS':
             time.sleep(60)
             status = cb.batch_get_builds(ids=[id])['builds'][0]['buildStatus']
@@ -119,13 +124,13 @@ class TestIntegration:
         
         return status
 
-    # @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["test_merge_lock_pr_status"])
     def test_trigger_sf_codebuild(self, trigger_sf_status):
 
         log.info('Assert build succeeded')
         assert trigger_sf_status == 'SUCCEEDED'
     
-    # @pytest.mark.dependency(depends=["test_trigger_sf_codebuild"])
+    @pytest.mark.dependency(depends=["test_trigger_sf_codebuild"])
     def test_executions_exists(self, conn, scenario, pr):
         with conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT array_agg(cfg_path::TEXT) FROM executions WHERE commit_id = {}").format(pr["head_commit_id"]))
