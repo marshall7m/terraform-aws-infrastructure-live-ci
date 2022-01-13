@@ -11,13 +11,13 @@ import sys
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+def pytest_addoption(parser):
+    parser.addoption("--skip-init", action="store_true", help="skips initing tf module")
+    parser.addoption("--skip-apply", action="store_true", help="skips applying tf module")
+
 @pytest.fixture(scope="session")
-def mut():
+def mut(request):
     tf_dir = os.path.dirname(os.path.realpath(__file__))
-    out = subprocess.run('tfenv install min-required && tfenv use min-required', 
-        cwd=tf_dir, shell=True, capture_output=True, check=True, text=True
-    )
-    log.debug(f'tfenv out: {out.stdout}')
 
     if 'GITHUB_TOKEN' not in os.environ:
         log.error('$GITHUB_TOKEN env var is not set -- required to setup Github resources')
@@ -25,19 +25,34 @@ def mut():
 
     log.info('Initializing testing module')
     tf = tftest.TerraformTest(tf_dir)
-    tf.init()
+
+    if request.param:
+        log.info('Skip scanning for tf version')
+        log.info('Skip initing testing tf module')
+    else:
+        log.info('Scanning tf config for minimum tf version')
+        out = subprocess.run('tfenv install min-required && tfenv use min-required', 
+            cwd=tf_dir, shell=True, capture_output=True, check=True, text=True
+        )
+
+        log.debug(f'tfenv out: {out.stdout}')
+        log.info('Initing testing tf module')
+        tf.init()
 
     yield tf
 
 @pytest.fixture(scope="session")
-def mut_plan(mut):
+def mut_plan(mut, request):
     log.info('Getting testing tf plan')
     yield mut.plan(output=True)
 
 @pytest.fixture(scope="session")
-def mut_output(mut):
-    log.info('Applying testing tf module')
-    mut.apply(auto_approve=True)
+def mut_output(mut, request):
+    if request.param:
+        log.info('Skip applying testing tf module')
+    else:    
+        log.info('Applying testing tf module')
+        mut.apply(auto_approve=True)
     yield {k: v['value'] for k, v in mut.output().items()}
     # tf.destroy(auto_approve=True)
 

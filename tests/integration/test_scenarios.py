@@ -20,6 +20,11 @@ def pytest_generate_tests(metafunc):
     if 'scenario' in metafunc.fixturenames:
         metafunc.parametrize('scenario', [metafunc.cls.scenario], scope='class')
 
+    if metafunc.config.getoption('skip_init'):
+        metafunc.parametrize('mut', [True], scope='class', indirect=True)
+    if metafunc.config.getoption('skip_apply'):
+        metafunc.parametrize('mut_output', [True], scope='class', indirect=True)
+
 class TestScenarioOne(test_integration.TestIntegration):
     scenario = {
         'modify_items': [
@@ -35,5 +40,5 @@ class TestScenarioOne(test_integration.TestIntegration):
         }
     }
 
-    def test_null_resource(self):
-        pass
+    # def test_null_resource(self):
+    #     pass
