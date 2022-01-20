@@ -26,7 +26,7 @@ def mut(request):
     log.info('Initializing testing module')
     tf = tftest.TerraformTest(tf_dir)
 
-    if request.param:
+    if getattr(request, 'param', False):
         log.info('Skip scanning for tf version')
         log.info('Skip initing testing tf module')
     else:
@@ -48,7 +48,7 @@ def mut_plan(mut, request):
 
 @pytest.fixture(scope="session")
 def mut_output(mut, request):
-    if request.param:
+    if getattr(request, 'param', False):
         log.info('Skip applying testing tf module')
     else:    
         log.info('Applying testing tf module')
@@ -65,6 +65,7 @@ def conn(mut_output):
         user=mut_output['pg_user'],
         password=mut_output['pg_password']
     )
+    
     conn.set_session(autocommit=True)
 
     yield conn
