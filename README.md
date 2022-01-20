@@ -221,7 +221,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_rule\_name | Name of the CloudWatch event rule that detects when the Step Function completes an execution | `string` | `null` | no |
-| codebuild\_vpc\_config | AWS VPC configurations associated with CodeBuild projects | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| codebuild\_vpc\_config | AWS VPC configurations associated with all CodeBuild projects within this module. <br>The subnets must have the approriate security groups to reach the subnet that the db is associated with. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | n/a | yes |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
@@ -231,14 +231,13 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
 | merge\_lock\_build\_name | Codebuild project name used for determine if infrastructure related PR can be merged into base branch | `string` | `null` | no |
 | merge\_lock\_ssm\_key | SSM Parameter Store key used for locking infrastructure related PR merges | `string` | `null` | no |
-| metadb\_ci\_user | Username used to authenticate CI services to connect to the metadb via IAM policy | `string` | `null` | no |
 | metadb\_name | Name of the AWS RDS db | `string` | `null` | no |
 | metadb\_password | Password for the AWS RDS db | `string` | n/a | yes |
 | metadb\_port | Port for AWS RDS Postgres db | `number` | `5432` | no |
 | metadb\_publicly\_accessible | Determines if metadb is publicly accessible outside of it's associated VPC | `bool` | `false` | no |
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Security group must be publicly accessible and allow inbound/outbound traffic from local testing IP address | `list(string)` | `null` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
-| metadb\_username | Username for the AWS RDS db | `string` | n/a | yes |
+| metadb\_username | Username used to authenticate CI services to connect to the metadb via IAM policy | `string` | `null` | no |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `null` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
@@ -256,7 +255,9 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | Name | Description |
 |------|-------------|
 | codebuild\_merge\_lock\_arn | n/a |
+| codebuild\_merge\_lock\_name | n/a |
 | codebuild\_trigger\_sf\_arn | n/a |
+| codebuild\_trigger\_sf\_name | n/a |
 | metadb\_address | n/a |
 | metadb\_endpoint | n/a |
 | metadb\_name | n/a |

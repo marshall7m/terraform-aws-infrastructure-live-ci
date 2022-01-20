@@ -1,6 +1,6 @@
 locals {
-  metadb_name    = coalesce(var.merge_lock_build_name, replace("${var.step_function_name}", "-", "_"))
-  metadb_ci_user = coalesce(var.merge_lock_build_name, replace("${var.step_function_name}_user", "-", "_"))
+  metadb_name     = coalesce(var.merge_lock_build_name, replace("${var.step_function_name}", "-", "_"))
+  metadb_username = coalesce(var.merge_lock_build_name, replace("${var.step_function_name}_user", "-", "_"))
 }
 
 resource "aws_db_instance" "metadb" {
@@ -22,9 +22,9 @@ resource "aws_db_instance" "metadb" {
 
 resource "null_resource" "metadb_setup" {
   provisioner "local-exec" {
-    command = "psql -f ${path.module}/sql/create_metadb_tables.sql; psql -c \"CREATE USER ${local.metadb_ci_user}; GRANT rds_iam TO ${local.metadb_ci_user};\""
+    command = "psql -f ${path.module}/sql/create_metadb_tables.sql; psql -c \"CREATE USER ${local.metadb_username}; GRANT rds_iam TO ${local.metadb_username};\""
     environment = {
-      PGUSER     = var.metadb_username
+      PGUSER     = local.metadb_username
       PGPASSWORD = var.metadb_password
       PGDATABASE = local.metadb_name
       PGHOST     = aws_db_instance.metadb.address

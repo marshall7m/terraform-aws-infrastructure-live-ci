@@ -202,7 +202,7 @@ module "lambda_approval_response" {
   ]
 
   env_vars = {
-    PGUSER     = local.metadb_ci_user
+    PGUSER     = local.metadb_username
     PGPORT     = var.metadb_port
     PGDATABASE = local.metadb_name
     PGHOST     = aws_db_instance.metadb.address

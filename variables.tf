@@ -106,13 +106,15 @@ variable "build_tags" {
 }
 
 variable "codebuild_vpc_config" {
-  description = "AWS VPC configurations associated with CodeBuild projects"
+  description = <<EOF
+AWS VPC configurations associated with all CodeBuild projects within this module. 
+The subnets must have the approriate security groups to reach the subnet that the db is associated with.
+EOF
   type = object({
     vpc_id             = string
     subnets            = list(string)
     security_group_ids = list(string)
   })
-  default = null
 }
 
 # GITHUB-WEBHOOK #
@@ -212,8 +214,9 @@ variable "metadb_name" {
 }
 
 variable "metadb_username" {
-  description = "Username for the AWS RDS db"
+  description = "Username used to authenticate CI services to connect to the metadb via IAM policy"
   type        = string
+  default     = null
 }
 
 variable "metadb_password" {
@@ -242,12 +245,6 @@ variable "metadb_security_group_ids" {
 
 variable "metadb_subnets_group_name" {
   description = "AWS VPC subnet group name to associate the metadb with"
-  type        = string
-  default     = null
-}
-
-variable "metadb_ci_user" {
-  description = "Username used to authenticate CI services to connect to the metadb via IAM policy"
   type        = string
   default     = null
 }

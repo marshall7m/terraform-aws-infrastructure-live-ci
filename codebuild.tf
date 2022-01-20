@@ -58,12 +58,12 @@ data "aws_iam_policy_document" "ci_metadb_access" {
       "rds-db:connect"
     ]
     resources = [
-      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${local.metadb_name}/${local.metadb_ci_user}"
+      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${local.metadb_name}/${local.metadb_username}"
     ]
   }
 }
 resource "aws_iam_policy" "ci_metadb_access" {
-  name        = "${local.metadb_name}-access"
+  name        = replace("${local.metadb_name}-access", "_", "-")
   description = "Allows CI services to connect to metadb"
   policy      = data.aws_iam_policy_document.ci_metadb_access.json
 }
@@ -149,7 +149,7 @@ module "codebuild_merge_lock" {
       {
         name  = "PGUSER"
         type  = "PLAINTEXT"
-        value = local.metadb_ci_user
+        value = local.metadb_username
       },
       {
         name  = "PGPORT"
@@ -232,6 +232,15 @@ module "codebuild_trigger_sf" {
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
     report_build_status = false
+    buildspec           = <<-EOT
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - python "$${CODEBUILD_SRC_DIR}/../${data.github_repository.build_scripts.name}/buildspecs/trigger_sf/trigger_sf.py"
+EOT
   }
 
   secondary_build_source = {
@@ -241,15 +250,8 @@ module "codebuild_trigger_sf" {
     report_build_status = false
     insecure_ssl        = false
     location            = data.github_repository.build_scripts.http_clone_url
-    buildspec           = <<-EOT
-version: 0.2
-env:
-  shell: bash
-phases:
-  build:
-    commands:
-      - python "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/buildspecs/trigger_sf/trigger_sf.py"
-EOT
+    #TODO: use github tag after development
+    source_version = "merge-trigger"
   }
 
   artifacts = {
@@ -279,7 +281,7 @@ EOT
       {
         name  = "PGUSER"
         type  = "PLAINTEXT"
-        value = local.metadb_ci_user
+        value = local.metadb_username
       },
       {
         name  = "PGPORT"
@@ -299,6 +301,22 @@ EOT
     ]
   }
 
+  webhook_filter_groups = [
+    [
+      {
+        pattern = "PULL_REQUEST_MERGED"
+        type    = "EVENT"
+      },
+      {
+        pattern = var.base_branch
+        type    = "BASE_REF"
+      },
+      {
+        pattern = var.file_path_pattern
+        type    = "FILE_PATH"
+      }
+    ]
+  ]
   vpc_config = var.codebuild_vpc_config
 
   role_policy_arns = [
