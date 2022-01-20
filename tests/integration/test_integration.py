@@ -15,6 +15,8 @@ import github
 import timeout_decorator
 import random
 import string
+from pytest_dependency import depends
+import boto3
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -76,62 +78,66 @@ class TestIntegration:
     @pytest.fixture(scope='class')
     @timeout_decorator.timeout(300)
     def merge_lock_status(self, cb, mut_output, pr):
-        ids = cb.list_builds_for_project(
-            projectName=mut_output['codebuild_merge_lock_name'],
-            sortOrder='DESCENDING'
-        )['ids']
-        
-        
         log.info('Waiting on merge lock Codebuild executions to finish')
-        log.debug(f'Codebuild IDs: {ids}')
-
-        statuses = ['IN_PROGRESS']
-        wait = 60
-        while 'IN_PROGRESS' in statuses:
-            time.sleep(wait)
-            statuses = [build['buildStatus'] for build in cb.batch_get_builds(ids=ids)['builds'] if build.get('sourceVersion', None) == f'pr/{pr["number"]}']
-            log.debug(f'Statuses: {statuses}')
-            if len(statuses) == 0:
-                log.error(f'No build have been triggered for PR: {pr["number"]} within {wait} secs')
-                sys.exit(1)
-        return statuses
+        return self.get_build_status(cb, mut_output["codebuild_merge_lock_name"], pr["number"])
 
     @pytest.mark.dependency()
-    def test_merge_lock_codebuild(self, merge_lock_status):        
+    def test_merge_lock_codebuild(self, request, merge_lock_status):
         log.info('Assert build succeeded')
         assert all(status == 'SUCCEEDED' for status in merge_lock_status)
 
-    @pytest.mark.dependency(depends=["test_merge_lock_codebuild"])
-    def test_merge_lock_pr_status(self, repo, pr):
+    @pytest.mark.dependency()
+    def test_merge_lock_pr_status(self, request, repo, pr):
+        log.debug(f'Test Class: {request.cls.__name__}')
+        depends(request, [f'{request.cls.__name__}::test_merge_lock_codebuild[{request.node.callspec.id}]'])
+
         log.info('Assert PR head commit status is successful')
         log.debug(f'PR head commit: {pr["head_commit_id"]}')
         
         assert repo.get_commit(pr["head_commit_id"]).get_statuses()[0].state == 'success'
 
-    @pytest.fixture(scope='class')
-    def trigger_sf_status(self, cb, mut_output, merge_pr):
-        id = cb.list_builds_for_project(
-            projectName=mut_output['codebuild_trigger_sf_name'],
-            sortOrder='DESCENDING'
-        )['ids'][0]
-        
-        status = 'IN_PROGRESS'
-        log.info('Waiting on trigger sf Codebuild execution to finish')
-        while status == 'IN_PROGRESS':
-            time.sleep(60)
-            status = cb.batch_get_builds(ids=[id])['builds'][0]['buildStatus']
-            log.debug(f'Status: {status}')
-        
-        return status
+    def get_build_status(self, client, name, pr_num):
 
-    @pytest.mark.dependency(depends=["test_merge_lock_pr_status"])
-    def test_trigger_sf_codebuild(self, trigger_sf_status):
+        statuses = ['IN_PROGRESS']
+        wait = 60
+
+        while 'IN_PROGRESS' in statuses:
+            time.sleep(wait)
+            ids = client.list_builds_for_project(
+                projectName=name,
+                sortOrder='DESCENDING'
+            )['ids']
+
+            if len(ids) == 0:
+                log.error(f'No builds have runned for project: {name}')
+                sys.exit(1)
+            statuses = [build['buildStatus'] for build in client.batch_get_builds(ids=ids)['builds'] if build.get('sourceVersion', None) == f'pr/{pr_num}']
+            
+            log.debug(f'Statuses: {statuses}')
+            if len(statuses) == 0:
+                log.error(f'No build have been triggered for PR: {pr_num} within {wait} secs')
+                sys.exit(1)
+    
+        return statuses
+    @pytest.fixture(scope='class')
+    @timeout_decorator.timeout(300)
+    def trigger_sf_status(self, cb, mut_output, pr, merge_pr):
+        log.info('Waiting on trigger sf Codebuild execution to finish')
+
+        return self.get_build_status(cb, mut_output["codebuild_trigger_sf_name"], pr["number"])
+
+    @pytest.mark.dependency()
+    def test_trigger_sf_codebuild(self, request, trigger_sf_status):
+        depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
 
         log.info('Assert build succeeded')
-        assert trigger_sf_status == 'SUCCEEDED'
+        assert len(trigger_sf_status) == 1
+        assert trigger_sf_status[0] == 'SUCCEEDED'
     
-    @pytest.mark.dependency(depends=["test_trigger_sf_codebuild"])
-    def test_executions_exists(self, conn, scenario, pr):
+    @pytest.mark.dependency()
+    def test_executions_exists(self, request, conn, scenario, pr):
+        depends(request, [f'{request.cls.__name__}::test_trigger_sf_codebuild[{request.node.callspec.id}]'])
+
         with conn.cursor() as cur:
             cur.execute(sql.SQL("SELECT array_agg(cfg_path::TEXT) FROM executions WHERE commit_id = {}").format(pr["head_commit_id"]))
             ids = cur.fetchone()[0]
@@ -143,21 +149,32 @@ class TestIntegration:
         assert len(scenario['executions']) == len(target_execution_ids)
 
     @pytest.fixture(scope="class")
-    def execution_record(self, conn, request, pr, trigger_sf_status):
+    def execution_record(self, conn, pr, trigger_sf_status):
         with conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT 1 FROM executions WHERE commit_id = {} AND status = 'running'").format(pr["head_commit_id"]))
-            record = cur.fetchone()[0]
-        yield record
+            cur.execute(sql.SQL("""
+                SELECT 1 
+                FROM executions 
+                WHERE commit_id = {}
+                AND status = 'running'
+            """).format(sql.Literal(pr["head_commit_id"])))
+            record = cur.fetchone()
+            if record == None:
+                log.error('No execution records have a status of running within commit')
+                sys.exit(1)
+            else:
+                return record[0]
+    
+    @pytest.mark.dependency()
+    def test_sf_execution_running(self, request, mut_output, sf, execution_record, scenario):
+        depends(request, [f'{request.cls.__name__}::test_executions_exists[{request.node.callspec.id}]'])
 
-    # @pytest.mark.dependency(depends=["test_executions_exists"])
-    def test_sf_execution_running(self, mut_output, sf, execution_record, scenario):
         executions = sf.list_executions(
             stateMachineArn=mut_output['state_machine_arn'],
             statusFilter='RUNNING'
         )['executions']
         running_ids = [execution['name'] for execution in executions]
 
-    #     assert execution_record['execution_id'] in running_ids
+        assert execution_record['execution_id'] in running_ids
         
     # def test_approval_request(cfg, s3):
     #     #while running executions' approval response is not finished, check if s3 bucket received requests
