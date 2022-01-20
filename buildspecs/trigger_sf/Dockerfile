@@ -33,4 +33,6 @@ RUN apk update \
     bash \
     git \
     openssl \
+    #postgresql dependency
+    libpq \
 && ln -sf python3 /usr/local/bin/python
