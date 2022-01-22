@@ -9,7 +9,7 @@ locals {
   buildspec_scripts_source_identifier = "helpers"
 }
 data "github_repository" "this" {
-  name = var.repo_name
+  full_name = var.repo_full_name
 }
 
 data "github_repository" "build_scripts" {
@@ -45,9 +45,51 @@ data "aws_iam_policy_document" "merge_lock_ssm_param_access" {
 }
 
 resource "aws_iam_policy" "merge_lock_ssm_param_access" {
-  name        = "${aws_ssm_parameter.merge_lock.name}-access"
+  name        = "${aws_ssm_parameter.merge_lock.name}-ssm-access"
   description = "Allows read access to merge lock ssm param"
   policy      = data.aws_iam_policy_document.merge_lock_ssm_param_access.json
+}
+
+data "aws_iam_policy_document" "codebuild_vpc_access" {
+  statement {
+    sid    = "VPCAcess"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateNetworkInterface",
+      "ec2:DescribeDhcpOptions",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeVpcs"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ec2:CreateNetworkInterfacePermission"
+    ]
+    resources = ["arn:aws:ec2:region:account-id:network-interface/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:AuthorizedService"
+      values   = ["codebuild.amazonaws.com"]
+    }
+
+    condition {
+      test     = "ArnEquals"
+      variable = "ec2:Subnet"
+      values   = [for subnet in var.codebuild_vpc_config.subnets : "arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:subnet/${subnet}"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "codebuild_vpc_access" {
+  name        = "${var.codebuild_vpc_config.vpc_id}-codebuild-access"
+  description = "Allows Codebuild services to connect to VPC"
+  policy      = data.aws_iam_policy_document.codebuild_vpc_access.json
 }
 
 data "aws_iam_policy_document" "ci_metadb_access" {
@@ -164,7 +206,7 @@ module "codebuild_merge_lock" {
       {
         name  = "PGHOST"
         type  = "PLAINTEXT"
-        value = aws_db_instance.metadb.address
+        value = aws_rds_cluster.metadb.endpoint
       }
     ]
   }
@@ -212,7 +254,8 @@ EOT
 
   role_policy_arns = [
     aws_iam_policy.merge_lock_ssm_param_access.arn,
-    aws_iam_policy.ci_metadb_access.arn
+    aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.codebuild_vpc_access.arn
   ]
 }
 
@@ -239,7 +282,7 @@ env:
 phases:
   build:
     commands:
-      - python "$${CODEBUILD_SRC_DIR}/../${data.github_repository.build_scripts.name}/buildspecs/trigger_sf/trigger_sf.py"
+      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/trigger_sf/trigger_sf.py"
 EOT
   }
 
@@ -296,7 +339,7 @@ EOT
       {
         name  = "PGHOST"
         type  = "PLAINTEXT"
-        value = aws_db_instance.metadb.address
+        value = aws_rds_cluster.metadb.endpoint
       }
     ]
   }
@@ -320,7 +363,8 @@ EOT
   vpc_config = var.codebuild_vpc_config
 
   role_policy_arns = [
-    aws_iam_policy.ci_metadb_access.arn
+    aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.codebuild_vpc_access.arn
   ]
 
   role_policy_statements = [
@@ -367,8 +411,6 @@ module "codebuild_terra_run" {
       }
     ])
   }
-
-  vpc_config = var.codebuild_vpc_config
 
   artifacts = {
     type = "NO_ARTIFACTS"
