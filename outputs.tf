@@ -1,26 +1,26 @@
 output "metadb_endpoint" {
-  value = aws_db_instance.metadb.endpoint
+  value = aws_rds_cluster.metadb.endpoint
 }
 
 output "metadb_address" {
-  value = aws_db_instance.metadb.address
+  value = aws_rds_cluster.metadb.endpoint
 }
 
 output "metadb_username" {
-  value = aws_db_instance.metadb.username
+  value = aws_rds_cluster.metadb.master_username
 }
 
 output "metadb_password" {
   sensitive = true
-  value     = aws_db_instance.metadb.password
+  value     = aws_rds_cluster.metadb.master_password
 }
 
 output "metadb_port" {
-  value = aws_db_instance.metadb.port
+  value = aws_rds_cluster.metadb.port
 }
 
 output "metadb_name" {
-  value = aws_db_instance.metadb.name
+  value = aws_rds_cluster.metadb.database_name
 }
 
 output "codebuild_trigger_sf_name" {

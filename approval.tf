@@ -202,10 +202,10 @@ module "lambda_approval_response" {
   ]
 
   env_vars = {
-    PGUSER     = local.metadb_username
+    PGUSER     = aws_rds_cluster.metadb.master_username
     PGPORT     = var.metadb_port
-    PGDATABASE = local.metadb_name
-    PGHOST     = aws_db_instance.metadb.address
+    PGDATABASE = aws_rds_cluster.metadb.database_name
+    PGHOST     = aws_rds_cluster.metadb.endpoint
   }
 
   custom_role_policy_arns = [

@@ -109,6 +109,7 @@ variable "codebuild_vpc_config" {
   description = <<EOF
 AWS VPC configurations associated with all CodeBuild projects within this module. 
 The subnets must have the approriate security groups to reach the subnet that the db is associated with.
+Ensure that there are enough IP addresses within the subnet to host the two codebuild projects.
 EOF
   type = object({
     vpc_id             = string
@@ -119,8 +120,8 @@ EOF
 
 # GITHUB-WEBHOOK #
 
-variable "repo_name" {
-  description = "Name of the GitHub repository"
+variable "repo_full_name" {
+  description = "Full name of the GitHub repository in the form of `user/repo`"
   type        = string
 }
 
@@ -238,13 +239,16 @@ variable "metadb_publicly_accessible" {
 }
 
 variable "metadb_security_group_ids" {
-  description = "AWS VPC security group to associate the metadb with. Security group must be publicly accessible and allow inbound/outbound traffic from local testing IP address"
+  description = "AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config`"
   type        = list(string)
-  default     = null
 }
 
 variable "metadb_subnets_group_name" {
   description = "AWS VPC subnet group name to associate the metadb with"
   type        = string
-  default     = null
+}
+
+variable "metadb_availability_zones" {
+  description = "AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones."
+  type        = list(string)
 }
