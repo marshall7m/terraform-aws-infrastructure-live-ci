@@ -20,5 +20,9 @@ terraform {
       source  = "apparentlymart/testing"
       version = "0.0.2"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "3.1.0"
+    }
   }
 }

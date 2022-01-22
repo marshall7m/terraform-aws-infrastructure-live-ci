@@ -42,3 +42,11 @@ output "pg_host" {
 output "pg_port" {
   value = module.mut_infrastructure_live_ci.metadb_port
 }
+
+output "testing_instance_id" {
+  value = aws_instance.testing.id
+}
+
+output "testing_pem" {
+  value = local_file.testing_pem.filename
+}
