@@ -43,14 +43,12 @@ module "mut_infrastructure_live_ci" {
   metadb_username            = "mut_user"
   metadb_password            = random_password.metadb.result
 
-  metadb_security_group_ids = [aws_security_group.metadb.id]
   metadb_subnets_group_name = module.vpc.database_subnet_group_name
   metadb_availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
 
   codebuild_vpc_config = {
-    vpc_id             = module.vpc.vpc_id
-    subnets            = module.vpc.private_subnets
-    security_group_ids = [aws_security_group.codebuild.id]
+    vpc_id  = module.vpc.vpc_id
+    subnets = module.vpc.private_subnets
   }
 
   create_github_token_ssm_param = false
@@ -71,104 +69,6 @@ module "mut_infrastructure_live_ci" {
   depends_on = [
     github_repository.test
   ]
-}
-
-resource "aws_security_group" "metadb" {
-  name        = "${local.mut_id}-codebuild"
-  description = "Allows Postgres connections with private subnets services"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    description = "Allows postgres inbound traffic"
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = module.vpc.private_subnets_cidr_blocks
-  }
-}
-
-resource "aws_security_group" "codebuild" {
-  name_prefix = "${local.mut_id}-codebuild"
-  description = "Allows Codebuild to download Github source"
-  vpc_id      = module.vpc.vpc_id
-
-  egress {
-    description = "Allows HTTPS outbound traffic"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "testing" {
-  name        = "testing-${local.mut_id}-ec2"
-  description = "Allows SSH access to EC2 instance"
-  vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    description = "Allows SSH access for testing EC2 instance"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    #replace with the IP address that is used to connect to EC2 instance
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-module "ecr_testing_img" {
-  source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
-
-  create_repo = true
-  source_path = "${path.module}/../.."
-  repo_name   = "${local.mut_id}-integration-testing"
-  tag         = "latest"
-  trigger_build_paths = [
-    "${path.module}/../../Dockerfile",
-    "${path.module}/../../entrypoint.sh",
-    "${path.module}/../../setup.bash"
-  ]
-}
-
-resource "tls_private_key" "testing" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-resource "aws_key_pair" "testing" {
-  key_name   = local.ssh_key_name
-  public_key = tls_private_key.testing.public_key_openssh
-}
-
-resource "local_file" "testing_pem" {
-  filename             = pathexpand("~/.ssh/${local.ssh_key_name}.pem")
-  file_permission      = "600"
-  directory_permission = "700"
-  sensitive_content    = tls_private_key.testing.private_key_pem
-}
-
-# using EC2 instance for testing since Aurora V1 DB clusters are only accessible within scope of VPC
-# see at: https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless.html
-resource "aws_instance" "testing" {
-  ami                         = "ami-066333d9c572b0680"
-  instance_type               = "t3.medium"
-  associate_public_ip_address = true
-  key_name                    = aws_key_pair.testing.key_name
-
-  subnet_id              = module.vpc.public_subnets[0]
-  vpc_security_group_ids = [aws_security_group.testing.id]
-}
-
-resource "aws_iam_instance_profile" "testing" {
-  name = "${local.mut_id}-testing-profile"
-  role = module.ec2_testing_role.role_name
-}
-
-module "ec2_testing_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = "${local.mut_id}-testing"
-  trusted_services        = ["ec2.amazonaws.com"]
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
 
 module "vpc" {
