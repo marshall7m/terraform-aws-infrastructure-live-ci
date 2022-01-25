@@ -53,7 +53,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_rule\_name | Name of the CloudWatch event rule that detects when the Step Function completes an execution | `string` | `null` | no |
-| codebuild\_vpc\_config | AWS VPC configurations associated with all CodeBuild projects within this module. <br>The subnets must have the approriate security groups to reach the subnet that the db is associated with.<br>Ensure that there are enough IP addresses within the subnet to host the two codebuild projects. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | n/a | yes |
+| codebuild\_vpc\_config | AWS VPC configurations associated with all CodeBuild projects within this module. <br>The subnets must have the approriate security groups to reach the subnet that the db is associated with.<br>Ensure that there are enough IP addresses within the subnet to host the two codebuild projects. | <pre>object({<br>    vpc_id  = string<br>    subnets = list(string)<br>  })</pre> | n/a | yes |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
@@ -68,7 +68,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | metadb\_password | Password for the AWS RDS db | `string` | n/a | yes |
 | metadb\_port | Port for AWS RDS Postgres db | `number` | `5432` | no |
 | metadb\_publicly\_accessible | Determines if metadb is publicly accessible outside of it's associated VPC | `bool` | `false` | no |
-| metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config` | `list(string)` | n/a | yes |
+| metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config` | `list(string)` | `[]` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | n/a | yes |
 | metadb\_username | Username used to authenticate CI services to connect to the metadb via IAM policy | `string` | `null` | no |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |

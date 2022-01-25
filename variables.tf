@@ -112,9 +112,8 @@ The subnets must have the approriate security groups to reach the subnet that th
 Ensure that there are enough IP addresses within the subnet to host the two codebuild projects.
 EOF
   type = object({
-    vpc_id             = string
-    subnets            = list(string)
-    security_group_ids = list(string)
+    vpc_id  = string
+    subnets = list(string)
   })
 }
 
@@ -241,6 +240,7 @@ variable "metadb_publicly_accessible" {
 variable "metadb_security_group_ids" {
   description = "AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config`"
   type        = list(string)
+  default     = []
 }
 
 variable "metadb_subnets_group_name" {

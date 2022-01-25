@@ -3,10 +3,10 @@ locals {
   apply_role_name = coalesce(var.apply_role_name, "${var.step_function_name}-tf-apply")
   merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
 
-  trigger_step_function_build_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-trigger-sf")
-  terra_run_build_name             = coalesce(var.merge_lock_build_name, "${var.step_function_name}-terra-run")
-
+  trigger_step_function_build_name    = coalesce(var.merge_lock_build_name, "${var.step_function_name}-trigger-sf")
+  terra_run_build_name                = coalesce(var.merge_lock_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
+  codebuild_vpc_config                = merge(var.codebuild_vpc_config, { "security_group_ids" = [aws_security_group.codebuilds.id] })
 }
 data "github_repository" "this" {
   full_name = var.repo_full_name
@@ -18,6 +18,20 @@ data "github_repository" "build_scripts" {
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
+
+resource "aws_security_group" "codebuilds" {
+  name_prefix = "${var.step_function_name}-codebuilds"
+  description = "Allows Codebuild projects to download associated repository source"
+  vpc_id      = var.codebuild_vpc_config.vpc_id
+
+  egress {
+    description = "Allows HTTPS outbound traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 
 resource "aws_ssm_parameter" "merge_lock" {
   name        = local.merge_lock_name
@@ -81,13 +95,13 @@ data "aws_iam_policy_document" "codebuild_vpc_access" {
     condition {
       test     = "ArnEquals"
       variable = "ec2:Subnet"
-      values   = [for subnet in var.codebuild_vpc_config.subnets : "arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:subnet/${subnet}"]
+      values   = [for subnet in local.codebuild_vpc_config.subnets : "arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:subnet/${subnet}"]
     }
   }
 }
 
 resource "aws_iam_policy" "codebuild_vpc_access" {
-  name        = "${var.codebuild_vpc_config.vpc_id}-codebuild-access"
+  name        = "${local.codebuild_vpc_config.vpc_id}-codebuild-access"
   description = "Allows Codebuild services to connect to VPC"
   policy      = data.aws_iam_policy_document.codebuild_vpc_access.json
 }
@@ -228,7 +242,7 @@ module "codebuild_merge_lock" {
     ]
   ]
 
-  vpc_config = var.codebuild_vpc_config
+  vpc_config = local.codebuild_vpc_config
 
   artifacts = {
     type = "NO_ARTIFACTS"
@@ -360,7 +374,7 @@ EOT
       }
     ]
   ]
-  vpc_config = var.codebuild_vpc_config
+  vpc_config = local.codebuild_vpc_config
 
   role_policy_arns = [
     aws_iam_policy.ci_metadb_access.arn,
