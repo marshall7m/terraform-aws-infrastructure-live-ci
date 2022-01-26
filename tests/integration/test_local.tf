@@ -66,7 +66,7 @@ resource "aws_ecs_service" "testing" {
   name                   = "${local.mut_id}-integration-testing"
   task_definition        = aws_ecs_task_definition.testing.arn
   cluster                = aws_ecs_cluster.testing.id
-  desired_count          = 1
+  desired_count          = 0
   enable_execute_command = true
   launch_type            = "FARGATE"
   platform_version       = "1.4.0"
@@ -121,7 +121,7 @@ resource "aws_ecs_task_definition" "testing" {
 
 resource "aws_security_group" "testing" {
   name        = "${local.mut_id}-integration-testing-ecs"
-  description = "Allows SSH access to EC2 instance"
+  description = "Allows internet access request from testing container"
   vpc_id      = module.vpc.vpc_id
 
   egress {
