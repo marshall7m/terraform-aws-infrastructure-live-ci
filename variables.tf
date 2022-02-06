@@ -251,4 +251,5 @@ variable "metadb_subnets_group_name" {
 variable "metadb_availability_zones" {
   description = "AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones."
   type        = list(string)
+  default = null
 }

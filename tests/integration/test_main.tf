@@ -1,10 +1,7 @@
 locals {
   mut_id           = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
   database_subnets = ["10.0.101.0/24", "10.0.102.0/24"]
-  private_subnets  = ["10.0.1.0/24"]
   public_subnets   = ["10.0.21.0/24"]
-
-  ssh_key_name = "testing"
 }
 
 resource "random_string" "this" {
@@ -44,11 +41,10 @@ module "mut_infrastructure_live_ci" {
   metadb_password            = random_password.metadb.result
 
   metadb_subnets_group_name = module.vpc.database_subnet_group_name
-  metadb_availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
 
   codebuild_vpc_config = {
     vpc_id  = module.vpc.vpc_id
-    subnets = module.vpc.private_subnets
+    subnets = module.vpc.public_subnets
   }
 
   create_github_token_ssm_param = false
@@ -77,38 +73,8 @@ module "vpc" {
   name = local.mut_id
   cidr = "10.0.0.0/16"
   azs  = ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"]
+  enable_dns_hostnames = true
 
   public_subnets = local.public_subnets
-
-  create_database_subnet_group   = true
-  database_dedicated_network_acl = true
-  database_inbound_acl_rules = [
-    {
-      rule_number = 1
-      rule_action = "allow"
-      from_port   = 5432
-      to_port     = 5432
-      protocol    = "tcp"
-      cidr_block  = local.private_subnets[0]
-    }
-  ]
-  database_subnet_group_name = "metadb"
   database_subnets           = local.database_subnets
-
-  private_subnets               = local.private_subnets
-  private_dedicated_network_acl = true
-  private_outbound_acl_rules = [
-    {
-      rule_number = 1
-      rule_action = "allow"
-      from_port   = 5432
-      to_port     = 5432
-      protocol    = "tcp"
-      cidr_block  = local.database_subnets[0]
-    }
-  ]
-
-  enable_nat_gateway     = true
-  single_nat_gateway     = true
-  one_nat_gateway_per_az = false
 }

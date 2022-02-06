@@ -1,5 +1,18 @@
 #!/bin/bash
 
+cleanup() {
+    if [ -n "$1" ] && [ -n "$2" ]; then
+        echo "Stopping ECS task"
+        aws ecs stop-task --cluster "$1" --task "$2" 1> /dev/null
+    fi
+
+    echo "Unmounting"
+    sudo umount -f "$local_mount"
+
+    echo "Killing OpenVPN connection"
+    sudo killall openvpn
+}
+
 # yarn upgrade
 TESTING_ENV="remote"
 if [ "$TESTING_ENV" == "local" ]; then
@@ -17,25 +30,68 @@ elif [ "$TESTING_ENV" == "remote" ]; then
     tf_out=$(cd tests/integration && echo "$(terraform output -json)")
     cluster_arn=$(echo "$tf_out" | jq -r '.testing_ecs_cluster_arn.value')
     task_arn=$(echo "$tf_out" | jq -r '.testing_ecs_task_arn.value')
-    private_subnet=$(echo "$tf_out" | jq -r '.private_subnets_ids.value[0]')
+    subnet_id=$(echo "$tf_out" | jq -r '.public_subnets_ids.value[0]')
     sg_id=$(echo "$tf_out" | jq -r '.testing_ecs_security_group_id.value')
+    efs_dns=$(echo "$tf_out" | jq -r '.testing_efs_dns.value')
+    efs_ip=$(echo "$tf_out" | jq -r '.testing_efs_ip_address.value')
+    vpn_endpoint=$(echo "$tf_out" | jq -r '.testing_vpn_client_endpoint.value')
+    vpn_private_key=$(echo "$tf_out" | jq -r '.testing_vpn_private_key_content.value')
+    vpn_cert=$(echo "$tf_out" | jq -r '.testing_vpn_cert_content.value')
+
+    local_mount="$(dirname "$(realpath $0)")/mnt"
+    sudo chown ${USER} "$local_mount"
 
     echo "Cluster ARN: $cluster_arn"
     echo "Task ARN: $task_arn"
-    echo "Private Subnet IDs: $private_subnet"
+    echo "Subnet IDs: $subnet_id"
+    echo "EFS DNS name: $efs_dns"
+    echo "EFS IP: $efs_ip"
+    echo "VPN Endpoint: $vpn_endpoint"
 
-    # local_mount="/Users/marshallmamiya/projects/terraform-modules/terraform-aws-infrastructure-live-ci/tmp/*"
+    client_cfg=$(aws ec2 export-client-vpn-client-configuration --client-vpn-endpoint-id "$vpn_endpoint" --output text)
+
+    client_cfg=$(cat <<EOT > $PWD/client.ovpn
+$client_cfg
+<cert>
+$vpn_cert
+</cert>
+
+<key>
+$vpn_private_key
+</key>
+EOT
+)
+    echo "Running OpenVPN"
+    sudo openvpn --config "$PWD/client.ovpn" --daemon
+
+    vpn_ip=$(aws ec2 describe-client-vpn-connections --client-vpn-endpoint-id "$vpn_endpoint" \
+        | jq -r '.Connections[] | select(.Status.Code == "active") | .ClientIp')
+
+    echo "VPN IP: $vpn_ip"
+
+    echo "Adding EFS IP address to local machine's mounts"
+    sudo echo "/Users -alldirs $efs_ip" >> /etc/exports
+    
+    echo "Restarting nfsd"
+    sudo nfsd restart
+
+    echo "Checking exports"
+    sudo nfsd checkexports
+
+    echo "Mounts:"
+    showmount -e
+
+    echo "Mounting to EFS: $local_mount"
+    sudo mount -t efs -o vers=4,tcp,rsize=1048576,wsize=1048576,hard,timeo=150,retrans=2,mountport=2049,addr="$efs_ip",clientaddr="$vpn_ip" -w "$efs_ip":/ "$local_mount" || cleanup; exit 1
+
     task_id=$(aws ecs run-task \
         --cluster "$cluster_arn"  \
         --task-definition "$task_arn" \
         --launch-type FARGATE \
         --platform-version '1.4.0' \
         --enable-execute-command \
-        --platform-version '1.4.0' \
-        --network-configuration awsvpcConfiguration="{subnets=[$private_subnet],securityGroups=[$sg_id]}" \
+        --network-configuration awsvpcConfiguration="{subnets=[$subnet_id],securityGroups=[$sg_id],assignPublicIp=ENABLED}" \
         --region $AWS_REGION | jq -r '.tasks[0].taskArn | split("/") | .[-1]')
-    
-    echo "Task ID: $task_id"
     
     if [ "$run_ecs_exec_check" == true ]; then
         bash <( curl -Ls https://raw.githubusercontent.com/aws-containers/amazon-ecs-exec-checker/main/check-ecs-exec.sh ) "$cluster_arn" "$task_id"
@@ -43,7 +99,8 @@ elif [ "$TESTING_ENV" == "remote" ]; then
 
     sleep_time=10
     status=""
-    echo "Waiting for ExecuteCommandAgent status to be running"
+    echo ""
+    echo "Waiting for task to be running"
     while [ "$status" != "RUNNING" ]; do
         echo "Checking status in $sleep_time seconds..."
         sleep $sleep_time
@@ -56,35 +113,29 @@ elif [ "$TESTING_ENV" == "remote" ]; then
         echo "Status: $status"
 
         if [ "$status" == "STOPPED" ]; then
-            echo "ExecuteCommandAgent stopped -- exiting"
             aws ecs describe-tasks \
             --cluster "$cluster_arn" \
             --region $AWS_REGION \
             --tasks "$task_id"
             exit 1
         fi
-
-        # sleep_time=$(( $sleep_time * 2 ))
     done
 
+    task_ip=$(aws ecs describe-tasks \
+        --cluster "$cluster_arn" \
+        --region $AWS_REGION \
+        --tasks "$task_id" | jq -r '.tasks[0].containers[0].networkInterfaces[0].privateIpv4Address')
+
+    echo "Task IP: $task_ip"
+    echo "Task ID: $task_id"
+
     echo "Running interactive shell within container"
-    
     aws ecs execute-command  \
         --region $AWS_REGION \
         --cluster "$cluster_arn" \
         --task "$task_id" \
         --command "/bin/bash" \
         --interactive
-    # # skips creating local metadb container
-    # docker-compose run \
-    #     -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-    #     -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-    #     -e AWS_REGION="$AWS_REGION" \
-    #     -e AWS_DEFAULT_REGION="$AWS_REGION" \
-    #     -e AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN" \
-    #     -v /var/run/docker.sock:/var/run/docker.sock \
-    #     --entrypoint="bash /src/entrypoint.sh" \
-    #     testing /bin/bash
 else
     echo '$TESTING_ENV is not set -- (local | remote)' && exit 1
 fi

@@ -1,7 +1,12 @@
 #!/bin/bash
 
-export PATH="$ADDITIONAL_PATH:$PATH"
-/bin/bash
+if [ -n "$ADDITIONAL_PATH" ]; then
+    echo "Adding to PATH: $ADDITIONAL_PATH"
+    export PATH="$ADDITIONAL_PATH:$PATH"
+fi
 
 source $VIRTUAL_ENV/bin/activate
-pip install -e /src
+
+# pip install -e /src
+
+tail -f /dev/null 

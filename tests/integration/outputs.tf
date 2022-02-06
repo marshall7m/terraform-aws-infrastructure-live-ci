@@ -60,5 +60,28 @@ output "private_subnets_ids" {
 }
 
 output "testing_ecs_security_group_id" {
-  value = aws_security_group.testing.id
+  value = aws_security_group.testing_ecs.id
+}
+
+output "testing_efs_dns" {
+  value = aws_efs_file_system.testing.dns_name
+}
+
+output "testing_efs_ip_address" {
+  value = aws_efs_mount_target.testing.ip_address
+}
+
+output "testing_vpn_client_endpoint" {
+  value = module.testing_vpn.vpn_endpoint_id
+  sensitive = true
+}
+
+output "testing_vpn_private_key_content" {
+  value = module.testing_vpn.vpn_client_key
+  sensitive = true
+}
+
+output "testing_vpn_cert_content" {
+  value = module.testing_vpn.vpn_client_cert
+  sensitive = true
 }
