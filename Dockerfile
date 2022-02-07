@@ -37,7 +37,7 @@ COPY --from=build $VIRTUAL_ENV $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$VIRTUAL_ENV/lib/python3.9/site-packages:$PATH"
 
 RUN apk update \
-    && apk add --virtual .runtime \
+    && apk add --virtual .runtime --no-cache \
     bash \
     git \
     curl \
@@ -54,10 +54,16 @@ RUN apk update \
     libstdc++ \
     ncurses-libs \
     docker \
+    openssh \
+    sudo \
+    openrc \
 && ln -sf python3 /usr/local/bin/python \
 && git config --global advice.detachedHead false \
 && git config --global user.email testing_user@users.noreply.github.com \
-&& git config --global user.name testing_user
+&& git config --global user.name testing_user \
+&& mkdir -p /var/run/sshd
+
+EXPOSE 22
 
 COPY entrypoint.sh ./entrypoint.sh
 

@@ -1,3 +1,7 @@
+locals {
+  ssh_key_name = "testing"
+}
+
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
@@ -17,35 +21,6 @@ module "ecr_testing_img" {
   ]
 }
 
-module "testing_kms" {
-  source                           = "github.com/marshall7m/terraform-aws-kms/modules//cmk"
-  trusted_admin_arns               = [data.aws_caller_identity.current.arn]
-  trusted_service_usage_principals = ["ecs-tasks.amazonaws.com"]
-}
-
-module "testing_ecs_task_role" {
-  source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name        = "${local.mut_id}-task"
-  trusted_services = ["ecs-tasks.amazonaws.com"]
-  statements = [
-    {
-      effect    = "Allow"
-      actions   = ["kms:Decrypt"]
-      resources = [module.testing_kms.arn]
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "ssmmessages:CreateControlChannel",
-        "ssmmessages:CreateDataChannel",
-        "ssmmessages:OpenControlChannel",
-        "ssmmessages:OpenDataChannel"
-      ]
-      resources = ["*"]
-    }
-  ]
-}
-
 module "testing_ecs_execution_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name               = "${local.mut_id}-exec"
@@ -53,25 +28,22 @@ module "testing_ecs_execution_role" {
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"]
 }
 
+module "testing_ecs_task_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name               = "${local.mut_id}-task"
+  trusted_services        = ["ecs-tasks.amazonaws.com"]
+  statements = [
+    {
+      sid    = "MetaDBConnectAccess"
+      effect = "Allow"
+      actions = ["rds-db:connect"]
+      resources = [module.mut_infrastructure_live_ci.metadb_arn]
+    }
+  ]
+}
+
 resource "aws_ecs_cluster" "testing" {
   name = "${local.mut_id}-integration-testing"
-
-  configuration {
-    execute_command_configuration {
-      kms_key_id = module.testing_kms.arn
-			logging = "DEFAULT"
-    }
-  }
-}
-
-resource "aws_efs_file_system" "testing" {
-  creation_token = local.mut_id
-}
-
-resource "aws_efs_mount_target" "testing" {
-  file_system_id = aws_efs_file_system.testing.id
-  subnet_id      = module.vpc.public_subnets[0]
-  security_groups = [aws_security_group.testing_efs.id]
 }
 
 resource "aws_ecs_service" "testing" {
@@ -102,20 +74,23 @@ resource "aws_ecs_task_definition" "testing" {
   network_mode             = "awsvpc"
   cpu                      = 256
   memory                   = 512
-  volume {
-    name = "${local.mut_id}-source-repo"
-    efs_volume_configuration {
-      file_system_id          = aws_efs_file_system.testing.id
-      # transit_encryption      = "ENABLED"
-      # transit_encryption_port = 2049
-    }
-  }
+
   container_definitions = jsonencode([{
     name  = "testing"
     image = module.ecr_testing_img.full_image_url
-    linuxParameters = {
-      initProcessEnabled = true
-    }
+    portMappings = [
+      {
+        hostPort = 22,
+        protocol = "tcp"
+        containerPort = 22
+      }
+    ]
+    environment = [
+      {
+        name = "SSH_PUBLIC_KEY"
+        value = tls_private_key.testing.public_key_openssh
+      }
+    ]
 		logConfiguration = {
 			logDriver = "awslogs",
 			options = {
@@ -153,78 +128,69 @@ resource "aws_security_group" "testing_ecs" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
   ingress {
-    description = "Allows EFS mount point access from testing container"
-    from_port   = 2049
-    to_port     = 2049
+    description = "Allows SSH access"
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  egress {
-    description = "Allows EFS mount point access from testing container"
-    from_port   = 2049
-    to_port     = 2049
-    protocol    = "tcp"
-    # cidr_blocks = ["${chomp(data.http.my_ip.body)}/32"]
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["${chomp(data.http.my_ip.body)}/32"]
   }
 }
 
-resource "aws_security_group" "testing_efs" {
-  name        = "${local.mut_id}-integration-testing-efs"
-  description = "Allows inbound access from testing container"
-  vpc_id      = module.vpc.vpc_id
+resource "tls_private_key" "testing" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
 
-  ingress {
-    description = "Allows EFS mounting from user within client VPN"
-    from_port   = 2049
-    to_port     = 2049
-    protocol    = "tcp"
-    security_groups = [aws_security_group.testing_vpn.id]
-  }
+resource "aws_key_pair" "testing" {
+  key_name   = local.ssh_key_name
+  public_key = tls_private_key.testing.public_key_openssh
+}
+
+resource "local_file" "testing_pem" {
+  filename             = pathexpand("~/.ssh/${local.ssh_key_name}.pem")
+  file_permission      = "400"
+  directory_permission = "700"
+  sensitive_content    = tls_private_key.testing.private_key_pem
 }
 
 data "http" "my_ip" {
   url = "http://ipv4.icanhazip.com"
 }
 
-resource "aws_security_group" "testing_vpn" {
-  name        = "${local.mut_id}-integration-testing-vpn"
-  description = "Allows inbound VPN connection"
+resource "aws_instance" "testing" {
+  ami                         = "ami-066333d9c572b0680"
+  instance_type               = "t3.medium"
+  associate_public_ip_address = true
+  key_name                    = aws_key_pair.testing.key_name
+
+  subnet_id              = module.vpc.public_subnets[0]
+  vpc_security_group_ids = [aws_security_group.testing.id]
+}
+
+resource "aws_iam_instance_profile" "testing" {
+  name = "${local.mut_id}-testing-profile"
+  role = module.ec2_testing_role.role_name
+}
+
+module "ec2_testing_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name               = "${local.mut_id}-testing"
+  trusted_services        = ["ec2.amazonaws.com"]
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
+}
+
+resource "aws_security_group" "testing" {
+  name        = "testing-${local.mut_id}-ec2"
+  description = "Allows SSH access to EC2 instance"
   vpc_id      = module.vpc.vpc_id
 
   ingress {
-    description = "Inbound VPN connection"
-    from_port = 443
-    protocol = "UDP"
-    to_port = 443
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port = 0
-    protocol = "-1"
-    to_port = 0
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Allows EFS mount point access from testing container"
-    from_port   = 2049
-    to_port     = 2049
+    description = "Allows SSH access for testing EC2 instance"
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
-    # cidr_blocks = ["${chomp(data.http.my_ip.body)}/32"]
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["${chomp(data.http.my_ip.body)}/32"]
   }
-}
-
-module "testing_vpn" {
-  source  = "DNXLabs/client-vpn/aws"
-  version = "0.3.0"
-  cidr = "172.31.0.0/16"
-  name = local.mut_id
-  vpc_id                        = module.vpc.vpc_id
-  subnet_ids = module.vpc.public_subnets
-  security_group_id = aws_security_group.testing_vpn.id
-  split_tunnel = true
 }

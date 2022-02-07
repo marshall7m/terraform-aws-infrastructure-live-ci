@@ -23,6 +23,10 @@ output "metadb_name" {
   value = aws_rds_cluster.metadb.database_name
 }
 
+output "metadb_arn" {
+  value = aws_rds_cluster.metadb.arn
+}
+
 output "codebuild_trigger_sf_name" {
   value = module.codebuild_trigger_sf.name
 }
