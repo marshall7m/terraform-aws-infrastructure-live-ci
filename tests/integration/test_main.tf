@@ -1,7 +1,17 @@
 locals {
-  mut_id           = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
-  database_subnets = ["10.0.101.0/24", "10.0.102.0/24"]
-  public_subnets   = ["10.0.21.0/24"]
+  mut_id = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
+}
+
+resource "aws_secretsmanager_secret" "testing" {
+  name = "${module.mut_infrastructure_live_ci.metadb_name}-data-api-secret"
+}
+
+resource "aws_secretsmanager_secret_version" "testing" {
+  secret_id = aws_secretsmanager_secret.testing.id
+  secret_string = jsonencode({
+    username = module.mut_infrastructure_live_ci.metadb_username
+    password = random_password.metadb["ci"].result
+  })
 }
 
 resource "random_string" "this" {
@@ -23,8 +33,25 @@ resource "github_repository" "test" {
 }
 
 resource "random_password" "metadb" {
-  length  = 16
-  special = false
+  for_each = toset(["master", "ci"])
+  length   = 16
+  special  = false
+}
+
+module "vpc" {
+  source = "terraform-aws-modules/vpc/aws"
+
+  name                 = local.mut_id
+  cidr                 = "10.0.0.0/16"
+  azs                  = ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"]
+  enable_dns_hostnames = true
+  private_subnets      = ["10.0.1.0/24", "10.0.2.0/24"]
+  public_subnets       = ["10.0.21.0/24", "10.0.22.0/24"]
+  database_subnets     = ["10.0.101.0/24", "10.0.102.0/24"]
+
+  enable_nat_gateway     = true
+  single_nat_gateway     = true
+  one_nat_gateway_per_az = false
 }
 
 module "mut_infrastructure_live_ci" {
@@ -38,13 +65,17 @@ module "mut_infrastructure_live_ci" {
 
   metadb_publicly_accessible = true
   metadb_username            = "mut_user"
-  metadb_password            = random_password.metadb.result
+  metadb_password            = random_password.metadb["master"].result
+
+  metadb_ci_username          = "mut_ci_user"
+  metadb_ci_password          = random_password.metadb["ci"].result
+  enable_metadb_http_endpoint = true
 
   metadb_subnets_group_name = module.vpc.database_subnet_group_name
 
   codebuild_vpc_config = {
     vpc_id  = module.vpc.vpc_id
-    subnets = module.vpc.public_subnets
+    subnets = module.vpc.private_subnets
   }
 
   create_github_token_ssm_param = false
@@ -65,16 +96,4 @@ module "mut_infrastructure_live_ci" {
   depends_on = [
     github_repository.test
   ]
-}
-
-module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
-
-  name = local.mut_id
-  cidr = "10.0.0.0/16"
-  azs  = ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"]
-  enable_dns_hostnames = true
-
-  public_subnets = local.public_subnets
-  database_subnets           = local.database_subnets
 }

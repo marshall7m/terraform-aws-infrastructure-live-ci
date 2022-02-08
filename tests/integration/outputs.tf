@@ -43,22 +43,14 @@ output "pg_port" {
   value = module.mut_infrastructure_live_ci.metadb_port
 }
 
-output "testing_ecs_cluster_arn" {
-  value = aws_ecs_cluster.testing.arn
+output "metadb_secret_manager_arn" {
+  value = aws_secretsmanager_secret_version.testing.arn
 }
 
-output "testing_ecs_task_arn" {
-  value = aws_ecs_service.testing.task_definition
+output "metadb_arn" {
+  value = module.mut_infrastructure_live_ci.metadb_arn
 }
 
-output "public_subnets_ids" {
-  value = module.vpc.public_subnets
-}
-
-output "private_subnets_ids" {
-  value = module.vpc.private_subnets
-}
-
-output "testing_ecs_security_group_id" {
-  value = aws_security_group.testing_ecs.id
+output "metadb_name" {
+  value = module.mut_infrastructure_live_ci.metadb_name
 }

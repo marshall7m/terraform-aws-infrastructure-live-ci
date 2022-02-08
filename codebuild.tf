@@ -1,4 +1,5 @@
 locals {
+  #replace with var.prefix?
   plan_role_name  = coalesce(var.plan_role_name, "${var.step_function_name}-tf-plan")
   apply_role_name = coalesce(var.apply_role_name, "${var.step_function_name}-tf-apply")
   merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
@@ -25,10 +26,9 @@ resource "aws_security_group" "codebuilds" {
   vpc_id      = var.codebuild_vpc_config.vpc_id
 
   egress {
-    description = "Allows HTTPS outbound traffic"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
@@ -38,6 +38,13 @@ resource "aws_ssm_parameter" "merge_lock" {
   description = "Locks PRs with infrastructure changes from being merged into base branch"
   type        = "String"
   value       = false
+}
+
+resource "aws_ssm_parameter" "metadb_ci_password" {
+  name        = "${local.metadb_name}_${var.metadb_ci_username}"
+  description = "Metadb password used by module's Codebuild projects"
+  type        = "SecureString"
+  value       = var.metadb_ci_password
 }
 
 data "aws_ssm_parameter" "github_token" {
@@ -85,7 +92,7 @@ data "aws_iam_policy_document" "codebuild_vpc_access" {
     actions = [
       "ec2:CreateNetworkInterfacePermission"
     ]
-    resources = ["arn:aws:ec2:region:account-id:network-interface/*"]
+    resources = ["arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:network-interface/*"]
     condition {
       test     = "StringEquals"
       variable = "ec2:AuthorizedService"
@@ -104,6 +111,34 @@ resource "aws_iam_policy" "codebuild_vpc_access" {
   name        = "${local.codebuild_vpc_config.vpc_id}-codebuild-access"
   description = "Allows Codebuild services to connect to VPC"
   policy      = data.aws_iam_policy_document.codebuild_vpc_access.json
+}
+
+data "aws_kms_key" "ssm" {
+  key_id = "alias/aws/ssm"
+}
+
+data "aws_iam_policy_document" "codebuild_ssm_access" {
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:GetParameters"]
+    resources = [aws_ssm_parameter.metadb_ci_password.arn]
+  }
+  statement {
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [data.aws_kms_key.ssm.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:PARAMETER_ARN"
+      values   = [aws_ssm_parameter.metadb_ci_password.arn]
+    }
+  }
+}
+
+resource "aws_iam_policy" "codebuild_ssm_access" {
+  name        = "${var.metadb_ci_username}-password-access"
+  description = "Allows Codebuild services to read associated metadb user credentials"
+  policy      = data.aws_iam_policy_document.codebuild_ssm_access.json
 }
 
 data "aws_iam_policy_document" "ci_metadb_access" {
@@ -205,7 +240,7 @@ module "codebuild_merge_lock" {
       {
         name  = "PGUSER"
         type  = "PLAINTEXT"
-        value = local.metadb_username
+        value = var.metadb_ci_username
       },
       {
         name  = "PGPORT"
@@ -258,6 +293,7 @@ env:
   parameter-store:
     MERGE_LOCK: ${aws_ssm_parameter.merge_lock.name}
     GITHUB_TOKEN: ${var.github_token_ssm_key}
+    PGPASSWORD: ${aws_ssm_parameter.metadb_ci_password.name}
 phases:
   build:
     commands:
@@ -269,7 +305,8 @@ EOT
   role_policy_arns = [
     aws_iam_policy.merge_lock_ssm_param_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
-    aws_iam_policy.codebuild_vpc_access.arn
+    aws_iam_policy.codebuild_vpc_access.arn,
+    aws_iam_policy.codebuild_ssm_access.arn
   ]
 }
 
@@ -378,7 +415,8 @@ EOT
 
   role_policy_arns = [
     aws_iam_policy.ci_metadb_access.arn,
-    aws_iam_policy.codebuild_vpc_access.arn
+    aws_iam_policy.codebuild_vpc_access.arn,
+    aws_iam_policy.codebuild_ssm_access.arn
   ]
 
   role_policy_statements = [

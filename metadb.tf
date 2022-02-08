@@ -18,6 +18,7 @@ resource "aws_security_group" "metadb" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
+    #use cb sg id instead?
     cidr_blocks = data.aws_subnet.codebuilds[*].cidr_block
   }
 }
@@ -37,6 +38,9 @@ resource "aws_rds_cluster" "metadb" {
     min_capacity = 2
   }
 
+  # set to true for integration testing's db connection
+  enable_http_endpoint = var.enable_metadb_http_endpoint
+
   skip_final_snapshot = true
   #TODO: not available for serverless V1-V2. Add once available
   # iam_database_authentication_enabled = true
@@ -45,23 +49,20 @@ resource "aws_rds_cluster" "metadb" {
   db_subnet_group_name   = var.metadb_subnets_group_name
 }
 
-# resource "aws_rds_cluster_instance" "metadb" {
-#   identifier         = replace(local.metadb_name, "_", "-")
-#   cluster_identifier = aws_rds_cluster.metadb.id
-#   instance_class     = "db.t4g.medium"
-#   engine             = aws_rds_cluster.metadb.engine
-#   engine_version     = aws_rds_cluster.metadb.engine_version
-# }
-
 resource "null_resource" "metadb_setup" {
   provisioner "local-exec" {
-    command = "psql -f ${path.module}/sql/create_metadb_tables.sql; psql -c \"CREATE USER ${local.metadb_username}; GRANT rds_iam TO ${local.metadb_username};\""
+    command = "psql -f ${path.module}/sql/create_metadb_tables.sql; psql -f ${path.module}/sql/create_metadb_user.sql; "
     environment = {
       PGUSER     = local.metadb_username
       PGPASSWORD = var.metadb_password
       PGDATABASE = local.metadb_name
       PGHOST     = aws_rds_cluster.metadb.endpoint
       PGPORT     = var.metadb_port
+
+      PG_SCHEMA = "private"
+
+      CI_USER     = var.metadb_ci_username
+      CI_PASSWORD = var.metadb_ci_password
     }
   }
   depends_on = [aws_rds_cluster.metadb]

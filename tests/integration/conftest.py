@@ -7,11 +7,13 @@ import github
 import subprocess
 import logging
 import sys
+import aurora_data_api
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 def pytest_addoption(parser):
+    #TODO: Add --skip-tfenv and transfer logic from --skip-init
     parser.addoption("--skip-init", action="store_true", help="skips initing tf module")
     parser.addoption("--skip-apply", action="store_true", help="skips applying tf module")
 
@@ -58,15 +60,11 @@ def mut_output(mut, request):
 
 @pytest.fixture(scope="session")
 def conn(mut_output):
-    conn = psycopg2.connect(
-        host=mut_output['pg_host'],
-        database=mut_output['pg_database'],
-        port=mut_output['pg_port'], 
-        user=mut_output['pg_user'],
-        password=mut_output['pg_password']
+    conn = aurora_data_api.connect(
+        aurora_cluster_arn=mut_output['metadb_arn'],
+        secret_arn=mut_output['metadb_secret_manager_arn'],
+        database=mut_output['metadb_name']
     )
-    
-    conn.set_session(autocommit=True)
 
     yield conn
     conn.close()

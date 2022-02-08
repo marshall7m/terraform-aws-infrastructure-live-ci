@@ -18,18 +18,10 @@ log.setLevel(logging.DEBUG)
 
 class TriggerSF:
     def __init__(self):
-        # define boto3 clients within class to allow pytest runtime env vars to fill in client params
-        rds = boto3.client('rds')
-
-        token = rds.generate_db_auth_token(
-            DBHostname=os.environ["PGHOST"],
-            Port=os.environ["PGPORT"], 
-            DBUsername=os.environ["PGUSER"]
-        )
-        self.conn = psycopg2.connect(password=token)
+        self.conn = psycopg2.connect()
         self.conn.set_session(autocommit=True)
 
-        self.cur = self.conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
+        self.cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         self.git_repo = git.Repo(search_parent_directories=True)
     
     def get_new_provider_resources(self, tg_dir, commit_id, new_providers):

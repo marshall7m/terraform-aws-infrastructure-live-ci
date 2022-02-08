@@ -214,13 +214,13 @@ variable "metadb_name" {
 }
 
 variable "metadb_username" {
-  description = "Username used to authenticate CI services to connect to the metadb via IAM policy"
+  description = "Master username of the metadb"
   type        = string
   default     = null
 }
 
 variable "metadb_password" {
-  description = "Password for the AWS RDS db"
+  description = "Master password for the metadb"
   type        = string
   sensitive   = true
 }
@@ -251,5 +251,23 @@ variable "metadb_subnets_group_name" {
 variable "metadb_availability_zones" {
   description = "AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones."
   type        = list(string)
-  default = null
+  default     = null
+}
+
+variable "enable_metadb_http_endpoint" {
+  description = "Enables AWS SDK connection to the metadb via data API HTTP endpoint. Needed in order to connect to metadb from outside of metadb's associated VPC"
+  type        = bool
+  default     = false
+}
+
+variable "metadb_ci_username" {
+  description = "Name of the metadb user used for the Codebuild projects"
+  type        = string
+  default     = "ci_user"
+}
+
+variable "metadb_ci_password" {
+  description = "Password for the metadb user used for the Codebuild projects"
+  type        = string
+  sensitive   = true
 }

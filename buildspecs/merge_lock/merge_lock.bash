@@ -1,6 +1,7 @@
 #!/bin/bash
 echo "CODEBUILD_RESOLVED_SOURCE_VERSION: $CODEBUILD_RESOLVED_SOURCE_VERSION"
 echo "REPO_FULL_NAME: $REPO_FULL_NAME"
+echo "MERGE_LOCK: $MERGE_LOCK"
 
 if [ "$MERGE_LOCK" == "true" ]; then
     running_pr=$(psql -qtAX -c "SELECT DISTINCT pr_id FROM executions WHERE status = 'running'")

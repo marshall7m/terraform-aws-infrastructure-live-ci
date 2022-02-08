@@ -53,17 +53,10 @@ RUN apk update \
     libgcc \
     libstdc++ \
     ncurses-libs \
-    docker \
-    openssh \
-    sudo \
-    openrc \
 && ln -sf python3 /usr/local/bin/python \
 && git config --global advice.detachedHead false \
 && git config --global user.email testing_user@users.noreply.github.com \
-&& git config --global user.name testing_user \
-&& mkdir -p /var/run/sshd
-
-EXPOSE 22
+&& git config --global user.name testing_user 
 
 COPY entrypoint.sh ./entrypoint.sh
 

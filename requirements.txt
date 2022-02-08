@@ -16,3 +16,5 @@ psycopg2-binary==2.9.2
 
 GitPython==3.1.24
 PyGithub==1.55
+
+aurora-data-api==0.3.2
