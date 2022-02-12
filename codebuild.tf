@@ -37,7 +37,7 @@ resource "aws_ssm_parameter" "merge_lock" {
   name        = local.merge_lock_name
   description = "Locks PRs with infrastructure changes from being merged into base branch"
   type        = "String"
-  value       = false
+  value       = "false"
 }
 
 resource "aws_ssm_parameter" "metadb_ci_password" {
@@ -149,7 +149,7 @@ data "aws_iam_policy_document" "ci_metadb_access" {
       "rds-db:connect"
     ]
     resources = [
-      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${local.metadb_name}/${local.metadb_username}"
+      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${local.metadb_name}/${var.metadb_username}"
     ]
   }
 }
@@ -375,7 +375,7 @@ EOT
       {
         name  = "PGUSER"
         type  = "PLAINTEXT"
-        value = local.metadb_username
+        value = var.metadb_ci_username
       },
       {
         name  = "PGPORT"
@@ -391,6 +391,16 @@ EOT
         name  = "PGHOST"
         type  = "PLAINTEXT"
         value = aws_rds_cluster.metadb.endpoint
+      },
+      {
+        name = "GITHUB_MERGE_LOCK_SSM_KEY"
+        type = "PLAINTEXT"
+        value = aws_ssm_parameter.merge_lock.name
+      },
+      {
+        name = "PGPASSWORD"
+        type = "PARAMETER_STORE"
+        value = aws_ssm_parameter.metadb_ci_password.name
       }
     ]
   }

@@ -216,7 +216,7 @@ variable "metadb_name" {
 variable "metadb_username" {
   description = "Master username of the metadb"
   type        = string
-  default     = null
+  default     = "root"
 }
 
 variable "metadb_password" {
@@ -229,6 +229,12 @@ variable "metadb_port" {
   description = "Port for AWS RDS Postgres db"
   type        = number
   default     = 5432
+}
+
+variable "metadb_schema" {
+  description = "Schema for AWS RDS Postgres db"
+  type = string
+  default = "prod"
 }
 
 variable "metadb_publicly_accessible" {

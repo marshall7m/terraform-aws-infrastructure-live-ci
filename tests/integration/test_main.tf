@@ -2,18 +2,6 @@ locals {
   mut_id = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
 }
 
-resource "aws_secretsmanager_secret" "testing" {
-  name = "${module.mut_infrastructure_live_ci.metadb_name}-data-api-secret"
-}
-
-resource "aws_secretsmanager_secret_version" "testing" {
-  secret_id = aws_secretsmanager_secret.testing.id
-  secret_string = jsonencode({
-    username = module.mut_infrastructure_live_ci.metadb_username
-    password = random_password.metadb["ci"].result
-  })
-}
-
 resource "random_string" "this" {
   length      = 10
   min_numeric = 5
