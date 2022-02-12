@@ -1,6 +1,68 @@
 locals {
-  metadb_name     = coalesce(var.metadb_name, replace("${var.step_function_name}", "-", "_"))
+  metadb_name        = coalesce(var.metadb_name, replace("${var.step_function_name}", "-", "_"))
   cluster_identifier = replace("${var.step_function_name}-cluster", "_", "-")
+  metadb_setup_script = <<EOF
+  aws rds-data execute-statement \
+  --continue-after-timeout \
+  --resource-arn ${aws_rds_cluster.metadb.arn} \
+  --secret-arn ${aws_secretsmanager_secret_version.master_metadb_user.arn} \
+  --database ${aws_rds_cluster.metadb.database_name} \
+  --sql "${templatefile("${path.module}/sql/create_metadb_tables.sql", { metadb_schema = var.metadb_schema })}";
+
+aws rds-data batch-execute-statement \
+  --resource-arn ${aws_rds_cluster.metadb.arn} \
+  --secret-arn ${aws_secretsmanager_secret_version.master_metadb_user.arn} \
+  --database ${aws_rds_cluster.metadb.database_name} \
+  --sql "
+  INSERT INTO account_dim
+  VALUES (
+    :account_name, 
+    :account_path, 
+    CAST(:account_deps AS VARCHAR[]),
+    :min_approval_count,
+    :min_rejection_count,
+    CAST(:voters AS VARCHAR[])
+  )
+  ON CONFLICT (account_name) DO UPDATE SET
+    account_path = EXCLUDED.account_path,
+    account_deps = EXCLUDED.account_deps,
+    min_approval_count = EXCLUDED.min_approval_count,
+    min_rejection_count = EXCLUDED.min_rejection_count,
+    voters = EXCLUDED.voters
+    " \
+  --parameter-sets "${replace(jsonencode([for account in var.account_parent_cfg :
+  [
+    {
+      name  = "account_name"
+      value = { stringValue = account.name }
+    },
+    {
+      name  = "account_path"
+      value = { stringValue = account.path }
+    },
+    {
+      name = "account_deps"
+      value = {
+        stringValue = "{${join(", ", account.dependencies)}}"
+      }
+    },
+    {
+      name  = "min_approval_count"
+      value = { doubleValue = account.min_approval_count }
+    },
+    {
+      name  = "min_rejection_count"
+      value = { doubleValue = account.min_rejection_count }
+    },
+    {
+      name = "voters"
+      value = {
+        stringValue = "{${join(", ", account.voters)}}"
+      }
+    }
+  ]
+]), "\"", "\\\"")}"
+EOF
 }
 
 data "aws_subnet" "codebuilds" {
@@ -40,7 +102,7 @@ resource "aws_rds_cluster" "metadb" {
 
   # set to true for integration testing's db connection
   enable_http_endpoint = var.enable_metadb_http_endpoint
-  skip_final_snapshot = true
+  skip_final_snapshot  = true
   #TODO: not available for serverless V1-V2. Add once available
   # iam_database_authentication_enabled = true
 
@@ -60,30 +122,12 @@ resource "aws_secretsmanager_secret_version" "master_metadb_user" {
   })
 }
 
+
+
 resource "null_resource" "metadb_setup" {
   provisioner "local-exec" {
-    command = <<EOF
-
-aws rds-data execute-statement \
-  --continue-after-timeout \
-  --resource-arn ${aws_rds_cluster.metadb.arn} \
-  --secret-arn ${aws_secretsmanager_secret_version.master_metadb_user.arn} \
-  --database ${aws_rds_cluster.metadb.database_name} \
-  --sql "${templatefile("${path.module}/sql/create_metadb_tables.sql", {metadb_schema = var.metadb_schema})}";
-
-aws rds-data execute-statement \
-  --resource-arn ${aws_rds_cluster.metadb.arn} \
-  --secret-arn ${aws_secretsmanager_secret_version.master_metadb_user.arn} \
-  --database ${aws_rds_cluster.metadb.database_name} \
-  --sql "${templatefile("${path.module}/sql/create_metadb_user.sql", {
-    metadb_ci_username = var.metadb_ci_username
-    metadb_ci_password = var.metadb_ci_password
-    metadb_name = local.metadb_name
-    metadb_username = var.metadb_username
-    metadb_schema = var.metadb_schema
-  })}"
-EOF
+    command     = local.metadb_setup_script
     interpreter = ["bash", "-c"]
   }
-  triggers = { for file in formatlist("${path.module}/%s", fileset("${path.module}", "sql/*")) : basename(file) => filesha256(file) }
+  triggers = merge({ for file in formatlist("${path.module}/%s", fileset("${path.module}", "sql/*")) : basename(file) => filesha256(file) }, { setup_script = sha256(local.metadb_setup_script) })
 }
