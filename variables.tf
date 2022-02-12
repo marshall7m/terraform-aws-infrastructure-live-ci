@@ -10,8 +10,8 @@ variable "account_parent_cfg" {
     name                     = string
     path                     = string
     voters                   = list(string)
-    approval_count_required  = number
-    rejection_count_required = number
+    min_approval_count  = number
+    min_rejection_count = number
     dependencies             = list(string)
   }))
 }
@@ -233,8 +233,8 @@ variable "metadb_port" {
 
 variable "metadb_schema" {
   description = "Schema for AWS RDS Postgres db"
-  type = string
-  default = "prod"
+  type        = string
+  default     = "prod"
 }
 
 variable "metadb_publicly_accessible" {

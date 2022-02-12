@@ -43,14 +43,14 @@ output "pg_port" {
   value = module.mut_infrastructure_live_ci.metadb_port
 }
 
-output "metadb_secret_manager_arn" {
-  value = aws_secretsmanager_secret_version.testing.arn
-}
-
 output "metadb_arn" {
   value = module.mut_infrastructure_live_ci.metadb_arn
 }
 
 output "metadb_name" {
   value = module.mut_infrastructure_live_ci.metadb_name
+}
+
+output "metadb_secret_manager_master_arn" {
+  value = module.mut_infrastructure_live_ci.metadb_secret_manager_master_arn
 }

@@ -73,11 +73,11 @@ module "mut_infrastructure_live_ci" {
   account_parent_cfg = [
     {
       name                     = "dev"
-      path                     = "dev-account"
+      path                     = "directory_dependency/dev-account"
       dependencies             = []
       voters                   = ["success@simulator.amazonses.com"]
-      approval_count_required  = 1
-      rejection_count_required = 1
+      min_approval_count  = 1
+      min_rejection_count = 1
     }
   ]
 

@@ -1,5 +1,4 @@
 import subprocess
-import psycopg2
 from psycopg2 import sql
 import pytest
 from unittest.mock import patch
@@ -119,6 +118,7 @@ class TestIntegration:
                 sys.exit(1)
     
         return statuses
+
     @pytest.fixture(scope='class')
     @timeout_decorator.timeout(300)
     def trigger_sf_status(self, cb, mut_output, pr, merge_pr):

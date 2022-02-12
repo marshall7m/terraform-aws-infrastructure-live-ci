@@ -52,7 +52,7 @@ output "metadb_ci_username" {
 }
 
 output "metadb_ci_password" {
-  value = var.metadb_ci_username
+  value     = var.metadb_ci_username
   sensitive = true
 }
 

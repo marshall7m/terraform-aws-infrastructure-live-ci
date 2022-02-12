@@ -45,8 +45,8 @@ module "mut_infrastructure_live_ci" {
       path                     = "dev-account"
       dependencies             = []
       voters                   = ["success@simulator.amazonses.com"]
-      approval_count_required  = 1
-      rejection_count_required = 1
+      min_approval_count  = 1
+      min_rejection_count = 1
     }
   ]
 

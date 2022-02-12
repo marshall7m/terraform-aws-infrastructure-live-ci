@@ -44,7 +44,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    path                     = string<br>    voters                   = list(string)<br>    approval_count_required  = number<br>    rejection_count_required = number<br>    dependencies             = list(string)<br>  }))</pre> | n/a | yes |
+| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    path                     = string<br>    voters                   = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies             = list(string)<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `null` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `null` | no |
@@ -71,9 +71,10 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | metadb\_password | Master password for the metadb | `string` | n/a | yes |
 | metadb\_port | Port for AWS RDS Postgres db | `number` | `5432` | no |
 | metadb\_publicly\_accessible | Determines if metadb is publicly accessible outside of it's associated VPC | `bool` | `false` | no |
+| metadb\_schema | Schema for AWS RDS Postgres db | `string` | `"prod"` | no |
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config` | `list(string)` | `[]` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | n/a | yes |
-| metadb\_username | Master username of the metadb | `string` | `null` | no |
+| metadb\_username | Master username of the metadb | `string` | `"root"` | no |
 | plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
 | plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `null` | no |
 | plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
@@ -96,10 +97,13 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | codebuild\_trigger\_sf\_name | n/a |
 | metadb\_address | n/a |
 | metadb\_arn | n/a |
+| metadb\_ci\_password | n/a |
+| metadb\_ci\_username | n/a |
 | metadb\_endpoint | n/a |
 | metadb\_name | n/a |
 | metadb\_password | n/a |
 | metadb\_port | n/a |
+| metadb\_secret\_manager\_master\_arn | n/a |
 | metadb\_username | n/a |
 | sf\_arn | n/a |
 
