@@ -14,7 +14,9 @@ from pprint import pprint
 import sys
 
 log = logging.getLogger(__name__)
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+stream = logging.StreamHandler(sys.stdout)
+log.addHandler(stream)
+log.setLevel(logging.DEBUG)
 
 class TriggerSF:
     def __init__(self):
