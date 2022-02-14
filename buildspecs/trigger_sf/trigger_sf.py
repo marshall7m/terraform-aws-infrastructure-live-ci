@@ -189,7 +189,7 @@ class TriggerSF:
             
             query = sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r').read()).format(
                 pr_id=sql.Literal(pr_id),
-                commit_id=sql.Literal(os.environ['CODEBUILD_SOURCE_VERSION']),
+                commit_id=sql.Literal(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION']),
                 account_path=sql.Literal(path),
                 cols=sql.SQL(', ').join(map(sql.Identifier, stack_cols)),
                 base_ref=sql.Literal(os.environ['CODEBUILD_WEBHOOK_BASE_REF']),
