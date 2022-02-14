@@ -20,6 +20,92 @@ resource "github_repository" "test" {
   }
 }
 
+resource "aws_s3_bucket" "testing_tf_state" {
+  bucket = "${local.mut_id}-tf-state"
+  acl    = "private"
+
+  versioning {
+    enabled = true
+  }
+  server_side_encryption_configuration {
+    rule {
+      bucket_key_enabled = true
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "aws:kms"
+      }
+    }
+  }
+}
+
+data "aws_kms_key" "s3" {
+  key_id = "alias/aws/s3"
+}
+
+data "aws_iam_policy_document" "testing_tf_state_kms" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt"
+    ]
+    resources = [data.aws_kms_key.s3.arn]
+  }
+}
+
+resource "aws_iam_policy" "codebuild_tf_state_access" {
+  name        = "${aws_s3_bucket.testing_tf_state.id}-kms-access"
+  description = "Allows Codebuild services to encrypt/decrypt objects from tf-state bucket"
+  policy      = data.aws_iam_policy_document.testing_tf_state_kms.json
+}
+
+resource "aws_s3_bucket_public_access_block" "testing_tf_state" {
+  bucket = aws_s3_bucket.testing_tf_state.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+data "aws_iam_policy_document" "testing_tf_state" {
+  statement {
+    sid       = "DenyUnEncryptedObjectUploads"
+    effect    = "Deny"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["aws:kms"]
+    }
+  }
+
+  statement {
+    sid       = "DenyInsecureConnections"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "testing_tf_state" {
+  bucket = aws_s3_bucket.testing_tf_state.id
+  policy = data.aws_iam_policy_document.testing_tf_state.json
+}
+
 resource "random_password" "metadb" {
   for_each = toset(["master", "ci"])
   length   = 16
@@ -45,6 +131,8 @@ module "vpc" {
 module "mut_infrastructure_live_ci" {
   source = "../.."
 
+  #scope of tests are within one AWS account so AWS managed policies within target account are used
+  # for multi-account setup use var.(plan|apply)_role_assumable_role_arns to cross-account roles codebuild can assume
   plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
   apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 
@@ -66,16 +154,32 @@ module "mut_infrastructure_live_ci" {
     subnets = module.vpc.private_subnets
   }
 
+  #required specific testing repo to conditionally set the terraform backend configurations
+  codebuild_common_env_vars = [
+    {
+      name  = "TG_BACKEND"
+      type  = "PLAINTEXT"
+      value = "s3"
+    },
+    {
+      name  = "TG_S3_BUCKET"
+      type  = "PLAINTEXT"
+      value = aws_s3_bucket.testing_tf_state.id
+    }
+  ]
+
+  codebuild_common_policy_arns = [aws_iam_policy.codebuild_tf_state_access.arn]
+
   create_github_token_ssm_param = false
   github_token_ssm_key          = "admin-github-token"
 
   approval_request_sender_email = "success@simulator.amazonses.com"
   account_parent_cfg = [
     {
-      name                     = "dev"
-      path                     = "directory_dependency/dev-account"
-      dependencies             = []
-      voters                   = ["success@simulator.amazonses.com"]
+      name                = "dev"
+      path                = "directory_dependency/dev-account"
+      dependencies        = []
+      voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
     }

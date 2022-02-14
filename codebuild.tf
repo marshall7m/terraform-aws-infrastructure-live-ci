@@ -356,7 +356,7 @@ EOT
     compute_type = "BUILD_GENERAL1_SMALL"
     image        = module.ecr_trigger_sf.full_image_url
     type         = "LINUX_CONTAINER"
-    environment_variables = [
+    environment_variables = concat(var.codebuild_common_env_vars, [
       {
         name  = "STATE_MACHINE_ARN"
         value = local.state_machine_arn
@@ -393,16 +393,16 @@ EOT
         value = aws_rds_cluster.metadb.endpoint
       },
       {
-        name = "GITHUB_MERGE_LOCK_SSM_KEY"
-        type = "PLAINTEXT"
+        name  = "GITHUB_MERGE_LOCK_SSM_KEY"
+        type  = "PLAINTEXT"
         value = aws_ssm_parameter.merge_lock.name
       },
       {
-        name = "PGPASSWORD"
-        type = "PARAMETER_STORE"
+        name  = "PGPASSWORD"
+        type  = "PARAMETER_STORE"
         value = aws_ssm_parameter.metadb_ci_password.name
       }
-    ]
+    ])
   }
 
   webhook_filter_groups = [
@@ -424,6 +424,7 @@ EOT
   vpc_config = local.codebuild_vpc_config
 
   role_policy_arns = [
+    "arn:aws:iam::aws:policy/ReadOnlyAccess",
     aws_iam_policy.ci_metadb_access.arn,
     aws_iam_policy.codebuild_vpc_access.arn,
     aws_iam_policy.codebuild_ssm_access.arn
@@ -460,7 +461,7 @@ module "codebuild_terra_run" {
     compute_type = "BUILD_GENERAL1_SMALL"
     image        = coalesce(var.terra_run_img, module.ecr_terra_run[0].full_image_url)
     type         = "LINUX_CONTAINER"
-    environment_variables = concat(var.terra_run_env_vars, [
+    environment_variables = concat(var.terra_run_env_vars, var.codebuild_common_env_vars, [
       {
         name  = "TF_IN_AUTOMATION"
         value = "true"

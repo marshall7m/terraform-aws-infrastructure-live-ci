@@ -41,10 +41,10 @@ module "mut_infrastructure_live_ci" {
   #incorporate other account for testing (e.g. prod)
   account_parent_cfg = [
     {
-      name                     = "dev"
-      path                     = "dev-account"
-      dependencies             = []
-      voters                   = ["success@simulator.amazonses.com"]
+      name                = "dev"
+      path                = "dev-account"
+      dependencies        = []
+      voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
     }

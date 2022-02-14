@@ -7,12 +7,12 @@ variable "common_tags" {
 variable "account_parent_cfg" {
   description = "Any modified child filepath of the parent path will be processed within the parent path associated Map task"
   type = list(object({
-    name                     = string
-    path                     = string
-    voters                   = list(string)
+    name                = string
+    path                = string
+    voters              = list(string)
     min_approval_count  = number
     min_rejection_count = number
-    dependencies             = list(string)
+    dependencies        = list(string)
   }))
 }
 
@@ -115,6 +115,21 @@ EOF
     vpc_id  = string
     subnets = list(string)
   })
+}
+
+variable "codebuild_common_env_vars" {
+  description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commmands."
+  type = list(object({
+    name  = string
+    value = string
+    type  = optional(string)
+  }))
+}
+
+variable "codebuild_common_policy_arns" {
+  description = "Common AWS IAM policy ARNs to attach to all Codebuild project roles"
+  type        = list(string)
+  default     = []
 }
 
 # GITHUB-WEBHOOK #

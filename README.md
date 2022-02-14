@@ -44,7 +44,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                     = string<br>    path                     = string<br>    voters                   = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies             = list(string)<br>  }))</pre> | n/a | yes |
+| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `null` | no |
 | apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
 | apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `null` | no |
@@ -53,6 +53,8 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_rule\_name | Name of the CloudWatch event rule that detects when the Step Function completes an execution | `string` | `null` | no |
+| codebuild\_common\_env\_vars | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commmands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | n/a | yes |
+| codebuild\_common\_policy\_arns | Common AWS IAM policy ARNs to attach to all Codebuild project roles | `list(string)` | `[]` | no |
 | codebuild\_vpc\_config | AWS VPC configurations associated with all CodeBuild projects within this module. <br>The subnets must have the approriate security groups to reach the subnet that the db is associated with.<br>Ensure that there are enough IP addresses within the subnet to host the two codebuild projects. | <pre>object({<br>    vpc_id  = string<br>    subnets = list(string)<br>  })</pre> | n/a | yes |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
