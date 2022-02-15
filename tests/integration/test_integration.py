@@ -1,5 +1,4 @@
 import subprocess
-from psycopg2 import sql
 import pytest
 from unittest.mock import patch
 import os
@@ -21,6 +20,15 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 class TestIntegration:
+
+    @pytest.fixture(scope='class', autouse=True)
+    def truncate_executions(self, conn):
+        #table setup is within tf module
+        #yielding none to define truncation as pytest teardown logic
+        yield None
+        log.info('Truncating executions table')
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE executions")
 
     # list of PRs with directory to create test files within
     # explicitly defining execution testing order until fixture list return values can be used to parametrize fixtures/tests
@@ -139,24 +147,30 @@ class TestIntegration:
         depends(request, [f'{request.cls.__name__}::test_trigger_sf_codebuild[{request.node.callspec.id}]'])
 
         with conn.cursor() as cur:
-            cur.execute(sql.SQL("SELECT array_agg(cfg_path::TEXT) FROM executions WHERE commit_id = {}").format(pr["head_commit_id"]))
+            cur.execute(f"""
+            SELECT array_agg(execution_id::TEXT)
+            FROM executions 
+            WHERE commit_id = '{pr["head_commit_id"]}'
+            """
+            )
             ids = cur.fetchone()[0]
         if ids == None:
             target_execution_ids = []
         else:
             target_execution_ids = [id for id in ids]
         
+        log.debug(f'Commit execution IDs:\n{target_execution_ids}')
         assert len(scenario['executions']) == len(target_execution_ids)
 
     @pytest.fixture(scope="class")
     def execution_record(self, conn, pr, trigger_sf_status):
         with conn.cursor() as cur:
-            cur.execute(sql.SQL("""
+            cur.execute(f"""
                 SELECT 1 
                 FROM executions 
-                WHERE commit_id = {}
+                WHERE commit_id = '{pr["head_commit_id"]}'
                 AND status = 'running'
-            """).format(sql.Literal(pr["head_commit_id"])))
+            """)
             record = cur.fetchone()
             if record == None:
                 log.error('No execution records have a status of running within commit')
@@ -173,6 +187,9 @@ class TestIntegration:
             statusFilter='RUNNING'
         )['executions']
         running_ids = [execution['name'] for execution in executions]
+
+        log.debug(f'Metadb execution record:\n{execution_record}')
+        log.debug(f'Step Function running execution IDs:\n{running_ids}')
 
         assert execution_record['execution_id'] in running_ids
         
