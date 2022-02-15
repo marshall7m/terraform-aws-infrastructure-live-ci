@@ -122,11 +122,25 @@ class TriggerSF:
 
         return list(set(cfg_providers).difference(state_providers))
 
-    def create_stack(self, path, git_root):
+    def create_stack(self, path, git_root, role_arn):
+        sts = boto3.client('sts')
+        log.debug(f'Account plan role ARN: {role_arn}')
+        plan_role_creds = sts.assume_role(RoleArn=role_arn, RoleSessionName='trigger-sf-terragrunt-plan-all')['Credentials']
+
+        log.debug("Setting account's plan role credentials")
+        os.environ['AWS_ACCESS_KEY_ID'] = plan_role_creds['AccessKeyId']
+        os.environ['AWS_SECRET_ACCESS_KEY'] = plan_role_creds['SecretAccessKey']
+        os.environ['AWS_SESSION_TOKEN'] = plan_role_creds['SessionToken']
+
         cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
 
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
         return_code = run.returncode
+
+        log.debug('Dropping account role')
+        del os.environ['AWS_ACCESS_KEY_ID']
+        del os.environ['AWS_SECRET_ACCESS_KEY']
+        del os.environ['AWS_SESSION_TOKEN']
 
         if return_code not in [0, 2]:
             log.fatal('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
@@ -156,12 +170,12 @@ class TriggerSF:
 
     def update_executions_with_new_deploy_stack(self):
         with self.conn.cursor() as cur:
-            cur.execute('SELECT account_path FROM account_dim')
-            account_paths = [path for t in cur.fetchall() for path in t]
+            cur.execute('SELECT account_path, plan_role_arn FROM account_dim')
+            accounts = [{'path': r[0], 'role': r[1]} for r in cur.fetchall()]
 
-        log.debug(f'Account Paths:\n{account_paths}')
+        log.debug(f'Accounts:\n{accounts}')
 
-        if len(account_paths) == 0:
+        if len(accounts) == 0:
             log.fatal('No account paths are defined in account_dim')
             sys.exit(1)
 
@@ -170,14 +184,14 @@ class TriggerSF:
         pr_id = os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]
 
         log.info('Getting account stacks')
-        for path in account_paths:
-            log.info(f'Account path: {path}')
+        for account in accounts:
+            log.info(f'Account path: {account["path"]}')
 
-            if not os.path.isdir(path):
+            if not os.path.isdir(account['path']):
                 log.error('Account path does not exist within repo')
                 sys.exit(1)
             
-            stack = self.create_stack(path, git_root)
+            stack = self.create_stack(account['path'], git_root, account['role'])
 
             log.debug(f'Stack:\n{stack}')
 
@@ -190,7 +204,7 @@ class TriggerSF:
             query = sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r').read()).format(
                 pr_id=sql.Literal(pr_id),
                 commit_id=sql.Literal(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION']),
-                account_path=sql.Literal(path),
+                account_path=sql.Literal(account['path']),
                 cols=sql.SQL(', ').join(map(sql.Identifier, stack_cols)),
                 base_ref=sql.Literal(os.environ['CODEBUILD_WEBHOOK_BASE_REF']),
                 head_ref=sql.Literal(os.environ['CODEBUILD_WEBHOOK_HEAD_REF'])
@@ -201,7 +215,7 @@ class TriggerSF:
             log.debug(f'Stack column template: {col_tpl}')
 
             res = execute_values(self.cur, query, stack, template=col_tpl, fetch=True)
-            
+            log.debug(f"res:\n{res}")
             log.debug(f'Inserted executions:\n{pprint([dict(r) for r in res])}')
             
     def start_sf_executions(self):
@@ -235,7 +249,7 @@ class TriggerSF:
                 """).format(sql.Literal(id)))
 
                 sf_input = json.dumps(self.cur.fetchone())
-                log.debug(f'SF input:\n{sf_input}')
+                log.debug(f'SF input:\n{pprint(sf_input)}')
 
                 log.debug('Starting sf execution')
                 sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)

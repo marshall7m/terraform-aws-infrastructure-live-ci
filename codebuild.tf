@@ -1,7 +1,5 @@
 locals {
   #replace with var.prefix?
-  plan_role_name  = coalesce(var.plan_role_name, "${var.step_function_name}-tf-plan")
-  apply_role_name = coalesce(var.apply_role_name, "${var.step_function_name}-tf-apply")
   merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
 
   trigger_step_function_build_name    = coalesce(var.merge_lock_build_name, "${var.step_function_name}-trigger-sf")
@@ -193,35 +191,6 @@ module "ecr_trigger_sf" {
     TERRAGRUNT_VERSION = var.terragrunt_version
   }
 }
-
-module "plan_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = local.plan_role_name
-  trusted_services        = ["codebuild.amazonaws.com"]
-  custom_role_policy_arns = var.plan_role_policy_arns
-  statements = length(var.plan_role_assumable_role_arns) > 0 ? [
-    {
-      effect    = "Allow"
-      actions   = ["sts:AssumeRole"]
-      resources = var.plan_role_assumable_role_arns
-    }
-  ] : []
-}
-
-module "apply_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = local.apply_role_name
-  trusted_services        = ["codebuild.amazonaws.com"]
-  custom_role_policy_arns = var.apply_role_policy_arns
-  statements = length(var.apply_role_assumable_role_arns) > 0 ? [
-    {
-      effect    = "Allow"
-      actions   = ["sts:AssumeRole"]
-      resources = var.apply_role_assumable_role_arns
-    }
-  ] : []
-}
-
 
 module "codebuild_merge_lock" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
@@ -424,10 +393,10 @@ EOT
   vpc_config = local.codebuild_vpc_config
 
   role_policy_arns = [
-    "arn:aws:iam::aws:policy/ReadOnlyAccess",
     aws_iam_policy.ci_metadb_access.arn,
     aws_iam_policy.codebuild_vpc_access.arn,
-    aws_iam_policy.codebuild_ssm_access.arn
+    aws_iam_policy.codebuild_ssm_access.arn,
+    var.tf_state_read_access_policy
   ]
 
   role_policy_statements = [
@@ -445,6 +414,12 @@ EOT
       effect    = "Allow"
       actions   = ["ssm:PutParameter"]
       resources = [aws_ssm_parameter.merge_lock.arn]
+    },
+    {
+      sid       = "CrossAccountTerraformPlanAccess"
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = [for account in var.account_parent_cfg : account.plan_role_arn]
     }
   ]
 }
@@ -453,10 +428,7 @@ EOT
 module "codebuild_terra_run" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
   name   = local.terra_run_build_name
-  assumable_role_arns = [
-    module.plan_role.role_arn,
-    module.apply_role.role_arn
-  ]
+
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
     image        = coalesce(var.terra_run_img, module.ecr_terra_run[0].full_image_url)
@@ -475,6 +447,7 @@ module "codebuild_terra_run" {
     ])
   }
 
+  source_version = var.base_branch
   artifacts = {
     type = "NO_ARTIFACTS"
   }

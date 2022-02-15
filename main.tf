@@ -13,7 +13,6 @@ resource "aws_sfn_state_machine" "this" {
       "Plan" = {
         Next = "Request Approval"
         Parameters = {
-          SourceVersion = "$.head_ref"
           EnvironmentVariablesOverride = [
             {
               Name      = "TG_COMMAND"
@@ -21,7 +20,8 @@ resource "aws_sfn_state_machine" "this" {
               "Value.$" = "$.plan_command"
             }
           ]
-          ProjectName = module.codebuild_terra_run.name
+          ProjectName             = module.codebuild_terra_run.name
+          "serviceRoleOverride.$" = "$.plan_role_arn"
         }
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Type     = "Task"
@@ -71,7 +71,6 @@ resource "aws_sfn_state_machine" "this" {
       "Apply" = {
         End = true
         Parameters = {
-          SourceVersion = "$.head_ref"
           EnvironmentVariablesOverride = [
             {
               Name      = "TG_COMMAND"
@@ -79,7 +78,8 @@ resource "aws_sfn_state_machine" "this" {
               "Value.$" = "$.deploy_command"
             }
           ]
-          ProjectName = module.codebuild_terra_run.name
+          ProjectName             = module.codebuild_terra_run.name
+          "serviceRoleOverride.$" = "$.deploy_role_arn"
         }
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Type     = "Task"

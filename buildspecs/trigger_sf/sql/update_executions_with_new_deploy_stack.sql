@@ -22,7 +22,9 @@ INSERT INTO executions (
         min_approval_count,
         rejection_voters,
         rejection_count,
-        min_rejection_count
+        min_rejection_count,
+        plan_role_arn,
+        deploy_role_arn
     )
 SELECT
     'run-' || substr(md5(random()::text), 0, 8),
@@ -40,16 +42,18 @@ SELECT
     'terragrunt apply --terragrunt-working-dir ' || stack.cfg_path || ' -auto-approve',
     stack.new_providers::TEXT[], 
     ARRAY[]::TEXT[],
-    account.account_name,
-    account.account_path,
-    account.account_deps,
-    account.voters,
+    a.account_name,
+    a.account_path,
+    a.account_deps,
+    a.voters,
     ARRAY[]::TEXT[],
     0,
-    account.min_approval_count,
+    a.min_approval_count,
     ARRAY[]::TEXT[],
     0,
-    account.min_rejection_count
+    a.min_rejection_count,
+    a.plan_role_arn,
+    a.deploy_role_arn
 FROM (
     SELECT
         account_dim.account_name,
@@ -57,10 +61,12 @@ FROM (
         account_dim.account_deps,
         account_dim.voters,
         account_dim.min_approval_count,
-        account_dim.min_rejection_count
+        account_dim.min_rejection_count,
+        account_dim.plan_role_arn,
+        account_dim.deploy_role_arn
     FROM account_dim
     WHERE account_dim.account_path = {account_path}
-) account,
+) a,
 (
     SELECT * 
     FROM (VALUES %s) stack({cols})

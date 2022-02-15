@@ -99,6 +99,14 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
             NEW.rejection_voters := (SELECT (NEW.voters)[:NEW.min_rejection_count]);
         END IF;
 
+        IF NEW.plan_role_arn IS NULL THEN
+            NEW.plan_role_arn := account_dim_ref.plan_role_arn;
+        END IF;
+
+        IF NEW.deploy_role_arn IS NULL THEN
+            NEW.deploy_role_arn := account_dim_ref.deploy_role_arn;
+        END IF;
+
         IF NEW.cfg_deps IS NULL THEN
             NEW.cfg_deps := ARRAY[]::TEXT[];
         END IF;

@@ -31,31 +31,10 @@ resource "aws_s3_bucket" "testing_tf_state" {
     rule {
       bucket_key_enabled = true
       apply_server_side_encryption_by_default {
-        sse_algorithm = "aws:kms"
+        sse_algorithm = "AES256"
       }
     }
   }
-}
-
-data "aws_kms_key" "s3" {
-  key_id = "alias/aws/s3"
-}
-
-data "aws_iam_policy_document" "testing_tf_state_kms" {
-  statement {
-    effect = "Allow"
-    actions = [
-      "kms:Encrypt",
-      "kms:Decrypt"
-    ]
-    resources = [data.aws_kms_key.s3.arn]
-  }
-}
-
-resource "aws_iam_policy" "codebuild_tf_state_access" {
-  name        = "${aws_s3_bucket.testing_tf_state.id}-kms-access"
-  description = "Allows Codebuild services to encrypt/decrypt objects from tf-state bucket"
-  policy      = data.aws_iam_policy_document.testing_tf_state_kms.json
 }
 
 resource "aws_s3_bucket_public_access_block" "testing_tf_state" {
@@ -69,7 +48,7 @@ resource "aws_s3_bucket_public_access_block" "testing_tf_state" {
 
 data "aws_iam_policy_document" "testing_tf_state" {
   statement {
-    sid       = "DenyUnEncryptedObjectUploads"
+    sid       = "DenyIncorrectEncryptionHeader"
     effect    = "Deny"
     actions   = ["s3:PutObject"]
     resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
@@ -80,23 +59,23 @@ data "aws_iam_policy_document" "testing_tf_state" {
     condition {
       test     = "StringNotEquals"
       variable = "s3:x-amz-server-side-encryption"
-      values   = ["aws:kms"]
+      values   = ["AES256"]
     }
   }
 
   statement {
-    sid       = "DenyInsecureConnections"
+    sid       = "DenyUnencryptedObjectUploads"
     effect    = "Deny"
-    actions   = ["s3:*"]
+    actions   = ["s3:PutObject"]
     resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
     principals {
       type        = "*"
       identifiers = ["*"]
     }
     condition {
-      test     = "Bool"
-      variable = "aws:SecureTransport"
-      values   = ["false"]
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["true"]
     }
   }
 }
@@ -128,13 +107,44 @@ module "vpc" {
   one_nat_gateway_per_az = false
 }
 
+module "plan_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name               = "${local.mut_id}-plan"
+  trusted_services        = ["codebuild.amazonaws.com"]
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+}
+
+module "deploy_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name               = "${local.mut_id}-deploy"
+  trusted_services        = ["codebuild.amazonaws.com"]
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
+}
+
+
+data "aws_iam_policy_document" "trigger_sf_tf_state_access" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = ["${aws_s3_bucket.testing_tf_state.arn}"]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
+  }
+}
+
+resource "aws_iam_policy" "trigger_sf_tf_state_access" {
+  name        = "${local.mut_id}-tf-state-read-access"
+  path        = "/"
+  description = "Allows trigger_sf Codebuild project to read from terraform state S3 bucket"
+  policy      = data.aws_iam_policy_document.trigger_sf_tf_state_access.json
+}
+
 module "mut_infrastructure_live_ci" {
   source = "../.."
-
-  #scope of tests are within one AWS account so AWS managed policies within target account are used
-  # for multi-account setup use var.(plan|apply)_role_assumable_role_arns to cross-account roles codebuild can assume
-  plan_role_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
-  apply_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 
   repo_full_name = github_repository.test.full_name
   base_branch    = "master"
@@ -168,7 +178,7 @@ module "mut_infrastructure_live_ci" {
     }
   ]
 
-  codebuild_common_policy_arns = [aws_iam_policy.codebuild_tf_state_access.arn]
+  tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
 
   create_github_token_ssm_param = false
   github_token_ssm_key          = "admin-github-token"
@@ -182,6 +192,8 @@ module "mut_infrastructure_live_ci" {
       voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
+      plan_role_arn       = module.plan_role.role_arn
+      deploy_role_arn     = module.deploy_role.role_arn
     }
   ]
 

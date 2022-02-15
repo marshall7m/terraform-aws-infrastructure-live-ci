@@ -44,17 +44,13 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| account\_parent\_cfg | Any modified child filepath of the parent path will be processed within the parent path associated Map task | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>  }))</pre> | n/a | yes |
+| account\_parent\_cfg | AWS account-level configurations.<br>  - name: AWS account name (e.g. dev, staging, prod, etc.)<br>  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)<br>  - voters: List of email addresses that will be sent approval request to<br>  - min\_approval\_count: Minimum approval count needed for CI pipeline to run deployment<br>  - min\_rejection\_count: Minimum rejection count needed for CI pipeline to decline deployment<br>  - dependencies: List of AWS account names that this account depends on before running any of it's deployments <br>    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),<br>      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a<br>      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.<br>  - plan\_role\_arn: IAM role ARN within the account that the plan build will assume<br>    - \*\*CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised\*\*<br>  - deploy\_role\_arn: IAM role ARN within the account that the deploy build will assume<br>    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before\_hook block that<br>      conditionally defines that assume\_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,<br>      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then<br>      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles. | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>    plan_role_arn       = string<br>    deploy_role_arn     = string<br>  }))</pre> | n/a | yes |
 | api\_name | Name of AWS Rest API | `string` | `null` | no |
-| apply\_role\_assumable\_role\_arns | List of IAM role ARNs the apply CodeBuild action can assume | `list(string)` | `[]` | no |
-| apply\_role\_name | Name of the IAM role used for running terr\* apply commands | `string` | `null` | no |
-| apply\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the apply Codebuild action | `list(string)` | `[]` | no |
 | approval\_request\_sender\_email | Email address to use for sending approval requests | `string` | n/a | yes |
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_rule\_name | Name of the CloudWatch event rule that detects when the Step Function completes an execution | `string` | `null` | no |
 | codebuild\_common\_env\_vars | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commmands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | n/a | yes |
-| codebuild\_common\_policy\_arns | Common AWS IAM policy ARNs to attach to all Codebuild project roles | `list(string)` | `[]` | no |
 | codebuild\_vpc\_config | AWS VPC configurations associated with all CodeBuild projects within this module. <br>The subnets must have the approriate security groups to reach the subnet that the db is associated with.<br>Ensure that there are enough IP addresses within the subnet to host the two codebuild projects. | <pre>object({<br>    vpc_id  = string<br>    subnets = list(string)<br>  })</pre> | n/a | yes |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
@@ -77,9 +73,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config` | `list(string)` | `[]` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | n/a | yes |
 | metadb\_username | Master username of the metadb | `string` | `"root"` | no |
-| plan\_role\_assumable\_role\_arns | List of IAM role ARNs the plan CodeBuild action can assume | `list(string)` | `[]` | no |
-| plan\_role\_name | Name of the IAM role used for running terr\* plan commands | `string` | `null` | no |
-| plan\_role\_policy\_arns | List of IAM policy ARNs that will be attach to the plan Codebuild action | `list(string)` | `[]` | no |
 | repo\_full\_name | Full name of the GitHub repository in the form of `user/repo` | `string` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions | `string` | `null` | no |
@@ -87,6 +80,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | terra\_run\_img | Docker, ECR or AWS CodeBuild managed image to use for the terra\_run CodeBuild project that runs plan/apply commands | `string` | `null` | no |
 | terraform\_version | Terraform version used for trigger\_sf and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `"1.0.2"` | no |
 | terragrunt\_version | Terragrunt version used for trigger\_sf and terra\_run builds | `string` | `"0.31.0"` | no |
+| tf\_state\_read\_access\_policy | AWS IAM policy ARN that allows trigger\_sf Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
 | trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `null` | no |
 
 ## Outputs

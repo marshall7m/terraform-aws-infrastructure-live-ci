@@ -5,7 +5,25 @@ variable "common_tags" {
 }
 
 variable "account_parent_cfg" {
-  description = "Any modified child filepath of the parent path will be processed within the parent path associated Map task"
+  description = <<EOF
+AWS account-level configurations.
+  - name: AWS account name (e.g. dev, staging, prod, etc.)
+  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)
+  - voters: List of email addresses that will be sent approval request to
+  - min_approval_count: Minimum approval count needed for CI pipeline to run deployment
+  - min_rejection_count: Minimum rejection count needed for CI pipeline to decline deployment
+  - dependencies: List of AWS account names that this account depends on before running any of it's deployments 
+    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),
+      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a
+      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.
+  - plan_role_arn: IAM role ARN within the account that the plan build will assume
+    - **CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised**
+  - deploy_role_arn: IAM role ARN within the account that the deploy build will assume
+    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before_hook block that
+      conditionally defines that assume_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,
+      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then
+      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles.
+EOF
   type = list(object({
     name                = string
     path                = string
@@ -13,6 +31,8 @@ variable "account_parent_cfg" {
     min_approval_count  = number
     min_rejection_count = number
     dependencies        = list(string)
+    plan_role_arn       = string
+    deploy_role_arn     = string
   }))
 }
 
@@ -41,6 +61,11 @@ variable "terra_run_img" {
   default     = null
 }
 
+variable "tf_state_read_access_policy" {
+  description = "AWS IAM policy ARN that allows trigger_sf Codebuild project to read from Terraform remote state resource"
+  type        = string
+}
+
 variable "terraform_version" {
   description = "Terraform version used for trigger_sf and terra_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended"
   type        = string
@@ -51,42 +76,6 @@ variable "terragrunt_version" {
   description = "Terragrunt version used for trigger_sf and terra_run builds"
   type        = string
   default     = "0.31.0"
-}
-
-variable "plan_role_name" {
-  description = "Name of the IAM role used for running terr* plan commands"
-  type        = string
-  default     = null
-}
-
-variable "plan_role_assumable_role_arns" {
-  description = "List of IAM role ARNs the plan CodeBuild action can assume"
-  type        = list(string)
-  default     = []
-}
-
-variable "plan_role_policy_arns" {
-  description = "List of IAM policy ARNs that will be attach to the plan Codebuild action"
-  type        = list(string)
-  default     = []
-}
-
-variable "apply_role_name" {
-  description = "Name of the IAM role used for running terr* apply commands"
-  type        = string
-  default     = null
-}
-
-variable "apply_role_assumable_role_arns" {
-  description = "List of IAM role ARNs the apply CodeBuild action can assume"
-  type        = list(string)
-  default     = []
-}
-
-variable "apply_role_policy_arns" {
-  description = "List of IAM policy ARNs that will be attach to the apply Codebuild action"
-  type        = list(string)
-  default     = []
 }
 
 variable "terra_run_env_vars" {
@@ -124,12 +113,6 @@ variable "codebuild_common_env_vars" {
     value = string
     type  = optional(string)
   }))
-}
-
-variable "codebuild_common_policy_arns" {
-  description = "Common AWS IAM policy ARNs to attach to all Codebuild project roles"
-  type        = list(string)
-  default     = []
 }
 
 # GITHUB-WEBHOOK #
