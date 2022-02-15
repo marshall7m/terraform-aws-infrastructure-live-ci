@@ -53,6 +53,7 @@ RUN apk update \
     libgcc \
     libstdc++ \
     ncurses-libs \
+    docker \
 && ln -sf python3 /usr/local/bin/python \
 && git config --global advice.detachedHead false \
 && git config --global user.email testing_user@users.noreply.github.com \
