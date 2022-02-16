@@ -10,7 +10,7 @@ from psycopg2.extras import execute_values
 import re
 import json
 import boto3
-from pprint import pprint
+from pprint import pformat
 import sys
 
 log = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class TriggerSF:
                 rollback_count = len(rollback_records)
                 log.info(f'Rollback count: {rollback_count}')
                 if rollback_count > 0:
-                    log.debug(f'Rollback records:\n{pprint(rollback_records)}')
+                    log.debug(f'Rollback records:\n{pformat(rollback_records)}')
     
         elif event['is_rollback'] == True and event['status'] == 'failed':
             log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
@@ -214,9 +214,9 @@ class TriggerSF:
             col_tpl = '(' + ', '.join([f'%({col})s' for col in stack_cols]) + ')'
             log.debug(f'Stack column template: {col_tpl}')
 
-            res = execute_values(self.cur, query, stack, template=col_tpl, fetch=True)
+            res = execute_values(self.cur, query, stack, template=col_tpl)
             log.debug(f"res:\n{res}")
-            log.debug(f'Inserted executions:\n{pprint([dict(r) for r in res])}')
+            log.debug(f'Inserted executions:\n{pformat([dict(r) for r in res])}')
             
     def start_sf_executions(self):
         sf = boto3.client('stepfunctions')
@@ -249,7 +249,7 @@ class TriggerSF:
                 """).format(sql.Literal(id)))
 
                 sf_input = json.dumps(self.cur.fetchone())
-                log.debug(f'SF input:\n{pprint(sf_input)}')
+                log.debug(f'SF input:\n{pformat(sf_input)}')
 
                 log.debug('Starting sf execution')
                 sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
@@ -267,7 +267,7 @@ class TriggerSF:
         if os.environ['CODEBUILD_INITIATOR'] == os.getenv('EVENTBRIDGE_FINISHED_RULE'):
             log.info('Triggered via Step Function Event')
             event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
-            log.debug(f'Parsed CW event:\n{pprint(event)}')
+            log.debug(f'Parsed CW event:\n{pformat(event)}')
 
             self.execution_finished(event)
 

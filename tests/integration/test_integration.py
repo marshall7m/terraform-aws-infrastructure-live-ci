@@ -90,11 +90,13 @@ class TestIntegration:
 
     @pytest.mark.dependency()
     def test_merge_lock_codebuild(self, request, merge_lock_status):
+        """Assert scenario's associated merge_lock codebuild was successful"""
         log.info('Assert build succeeded')
         assert all(status == 'SUCCEEDED' for status in merge_lock_status)
 
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, pr):
+        """Assert PR's head commit ID has a successful merge lock status"""
         log.debug(f'Test Class: {request.cls.__name__}')
         depends(request, [f'{request.cls.__name__}::test_merge_lock_codebuild[{request.node.callspec.id}]'])
 
@@ -136,6 +138,7 @@ class TestIntegration:
 
     @pytest.mark.dependency()
     def test_trigger_sf_codebuild(self, request, trigger_sf_status):
+        """Assert scenario's associated trigger_sf codebuild was successful"""
         depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
 
         log.info('Assert build succeeded')
@@ -144,6 +147,7 @@ class TestIntegration:
     
     @pytest.mark.dependency()
     def test_executions_exists(self, request, conn, scenario, pr):
+        """Assert that all expected scenario directories are within executions table"""
         depends(request, [f'{request.cls.__name__}::test_trigger_sf_codebuild[{request.node.callspec.id}]'])
 
         with conn.cursor() as cur:
@@ -180,6 +184,7 @@ class TestIntegration:
     
     @pytest.mark.dependency()
     def test_sf_execution_running(self, request, mut_output, sf, execution_record, scenario):
+        """Assert running execution record has a running Step Function execution"""
         depends(request, [f'{request.cls.__name__}::test_executions_exists[{request.node.callspec.id}]'])
 
         executions = sf.list_executions(
@@ -192,13 +197,33 @@ class TestIntegration:
         log.debug(f'Step Function running execution IDs:\n{running_ids}')
 
         assert execution_record['execution_id'] in running_ids
-        
+
+    # @timeout_decorator.timeout(300)
+    # @pytest.mark.dependency()
+    # def test_terr_run_plan_codebuild(self, request, sf, mut_output):
+    #     """Assert scenario's associated trigger_sf codebuild was successful"""
+    #     depends(request, [f'{request.cls.__name__}::test_sf_execution_running[{request.node.callspec.id}]'])
+
+    #     log.info('Assert build succeeded')
+    #     assert status == 'SUCCEEDED'
+
     # def test_approval_request(cfg, s3):
     #     #while running executions' approval response is not finished, check if s3 bucket received requests
     #     obj = s3.get_object(Bucket=os.environ['TESTING_BUCKET_NAME'], Key=os.environ['TESTING_EMAIL_S3_KEY'])
     #     action_url = json.loads(obj['Body'].read())[cfg['action']]
         
     #     out = subprocess.run(["ping", "-c", action_url], capture_output=True, check=True)
+    
+    # @timeout_decorator.timeout(300)
+    # @pytest.mark.dependency()
+    # def test_terr_run_apply_codebuild(self, request, cb, mut_output):
+    #     """Assert scenario's associated trigger_sf codebuild was successful"""
+    #     depends(request, [f'{request.cls.__name__}::test_sf_execution_running[{request.node.callspec.id}]'])
+
+    #     status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], {<filter>})[0]
+
+    #     log.info('Assert build succeeded')
+    #     assert status == 'SUCCEEDED'
 
     # def test_applied_changes(self, execution):
     #     # run tg plan -detailed-exitcode and assert return code is == 0
