@@ -464,6 +464,13 @@ env:
 phases:
   build:
     commands:
+      # serviceRoleOverride.$ within step function definition is not supported yet
+      - export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s" \
+        $(aws sts assume-role \
+        --role-arn $ROLE_ARN \
+        --role-session-name ${local.terra_run_build_name} \
+        --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" \
+        --output text))
       - "$${TG_COMMAND}"
 EOT
   }
