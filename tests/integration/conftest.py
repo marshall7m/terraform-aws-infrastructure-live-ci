@@ -57,7 +57,7 @@ def mut_plan(mut, request):
     log.info('Getting testing tf plan')
     yield mut.plan(output=True)
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def mut_output(mut, request):
     if getattr(request, 'param', False):
         log.info('Skip applying testing tf module')

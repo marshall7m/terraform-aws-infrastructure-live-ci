@@ -1,6 +1,10 @@
 locals {
-  mut_id = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
+  mut_id           = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
+  plan_role_name   = "${local.mut_id}-plan"
+  deploy_role_name = "${local.mut_id}-deploy"
 }
+
+data "aws_caller_identity" "current" {}
 
 resource "random_string" "this" {
   length      = 10
@@ -109,15 +113,15 @@ module "vpc" {
 
 module "plan_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = "${local.mut_id}-plan"
-  trusted_services        = ["codebuild.amazonaws.com"]
+  role_name               = local.plan_role_name
+  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
 }
 
 module "deploy_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = "${local.mut_id}-deploy"
-  trusted_services        = ["codebuild.amazonaws.com"]
+  role_name               = local.deploy_role_name
+  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
 
@@ -192,8 +196,8 @@ module "mut_infrastructure_live_ci" {
       voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
-      plan_role_arn       = module.plan_role.role_arn
-      deploy_role_arn     = module.deploy_role.role_arn
+      plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
+      deploy_role_arn     = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.deploy_role_name}"
     }
   ]
 
