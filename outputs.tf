@@ -35,6 +35,10 @@ output "codebuild_trigger_sf_arn" {
   value = module.codebuild_trigger_sf.arn
 }
 
+output "codebuild_trigger_sf_role_arn" {
+  value = module.codebuild_trigger_sf.role_arn
+}
+
 output "codebuild_merge_lock_name" {
   value = module.codebuild_merge_lock.name
 }
