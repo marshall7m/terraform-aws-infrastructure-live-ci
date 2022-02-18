@@ -224,9 +224,21 @@ class TriggerSF:
         log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
 
         with self.conn.cursor() as cur:
-            with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
-                cur.execute(f.read())
-                ids = cur.fetchone()[0]
+            try:
+                with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
+                    cur.execute(f.read())
+                    ids = cur.fetchone()[0]
+            except psycopg2.errors.CardinalityViolation:
+                ssm = boto3.client('ssm')
+                log.error('More than one commit ID is waiting')
+                log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])}')
+                cur.execute("""
+                SELECT DISTINCT commit_id, is_rollback 
+                FROM executions
+                WHERE "status" = 'waiting'
+                """)
+                log.error(f'Waiting commits:\n{pformat(cur.fetchall())}')
+                sys.exit(1)
             if ids == None:
                 log.info('No executions are ready')
                 return
