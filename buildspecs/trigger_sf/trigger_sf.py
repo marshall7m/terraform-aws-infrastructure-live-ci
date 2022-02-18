@@ -214,7 +214,7 @@ class TriggerSF:
             col_tpl = '(' + ', '.join([f'%({col})s' for col in stack_cols]) + ')'
             log.debug(f'Stack column template: {col_tpl}')
 
-            res = execute_values(self.cur, query, stack, template=col_tpl)
+            res = execute_values(self.cur, query, stack, template=col_tpl, fetch=True)
             log.debug(f"res:\n{res}")
             log.debug(f'Inserted executions:\n{pformat([dict(r) for r in res])}')
             

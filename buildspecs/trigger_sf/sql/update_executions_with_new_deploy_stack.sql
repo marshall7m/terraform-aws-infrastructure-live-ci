@@ -71,4 +71,4 @@ FROM (
     SELECT * 
     FROM (VALUES %s) stack({cols})
 ) stack
-RETURNING *;
+;
