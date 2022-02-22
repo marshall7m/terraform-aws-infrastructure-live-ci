@@ -15,6 +15,8 @@ import random
 import string
 from pytest_dependency import depends
 import boto3
+from pprint import pformat
+import re
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -73,6 +75,10 @@ class TestIntegration:
         except Exception:
             pass
     
+    def get_execution_history(self, sf, arn, id):
+        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=arn)['executions'] if execution['name'] == id][0]
+
+        return sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
 
     @pytest.fixture(scope="class")
     def scenario(self, request):
@@ -86,7 +92,7 @@ class TestIntegration:
     @timeout_decorator.timeout(300)
     def merge_lock_status(self, cb, mut_output, pr):
         log.info('Waiting on merge lock Codebuild executions to finish')
-        return self.get_build_status(cb, mut_output["codebuild_merge_lock_name"], pr["number"])
+        return self.get_build_status(cb, mut_output["codebuild_merge_lock_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})
 
     @pytest.mark.dependency()
     def test_merge_lock_codebuild(self, request, merge_lock_status):
@@ -105,27 +111,29 @@ class TestIntegration:
         
         assert repo.get_commit(pr["head_commit_id"]).get_statuses()[0].state == 'success'
 
-    def get_build_status(self, client, name, pr_num):
+    def get_build_status(self, client, name, ids=[], filters={}):
 
         statuses = ['IN_PROGRESS']
         wait = 60
 
         while 'IN_PROGRESS' in statuses:
             time.sleep(wait)
-            ids = client.list_builds_for_project(
-                projectName=name,
-                sortOrder='DESCENDING'
-            )['ids']
+            if len(ids) == 0:
+                ids = client.list_builds_for_project(
+                    projectName=name,
+                    sortOrder='DESCENDING'
+                )['ids']
 
             if len(ids) == 0:
                 log.error(f'No builds have runned for project: {name}')
                 sys.exit(1)
-            statuses = [build['buildStatus'] for build in client.batch_get_builds(ids=ids)['builds'] if build.get('sourceVersion', None) == f'pr/{pr_num}']
-            
-            log.debug(f'Statuses: {statuses}')
-            if len(statuses) == 0:
-                log.error(f'No build have been triggered for PR: {pr_num} within {wait} secs')
-                sys.exit(1)
+            statuses = []
+            for build in client.batch_get_builds(ids=ids)['builds']:
+                for key, value in filters.items():
+                    if build.get(key, None) != value:
+                        break
+                else:
+                    statuses.append(build['buildStatus'])
     
         return statuses
 
@@ -134,7 +142,7 @@ class TestIntegration:
     def trigger_sf_status(self, cb, mut_output, pr, merge_pr):
         log.info('Waiting on trigger sf Codebuild execution to finish')
 
-        return self.get_build_status(cb, mut_output["codebuild_trigger_sf_name"], pr["number"])
+        return self.get_build_status(cb, mut_output["codebuild_trigger_sf_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})
 
     @pytest.mark.dependency()
     def test_trigger_sf_codebuild(self, request, trigger_sf_status):
@@ -165,27 +173,33 @@ class TestIntegration:
         
         log.debug(f'Commit execution IDs:\n{target_execution_ids}')
         assert len(scenario['executions']) == len(target_execution_ids)
-
+    
     @pytest.fixture(scope="class")
-    def execution_record(self, conn, pr, trigger_sf_status):
+    def target_execution(self, conn, pr, request):
+        record = {}
         with conn.cursor() as cur:
             cur.execute(f"""
-                SELECT 1 
+                SELECT *
                 FROM executions 
                 WHERE commit_id = '{pr["head_commit_id"]}'
                 AND status = 'running'
+                LIMIT 1
             """)
-            record = cur.fetchone()
-            if record == None:
+
+            row = [value for value in cur.fetchone()]
+
+            if len(row) == 0:
                 log.error('No execution records have a status of running within commit')
                 sys.exit(1)
             else:
-                return record[0]
-    
+                for i, description in enumerate(cur.description):
+                    record[description.name] = row[i]
+                return record
+
     @pytest.mark.dependency()
-    def test_sf_execution_running(self, request, mut_output, sf, execution_record, scenario):
+    def test_sf_execution_running(self, request, mut_output, sf, target_execution, scenario):
         """Assert running execution record has a running Step Function execution"""
-        depends(request, [f'{request.cls.__name__}::test_executions_exists[{request.node.callspec.id}]'])
+        depends(request, [f"{request.cls.__name__}::test_executions_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
 
         executions = sf.list_executions(
             stateMachineArn=mut_output['state_machine_arn'],
@@ -193,39 +207,71 @@ class TestIntegration:
         )['executions']
         running_ids = [execution['name'] for execution in executions]
 
-        log.debug(f'Metadb execution record:\n{execution_record}')
-        log.debug(f'Step Function running execution IDs:\n{running_ids}')
+        assert target_execution['execution_id'] in running_ids
 
-        assert execution_record['execution_id'] in running_ids
+    @pytest.mark.dependency()
+    def test_terra_run_plan_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
+        """Assert running execution record has a running Step Function execution"""
+        depends(request, [f'{request.cls.__name__}::test_sf_execution_running[{request.node.callspec.id}]'])
 
-    # @timeout_decorator.timeout(300)
-    # @pytest.mark.dependency()
-    # def test_terr_run_plan_codebuild(self, request, sf, mut_output):
-    #     """Assert scenario's associated trigger_sf codebuild was successful"""
-    #     depends(request, [f'{request.cls.__name__}::test_sf_execution_running[{request.node.callspec.id}]'])
+        log.info(f'Testing Plan Task')
 
-    #     log.info('Assert build succeeded')
-    #     assert status == 'SUCCEEDED'
+        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
 
-    # def test_approval_request(cfg, s3):
-    #     #while running executions' approval response is not finished, check if s3 bucket received requests
-    #     obj = s3.get_object(Bucket=os.environ['TESTING_BUCKET_NAME'], Key=os.environ['TESTING_EMAIL_S3_KEY'])
-    #     action_url = json.loads(obj['Body'].read())[cfg['action']]
-        
-    #     out = subprocess.run(["ping", "-c", action_url], capture_output=True, check=True)
+        for event in events:
+            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'codebuild':
+                plan_build_id = json.loads(event['taskSubmittedEventDetails']['output'])['Build']['Id']
+                status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], ids=[plan_build_id])[0]
+
+        assert status == 'SUCCEEDED'
+
+    @pytest.mark.dependency()
+    def test_approval_request(self, request, sf, scenario, mut_output, target_execution):
+        depends(request, [f'{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]'])
     
-    # @timeout_decorator.timeout(300)
-    # @pytest.mark.dependency()
-    # def test_terr_run_apply_codebuild(self, request, cb, mut_output):
-    #     """Assert scenario's associated trigger_sf codebuild was successful"""
-    #     depends(request, [f'{request.cls.__name__}::test_sf_execution_running[{request.node.callspec.id}]'])
+        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
 
-    #     status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], {<filter>})[0]
+        for event in events:
+            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resource'] == 'invoke.waitForTaskToken':
+                out = json.loads(event['taskSubmittedEventDetails']['output'])
 
-    #     log.info('Assert build succeeded')
-    #     assert status == 'SUCCEEDED'
+        assert out['StatusCode'] == 200
 
-    # def test_applied_changes(self, execution):
+    @pytest.mark.dependency()
+    def test_approval_response(self, request, scenario, mut_output, target_execution):
+        depends(request, [f'{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]'])
+        log.info('Testing Approval Task')
+
+        s3 = boto3.client('s3')
+
+        obj = s3.get_object(Bucket=mut_output['testing_ses_approval_bucket_id'], Key=f'{mut_output["testing_ses_approval_bucket_key"]}/AMAZON_SES_SETUP_NOTIFICATION')
+        action_url = json.loads(obj['Body'].read())[scenario['executions'][target_execution['cfg_path']]['action']]
+        
+        response = subprocess.run(["ping", "-c", action_url], capture_output=True, check=True)
+
+        assert response['statusCode'] == '200'
+
+    # def test_approval_denied(sf):
+    #     """Skips if execution is approved"""
+    #     sf_execution = sf.get_execution()
+    #     assert sf_execution['Reject'] == 'Succeeded'
+
+    @pytest.mark.dependency()
+    def test_terra_run_plan_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
+        """Assert running execution record has a running Step Function execution"""
+        depends(request, [f'{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]'])
+
+        log.info(f'Testing Plan Task')
+
+        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+
+        for event in events:
+            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'codebuild':
+                plan_build_id = json.loads(event['taskSubmittedEventDetails']['output'])['Build']['Id']
+                status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], ids=[plan_build_id])[0]
+
+        assert status == 'SUCCEEDED'
+    # def test_applied_changes(self, target_execution):
     #     # run tg plan -detailed-exitcode and assert return code is == 0
     #     pass
 

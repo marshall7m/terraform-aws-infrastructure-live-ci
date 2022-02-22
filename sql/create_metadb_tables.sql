@@ -39,3 +39,5 @@ CREATE TABLE IF NOT EXISTS ${metadb_schema}.account_dim (
     plan_role_arn VARCHAR,
     deploy_role_arn VARCHAR
 );
+
+ALTER DATABASE ${metadb_name} SET search_path TO ${metadb_schema};

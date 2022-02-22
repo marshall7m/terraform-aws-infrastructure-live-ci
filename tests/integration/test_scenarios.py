@@ -15,8 +15,8 @@ output "{random}" {{
 def pytest_generate_tests(metafunc):
     if 'modify_items' in metafunc.fixturenames:
         metafunc.parametrize('modify_items', metafunc.cls.scenario['modify_items'], indirect=True)
-    if 'execution_record' in metafunc.fixturenames:
-        metafunc.parametrize('execution_record', list(range(0, len(metafunc.cls.scenario['executions']))), indirect=True)
+    if 'target_execution' in metafunc.fixturenames:
+        metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.scenario['executions']))), indirect=True)
     if 'scenario' in metafunc.fixturenames:
         metafunc.parametrize('scenario', [metafunc.cls.scenario], scope='class')
 
@@ -35,10 +35,9 @@ class TestScenarioOne(test_integration.TestIntegration):
         ],
         'executions': {
             'directory_dependency/dev-account/us-west-2/env-one/doo': {
-                'approve_all': True
+                'action': 'approve'
             }
         }
     }
-
     # def test_null_resource(self):
     #     pass
