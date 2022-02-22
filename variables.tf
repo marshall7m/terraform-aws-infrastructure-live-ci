@@ -3,6 +3,11 @@ variable "common_tags" {
   type        = map(string)
   default     = {}
 }
+variable "prefix" {
+  description = "Prefix to attach to all resources"
+  type        = string
+  default     = null
+}
 
 variable "account_parent_cfg" {
   description = <<EOF
@@ -274,4 +279,9 @@ variable "metadb_ci_password" {
   description = "Password for the metadb user used for the Codebuild projects"
   type        = string
   sensitive   = true
+}
+
+variable "lambda_subnet_ids" {
+  description = "Subnets to host Lambda approval response function in. Subnet doesn't need internet access but does need to be the same VPC that the metadb is hosted in"
+  type        = list(string)
 }

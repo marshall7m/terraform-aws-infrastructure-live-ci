@@ -47,8 +47,24 @@ output "codebuild_merge_lock_arn" {
   value = module.codebuild_merge_lock.arn
 }
 
+output "codebuild_terra_run_name" {
+  value = module.codebuild_terra_run.name
+}
+
+output "codebuild_terra_run_arn" {
+  value = module.codebuild_terra_run.arn
+}
+
+output "codebuild_terra_run_role_arn" {
+  value = module.codebuild_terra_run.role_arn
+}
+
 output "sf_arn" {
   value = aws_sfn_state_machine.this.arn
+}
+
+output "sf_name" {
+  value = aws_sfn_state_machine.this.name
 }
 
 output "metadb_ci_username" {

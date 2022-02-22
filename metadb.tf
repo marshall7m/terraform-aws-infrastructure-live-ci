@@ -7,7 +7,7 @@ locals {
   --resource-arn ${aws_rds_cluster.metadb.arn} \
   --secret-arn ${aws_secretsmanager_secret_version.master_metadb_user.arn} \
   --database ${aws_rds_cluster.metadb.database_name} \
-  --sql "${templatefile("${path.module}/sql/create_metadb_tables.sql", { metadb_schema = var.metadb_schema })}";
+  --sql "${templatefile("${path.module}/sql/create_metadb_tables.sql", { metadb_schema = var.metadb_schema, metadb_name = local.metadb_name })}";
 
   aws rds-data execute-statement \
   --continue-after-timeout \
@@ -95,6 +95,11 @@ data "aws_subnet" "codebuilds" {
   id    = local.codebuild_vpc_config.subnets[count.index]
 }
 
+data "aws_subnet" "lambda" {
+  count = length(var.lambda_subnet_ids)
+  id    = var.lambda_subnet_ids[count.index]
+}
+
 resource "aws_security_group" "metadb" {
   name        = local.metadb_name
   description = "Allows Postgres connections from instances within private subnets"
@@ -106,7 +111,7 @@ resource "aws_security_group" "metadb" {
     to_port     = 5432
     protocol    = "tcp"
     #use cb sg id instead?
-    cidr_blocks = data.aws_subnet.codebuilds[*].cidr_block
+    security_groups = concat(data.aws_subnet.codebuilds[*].cidr_block, data.aws_subnet.lambda[*].cidr_block)
   }
 }
 
@@ -117,10 +122,8 @@ resource "aws_rds_cluster" "metadb" {
   database_name      = local.metadb_name
   master_username    = var.metadb_username
   master_password    = var.metadb_password
-  # must be >= 12.0 to allow `GENERATED AS ALWAYS` for execution table columns
-  # engine_version                      = "default.aurora-postgresql10"
-  port        = var.metadb_port
-  engine_mode = "serverless"
+  port               = var.metadb_port
+  engine_mode        = "serverless"
   scaling_configuration {
     min_capacity = 2
   }

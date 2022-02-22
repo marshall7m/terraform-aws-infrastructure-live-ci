@@ -60,6 +60,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
 | github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key` | `string` | `""` | no |
+| lambda\_subnet\_ids | Subnets to host Lambda approval response function in. Subnet doesn't need internet access but does need to be the same VPC that the metadb is hosted in | `list(string)` | n/a | yes |
 | merge\_lock\_build\_name | Codebuild project name used for determine if infrastructure related PR can be merged into base branch | `string` | `null` | no |
 | merge\_lock\_ssm\_key | SSM Parameter Store key used for locking infrastructure related PR merges | `string` | `null` | no |
 | metadb\_availability\_zones | AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones. | `list(string)` | `null` | no |
@@ -73,6 +74,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config` | `list(string)` | `[]` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | n/a | yes |
 | metadb\_username | Master username of the metadb | `string` | `"root"` | no |
+| prefix | Prefix to attach to all resources | `string` | `null` | no |
 | repo\_full\_name | Full name of the GitHub repository in the form of `user/repo` | `string` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions | `string` | `null` | no |
@@ -89,6 +91,9 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 |------|-------------|
 | codebuild\_merge\_lock\_arn | n/a |
 | codebuild\_merge\_lock\_name | n/a |
+| codebuild\_terra\_run\_arn | n/a |
+| codebuild\_terra\_run\_name | n/a |
+| codebuild\_terra\_run\_role\_arn | n/a |
 | codebuild\_trigger\_sf\_arn | n/a |
 | codebuild\_trigger\_sf\_name | n/a |
 | codebuild\_trigger\_sf\_role\_arn | n/a |
@@ -103,6 +108,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | metadb\_secret\_manager\_master\_arn | n/a |
 | metadb\_username | n/a |
 | sf\_arn | n/a |
+| sf\_name | n/a |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
