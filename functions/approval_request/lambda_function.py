@@ -16,9 +16,11 @@ def lambda_handler(event, context):
 
     log.debug(f'Lambda Event: {event}')
 
-    full_approval_api = event['payload']['ApprovalAPI']
-    voters = event['payload']['Voters']
+    full_approval_api = event['ApprovalAPI']
+    voters = event['Voters']
+    path = event['Path']
 
+    log.debug(f'Path: {path}')
     log.debug(f'API Full URL: {full_approval_api}')
 
     destinations = []
@@ -43,7 +45,8 @@ def lambda_handler(event, context):
             Template=os.environ['SES_TEMPLATE'],
             Source=os.environ['SENDER_EMAIL_ADDRESS'],
             DefaultTemplateData=json.dumps({
-                "full_approval_api": full_approval_api
+                'full_approval_api': full_approval_api,
+                'path': path
             }),
             Destinations=destinations
         )

@@ -294,7 +294,9 @@ class TriggerSF:
             log.error('Codebuild triggered action not handled')
             sys.exit(1)
 
+
         log.info('Checking if commit executions are in progress')
+        # use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
         self.cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
 
         if self.cur.rowcount > 0:
@@ -303,6 +305,7 @@ class TriggerSF:
         else:
             log.info('No executions are waiting or running -- unlocking merge action within target branch')
             ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='false', Type='String', Overwrite=True)
+
     def cleanup(self):
 
         log.debug('Closing metadb cursor')
