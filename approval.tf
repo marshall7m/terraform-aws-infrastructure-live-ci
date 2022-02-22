@@ -2,6 +2,9 @@ locals {
   approval_request_name  = "${var.step_function_name}-request"
   approval_response_name = "${var.step_function_name}-response"
   approval_logs          = "${var.step_function_name}-approval"
+
+  approval_response_deps_zip_path = replace("${path.module}/${local.approval_response_name}_deps.zip", "-", "_")
+  approval_deps_dir               = "${path.module}/deps"
 }
 resource "aws_api_gateway_rest_api" "approval" {
   name        = local.approval_logs
@@ -156,6 +159,35 @@ data "archive_file" "lambda_approval_request" {
   output_path = "${path.module}/approval_request.zip"
 }
 
+data "aws_iam_policy_document" "lambda_approval_request" {
+  statement {
+    sid    = "SESAccess"
+    effect = "Allow"
+    actions = [
+      "ses:SendRawEmail",
+      "ses:SendEmail"
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ses:FromAddress"
+      values   = [var.approval_request_sender_email]
+    }
+
+    condition {
+      test     = "ForAllValues:StringLike"
+      variable = "ses:Recipients"
+      values   = flatten([for account in var.account_parent_cfg : account.voters])
+    }
+  }
+}
+
+resource "aws_iam_policy" "lambda_approval_request" {
+  name        = "${local.approval_request_name}-ses-access"
+  description = "Allows Lambda function to send SES emails to and from defined email addresses"
+  policy      = data.aws_iam_policy_document.lambda_approval_request.json
+}
+
 module "lambda_approval_request" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
   filename         = data.archive_file.lambda_approval_request.output_path
@@ -168,17 +200,8 @@ module "lambda_approval_request" {
     SES_TEMPLATE         = aws_ses_template.approval.name
   }
   custom_role_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-  ]
-  statements = [
-    {
-      sid    = "SESSendAccess"
-      effect = "Allow"
-      actions = [
-        "SES:SendRawEmail"
-      ]
-      resources = [aws_ses_email_identity.approval.arn]
-    }
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    aws_iam_policy.lambda_approval_request.arn
   ]
 }
 
@@ -186,6 +209,40 @@ data "archive_file" "lambda_approval_response" {
   type        = "zip"
   source_dir  = "${path.module}/functions/approval_response"
   output_path = "${path.module}/approval_response.zip"
+}
+
+# pip install runtime packages needed for function
+resource "null_resource" "lambda_approval_response_deps" {
+  triggers = {
+    zip_hash = fileexists(local.approval_response_deps_zip_path) ? 0 : timestamp()
+  }
+  provisioner "local-exec" {
+    command = <<EOF
+    python3 -m pip install --target ${local.approval_deps_dir}/python aws-psycopg2==1.2.1
+    EOF
+  }
+}
+
+data "archive_file" "lambda_approval_response_deps" {
+  type        = "zip"
+  source_dir  = local.approval_deps_dir
+  output_path = local.approval_response_deps_zip_path
+  depends_on = [
+    null_resource.lambda_approval_response_deps
+  ]
+}
+
+resource "aws_security_group" "lambda_approval_response" {
+  name_prefix = local.approval_response_name
+  description = "Allows Lambda function to connect to metadb and make AWS API calls"
+  vpc_id      = var.codebuild_vpc_config.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 module "lambda_approval_response" {
@@ -201,15 +258,33 @@ module "lambda_approval_response" {
     }
   ]
 
+  vpc_config = {
+    subnet_ids         = var.lambda_subnet_ids
+    security_group_ids = [aws_security_group.lambda_approval_response.id]
+  }
+  timeout = 180
+
   env_vars = {
-    PGUSER     = aws_rds_cluster.metadb.master_username
-    PGPORT     = var.metadb_port
-    PGDATABASE = aws_rds_cluster.metadb.database_name
-    PGHOST     = aws_rds_cluster.metadb.endpoint
+    PGUSER             = var.metadb_ci_username
+    PGPORT             = var.metadb_port
+    PGDATABASE         = aws_rds_cluster.metadb.database_name
+    PGHOST             = aws_rds_cluster.metadb.endpoint
+    PGPASSWORD_SSM_KEY = aws_ssm_parameter.metadb_ci_password.name
   }
 
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    aws_iam_policy.codebuild_ssm_access.arn,
+    aws_iam_policy.ci_metadb_access.arn
+  ]
+  lambda_layers = [
+    {
+      filename         = data.archive_file.lambda_approval_response_deps.output_path
+      name             = "${local.approval_response_name}-deps"
+      runtimes         = ["python3.8"]
+      source_code_hash = data.archive_file.lambda_approval_response_deps.output_base64sha256
+      description      = "Dependencies for lambda function: ${local.approval_response_name}"
+    }
   ]
 }
 
