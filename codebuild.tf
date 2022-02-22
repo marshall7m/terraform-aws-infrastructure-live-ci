@@ -118,7 +118,12 @@ data "aws_kms_key" "ssm" {
 data "aws_iam_policy_document" "codebuild_ssm_access" {
   statement {
     effect    = "Allow"
-    actions   = ["ssm:GetParameters"]
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
     resources = [aws_ssm_parameter.metadb_ci_password.arn]
   }
   statement {
@@ -225,6 +230,21 @@ module "codebuild_merge_lock" {
         name  = "PGHOST"
         type  = "PLAINTEXT"
         value = aws_rds_cluster.metadb.endpoint
+      },
+      {
+        name  = "MERGE_LOCK"
+        type  = "PARAMETER_STORE"
+        value = aws_ssm_parameter.merge_lock.name
+      },
+      {
+        name  = "GITHUB_TOKEN"
+        type  = "PARAMETER_STORE"
+        value = var.github_token_ssm_key
+      },
+      {
+        name  = "PGPASSWORD"
+        type  = "PARAMETER_STORE"
+        value = aws_ssm_parameter.metadb_ci_password.name
       }
     ]
   }
@@ -259,10 +279,6 @@ module "codebuild_merge_lock" {
 version: 0.2
 env:
   shell: bash
-  parameter-store:
-    MERGE_LOCK: ${aws_ssm_parameter.merge_lock.name}
-    GITHUB_TOKEN: ${var.github_token_ssm_key}
-    PGPASSWORD: ${aws_ssm_parameter.metadb_ci_password.name}
 phases:
   build:
     commands:
@@ -465,13 +481,22 @@ phases:
   build:
     commands:
       # serviceRoleOverride.$ within step function definition is not supported yet
-      - export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s" \
+      - |
+        export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s" \
         $(aws sts assume-role \
-        --role-arn $ROLE_ARN \
+        --role-arn "$${ROLE_ARN}" \
         --role-session-name ${local.terra_run_build_name} \
         --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" \
         --output text))
       - "$${TG_COMMAND}"
 EOT
   }
+  role_policy_statements = [
+    {
+      sid       = "CrossAccountTerraformPlanAndDeployAccess"
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = flatten([for account in var.account_parent_cfg : [account.plan_role_arn, account.deploy_role_arn]])
+    }
+  ]
 }
