@@ -27,31 +27,33 @@ resource "aws_sfn_state_machine" "this" {
           ]
           ProjectName = module.codebuild_terra_run.name
         }
-        Resource = "arn:aws:states:::codebuild:startBuild.sync"
-        Type     = "Task"
+        Resource   = "arn:aws:states:::codebuild:startBuild.sync"
+        Type       = "Task"
+        ResultPath = null
       },
       "Request Approval" = {
         Next = "Approval Results"
         Parameters = {
           FunctionName = module.lambda_approval_request.function_arn
           Payload = {
-            PathApproval = {
+            "PathApproval" = {
               "Approval" = {
-                Required = "$.min_approval_count"
-                Count    = 0
-                Voters   = []
+                "Required.$" = "$.min_approval_count"
+                Count        = 0
+                Voters       = []
               },
               "Rejection" = {
-                "Required" = "$.min_rejection_count"
-                "Count"    = 0
-                "Voters"   = []
+                "Required.$" = "$.min_rejection_count"
+                "Count"      = 0
+                "Voters"     = []
               },
-              "AwaitingApprovals" = "$.voters"
-              "TaskToken"         = "$$.Task.Token"
+              "AwaitingApprovals.$" = "$.voters"
+              "TaskToken.$"         = "$$.Task.Token"
             }
-            Voters        = "$.voters"
-            ApprovalAPI   = "States.Format('${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}?ex={}&sm={}&taskToken={}, $$.Execution.Name, $$.StateMachine.Id, $$.Task.Token)"
-            ExecutionName = "$$.Execution.Name"
+            "Voters.$"        = "$.voters"
+            "Path.$"          = "$.cfg_path"
+            "ApprovalAPI.$"   = "States.Format('${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}?ex={}&sm={}&taskToken={}', $$.Execution.Name, $$.StateMachine.Id, $$.Task.Token)"
+            "ExecutionName.$" = "$$.Execution.Name"
           }
         }
         Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
@@ -60,7 +62,7 @@ resource "aws_sfn_state_machine" "this" {
       "Approval Results" = {
         Choices = [
           {
-            Next         = "Apply"
+            Next         = "Deploy"
             StringEquals = "Approve"
             Variable     = "$.status"
           },
@@ -72,7 +74,7 @@ resource "aws_sfn_state_machine" "this" {
         ]
         Type = "Choice"
       },
-      "Apply" = {
+      "Deploy" = {
         End = true
         Parameters = {
           EnvironmentVariablesOverride = [
