@@ -2,6 +2,8 @@ locals {
   mut_id           = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
   plan_role_name   = "${local.mut_id}-plan"
   deploy_role_name = "${local.mut_id}-deploy"
+  approval_key     = "approval"
+  voters           = [data.aws_ssm_parameter.testing_sender_email.value]
 }
 
 data "aws_caller_identity" "current" {}
@@ -14,7 +16,7 @@ resource "random_string" "this" {
   upper       = false
 }
 
-resource "github_repository" "test" {
+resource "github_repository" "testing" {
   name        = local.mut_id
   description = "Test repo for mut: ${local.mut_id}"
   visibility  = "public"
@@ -26,18 +28,27 @@ resource "github_repository" "test" {
 
 resource "aws_s3_bucket" "testing_tf_state" {
   bucket = "${local.mut_id}-tf-state"
-  acl    = "private"
+}
 
-  versioning {
-    enabled = true
-  }
-  server_side_encryption_configuration {
-    rule {
-      bucket_key_enabled = true
-      apply_server_side_encryption_by_default {
-        sse_algorithm = "AES256"
-      }
+resource "aws_s3_bucket_server_side_encryption_configuration" "testing_tf_state" {
+  bucket = aws_s3_bucket.testing_tf_state.id
+  rule {
+    bucket_key_enabled = true
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
     }
+  }
+}
+
+resource "aws_s3_bucket_acl" "testing_tf_state" {
+  bucket = aws_s3_bucket.testing_tf_state.id
+  acl    = "private"
+}
+
+resource "aws_s3_bucket_versioning" "testing_tf_state" {
+  bucket = aws_s3_bucket.testing_tf_state.id
+  versioning_configuration {
+    status = "Enabled"
   }
 }
 
@@ -112,16 +123,19 @@ module "vpc" {
 }
 
 module "plan_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name               = local.plan_role_name
-  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn]
+  source    = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name = local.plan_role_name
+  trusted_entities = [
+    module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn,
+    module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn
+  ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
 }
 
 module "deploy_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name               = local.deploy_role_name
-  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn]
+  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
 
@@ -147,10 +161,18 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
   policy      = data.aws_iam_policy_document.trigger_sf_tf_state_access.json
 }
 
+module "testing_ses_approval_bucket" {
+  source     = "../modules/ses_approval"
+  bucket_id  = "${local.mut_id}-approval"
+  rule_name  = "${local.mut_id}-approval"
+  key        = local.approval_key
+  recipients = local.voters
+}
+
 module "mut_infrastructure_live_ci" {
   source = "../.."
 
-  repo_full_name = github_repository.test.full_name
+  repo_full_name = github_repository.testing.full_name
   base_branch    = "master"
 
   metadb_publicly_accessible = true
@@ -167,6 +189,8 @@ module "mut_infrastructure_live_ci" {
     vpc_id  = module.vpc.vpc_id
     subnets = module.vpc.private_subnets
   }
+
+  lambda_subnet_ids = module.vpc.private_subnets
 
   #required specific testing repo to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
@@ -187,13 +211,13 @@ module "mut_infrastructure_live_ci" {
   create_github_token_ssm_param = false
   github_token_ssm_key          = "admin-github-token"
 
-  approval_request_sender_email = "success@simulator.amazonses.com"
+  approval_request_sender_email = data.aws_ssm_parameter.testing_sender_email.value
   account_parent_cfg = [
     {
       name                = "dev"
       path                = "directory_dependency/dev-account"
       dependencies        = []
-      voters              = ["success@simulator.amazonses.com"]
+      voters              = local.voters
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
@@ -202,6 +226,10 @@ module "mut_infrastructure_live_ci" {
   ]
 
   depends_on = [
-    github_repository.test
+    github_repository.testing
   ]
+}
+
+data "aws_ssm_parameter" "testing_sender_email" {
+  name = "testing-ses-email-address"
 }

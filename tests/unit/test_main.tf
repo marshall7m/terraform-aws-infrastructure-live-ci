@@ -21,6 +21,13 @@ resource "github_repository" "test" {
   }
 }
 
+module "testing_ses_approval_bucket" {
+  source     = "../modules/ses_approval"
+  name       = local.mut_id
+  key        = "testing"
+  recipients = ["success@simulator.amazonses.com"]
+}
+
 module "mut_infrastructure_live_ci" {
   source = "..//"
 
