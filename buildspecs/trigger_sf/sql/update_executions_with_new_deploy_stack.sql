@@ -18,10 +18,8 @@ INSERT INTO executions (
         account_deps,
         voters,
         approval_voters,
-        approval_count,
         min_approval_count,
         rejection_voters,
-        rejection_count,
         min_rejection_count,
         plan_role_arn,
         deploy_role_arn

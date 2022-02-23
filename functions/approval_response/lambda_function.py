@@ -48,7 +48,7 @@ def lambda_handler(event, context):
                 'statusCode': 410,
                 'message': 'Execution has been aborted -- Approval submissions are not available anymore'
             }
-        elif record['approval_count'] == record['min_approval_count'] or record['rejection_count'] == record['min_rejection_count']:
+        elif len(record['approval_voters']) == record['min_approval_count'] or len(record['rejection_voters']) == record['min_rejection_count']:
             log.info('Voter count meets requirement')
 
             log.info('Sending task token to Step Function Machine')

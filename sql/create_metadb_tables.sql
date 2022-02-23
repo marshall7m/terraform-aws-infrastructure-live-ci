@@ -20,10 +20,8 @@ CREATE TABLE IF NOT EXISTS ${metadb_schema}.executions (
     account_deps TEXT[],
     voters TEXT[],
     approval_voters TEXT[],
-    approval_count INT CHECK (approval_count >= 0),
     min_approval_count INT CHECK (min_approval_count >= 0),
     rejection_voters TEXT[],
-    rejection_count INT CHECK (rejection_count >= 0),
     min_rejection_count INT CHECK (min_rejection_count >= 0),
     plan_role_arn VARCHAR,
     deploy_role_arn VARCHAR

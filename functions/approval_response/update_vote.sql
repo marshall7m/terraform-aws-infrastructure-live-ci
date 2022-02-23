@@ -6,7 +6,7 @@ SET
                 SELECT array_agg(DISTINCT e)
                 FROM unnest(approval_voters || ARRAY[{recipient}]) e
             )
-        WHEN {action} = 'reject' THEN 
+        WHEN {action} = 'reject' THEN
             array_remove(approval_voters, {recipient})
     END,
     rejection_voters = CASE 
