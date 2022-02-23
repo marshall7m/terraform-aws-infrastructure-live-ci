@@ -45,10 +45,8 @@ SELECT
     a.account_deps,
     a.voters,
     ARRAY[]::TEXT[],
-    0,
     a.min_approval_count,
     ARRAY[]::TEXT[],
-    0,
     a.min_rejection_count,
     a.plan_role_arn,
     a.deploy_role_arn
