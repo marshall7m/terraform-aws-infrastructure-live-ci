@@ -68,9 +68,17 @@ output "metadb_secret_manager_master_arn" {
 }
 
 output "testing_ses_approval_bucket_id" {
-  value = module.testing_ses_approval_bucket.id
+  value = try(module.testing_ses_approval_bucket[0].id, null)
 }
 
 output "testing_ses_approval_bucket_key" {
   value = local.approval_key
+}
+
+output "voters" {
+  value = local.voters
+}
+
+output "approval_url" {
+  value = module.mut_infrastructure_live_ci.approval_url
 }

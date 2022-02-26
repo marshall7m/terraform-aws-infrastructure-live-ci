@@ -40,25 +40,19 @@ def lambda_handler(event, context):
             }
         )
 
-    try:
-        response = ses.send_bulk_templated_email(
-            Template=os.environ['SES_TEMPLATE'],
-            Source=os.environ['SENDER_EMAIL_ADDRESS'],
-            DefaultTemplateData=json.dumps({
-                'full_approval_api': full_approval_api,
-                'path': path
-            }),
-            Destinations=destinations
-        )
-    except ClientError as e:
-        print(e.response['Error']['Message'])
-    else:
-        for msg in response['Status']:
-            if msg['Status'] == 'Success':
-                log.info("Email was succesfully sent")
-                log.debug(f"Message ID: {msg['MessageId']}\n")
-            else:
-                log.debug(f"Message ID: {msg['MessageId']}")
-                log.debug(f"Status: {msg['Status']}")
-                log.debug(f"Error: {msg['Error']}\n")
-                log.fatal("Email was not sent")
+    response = ses.send_bulk_templated_email(
+        Template=os.environ['SES_TEMPLATE'],
+        Source=os.environ['SENDER_EMAIL_ADDRESS'],
+        DefaultTemplateData=json.dumps({
+            'full_approval_api': full_approval_api,
+            'path': path
+        }),
+        Destinations=destinations
+    )
+    log.debug(f'Response:\n{response}')
+    for msg in response['Status']:
+        if msg['Status'] == 'Success':
+            log.info("Email was succesfully sent")
+        else:
+            log.error('Email was not sent')
+            log.debug(f"Email Status:\n{msg}")

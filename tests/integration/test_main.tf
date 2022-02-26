@@ -1,9 +1,10 @@
 locals {
-  mut_id           = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
-  plan_role_name   = "${local.mut_id}-plan"
-  deploy_role_name = "${local.mut_id}-deploy"
-  approval_key     = "approval"
-  voters           = [data.aws_ssm_parameter.testing_sender_email.value]
+  mut_id                = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
+  plan_role_name        = "${local.mut_id}-plan"
+  deploy_role_name      = "${local.mut_id}-deploy"
+  approval_key          = "approval"
+  test_approval_content = false
+  voters                = local.test_approval_content ? [data.aws_ssm_parameter.testing_sender_email.value] : ["success@simulator.amazonses.com"]
 }
 
 data "aws_caller_identity" "current" {}
@@ -162,6 +163,7 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
 }
 
 module "testing_ses_approval_bucket" {
+  count      = local.test_approval_content ? 1 : 0
   source     = "../modules/ses_approval"
   bucket_id  = "${local.mut_id}-approval"
   rule_name  = "${local.mut_id}-approval"

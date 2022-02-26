@@ -79,3 +79,11 @@ output "metadb_ci_password" {
 output "metadb_secret_manager_master_arn" {
   value = aws_secretsmanager_secret_version.master_metadb_user.arn
 }
+
+output "approval_url" {
+  value = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}"
+}
+
+output "cw_rule_initiator" {
+  value = local.cw_rule_initiator
+}

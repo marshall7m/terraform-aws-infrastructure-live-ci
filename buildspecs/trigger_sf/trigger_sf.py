@@ -67,7 +67,7 @@ class TriggerSF:
 
                 log.debug(self.cur.fetchall())
 
-            if event['status'] == 'failed':
+            if event['status'] in ['failed', 'rejected']:
                 log.info('Aborting all deployments for commit')
                 self.cur.execute(
                     sql.SQL("""
@@ -254,6 +254,7 @@ class TriggerSF:
             for id in target_execution_ids:
                 log.info(f'Execution ID: {id}')
 
+                #TODO: Change status from waiting to running for sf input
                 self.cur.execute(sql.SQL("""
                     SELECT *
                     FROM queued_executions 
@@ -278,7 +279,7 @@ class TriggerSF:
         
         if os.environ['CODEBUILD_INITIATOR'] == os.getenv('EVENTBRIDGE_FINISHED_RULE'):
             log.info('Triggered via Step Function Event')
-            event = json.loads(os.environ['EVENTBRIDGE_EVENT'])
+            event = json.loads(os.environ['EVENTBRIDGE_FINISHED_RULE'])
             log.debug(f'Parsed CW event:\n{pformat(event)}')
 
             self.execution_finished(event)
@@ -292,8 +293,9 @@ class TriggerSF:
         
         else:
             log.error('Codebuild triggered action not handled')
+            log.debug(f'CODEBUILD_INITIATOR: {os.environ["CODEBUILD_INITIATOR"]}')
+            log.debug(f'CODEBUILD_WEBHOOK_TRIGGER: {os.environ["CODEBUILD_WEBHOOK_TRIGGER"]}')
             sys.exit(1)
-
 
         log.info('Checking if commit executions are in progress')
         # use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
