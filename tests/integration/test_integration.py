@@ -17,6 +17,9 @@ from pytest_dependency import depends
 import boto3
 from pprint import pformat
 import re
+import tftest
+import requests
+
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -175,7 +178,7 @@ class TestIntegration:
         assert len(scenario['executions']) == len(target_execution_ids)
     
     @pytest.fixture(scope="class")
-    def target_execution(self, conn, pr, request):
+    def target_execution(self, conn, pr, request, mut_output, cb, scenario):
         record = {}
         with conn.cursor() as cur:
             cur.execute(f"""
@@ -194,7 +197,26 @@ class TestIntegration:
             else:
                 for i, description in enumerate(cur.description):
                     record[description.name] = row[i]
-                return record
+
+        yield record
+        
+        log.info('Destroying Terraform provisioned resources from test repository')
+
+        cb.start_build(
+            projectName=mut_output['codebuild_terra_run_name'],
+            environmentVariablesOverride=[
+                {
+                    'name': 'TG_COMMAND',
+                    'type': 'PLAINTEXT',
+                    'value': f'terragrunt destroy --terragrunt-working-dir {record["cfg_path"]} -auto-approve'
+                },
+                {
+                    'name': 'ROLE_ARN',
+                    'type': 'PLAINTEXT',
+                    'value': record['deploy_role_arn']
+                }
+            ]
+        )
 
     @pytest.mark.dependency()
     def test_sf_execution_running(self, request, mut_output, sf, target_execution, scenario):
@@ -238,30 +260,52 @@ class TestIntegration:
         assert out['StatusCode'] == 200
 
     @pytest.mark.dependency()
-    def test_approval_response(self, request, scenario, mut_output, target_execution):
+    def test_approval_response(self, request, sf, scenario, mut_output, target_execution):
         depends(request, [f'{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]'])
         log.info('Testing Approval Task')
 
-        s3 = boto3.client('s3')
+        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
 
-        obj = s3.get_object(Bucket=mut_output['testing_ses_approval_bucket_id'], Key=f'{mut_output["testing_ses_approval_bucket_key"]}/AMAZON_SES_SETUP_NOTIFICATION')
-        action_url = json.loads(obj['Body'].read())[scenario['executions'][target_execution['cfg_path']]['action']]
-        
-        response = subprocess.run(["ping", "-c", action_url], capture_output=True, check=True)
+        for event in events:
+            if event['type'] == 'TaskScheduled' and event['taskScheduledEventDetails']['resource'] == 'invoke.waitForTaskToken':
+                task_token = json.loads(event['taskScheduledEventDetails']['parameters'])['Payload']['PathApproval']['TaskToken']
 
-        assert response['statusCode'] == '200'
+        approval_url = f'{mut_output["approval_url"]}?ex={target_execution["execution_id"]}&sm={mut_output["state_machine_arn"]}&taskToken={task_token}'
+        log.debug(f'Approval URL: {approval_url}')
 
-    # def test_approval_denied(sf):
-    #     """Skips if execution is approved"""
-    #     sf_execution = sf.get_execution()
-    #     assert sf_execution['Reject'] == 'Succeeded'
+        body = {
+            'action': scenario['executions'][target_execution['cfg_path']]['action'],
+            'recipient': mut_output['voters']
+        }
+
+        log.debug(f'Request Body:\n{body}')
+
+        response = requests.post(approval_url, data=body)
+        log.debug(f'Response:\n{response}')
+
+        assert json.loads(response.text)['statusCode'] == 302
 
     @pytest.mark.dependency()
-    def test_terra_run_plan_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
+    def test_approval_denied(self, request, sf, target_execution, mut_output, scenario):
+        depends(request, [f'{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]'])
+
+        if scenario['executions'][target_execution['cfg_path']]['action'] == 'approve':
+            pytest.skip()
+        
+        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+        for event in events:
+            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'Fail':
+                pass
+        assert event['Reject'] == 'Succeeded'
+
+    @pytest.mark.dependency()
+    def test_terra_run_deploy_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
+        if scenario['executions'][target_execution['cfg_path']]['action'] == 'reject':
+            pytest.skip()
         """Assert running execution record has a running Step Function execution"""
         depends(request, [f'{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]'])
 
-        log.info(f'Testing Plan Task')
+        log.info(f'Testing Deploy Task')
 
         events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
 
@@ -271,9 +315,19 @@ class TestIntegration:
                 status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], ids=[plan_build_id])[0]
 
         assert status == 'SUCCEEDED'
-    # def test_applied_changes(self, target_execution):
-    #     # run tg plan -detailed-exitcode and assert return code is == 0
-    #     pass
+    
+    @pytest.mark.dependency()
+    def test_sf_execution_status(self, request, mut_output, sf, target_execution, scenario):
+    
+        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
+        
+        response = sf.describe_execution(executionArn=execution_arn)
 
-    # def test_cw_event_sent(self):
-    #     pass
+        assert response['status'] == 'SUCCEEDED'
+
+    @pytest.mark.dependency()
+    def test_cw_event_sent(self, request, cb, mut_output, scenario, target_execution):
+        depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
+        status = self.get_build_status(cb, mut_output['codebuild_trigger_sf_name'], filters={'initiator': mut_output['cw_rule_initiator']})[0]
+
+        assert status == 'SUCCEEDED'
