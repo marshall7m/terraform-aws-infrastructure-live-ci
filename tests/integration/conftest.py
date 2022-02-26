@@ -105,7 +105,14 @@ def repo(gh, mut_output):
     return repo
 
 @pytest.fixture(scope='class')
-def merge_pr(repo, pr, merge_lock_status, tmp_path_factory):
+def git_repo(tmp_path_factory):
+    dir = str(tmp_path_factory.mktemp('scenario-repo-'))
+    log.debug(f'Scenario repo dir: {dir}')
+
+    yield git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir)
+    
+@pytest.fixture(scope='class')
+def merge_pr(repo, pr, merge_lock_status, git_repo):
     log.info('Merging PR')
     base_commit_id = repo.get_branch(os.environ['BASE_REF']).commit.sha
     merge_commit = repo.merge(os.environ['BASE_REF'], os.environ['HEAD_REF'])
@@ -113,13 +120,8 @@ def merge_pr(repo, pr, merge_lock_status, tmp_path_factory):
 
     log.info('Removing PR changes')
 
-    dir = str(tmp_path_factory.mktemp('scenario-repo-'))
-    log.debug(f'Scenario repo dir: {dir}')
-
-    git_repo = git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir)
-
     log.info(f'Reverting to commit ID: {base_commit_id}')
-    git_repo.git.revert('-m', '1', merge_commit.sha, no_edit=True)
+    git_repo.git.reset('--hard')
+    git_repo.git.pull()
+    git_repo.git.revert('-m', '1', str(merge_commit.sha), no_edit=True)
     git_repo.git.push('origin')
-
-    shutil.rmtree(dir)
