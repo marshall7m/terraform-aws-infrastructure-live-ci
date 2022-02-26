@@ -65,8 +65,12 @@ resource "aws_api_gateway_integration" "approval" {
     },
   "query": {
     #foreach($queryParam in $input.params().querystring.keySet())
-    "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam))" #if($foreach.hasNext),#end
-
+      #if ( $queryParam == "taskToken" )
+          "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam).replaceAll(" ", "+"))"
+      #else
+          "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam))" 
+      #end
+      #if($foreach.hasNext),#end
     #end
   }
 }
@@ -276,6 +280,15 @@ module "lambda_approval_response" {
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.codebuild_ssm_access.arn,
     aws_iam_policy.ci_metadb_access.arn
+  ]
+
+  statements = [
+    {
+      sid       = "SendTaskSuccess"
+      effect    = "Allow"
+      actions   = ["states:SendTaskSuccess"]
+      resources = [aws_sfn_state_machine.this.arn]
+    }
   ]
   lambda_layers = [
     {
