@@ -56,20 +56,21 @@ resource "aws_sfn_state_machine" "this" {
             "ExecutionName.$" = "$$.Execution.Name"
           }
         }
-        Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
-        Type     = "Task"
+        Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+        Type       = "Task"
+        ResultPath = "$.Status"
       },
       "Approval Results" = {
         Choices = [
           {
             Next         = "Deploy"
-            StringEquals = "Approve"
-            Variable     = "$.status"
+            StringEquals = "approve"
+            Variable     = "$.Status"
           },
           {
             Next         = "Reject"
-            StringEquals = "Reject"
-            Variable     = "$.status"
+            StringEquals = "reject"
+            Variable     = "$.Status"
           }
         ]
         Type = "Choice"
@@ -94,6 +95,7 @@ resource "aws_sfn_state_machine" "this" {
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Type     = "Task"
       },
+      #TODO: update sf result path status attribute for cw event to be used by trigger sf
       "Reject" = {
         Cause = "Terraform plan was rejected"
         Error = "RejectedPlan"
@@ -159,7 +161,7 @@ resource "aws_cloudwatch_event_rule" "sf_execution" {
     source      = ["aws.states"]
     detail-type = ["Step Functions Execution Status Change"],
     detail = {
-      status          = ["SUCCESS", "FAILED"],
+      status          = ["SUCCEEDED", "FAILED", "ABORTED"],
       stateMachineArn = [local.state_machine_arn]
     }
   })

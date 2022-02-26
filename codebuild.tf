@@ -6,6 +6,7 @@ locals {
   terra_run_build_name                = coalesce(var.merge_lock_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
   codebuild_vpc_config                = merge(var.codebuild_vpc_config, { "security_group_ids" = [aws_security_group.codebuilds.id] })
+  cw_rule_initiator                   = "rule/${local.cloudwatch_event_rule_name}"
 }
 data "github_repository" "this" {
   full_name = var.repo_full_name
@@ -353,9 +354,9 @@ EOT
         value = local.buildspec_scripts_source_identifier
       },
       {
-        name  = "EVENTBRIDGE_RULE"
+        name  = "EVENTBRIDGE_FINISHED_RULE"
         type  = "PLAINTEXT"
-        value = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:rule/${local.cloudwatch_event_rule_name}"
+        value = local.cw_rule_initiator
       },
       {
         name  = "PGUSER"

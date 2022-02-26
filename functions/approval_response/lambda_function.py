@@ -52,7 +52,7 @@ def lambda_handler(event, context):
             log.info('Voter count meets requirement')
 
             log.info('Sending task token to Step Function Machine')
-            sf.send_task_success(taskToken=event['query']['taskToken'], output=json.dumps({'Status': action}))
+            sf.send_task_success(taskToken=event['query']['taskToken'], output=json.dumps(action))
             return {
                 'statusCode': 302,
                 'message': 'Your choice has been submitted'
