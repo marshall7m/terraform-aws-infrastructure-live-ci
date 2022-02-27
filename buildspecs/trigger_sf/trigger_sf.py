@@ -86,8 +86,11 @@ class TriggerSF:
                 log.debug('Execution IDs:\n{aborted_ids}')
 
                 for id in aborted_ids:
+                    execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=os.environ["STATE_MACHINE_ARN"])['executions'] if execution['name'] == id][0]
+                    log.debug(f'Execution ARN: {execution_arn}')
+                    
                     sf.stop_execution(
-                        executionArn=f'{os.environ["STATE_MACHINE_ARN"]}/{id}',
+                        executionArn=execution_arn,
                         error='DependencyError',
                         cause=f'cfg_path dependency failed: {event["cfg_path"]}'
                     )
@@ -235,7 +238,7 @@ class TriggerSF:
             except psycopg2.errors.CardinalityViolation:
                 ssm = boto3.client('ssm')
                 log.error('More than one commit ID is waiting')
-                log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])}')
+                log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
                 cur.execute("""
                 SELECT DISTINCT commit_id, is_rollback 
                 FROM executions
