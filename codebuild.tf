@@ -52,10 +52,15 @@ data "aws_ssm_parameter" "github_token" {
 
 data "aws_iam_policy_document" "merge_lock_ssm_param_access" {
   statement {
-    sid    = "GetSSMParams"
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "GetSSMParameter"
     effect = "Allow"
     actions = [
-      "ssm:GetParameters"
+      "ssm:GetParameter"
     ]
     resources = [
       aws_ssm_parameter.merge_lock.arn,
@@ -281,6 +286,9 @@ version: 0.2
 env:
   shell: bash
 phases:
+  install:
+    commands:
+      - apt-get -qq update && apt-get -qq -y install postgresql-client && psql --version
   build:
     commands:
       - |
@@ -410,6 +418,7 @@ EOT
   vpc_config = local.codebuild_vpc_config
 
   role_policy_arns = [
+    aws_iam_policy.merge_lock_ssm_param_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
     aws_iam_policy.codebuild_vpc_access.arn,
     aws_iam_policy.codebuild_ssm_access.arn,
