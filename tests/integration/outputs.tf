@@ -82,3 +82,7 @@ output "voters" {
 output "approval_url" {
   value = module.mut_infrastructure_live_ci.approval_url
 }
+
+output "cw_rule_initiator" {
+  value = module.mut_infrastructure_live_ci.cw_rule_initiator
+}
