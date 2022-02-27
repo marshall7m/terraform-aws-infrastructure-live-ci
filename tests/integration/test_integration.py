@@ -34,6 +34,57 @@ class TestIntegration:
         log.info('Truncating executions table')
         with conn.cursor() as cur:
             cur.execute("TRUNCATE executions")
+        conn.commit()
+
+    @pytest.fixture(scope='class', autouse=True)
+    def destroy_scenario_tf_resources(self, cb, conn, mut_output):
+
+        yield None
+        log.info('Destroying Terraform provisioned resources from test repository')
+
+        with conn.cursor() as cur:
+            cur.execute(f"""
+            SELECT account_name, account_path, deploy_role_arn
+            FROM account_dim 
+            """
+            )
+
+            accounts = []
+            for result in cur.fetchall():
+                record = {}
+                for i, description in enumerate(cur.description):
+                    record[description.name] = result[i]
+                accounts.append(record)
+            
+        log.debug(f'Accounts:\n{pformat(accounts)}')
+
+        ids = []
+        log.info("Starting account-level terraform destroy builds")
+        for account in accounts:
+            log.debug(f'Account Name: {account["account_name"]}')
+
+            response = cb.start_build(
+                projectName=mut_output['codebuild_terra_run_name'],
+                environmentVariablesOverride=[
+                    {
+                        'name': 'TG_COMMAND',
+                        'type': 'PLAINTEXT',
+                        'value': f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} -auto-approve'
+                    },
+                    {
+                        'name': 'ROLE_ARN',
+                        'type': 'PLAINTEXT',
+                        'value': account['deploy_role_arn']
+                    }
+                ]
+            )
+
+            ids.append(response['build']['id'])
+        
+        log.info('Waiting on destroy builds to finish')
+        statuses = self.get_build_status(cb, mut_output['codebuild_terra_run_name'], ids=ids)
+
+        log.info(f'Finished Statuses:\n{statuses}')
 
     # list of PRs with directory to create test files within
     # explicitly defining execution testing order until fixture list return values can be used to parametrize fixtures/tests
@@ -178,50 +229,71 @@ class TestIntegration:
         assert len(scenario['executions']) == len(target_execution_ids)
     
     @pytest.fixture(scope="class")
-    def target_execution(self, conn, pr, request, mut_output, cb, scenario):
+    def target_execution(self, conn, pr, request, sf, mut_output, cb, scenario):
         record = {}
         with conn.cursor() as cur:
             cur.execute(f"""
                 SELECT *
                 FROM executions 
                 WHERE commit_id = '{pr["head_commit_id"]}'
-                AND status = 'running'
+                AND "status" IN ('running', 'aborted')
                 LIMIT 1
             """)
+            
+            results = cur.fetchone()
 
-            row = [value for value in cur.fetchone()]
+            log.debug(f'Results:\n{results}')
 
-            if len(row) == 0:
-                log.error('No execution records have a status of running within commit')
-                sys.exit(1)
-            else:
+            if results != None:
+                row = [value for value in results]
                 for i, description in enumerate(cur.description):
                     record[description.name] = row[i]
+            else:
+                log.error('No execution records have a status of running within commit')
+                sys.exit(1)
 
         yield record
-        
-        log.info('Destroying Terraform provisioned resources from test repository')
 
-        cb.start_build(
-            projectName=mut_output['codebuild_terra_run_name'],
-            environmentVariablesOverride=[
-                {
-                    'name': 'TG_COMMAND',
-                    'type': 'PLAINTEXT',
-                    'value': f'terragrunt destroy --terragrunt-working-dir {record["cfg_path"]} -auto-approve'
-                },
-                {
-                    'name': 'ROLE_ARN',
-                    'type': 'PLAINTEXT',
-                    'value': record['deploy_role_arn']
-                }
-            ]
-        )
+        try:
+            log.info('Stopping step function execution if left hanging')
+            log.info(f'Execution ID: {record["execution_id"]}')
+
+            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == record['execution_id']][0]
+
+            sf.stop_execution(
+                executionArn=execution_arn,
+                error='IntegrationTestsError',
+                cause='Failed integrations tests prevented execution from finishing'
+            )
+
+        except sf.exceptions.ResourceNotFound:
+            log.info('Execution has finished')
+    
+    @pytest.mark.dependency()
+    def test_sf_execution_aborted(self, request, sf, target_execution, mut_output):
+        depends(request, [f"{request.cls.__name__}::test_executions_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
+
+        if target_execution['status'] == 'running':
+            pytest.skip()
+
+        executions = sf.list_executions(
+            stateMachineArn=mut_output['state_machine_arn'],
+            statusFilter='ABORTED'
+        )['executions']
+
+        running_ids = [execution['name'] for execution in executions]
+
+        assert target_execution['execution_id'] not in running_ids
+
 
     @pytest.mark.dependency()
     def test_sf_execution_running(self, request, mut_output, sf, target_execution, scenario):
         """Assert running execution record has a running Step Function execution"""
+
         depends(request, [f"{request.cls.__name__}::test_executions_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
+
+        if target_execution['status'] == 'aborted':
+            pytest.skip()
 
         executions = sf.list_executions(
             stateMachineArn=mut_output['state_machine_arn'],
@@ -318,6 +390,11 @@ class TestIntegration:
     
     @pytest.mark.dependency()
     def test_sf_execution_status(self, request, mut_output, sf, target_execution, scenario):
+
+        if scenario['executions'][target_execution['cfg_path']]['action'] == 'approve':
+            depends(request, [f'{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]'])
+        else:
+            depends(request, [f'{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]'])
     
         execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
         
