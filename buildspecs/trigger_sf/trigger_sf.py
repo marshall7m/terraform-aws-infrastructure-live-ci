@@ -141,11 +141,6 @@ class TriggerSF:
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
         return_code = run.returncode
 
-        log.debug('Dropping account role')
-        del os.environ['AWS_ACCESS_KEY_ID']
-        del os.environ['AWS_SECRET_ACCESS_KEY']
-        del os.environ['AWS_SESSION_TOKEN']
-
         if return_code not in [0, 2]:
             log.fatal('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
             log.debug(f'Return code: {return_code}')
@@ -169,6 +164,11 @@ class TriggerSF:
                 cfg['new_providers'] = self.get_new_providers(cfg['cfg_path'])
 
                 stack.append(cfg)
+        
+        log.debug('Dropping account role')
+        del os.environ['AWS_ACCESS_KEY_ID']
+        del os.environ['AWS_SECRET_ACCESS_KEY']
+        del os.environ['AWS_SESSION_TOKEN']
 
         return stack
 
