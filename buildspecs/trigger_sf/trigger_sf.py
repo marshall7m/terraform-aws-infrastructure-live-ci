@@ -109,10 +109,14 @@ class TriggerSF:
     def get_new_providers(self, path):
         log.debug(f'Path: {path}')
         cmd = f"terragrunt providers --terragrunt-working-dir {path}"
-        run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=True)
+        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
 
         log.debug(f'Terragrunt providers cmd out:\n{run.stdout}')
-        log.debug(f'Terragrunt providers cmd stderr:\n{run.stderr}')
+
+        if run.returncode != 0:
+            log.error(f'Running cmd: {cmd} resulted in error')
+            log.error(f'Cmd stderr:\n{run.stderr}')
+            sys.exit(1)
         
         cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
         state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
@@ -279,7 +283,8 @@ class TriggerSF:
         
         if os.environ['CODEBUILD_INITIATOR'] == os.getenv('EVENTBRIDGE_FINISHED_RULE'):
             log.info('Triggered via Step Function Event')
-            event = json.loads(os.environ['EVENTBRIDGE_FINISHED_RULE'])
+            log.debug(f'Env vars:\n{os.environ}')
+            event = json.loads(os.environ['EVENTBRIDGE_RULE'])
             log.debug(f'Parsed CW event:\n{pformat(event)}')
 
             self.execution_finished(event)
