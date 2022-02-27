@@ -1,4 +1,5 @@
 from tests.integration import test_integration
+import pytest
 
 test_null_resource = """
 provider "null" {}
@@ -39,5 +40,30 @@ class TestScenarioOne(test_integration.TestIntegration):
             }
         }
     }
-    # def test_null_resource(self):
-    #     pass
+
+class TestScenarioTwo(test_integration.TestIntegration):
+    scenario = {
+        'modify_items': [
+            {
+                'cfg_path': 'directory_dependency/dev-account/global',
+                'content': test_null_resource
+            }
+        ],
+        'executions': {
+            'directory_dependency/dev-account/global': {
+                'action': 'approve'
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/baz': {
+                'action': 'approve'
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/bar': {
+                'action': 'reject'
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/doo': {
+                'action': 'approve'
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/foo': {
+                'action': 'approve'
+            }
+        }
+    }
