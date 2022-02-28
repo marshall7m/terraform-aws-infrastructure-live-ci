@@ -150,6 +150,28 @@ resource "aws_cloudwatch_event_target" "sf_execution" {
   target_id = "CodeBuildTriggerStepFunction"
   arn       = module.codebuild_trigger_sf.arn
   role_arn  = module.cw_event_rule_role.role_arn
+  input_transformer {
+    input_paths = {
+      output = "$.detail.output",
+      status = "$.detail.status"
+    }
+    input_template = <<EOF
+{
+  "environmentVariablesOverride": [
+    {
+      "name": "EXECUTION_STATUS",
+      "type": "PLAINTEXT",
+      "value": <status>
+    },
+    {
+      "name": "EXECUTION_OUTPUT",
+      "type": "PLAINTEXT",
+      "value": <output>
+    }
+  ]
+}
+EOF
+  }
 }
 
 resource "aws_cloudwatch_event_rule" "sf_execution" {
