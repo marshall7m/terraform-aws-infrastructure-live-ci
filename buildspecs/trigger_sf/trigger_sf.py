@@ -39,7 +39,7 @@ class TriggerSF:
         
         return [resource['type'] + '.' + resource['name'] for resource in json.loads(run.stdout)['resources'] if resource['provider'].split('\"')[1] in new_providers]
 
-    def execution_finished(self, status, output):
+    def execution_finished(self, output):
         sf = boto3.client('stepfunctions')
 
         log.info('Updating execution record status')
@@ -48,7 +48,7 @@ class TriggerSF:
         SET "status" = {}
         WHERE execution_id = {}
         """).format(
-            sql.Literal(status),
+            sql.Literal(output['status']),
             sql.Literal(output['execution_id'])
         ))
         
@@ -71,7 +71,7 @@ class TriggerSF:
 
                 log.debug(self.cur.fetchall())
 
-            if status == 'failed':
+            if output['status'] == 'failed':
                 log.info('Aborting all deployments for commit')
                 self.cur.execute(
                     sql.SQL("""
@@ -109,7 +109,7 @@ class TriggerSF:
                 if rollback_count > 0:
                     log.debug(f'Rollback records:\n{pformat(rollback_records)}')
     
-        elif output['is_rollback'] == True and status == 'failed':
+        elif output['is_rollback'] == True and output['status'] == 'failed':
             log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
             sys.exit(1)
 
@@ -294,10 +294,8 @@ class TriggerSF:
             log.info('Triggered via Step Function Event')
             output = json.loads(os.environ['EXECUTION_OUTPUT'])
             log.debug(f'Parsed Step Function Output:\n{pformat(output)}')
-            status = os.environ['EXECUTION_STATUS'].lower()
-            log.debug(f'Step Function Status: {status}')
 
-            self.execution_finished(status, output)
+            self.execution_finished(output)
 
         elif os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
             log.info('Locking merge action within target branch')
