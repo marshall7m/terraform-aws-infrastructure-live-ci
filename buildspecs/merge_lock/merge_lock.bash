@@ -3,12 +3,11 @@ echo "CODEBUILD_RESOLVED_SOURCE_VERSION: $CODEBUILD_RESOLVED_SOURCE_VERSION"
 echo "REPO_FULL_NAME: $REPO_FULL_NAME"
 echo "MERGE_LOCK: $MERGE_LOCK"
 
-if [ "$MERGE_LOCK" == "true" ]; then
-    running_pr=$(psql -qtAX -c "SELECT DISTINCT pr_id FROM executions WHERE status = 'running'")
+if [ "$MERGE_LOCK" != "none" ]; then
     data=$(cat <<EOF
     {
         "state": "pending", 
-        "description": "Merging Terragrunt changes is locked. PR #${running_pr} integration is running"
+        "description": "Merging Terragrunt changes is locked. PR #${MERGE_LOCK} integration is running"
     }
 EOF
     )
@@ -16,7 +15,7 @@ EOF
         -H 'Content-Type: application/json' \
         --data "$data" \
         https://${GITHUB_TOKEN}:x-oauth-basic@api.github.com/repos/${REPO_FULL_NAME}/statuses/${CODEBUILD_RESOLVED_SOURCE_VERSION}
-elif [ "$MERGE_LOCK" == "false" ]; then
+elif [ "$MERGE_LOCK" == "none" ]; then
     curl -s -X POST \
         -H 'Content-Type: application/json' \
         --data '{"state": "success", "description": "Merging Terragrunt changes is unlocked"}' \

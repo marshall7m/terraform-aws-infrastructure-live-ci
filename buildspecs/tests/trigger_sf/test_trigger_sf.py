@@ -311,6 +311,6 @@ class TestCloudWatchEvent:
         if results == None:
             log.debug('Assert merge unlock')
             log.debug(f'AWS client calls():\n{mock_aws_client.mock_calls}')
-            mock_aws_client().put_parameter.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=False, Type='String', Overwrite=True)
+            mock_aws_client().put_parameter.assert_called_once_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value="none", Type='String', Overwrite=True)
         else:
             pytest.mark.skip('Executions are runnning -- skip merge unlock assertion')

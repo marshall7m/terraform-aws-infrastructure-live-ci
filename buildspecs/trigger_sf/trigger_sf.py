@@ -222,7 +222,6 @@ class TriggerSF:
             log.debug(f'Stack column template: {col_tpl}')
 
             res = execute_values(self.cur, query, stack, template=col_tpl, fetch=True)
-            log.debug(f"res:\n{res}")
             log.debug(f'Inserted executions:\n{pformat([dict(r) for r in res])}')
             
     def start_sf_executions(self):
@@ -295,7 +294,7 @@ class TriggerSF:
 
         elif os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
             log.info('Locking merge action within target branch')
-            ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='true', Type='String', Overwrite=True)
+            ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1], Type='String', Overwrite=True)
 
             log.info('Creating deployment execution records')
             self.update_executions_with_new_deploy_stack()
@@ -315,7 +314,7 @@ class TriggerSF:
             self.start_sf_executions()
         else:
             log.info('No executions are waiting or running -- unlocking merge action within target branch')
-            ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='false', Type='String', Overwrite=True)
+            ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
 
     def cleanup(self):
 

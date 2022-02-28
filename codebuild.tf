@@ -36,7 +36,7 @@ resource "aws_ssm_parameter" "merge_lock" {
   name        = local.merge_lock_name
   description = "Locks PRs with infrastructure changes from being merged into base branch"
   type        = "String"
-  value       = "false"
+  value       = "none"
 }
 
 resource "aws_ssm_parameter" "metadb_ci_password" {
@@ -286,9 +286,6 @@ version: 0.2
 env:
   shell: bash
 phases:
-  install:
-    commands:
-      - apt-get -qq update && apt-get -qq -y install postgresql-client && psql --version
   build:
     commands:
       - |
