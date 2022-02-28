@@ -92,8 +92,9 @@ resource "aws_sfn_state_machine" "this" {
           ]
           ProjectName = module.codebuild_terra_run.name
         }
-        Resource = "arn:aws:states:::codebuild:startBuild.sync"
-        Type     = "Task"
+        Resource   = "arn:aws:states:::codebuild:startBuild.sync"
+        Type       = "Task"
+        ResultPath = null
       },
       #TODO: update sf result path status attribute for cw event to be used by trigger sf
       "Reject" = {
