@@ -12,6 +12,7 @@ import json
 import boto3
 from pprint import pformat
 import sys
+import contextlib
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -54,10 +55,13 @@ class TriggerSF:
         if not output['is_rollback']:
             if len(output['new_providers']) > 0:
                 log.info('Adding new provider resources to associated execution record')
-                resources = self.get_new_provider_resources(output['cfg_path'], output['commit_id'], output['new_providers'])
+                with self.set_aws_env_vars(output['plan_role_arn'], 'trigger-sf-terragrunt-state'):
+                    resources = self.get_new_provider_resources(output['cfg_path'], output['commit_id'], output['new_providers'])
+
+                log.debug(f'New Terraform resources:\n{resources}')
                 self.cur.execute(sql.SQL("""
                 UPDATE executions 
-                SET new_resources = {} 
+                SET new_resources = {}
                 WHERE execution_id = {}
                 RETURNING new_resources
                 """).format(
@@ -129,16 +133,22 @@ class TriggerSF:
 
         return list(set(cfg_providers).difference(state_providers))
 
-    def create_stack(self, path, git_root, role_arn):
+    @contextlib.contextmanager
+    def set_aws_env_vars(self, role_arn, session_name):
         sts = boto3.client('sts')
-        log.debug(f'Account plan role ARN: {role_arn}')
-        plan_role_creds = sts.assume_role(RoleArn=role_arn, RoleSessionName='trigger-sf-terragrunt-plan-all')['Credentials']
+        creds =sts.assume_role(RoleArn=role_arn, RoleSessionName=session_name)['Credentials']
 
-        log.debug("Setting account's plan role credentials")
-        os.environ['AWS_ACCESS_KEY_ID'] = plan_role_creds['AccessKeyId']
-        os.environ['AWS_SECRET_ACCESS_KEY'] = plan_role_creds['SecretAccessKey']
-        os.environ['AWS_SESSION_TOKEN'] = plan_role_creds['SessionToken']
+        os.environ['AWS_ACCESS_KEY_ID'] = creds['AccessKeyId']
+        os.environ['AWS_SECRET_ACCESS_KEY'] = creds['SecretAccessKey']
+        os.environ['AWS_SESSION_TOKEN'] = creds['SessionToken']
 
+        yield None
+
+        del os.environ['AWS_ACCESS_KEY_ID']
+        del os.environ['AWS_SECRET_ACCESS_KEY']
+        del os.environ['AWS_SESSION_TOKEN']
+        
+    def create_stack(self, path, git_root):
         cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
 
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
@@ -167,11 +177,6 @@ class TriggerSF:
                 cfg['new_providers'] = self.get_new_providers(cfg['cfg_path'])
 
                 stack.append(cfg)
-        
-        log.debug('Dropping account role')
-        del os.environ['AWS_ACCESS_KEY_ID']
-        del os.environ['AWS_SECRET_ACCESS_KEY']
-        del os.environ['AWS_SESSION_TOKEN']
 
         return stack
 
@@ -193,12 +198,14 @@ class TriggerSF:
         log.info('Getting account stacks')
         for account in accounts:
             log.info(f'Account path: {account["path"]}')
+            log.debug(f'Account plan role ARN: {account["role"]}')
 
             if not os.path.isdir(account['path']):
                 log.error('Account path does not exist within repo')
                 sys.exit(1)
             
-            stack = self.create_stack(account['path'], git_root, account['role'])
+            with self.set_aws_env_vars(account['role'], 'trigger-sf-terragrunt-plan-all'):
+                stack = self.create_stack(account['path'], git_root)
 
             log.debug(f'Stack:\n{stack}')
 
