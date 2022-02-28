@@ -38,7 +38,7 @@ class TriggerSF:
         
         return [resource['type'] + '.' + resource['name'] for resource in json.loads(run.stdout)['resources'] if resource['provider'].split('\"')[1] in new_providers]
 
-    def execution_finished(self, event):
+    def execution_finished(self, status, output):
         sf = boto3.client('stepfunctions')
 
         log.info('Updating execution record status')
@@ -47,14 +47,14 @@ class TriggerSF:
         SET "status" = {}
         WHERE execution_id = {}
         """).format(
-            sql.Literal(event['status']),
-            sql.Literal(event['execution_id'])
+            sql.Literal(status),
+            sql.Literal(output['execution_id'])
         ))
         
-        if not event['is_rollback']:
-            if len(event['new_providers']) > 0:
+        if not output['is_rollback']:
+            if len(output['new_providers']) > 0:
                 log.info('Adding new provider resources to associated execution record')
-                resources = self.get_new_provider_resources(event['cfg_path'], event['commit_id'], event['new_providers'])
+                resources = self.get_new_provider_resources(output['cfg_path'], output['commit_id'], output['new_providers'])
                 self.cur.execute(sql.SQL("""
                 UPDATE executions 
                 SET new_resources = {} 
@@ -62,12 +62,12 @@ class TriggerSF:
                 RETURNING new_resources
                 """).format(
                     sql.Literal(resources),
-                    sql.Literal(event['execution_id'])
+                    sql.Literal(output['execution_id'])
                 ))
 
                 log.debug(self.cur.fetchall())
 
-            if event['status'] in ['failed', 'rejected']:
+            if status == 'failed':
                 log.info('Aborting all deployments for commit')
                 self.cur.execute(
                     sql.SQL("""
@@ -77,7 +77,7 @@ class TriggerSF:
                     AND commit_id = {}
                     AND is_rollback = false
                     RETURNING execution_id
-                    """).format(sql.Literal(event['commit_id']))
+                    """).format(sql.Literal(output['commit_id']))
                 )
 
                 log.info('Aborting Step Function executions')
@@ -92,12 +92,12 @@ class TriggerSF:
                     sf.stop_execution(
                         executionArn=execution_arn,
                         error='DependencyError',
-                        cause=f'cfg_path dependency failed: {event["cfg_path"]}'
+                        cause=f'cfg_path dependency failed: {output["cfg_path"]}'
                     )
 
                 log.info('Creating rollback executions if needed')
                 with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
-                    self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(event['commit_id'])))
+                    self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(output['commit_id'])))
                     rollback_records = [dict(r) for r in self.cur.fetchall()]
         
                 rollback_count = len(rollback_records)
@@ -105,7 +105,7 @@ class TriggerSF:
                 if rollback_count > 0:
                     log.debug(f'Rollback records:\n{pformat(rollback_records)}')
     
-        elif event['is_rollback'] == True and event['status'] == 'failed':
+        elif output['is_rollback'] == True and status == 'failed':
             log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
             sys.exit(1)
 
@@ -286,11 +286,12 @@ class TriggerSF:
         
         if os.environ['CODEBUILD_INITIATOR'] == os.getenv('EVENTBRIDGE_FINISHED_RULE'):
             log.info('Triggered via Step Function Event')
-            log.debug(f'Env vars:\n{os.environ}')
-            event = json.loads(os.environ['EVENTBRIDGE_RULE'])
-            log.debug(f'Parsed CW event:\n{pformat(event)}')
+            output = json.loads(os.environ['EXECUTION_OUTPUT'])
+            log.debug(f'Parsed Step Function Output:\n{pformat(output)}')
+            status = os.environ['EXECUTION_STATUS'].lower()
+            log.debug(f'Step Function Status: {status}')
 
-            self.execution_finished(event)
+            self.execution_finished(status, output)
 
         elif os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
             log.info('Locking merge action within target branch')
