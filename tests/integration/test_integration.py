@@ -19,6 +19,7 @@ from pprint import pformat
 import re
 import tftest
 import requests
+import aurora_data_api
 
 
 log = logging.getLogger(__name__)
@@ -27,14 +28,19 @@ log.setLevel(logging.DEBUG)
 class TestIntegration:
 
     @pytest.fixture(scope='class', autouse=True)
-    def truncate_executions(self, conn):
+    def truncate_executions(self, mut_output):
         #table setup is within tf module
         #yielding none to define truncation as pytest teardown logic
         yield None
         log.info('Truncating executions table')
-        with conn.cursor() as cur:
-            cur.execute("TRUNCATE executions")
-        conn.commit()
+        # using `conn` fixture with conn.commit() after query results in `conn` fixture teardown to output that the transaction isn't found
+        with aurora_data_api.connect(
+            aurora_cluster_arn=mut_output['metadb_arn'],
+            secret_arn=mut_output['metadb_secret_manager_master_arn'],
+            database=mut_output['metadb_name']
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("TRUNCATE executions")
 
     @pytest.fixture(scope='class', autouse=True)
     def destroy_scenario_tf_resources(self, cb, conn, mut_output):
