@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION status_all_update(statuses text[])
                     RETURN 'running';
                 WHEN i = 'failed' THEN
                     fail_count := fail_count + 1;
-                WHEN i = 'success' THEN
+                WHEN i = 'succeeded' THEN
                     succcess_count := succcess_count + 1;
                 ELSE
                     RAISE EXCEPTION 'status is unknown: %', i; 
@@ -22,7 +22,7 @@ CREATE OR REPLACE FUNCTION status_all_update(statuses text[])
             WHEN fail_count > 0 THEN
                 RETURN 'failed';
             WHEN succcess_count > 0 THEN
-                RETURN 'success';
+                RETURN 'succeeded';
             ELSE
                 RAISE EXCEPTION 'Array is empty: %', statuses; 
         END CASE;

@@ -46,7 +46,7 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
                         SELECT DISTINCT account_name
                         FROM commit_executions
                         GROUP BY account_name
-                        HAVING COUNT(*) FILTER (WHERE "status" = 'success') = COUNT(*)
+                        HAVING COUNT(*) FILTER (WHERE "status" = 'succeeded') = COUNT(*)
                     )
                 )
             )
@@ -55,7 +55,7 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
                     SELECT ARRAY(
                         SELECT DISTINCT commit_executions.cfg_path
                         FROM commit_executions
-                        WHERE "status" = 'success'
+                        WHERE "status" = 'succeeded'
                     )
                 )
             )
