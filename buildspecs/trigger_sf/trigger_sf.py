@@ -88,7 +88,7 @@ class TriggerSF:
                 results = self.cur.fetchall()
                 log.debug(f'Results: {results}')
                 if results != None:
-                    aborted_ids = [rec[0] for rec in results]
+                    aborted_ids = [dict(r) for r in results]
                 else:
                     aborted_ids = []
                 
