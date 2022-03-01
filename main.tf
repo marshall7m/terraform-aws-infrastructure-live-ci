@@ -30,6 +30,15 @@ resource "aws_sfn_state_machine" "this" {
         Resource   = "arn:aws:states:::codebuild:startBuild.sync"
         Type       = "Task"
         ResultPath = null
+        # TODO: Create terraform specific error catching/retries 
+        # (e.g. tf plan timeout results in task to retry or tf deploy role arn has insufficient permissions results in waiting till user updates deploy role permissions)
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "Reject"
+            ResultPath  = null
+          }
+        ]
       },
       "Request Approval" = {
         Next = "Approval Results"
@@ -58,25 +67,32 @@ resource "aws_sfn_state_machine" "this" {
         }
         Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
         Type       = "Task"
-        ResultPath = "$.Status"
+        ResultPath = "$.Action"
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "Reject"
+            ResultPath  = null
+          }
+        ]
       },
       "Approval Results" = {
         Choices = [
           {
             Next         = "Deploy"
             StringEquals = "approve"
-            Variable     = "$.Status"
+            Variable     = "$.Action"
           },
           {
             Next         = "Reject"
             StringEquals = "reject"
-            Variable     = "$.Status"
+            Variable     = "$.Action"
           }
         ]
         Type = "Choice"
       },
       "Deploy" = {
-        End = true
+        Next = "Success"
         Parameters = {
           EnvironmentVariablesOverride = [
             {
@@ -95,12 +111,39 @@ resource "aws_sfn_state_machine" "this" {
         Resource   = "arn:aws:states:::codebuild:startBuild.sync"
         Type       = "Task"
         ResultPath = null
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "Reject"
+            ResultPath  = null
+          }
+        ]
       },
-      #TODO: update sf result path status attribute for cw event to be used by trigger sf
+      "Success" = {
+        Type = "Pass"
+        Parameters = {
+          "execution_id.$"  = "$.execution_id"
+          "is_rollback.$"   = "$.is_rollback"
+          "new_providers.$" = "$.new_providers"
+          "plan_role_arn.$" = "$.plan_role_arn"
+          "cfg_path.$"      = "$.cfg_path"
+          "commit_id.$"     = "$.commit_id"
+          "status"          = "succeeded"
+        }
+        End = true
+      },
       "Reject" = {
-        Cause = "Terraform plan was rejected"
-        Error = "RejectedPlan"
-        Type  = "Fail"
+        Type = "Pass"
+        Parameters = {
+          "execution_id.$"  = "$.execution_id"
+          "is_rollback.$"   = "$.is_rollback"
+          "new_providers.$" = "$.new_providers"
+          "plan_role_arn.$" = "$.plan_role_arn"
+          "cfg_path.$"      = "$.cfg_path"
+          "commit_id.$"     = "$.commit_id"
+          "status"          = "failed"
+        }
+        End = true
       }
     }
   })
@@ -153,17 +196,11 @@ resource "aws_cloudwatch_event_target" "sf_execution" {
   role_arn  = module.cw_event_rule_role.role_arn
   input_transformer {
     input_paths = {
-      output = "$.detail.output",
-      status = "$.detail.status"
+      output = "$.detail.output"
     }
     input_template = <<EOF
 {
   "environmentVariablesOverride": [
-    {
-      "name": "EXECUTION_STATUS",
-      "type": "PLAINTEXT",
-      "value": <status>
-    },
     {
       "name": "EXECUTION_OUTPUT",
       "type": "PLAINTEXT",
