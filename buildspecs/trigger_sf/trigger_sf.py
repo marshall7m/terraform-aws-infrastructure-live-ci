@@ -85,9 +85,14 @@ class TriggerSF:
                 )
 
                 log.info('Aborting Step Function executions')
-
-                aborted_ids = [rec[0] for rec in self.cur.fetchall()]
-                log.debug('Execution IDs:\n{aborted_ids}')
+                results = self.cur.fetchall()
+                log.debug(f'Results: {results}')
+                if results != None:
+                    aborted_ids = [rec[0] for rec in results]
+                else:
+                    aborted_ids = []
+                
+                log.debug(f'Execution IDs:\n{aborted_ids}')
 
                 for id in aborted_ids:
                     execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=os.environ["STATE_MACHINE_ARN"])['executions'] if execution['name'] == id][0]
@@ -102,7 +107,9 @@ class TriggerSF:
                 log.info('Creating rollback executions if needed')
                 with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
                     self.cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(output['commit_id'])))
-                    rollback_records = [dict(r) for r in self.cur.fetchall()]
+                    results = self.cur.fetchall()
+                    log.debug(f'Results:\n{results}')
+                    rollback_records = [dict(r) for r in results]
         
                 rollback_count = len(rollback_records)
                 log.info(f'Rollback count: {rollback_count}')
