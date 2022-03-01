@@ -125,3 +125,24 @@ def merge_pr(repo, pr, merge_lock_status, git_repo):
     git_repo.git.pull()
     git_repo.git.revert('-m', '1', str(merge_commit.sha), no_edit=True)
     git_repo.git.push('origin')
+
+@pytest.fixture(scope='class')
+def revert_pr(git_repo, repo, pr, merge_pr, tmp_path_factory):
+
+    dir = str(tmp_path_factory.mktemp('scenario-repo-rollback'))
+
+    revert_ref = f'revert-{pr["number"]}-{os.environ["HEAD_REF"]}'
+
+    log.info(f'Creating rollback feature branch: {revert_ref}')
+    base_commit = repo.get_branch(os.environ['BASE_REF'])
+    repo.create_git_ref(ref='refs/heads/' + revert_ref, sha=base_commit.commit.sha)
+
+    git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir, branch=revert_ref)
+    log.debug(f'Reverting merge commit: {merge_pr.sha}')
+    git_repo.git.revert('-m', '1', str(merge_pr.sha), no_edit=True)
+    git_repo.git.push('origin')
+
+    log.debug('Creating PR')
+    pr = repo.create_pull(title=f"Revert {os.environ['HEAD_REF']}", body='Rollback PR', base=os.environ['BASE_REF'], head=revert_ref)
+
+    yield pr
