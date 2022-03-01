@@ -426,16 +426,12 @@ class TestIntegration:
 
         if scenario['executions'][target_execution['cfg_path']]['action'] == 'approve':
             depends(request, [f'{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]'])
-            
-            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
-            response = sf.describe_execution(executionArn=execution_arn)
-            assert response['status'] == 'SUCCEEDED'
         else:
             depends(request, [f'{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]'])
 
-            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
-            response = sf.describe_execution(executionArn=execution_arn)
-            assert response['status'] == 'FAILED'
+        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
+        response = sf.describe_execution(executionArn=execution_arn)
+        assert response['status'] == 'SUCCEEDED'
 
     @pytest.mark.dependency()
     def test_cw_event_sent(self, request, cb, mut_output, scenario, target_execution):
