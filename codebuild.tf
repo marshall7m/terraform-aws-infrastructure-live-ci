@@ -424,11 +424,12 @@ EOT
 
   role_policy_statements = [
     {
-      sid    = "StepFunctionTriggerAccess"
+      sid    = "StepFunctionAccess"
       effect = "Allow"
       actions = [
         "states:StartExecution",
-        "states:StopExecution"
+        "states:StopExecution",
+        "states:ListExecutions"
       ]
       resources = [local.state_machine_arn]
     },
