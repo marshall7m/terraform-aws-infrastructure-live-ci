@@ -28,19 +28,50 @@ log.setLevel(logging.DEBUG)
 class TestIntegration:
 
     @pytest.fixture(scope='class', autouse=True)
+    def tested_executions(self):
+        ids = []
+        
+        def _add_id(id=None):
+            if id != None:
+                ids.append(id)
+            
+            return ids
+
+        yield _add_id
+
+        ids = []
+
+    @pytest.fixture(scope='class', autouse=True)
     def truncate_executions(self, mut_output):
         #table setup is within tf module
         #yielding none to define truncation as pytest teardown logic
         yield None
         log.info('Truncating executions table')
-        # using `conn` fixture with conn.commit() after query results in `conn` fixture teardown to output that the transaction isn't found
         with aurora_data_api.connect(
             aurora_cluster_arn=mut_output['metadb_arn'],
             secret_arn=mut_output['metadb_secret_manager_master_arn'],
-            database=mut_output['metadb_name']
+            database=mut_output['metadb_name'],
+            #recommended for DDL statements
+            continue_after_timeout=True
         ) as conn:
             with conn.cursor() as cur:
                 cur.execute("TRUNCATE executions")
+
+    @pytest.fixture(scope='class', autouse=True)
+    def abort_hanging_sf_executions(self, sf, mut_output):
+        yield None
+
+        log.info('Stopping step function execution if left hanging')
+        execution_arns = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'], statusFilter='RUNNING')['executions']]
+
+        for arn in execution_arns:
+            log.debug(f'ARN: {arn}')
+
+            sf.stop_execution(
+                executionArn=arn,
+                error='IntegrationTestsError',
+                cause='Failed integrations tests prevented execution from finishing'
+            )
 
     @pytest.fixture(scope='class', autouse=True)
     def destroy_scenario_tf_resources(self, cb, conn, mut_output):
@@ -61,6 +92,7 @@ class TestIntegration:
                 for i, description in enumerate(cur.description):
                     record[description.name] = result[i]
                 accounts.append(record)
+        conn.commit()
             
         log.debug(f'Accounts:\n{pformat(accounts)}')
 
@@ -214,7 +246,7 @@ class TestIntegration:
         assert trigger_sf_status[0] == 'SUCCEEDED'
     
     @pytest.mark.dependency()
-    def test_executions_exists(self, request, conn, scenario, pr):
+    def test_execution_records_exists(self, request, conn, scenario, pr):
         """Assert that all expected scenario directories are within executions table"""
         depends(request, [f'{request.cls.__name__}::test_trigger_sf_codebuild[{request.node.callspec.id}]'])
 
@@ -226,6 +258,8 @@ class TestIntegration:
             """
             )
             ids = cur.fetchone()[0]
+        conn.commit()
+
         if ids == None:
             target_execution_ids = []
         else:
@@ -235,84 +269,67 @@ class TestIntegration:
         assert len(scenario['executions']) == len(target_execution_ids)
     
     @pytest.fixture(scope="class")
-    def target_execution(self, conn, pr, request, sf, mut_output, cb, scenario):
-        record = {}
+    def target_execution(self, conn, pr, request, sf, mut_output, cb, scenario, tested_executions):
+
+        log.debug(f'Already tested execution IDs:\n{tested_executions()}')
         with conn.cursor() as cur:
             cur.execute(f"""
                 SELECT *
                 FROM executions 
                 WHERE commit_id = '{pr["head_commit_id"]}'
-                AND "status" IN ('running', 'aborted')
+                AND "status" IN ('running', 'aborted', 'failed')
+                AND NOT (execution_id = ANY (ARRAY{tested_executions()}::TEXT[]))
                 LIMIT 1
             """)
-            
             results = cur.fetchone()
+        conn.commit()
 
-            log.debug(f'Results:\n{results}')
+        record = {}
+        if results != None:
+            row = [value for value in results]
+            for i, description in enumerate(cur.description):
+                record[description.name] = row[i]
+        else:
+            log.error('Expected target execution record was not found')
+            sys.exit(1)
 
-            if results != None:
-                row = [value for value in results]
-                for i, description in enumerate(cur.description):
-                    record[description.name] = row[i]
-            else:
-                log.error('No execution records have a status of running within commit')
-                sys.exit(1)
-
+        log.debug(f'Target Execution Record:\n{pformat(record)}')
         yield record
 
-        try:
-            log.info('Stopping step function execution if left hanging')
-            log.info(f'Execution ID: {record["execution_id"]}')
-
-            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == record['execution_id']][0]
-
-            sf.stop_execution(
-                executionArn=execution_arn,
-                error='IntegrationTestsError',
-                cause='Failed integrations tests prevented execution from finishing'
-            )
-
-        except sf.exceptions.ResourceNotFound:
-            log.info('Execution has finished')
+        log.debug('Adding execution ID to tested executions list')
+        tested_executions(record['execution_id'])
     
     @pytest.mark.dependency()
     def test_sf_execution_aborted(self, request, sf, target_execution, mut_output):
-        depends(request, [f"{request.cls.__name__}::test_executions_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
+        depends(request, [f"{request.cls.__name__}::test_execution_records_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
 
-        if target_execution['status'] == 'running':
+        if target_execution['status'] != 'aborted':
             pytest.skip()
 
-        executions = sf.list_executions(
-            stateMachineArn=mut_output['state_machine_arn'],
-            statusFilter='ABORTED'
-        )['executions']
-
-        running_ids = [execution['name'] for execution in executions]
-
-        assert target_execution['execution_id'] not in running_ids
-
+        try:
+            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
+        except IndexError:
+            log.info('Executino record status was set to aborted before associated Step Function execution was created')
+        else:
+            assert sf.describe_execution(executionArn=execution_arn)['status'] == 'ABORTED'
 
     @pytest.mark.dependency()
-    def test_sf_execution_running(self, request, mut_output, sf, target_execution, scenario):
-        """Assert running execution record has a running Step Function execution"""
+    def test_sf_execution_exists(self, request, mut_output, sf, target_execution, scenario):
+        """Assert execution record has an associated Step Function execution"""
 
-        depends(request, [f"{request.cls.__name__}::test_executions_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
+        depends(request, [f"{request.cls.__name__}::test_execution_records_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
 
         if target_execution['status'] == 'aborted':
             pytest.skip()
 
-        executions = sf.list_executions(
-            stateMachineArn=mut_output['state_machine_arn'],
-            statusFilter='RUNNING'
-        )['executions']
-        running_ids = [execution['name'] for execution in executions]
+        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
 
-        assert target_execution['execution_id'] in running_ids
+        assert sf.describe_execution(executionArn=execution_arn)['status'] in ['RUNNING', 'SUCCEEDED', 'FAILED', 'TIMED_OUT']
 
     @pytest.mark.dependency()
     def test_terra_run_plan_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
         """Assert running execution record has a running Step Function execution"""
-        depends(request, [f'{request.cls.__name__}::test_sf_execution_running[{request.node.callspec.id}]'])
+        depends(request, [f'{request.cls.__name__}::test_sf_execution_exists[{request.node.callspec.id}]'])
 
         log.info(f'Testing Plan Task')
 
@@ -370,11 +387,21 @@ class TestIntegration:
         if scenario['executions'][target_execution['cfg_path']]['action'] == 'approve':
             pytest.skip()
         
+        log.debug(f'Execution ID: {target_execution["execution_id"]}')
+        state = None
+        out = None
         events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+
         for event in events:
-            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'Fail':
-                pass
-        assert event['Reject'] == 'Succeeded'
+            if event['type'] == 'PassStateEntered':
+                state = event
+            elif event['type'] == 'PassStateExited':
+                if event['stateExitedEventDetails']['name'] == 'Reject':
+                    out = json.loads(event['stateExitedEventDetails']['output'])
+
+        log.debug(f'Rejection State Output:\n{pformat(out)}')
+        assert state is not None
+        assert out['status'] == 'failed'
 
     @pytest.mark.dependency()
     def test_terra_run_deploy_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
@@ -395,18 +422,20 @@ class TestIntegration:
         assert status == 'SUCCEEDED'
     
     @pytest.mark.dependency()
-    def test_sf_execution_status(self, request, mut_output, sf, target_execution, scenario):
+    def test_sf_execution_status(self, request, mut_output, sf, target_execution, scenario, tested_executions):
 
         if scenario['executions'][target_execution['cfg_path']]['action'] == 'approve':
             depends(request, [f'{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]'])
+            
+            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
+            response = sf.describe_execution(executionArn=execution_arn)
+            assert response['status'] == 'SUCCEEDED'
         else:
             depends(request, [f'{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]'])
-    
-        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
-        
-        response = sf.describe_execution(executionArn=execution_arn)
 
-        assert response['status'] == 'SUCCEEDED'
+            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
+            response = sf.describe_execution(executionArn=execution_arn)
+            assert response['status'] == 'FAILED'
 
     @pytest.mark.dependency()
     def test_cw_event_sent(self, request, cb, mut_output, scenario, target_execution):
