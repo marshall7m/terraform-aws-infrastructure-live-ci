@@ -17,7 +17,7 @@ def pytest_generate_tests(metafunc):
     if 'modify_items' in metafunc.fixturenames:
         metafunc.parametrize('modify_items', metafunc.cls.scenario['modify_items'], indirect=True)
     if 'target_execution' in metafunc.fixturenames:
-        metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.scenario['executions']))), indirect=True)
+        metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.scenario['executions']) + len(metafunc.cls.scenario['rollback_executions']))), indirect=True)
     if 'scenario' in metafunc.fixturenames:
         metafunc.parametrize('scenario', [metafunc.cls.scenario], scope='class')
 
@@ -64,6 +64,12 @@ class TestScenarioTwo(test_integration.TestIntegration):
             },
             'directory_dependency/dev-account/us-west-2/env-one/foo': {
                 'action': 'approve'
+            }
+        },
+        'rollback_executions': {
+            'directory_dependency/dev-account/global': {
+                'action': 'approve',
+                'new_resources': []
             }
         }
     }
