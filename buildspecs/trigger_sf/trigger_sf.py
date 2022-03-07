@@ -91,7 +91,11 @@ class TriggerSF:
                     aborted_ids = [dict(r)['execution_id'] for r in results]
 
                     for id in aborted_ids:
-                        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=os.environ["STATE_MACHINE_ARN"])['executions'] if execution['name'] == id][0]
+                        try:
+                            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=os.environ["STATE_MACHINE_ARN"])['executions'] if execution['name'] == id][0]
+                        except IndexError:
+                            log.debug(f'Step Function execution for execution ID does not exist: {id}')
+                            continue
                         log.debug(f'Execution ARN: {execution_arn}')
                         
                         sf.stop_execution(
