@@ -33,7 +33,9 @@ INSERT INTO executions (
     approval_voters,
     min_approval_count,
     rejection_voters,
-    min_rejection_count
+    min_rejection_count,
+    plan_role_arn,
+    deploy_role_arn
 )
 SELECT 
     execution_id,
@@ -64,7 +66,9 @@ SELECT
     approval_voters,
     min_approval_count,
     rejection_voters,
-    min_rejection_count
+    min_rejection_count,
+    plan_role_arn,
+    deploy_role_arn
 FROM (
     SELECT
         'run-' || substr(md5(random()::TEXT), 0, 8) AS execution_id,
@@ -88,7 +92,9 @@ FROM (
         ARRAY[]::TEXT[] as approval_voters,
         min_approval_count,
         ARRAY[]::TEXT[] as rejection_voters,
-        min_rejection_count
+        min_rejection_count,
+        plan_role_arn,
+        deploy_role_arn
     FROM executions
     WHERE commit_id = {commit_id} 
     AND cardinality(new_resources) > 0
