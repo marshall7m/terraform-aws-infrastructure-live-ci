@@ -162,15 +162,6 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
   policy      = data.aws_iam_policy_document.trigger_sf_tf_state_access.json
 }
 
-module "testing_ses_approval_bucket" {
-  count      = local.test_approval_content ? 1 : 0
-  source     = "../modules/ses_approval"
-  bucket_id  = "${local.mut_id}-approval"
-  rule_name  = "${local.mut_id}-approval"
-  key        = local.approval_key
-  recipients = local.voters
-}
-
 module "mut_infrastructure_live_ci" {
   source = "../.."
 
