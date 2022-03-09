@@ -303,8 +303,14 @@ class PR(TestSetup):
 
         if apply_changes:
             log.debug('Applying changes')
-            cmd = f'terragrunt apply --terragrunt-working-dir {abs_cfg_path} -auto-approve'
-            subprocess.run(cmd.split(' '), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            cmd = f'terragrunt apply --terragrunt-working-dir {abs_cfg_path} --terragrunt-log-level debug -auto-approve'
+            run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
+            
+            if run.returncode != 0:
+                log.error(f'Running cmd: {cmd} resulted in error')
+                log.error(f'Cmd stdout:\n{run.stdout}')
+                log.error(f'Cmd stderr:\n{run.stderr}')
+                sys.exit(1)
 
         log.debug(f'Adding file to commit: {filepath}')
         self.git_repo.index.add(filepath)
@@ -345,7 +351,7 @@ class PR(TestSetup):
 
             if 'cw_event_finished_status' in item:
                 record = {**record, **{'status': item['cw_event_finished_status']}}
-                os.environ['EVENTBRIDGE_EVENT'] = json.dumps(record)
+                os.environ['EXECUTION_OUTPUT'] = json.dumps(record)
 
             if 'record_assertion' in item:
                 assertion = {}

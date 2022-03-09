@@ -7,7 +7,7 @@ import logging
 import sys
 from buildspecs.trigger_sf.trigger_sf import TriggerSF
 from psycopg2.sql import SQL
-from helpers.utils import TestSetup
+from tests.helpers.utils import TestSetup
 import shutil
 import uuid
 import json
@@ -61,8 +61,16 @@ def mock_aws_client():
     _patched.reset_mock()
 
 @pytest.fixture(scope='class')
+def mock_set_aws_env_vars():
+    '''Mocks assuming plan/deploy IAM role ARNs'''
+    with patch('buildspecs.trigger_sf.trigger_sf.TriggerSF.set_aws_env_vars') as _patched:
+        yield _patched
+    
+    _patched.reset_mock()
+
+@pytest.fixture(scope='class')
 @patch('psycopg2.connect', return_value=psycopg2.connect())
-def run(mock_conn, mock_aws_client, scenario):
+def run(mock_conn, mock_aws_client, mock_set_aws_env_vars, scenario):
     os.chdir(scenario.git_dir)
     log.debug(f'CWD: {os.getcwd()}')
 
@@ -72,10 +80,15 @@ def run(mock_conn, mock_aws_client, scenario):
 
 @pytest.fixture(scope='class')
 def ts(repo_url, class_repo_dir):
+    #use docker images installed terraform version instead of tfenv managed version
+    os.environ['PATH'] = f'usr/local/bin:{os.environ["PATH"]}'
     return TestSetup(psycopg2.connect(), repo_url, class_repo_dir, os.environ['GITHUB_TOKEN'])
 
 @pytest.fixture(scope="class")
 def scenario(request, account_dim, class_repo_dir, class_tf_state_dir, create_metadb_tables, ts):
+    #Testing repo's terragrunt specific env vars
+    #Stores tf state files within local clone of testing repo
+    os.environ['TG_BACKEND'] = 'local'
     return request.getfixturevalue(request.param)
 
 @pytest.mark.skip(reason="Not implemented")
