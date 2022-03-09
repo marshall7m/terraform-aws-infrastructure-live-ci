@@ -81,7 +81,7 @@ FROM (
         cfg_path,
         cfg_deps,
         'waiting' AS "status",
-        'terragrunt destroy --terragrunt-working-dir ' || cfg_path || target_resources(new_resources) AS plan_command,
+        'terragrunt plan --terragrunt-working-dir ' || cfg_path || target_resources(new_resources) || ' -destroy' AS plan_command,
         'terragrunt destroy --terragrunt-working-dir ' || cfg_path || target_resources(new_resources) || ' -auto-approve' AS deploy_command,
         new_providers,
         new_resources,
