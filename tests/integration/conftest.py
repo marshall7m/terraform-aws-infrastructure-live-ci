@@ -19,19 +19,19 @@ def pytest_addoption(parser):
     parser.addoption("--skip-init", action="store_true", help="skips initing tf module")
     parser.addoption("--skip-apply", action="store_true", help="skips applying tf module")
 
-@pytest.fixture(scope="session", autouse=True)
-def tf_version():
-    tf_dir = os.path.dirname(os.path.realpath(__file__))
-    version = subprocess.run('terraform --version', shell=True, capture_output=True, text=True)
-    if version.returncode == 0:
-        log.info('Terraform found in $PATH -- skip scanning for tf version')
-        log.info(f'Terraform Version: {version.stdout}')
-    else:
-        log.info('Scanning tf config for minimum tf version')
-        out = subprocess.run('tfenv install min-required && tfenv use min-required', 
-            cwd=tf_dir, shell=True, capture_output=True, check=True, text=True
-        )
-        log.debug(f'tfenv out: {out.stdout}')
+def pytest_generate_tests(metafunc):
+    if metafunc.config.getoption('skip_init'):
+        metafunc.parametrize('mut', [True], scope='session', indirect=True)
+
+    if metafunc.config.getoption('skip_apply'):
+        metafunc.parametrize('mut_output', [True], scope='session', indirect=True)
+
+    if 'scenario_param' in metafunc.fixturenames:
+        metafunc.parametrize('scenario_param', [metafunc.cls.scenario], scope='module', indirect=True)
+
+    if 'target_execution' in metafunc.fixturenames:
+        rollback_execution_count = len([1 for scenario in metafunc.cls.scenario.values() if scenario['actions'].get('rollback_providers', None) != None])
+        metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.scenario) + rollback_execution_count)), scope='class', indirect=True)
 
 @pytest.fixture(scope="session")
 def mut(request, tf_version):
@@ -57,7 +57,7 @@ def mut_plan(mut, request):
     log.info('Getting testing tf plan')
     yield mut.plan(output=True)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def mut_output(mut, request):
     if getattr(request, 'param', False):
         log.info('Skip applying testing tf module')
@@ -65,6 +65,8 @@ def mut_output(mut, request):
         log.info('Applying testing tf module')
         mut.apply(auto_approve=True)
     yield {k: v['value'] for k, v in mut.output().items()}
+
+    # create flag for cleaning up testing module?
     # tf.destroy(auto_approve=True)
 
 @pytest.fixture(scope="session")
@@ -104,45 +106,9 @@ def repo(gh, mut_output):
 
     return repo
 
-@pytest.fixture(scope='class')
+@pytest.fixture(scope='module')
 def git_repo(tmp_path_factory):
     dir = str(tmp_path_factory.mktemp('scenario-repo-'))
     log.debug(f'Scenario repo dir: {dir}')
 
     yield git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir)
-    
-@pytest.fixture(scope='class')
-def merge_pr(repo, pr, merge_lock_status, git_repo):
-    log.info('Merging PR')
-    base_commit_id = repo.get_branch(os.environ['BASE_REF']).commit.sha
-    merge_commit = repo.merge(os.environ['BASE_REF'], os.environ['HEAD_REF'])
-    yield merge_commit
-
-    log.info('Removing PR changes')
-
-    log.info(f'Reverting to commit ID: {base_commit_id}')
-    git_repo.git.reset('--hard')
-    git_repo.git.pull()
-    git_repo.git.revert('-m', '1', str(merge_commit.sha), no_edit=True)
-    git_repo.git.push('origin')
-
-@pytest.fixture(scope='class')
-def revert_pr(git_repo, repo, pr, merge_pr, tmp_path_factory):
-
-    dir = str(tmp_path_factory.mktemp('scenario-repo-rollback'))
-
-    revert_ref = f'revert-{pr["number"]}-{os.environ["HEAD_REF"]}'
-
-    log.info(f'Creating rollback feature branch: {revert_ref}')
-    base_commit = repo.get_branch(os.environ['BASE_REF'])
-    repo.create_git_ref(ref='refs/heads/' + revert_ref, sha=base_commit.commit.sha)
-
-    git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir, branch=revert_ref)
-    log.debug(f'Reverting merge commit: {merge_pr.sha}')
-    git_repo.git.revert('-m', '1', str(merge_pr.sha), no_edit=True)
-    git_repo.git.push('origin')
-
-    log.debug('Creating PR')
-    pr = repo.create_pull(title=f"Revert {os.environ['HEAD_REF']}", body='Rollback PR', base=os.environ['BASE_REF'], head=revert_ref)
-
-    yield pr
