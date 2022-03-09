@@ -310,7 +310,10 @@ module "codebuild_trigger_sf" {
   source_auth_server_type    = "GITHUB"
   source_auth_type           = "PERSONAL_ACCESS_TOKEN"
   source_auth_ssm_param_name = var.github_token_ssm_key
-
+  cache = {
+    type  = "LOCAL"
+    modes = ["LOCAL_SOURCE_CACHE"]
+  }
   build_source = {
     type                = "GITHUB"
     git_clone_depth     = 1
@@ -452,6 +455,11 @@ EOT
 module "codebuild_terra_run" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
   name   = local.terra_run_build_name
+
+  cache = {
+    type  = "LOCAL"
+    modes = ["LOCAL_SOURCE_CACHE"]
+  }
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
