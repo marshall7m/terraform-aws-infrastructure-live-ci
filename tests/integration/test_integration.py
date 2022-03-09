@@ -1,3 +1,4 @@
+from heapq import merge
 import subprocess
 import pytest
 from unittest.mock import patch
@@ -10,6 +11,7 @@ import uuid
 import json
 import time
 import github
+import git
 import timeout_decorator
 import random
 import string
@@ -21,13 +23,35 @@ import tftest
 import requests
 import aurora_data_api
 
+# def pytest_collection_modifyitems(config, items):
+    # """Rearrange testing order so that rollback test classes are always executed after PR test classes"""
+    # config.fromdictargs({'foo': 'doo'}, 'zoo')
+    # updated = []
+    # scenarios = [item.nodeid.split('::')[1] for item in items]
+    # log.debug(f'Scenario Class Names:\n{scenarios}')
+
+    # for item in items:
+    #     for name in scenarios:
+    #         main = []
+    #         rollbacks = []
+    #         if item.nodeid.startswith(f'tests/integration/test_scenarios.py::{name}::TestRollbackPR'):
+    #             rollbacks.append(item)
+    #         else:
+    #             main.append(item)
+    #     updated.extend(main.extend(rollbacks))
+    # items[:] = updated
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+@pytest.mark.usefixtures('stage', 'scenario_param')
 class TestIntegration:
 
-    @pytest.fixture(scope='class', autouse=True)
+    @pytest.fixture(scope='module', params=['deploy', 'rollback_base'])
+    def stage(self, request):
+        return request.param
+
+    @pytest.fixture(scope='class')
     def tested_executions(self):
         ids = []
         
@@ -124,78 +148,167 @@ class TestIntegration:
 
         log.info(f'Finished Statuses:\n{statuses}')
 
-    # list of PRs with directory to create test files within
-    # explicitly defining execution testing order until fixture list return values can be used to parametrize fixtures/tests
-    # at the execution phase of pytest
-    # see: https://stackoverflow.com/questions/50231627/python-pytest-unpack-fixture/56865893#56865893
     @pytest.fixture(scope='class')
-    def pr(self, repo, scenario):
-        os.environ['BASE_REF'] = 'master'
-        os.environ['HEAD_REF'] = f'feature-{uuid.uuid4()}'
-
-        base_commit = repo.get_branch(os.environ['BASE_REF'])
-        head_ref = repo.create_git_ref(ref='refs/heads/' + os.environ['HEAD_REF'], sha=base_commit.commit.sha)
-        elements = []
-        for item in scenario['modify_items']:
-            filepath = item['cfg_path'] + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
-            log.debug(f'Creating file: {filepath}')
-            blob = repo.create_git_blob(item['content'], "utf-8")
-            elements.append(github.InputGitTreeElement(path=filepath, mode='100644', type='blob', sha=blob.sha))
-
-        head_sha = repo.get_branch(os.environ['HEAD_REF']).commit.sha
-        base_tree = repo.get_git_tree(sha=head_sha)
-        tree = repo.create_git_tree(elements, base_tree)
-        parent = repo.get_git_commit(sha=head_sha)
-        commit_id = repo.create_git_commit("commit_message", tree, [parent]).sha
-        head_ref.edit(sha=commit_id)
-
+    def merge_pr(self, repo, git_repo):
         
-        log.info('Creating PR')
-        pr = repo.create_pull(title=f"test-{os.environ['HEAD_REF']}", body='test', base=os.environ['BASE_REF'], head=os.environ['HEAD_REF'])
+        merge_commits = []
+
+        def _merge(base_ref=None, head_ref=None):
+            if base_ref != None and head_ref != None:
+                log.info('Merging PR')
+                merge_commits.append(repo.merge(base_ref, head_ref))
+
+            return merge_commits
+
+        yield _merge
         
-        log.debug(f'head ref commit: {commit_id}')
-        log.debug(f'pr commits: {pr.commits}')
+        log.info(f'Removing PR changes from branch: {git_repo.git.branch_name}')
 
-        yield {
-            'number': pr.number,
-            'head_commit_id': commit_id
-        }
+        log.debug('Pulling remote changes')
+        git_repo.git.reset('--hard')
+        git_repo.git.pull()
 
+        for commit in reversed(merge_commits):
+            log.debug(f'Merge Commit ID: {commit.sha}')
+            try:
+                git_repo.git.revert('-m', '1', str(commit.sha), no_edit=True)
+                git_repo.git.push('origin')
+            except Exception as e:
+                print(e)
+
+    @pytest.fixture(scope='class')
+    def pr(self, request, stage, repo, scenario_param, git_repo, merge_pr, tmp_path_factory):
+        if stage == 'deploy':
+            os.environ['BASE_REF'] = 'master'
+            os.environ['HEAD_REF'] = f'feature-{uuid.uuid4()}'
+
+            base_commit = repo.get_branch(os.environ['BASE_REF'])
+            head_ref = repo.create_git_ref(ref='refs/heads/' + os.environ['HEAD_REF'], sha=base_commit.commit.sha)
+            elements = []
+            for dir, cfg in scenario_param.items():
+                if 'new_file_content' in cfg:
+                    filepath = dir + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
+                    log.debug(f'Creating file: {filepath}')
+                    blob = repo.create_git_blob(cfg['new_file_content'], "utf-8")
+                    elements.append(github.InputGitTreeElement(path=filepath, mode='100644', type='blob', sha=blob.sha))
+
+            head_sha = repo.get_branch(os.environ['HEAD_REF']).commit.sha
+            base_tree = repo.get_git_tree(sha=head_sha)
+            tree = repo.create_git_tree(elements, base_tree)
+            parent = repo.get_git_commit(sha=head_sha)
+            commit_id = repo.create_git_commit("commit_message", tree, [parent]).sha
+            head_ref.edit(sha=commit_id)
+
+            
+            log.info('Creating PR')
+            pr = repo.create_pull(title=f"test-{os.environ['HEAD_REF']}", body='test', base=os.environ['BASE_REF'], head=os.environ['HEAD_REF'])
+            
+            log.debug(f'head ref commit: {commit_id}')
+            log.debug(f'pr commits: {pr.commits}')
+
+            yield {
+                'number': pr.number,
+                'head_commit_id': commit_id,
+                'base_ref': os.environ['BASE_REF'],
+                'head_ref': os.environ['HEAD_REF']
+            }
+
+        elif stage == 'rollback_base':
+            dir = str(tmp_path_factory.mktemp('scenario-repo-rollback'))
+
+            revert_ref = f'revert-{os.environ["HEAD_REF"]}'
+
+            log.info(f'Creating rollback feature branch: {revert_ref}')
+            base_commit = repo.get_branch(os.environ['BASE_REF'])
+            head_ref = repo.create_git_ref(ref='refs/heads/' + revert_ref, sha=base_commit.commit.sha)
+
+            git_repo = git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir, branch=revert_ref)
+            
+            merge_commit = merge_pr()
+            log.debug(f'Merged Commits: {merge_commit}')
+            log.debug(f'Reverting merge commit: {merge_commit[0].sha}')
+            git_repo.git.revert('-m', '1', str(merge_commit[0].sha), no_edit=True)
+                        
+            git_repo.git.push('origin')
+
+            log.debug('Creating PR')
+            pr = repo.create_pull(title=f"Revert {os.environ['HEAD_REF']}", body='Rollback PR', base=os.environ['BASE_REF'], head=revert_ref)
+
+            yield {
+                'number': pr.number,
+                'head_commit_id': git_repo.head.object.hexsha,
+                'base_ref': os.environ['BASE_REF'],
+                'head_ref': revert_ref
+            }
+
+        log.info('Removing PR head ref branch')
+        head_ref.delete()
+        
         try:
             log.info('Closing PR')
             pr.edit(state='closed')
         except Exception:
             pass
-    
+
     def get_execution_history(self, sf, arn, id):
         execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=arn)['executions'] if execution['name'] == id][0]
 
         return sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
-
-    @pytest.fixture(scope="class")
-    def scenario(self, request):
-        return request.param
-
-    @pytest.fixture(scope="class")
-    def execution(self, request):
-        return request.param
     
-    @pytest.fixture(scope='class')
-    @timeout_decorator.timeout(300)
-    def merge_lock_status(self, cb, mut_output, pr):
-        log.info('Waiting on merge lock Codebuild executions to finish')
-        return self.get_build_status(cb, mut_output["codebuild_merge_lock_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})
+    def get_build_status(self, client, name, ids=[], filters={}):
+        
+        statuses = ['IN_PROGRESS']
+        wait = 30
+
+        time.sleep(wait)
+
+        if len(ids) == 0:
+            ids = client.list_builds_for_project(
+                projectName=name,
+                sortOrder='DESCENDING'
+            )['ids']
+
+            if len(ids) == 0:
+                log.error(f'No builds have runned for project: {name}')
+                sys.exit(1)
+            
+            log.debug(f'Build Filters:\n{filters}')
+            for build in client.batch_get_builds(ids=ids)['builds']:
+                for key, value in filters.items():
+                    if build.get(key, None) != value and build['id'] in ids:
+                        ids.remove(build['id'])
+            
+            if len(ids) == 0:
+                log.error(f'No builds have met provided filters')
+                sys.exit(1)
+
+        log.debug(f'Getting build statuses for the following IDs:\n{ids}')
+        while 'IN_PROGRESS' in statuses:
+            time.sleep(wait)
+            statuses = []
+            for build in client.batch_get_builds(ids=ids)['builds']:
+                statuses.append(build['buildStatus'])
+    
+        return statuses
+
+    @pytest.fixture(scope="module")
+    def scenario_param(self, request):
+        return request.param
 
     @pytest.mark.dependency()
-    def test_merge_lock_codebuild(self, request, merge_lock_status):
+    @timeout_decorator.timeout(300)
+    def test_merge_lock_codebuild(self, request, pr, cb, mut_output, stage):
         """Assert scenario's associated merge_lock codebuild was successful"""
+
+        log.info('Waiting on merge lock Codebuild executions to finish')
+        status = self.get_build_status(cb, mut_output["codebuild_merge_lock_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})
+
         log.info('Assert build succeeded')
-        assert all(status == 'SUCCEEDED' for status in merge_lock_status)
+        assert all(status == 'SUCCEEDED' for status in status)
 
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
-        log.debug(f'Test Class: {request.cls.__name__}')
         depends(request, [f'{request.cls.__name__}::test_merge_lock_codebuild[{request.node.callspec.id}]'])
 
         log.info('Assert PR head commit status is successful')
@@ -203,50 +316,37 @@ class TestIntegration:
         
         assert repo.get_commit(pr["head_commit_id"]).get_statuses()[0].state == 'success'
 
-    def get_build_status(self, client, name, ids=[], filters={}):
-
-        statuses = ['IN_PROGRESS']
-        wait = 60
-
-        while 'IN_PROGRESS' in statuses:
-            time.sleep(wait)
-            if len(ids) == 0:
-                ids = client.list_builds_for_project(
-                    projectName=name,
-                    sortOrder='DESCENDING'
-                )['ids']
-
-            if len(ids) == 0:
-                log.error(f'No builds have runned for project: {name}')
-                sys.exit(1)
-            statuses = []
-            for build in client.batch_get_builds(ids=ids)['builds']:
-                for key, value in filters.items():
-                    if build.get(key, None) != value:
-                        break
-                else:
-                    statuses.append(build['buildStatus'])
-    
-        return statuses
-
-    @pytest.fixture(scope='class')
     @timeout_decorator.timeout(300)
-    def trigger_sf_status(self, cb, mut_output, pr, merge_pr):
-        log.info('Waiting on trigger sf Codebuild execution to finish')
-
-        return self.get_build_status(cb, mut_output["codebuild_trigger_sf_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})
-
     @pytest.mark.dependency()
-    def test_trigger_sf_codebuild(self, request, trigger_sf_status):
+    def test_trigger_sf_codebuild(self, request, merge_pr, pr, mut_output, cb):
         """Assert scenario's associated trigger_sf codebuild was successful"""
         depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
 
+        merge_pr(pr['base_ref'], pr['head_ref'])
+
+        log.info('Waiting on trigger sf Codebuild execution to finish')
+
+        status = self.get_build_status(cb, mut_output["codebuild_trigger_sf_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})[0]
+
         log.info('Assert build succeeded')
-        assert len(trigger_sf_status) == 1
-        assert trigger_sf_status[0] == 'SUCCEEDED'
+        assert status == 'SUCCEEDED'
     
+    @pytest.fixture(scope='class')
+    def expected_execution_count(self, scenario_param, stage):
+        count_map = {
+            'deploy': 0,
+            'rollback_providers': 0,
+            'rollback_base': 0
+        }
+        for cfg in scenario_param.values():
+            for stage in count_map.keys():
+                if stage in cfg['actions']:
+                    count_map[stage] += 1
+        
+        return count_map
+
     @pytest.mark.dependency()
-    def test_execution_records_exists(self, request, conn, scenario, pr):
+    def test_execution_records_exists(self, request, conn, stage, expected_execution_count, pr):
         """Assert that all expected scenario directories are within executions table"""
         depends(request, [f'{request.cls.__name__}::test_trigger_sf_codebuild[{request.node.callspec.id}]'])
 
@@ -266,11 +366,13 @@ class TestIntegration:
             target_execution_ids = [id for id in ids]
         
         log.debug(f'Commit execution IDs:\n{target_execution_ids}')
-        assert len(scenario['executions']) == len(target_execution_ids)
+        log.debug(f'Stages execution count mapping: {expected_execution_count}')
+
+        assert expected_execution_count[stage] == len(target_execution_ids)
     
     @pytest.fixture(scope="class")
-    def target_execution(self, conn, pr, request, sf, mut_output, cb, scenario, tested_executions):
-
+    def target_execution(self, conn, pr, tested_executions):
+        
         log.debug(f'Already tested execution IDs:\n{tested_executions()}')
         with conn.cursor() as cur:
             cur.execute(f"""
@@ -289,22 +391,37 @@ class TestIntegration:
             row = [value for value in results]
             for i, description in enumerate(cur.description):
                 record[description.name] = row[i]
-        else:
-            log.error('Expected target execution record was not found')
-            sys.exit(1)
 
         log.debug(f'Target Execution Record:\n{pformat(record)}')
         yield record
 
         log.debug('Adding execution ID to tested executions list')
-        tested_executions(record['execution_id'])
+        if record != {}:
+            tested_executions(record['execution_id'])
+
+    @pytest.fixture(scope="class")
+    def action(self, target_execution, scenario_param, stage):
+        if target_execution == {}:
+            pytest.skip('No new running or finished execution records')
+            # return None
+        else:
+            return scenario_param[target_execution['cfg_path']]['actions'].get(stage, None)
     
     @pytest.mark.dependency()
     def test_sf_execution_aborted(self, request, sf, target_execution, mut_output):
-        depends(request, [f"{request.cls.__name__}::test_execution_records_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
+
+        target_execution_param = request.node.callspec.id.split('-')[-1]
+        if target_execution_param != '0':
+            depends(request, [
+                f"{request.cls.__name__}::test_execution_records_exists[{request.node.callspec.id.rsplit('-', 1)[0]}]",
+                # depends on previous target_execution param's cw event trigger sf build finished status
+                f"{request.cls.__name__}::test_cw_event_trigger_sf[{re.sub(r'^.+?-', f'{int(target_execution_param) - 1}-', request.node.callspec.id)}]"
+            ])
+        else:
+            depends(request, [f"{request.cls.__name__}::test_execution_records_exists[{request.node.callspec.id.rsplit('-', 1)[0]}]"])
 
         if target_execution['status'] != 'aborted':
-            pytest.skip()
+            pytest.skip('Execution approval action is not set to `aborted`')
 
         try:
             execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
@@ -314,20 +431,22 @@ class TestIntegration:
             assert sf.describe_execution(executionArn=execution_arn)['status'] == 'ABORTED'
 
     @pytest.mark.dependency()
-    def test_sf_execution_exists(self, request, mut_output, sf, target_execution, scenario):
+    @pytest.mark.usefixtures('action')
+    def test_sf_execution_exists(self, request, mut_output, sf, target_execution):
         """Assert execution record has an associated Step Function execution"""
 
-        depends(request, [f"{request.cls.__name__}::test_execution_records_exists[{re.sub(r'^.+?-', '', request.node.callspec.id)}]"])
+        depends(request, [f"{request.cls.__name__}::test_execution_records_exists[{request.node.callspec.id.rsplit('-', 1)[0]}]"])
 
         if target_execution['status'] == 'aborted':
-            pytest.skip()
+            pytest.skip('Execution approval action is set to `aborted`')
 
         execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
 
         assert sf.describe_execution(executionArn=execution_arn)['status'] in ['RUNNING', 'SUCCEEDED', 'FAILED', 'TIMED_OUT']
 
     @pytest.mark.dependency()
-    def test_terra_run_plan_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
+    @pytest.mark.usefixtures('action')
+    def test_terra_run_plan_codebuild(self, request, mut_output, sf, cb, target_execution):
         """Assert running execution record has a running Step Function execution"""
         depends(request, [f'{request.cls.__name__}::test_sf_execution_exists[{request.node.callspec.id}]'])
 
@@ -335,15 +454,20 @@ class TestIntegration:
 
         events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
 
+        status = None
         for event in events:
             if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'codebuild':
                 plan_build_id = json.loads(event['taskSubmittedEventDetails']['output'])['Build']['Id']
                 status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], ids=[plan_build_id])[0]
+                break
+        
+        if status == None:
+            pytest.fail('Task was not submitted')
 
         assert status == 'SUCCEEDED'
 
     @pytest.mark.dependency()
-    def test_approval_request(self, request, sf, scenario, mut_output, target_execution):
+    def test_approval_request(self, request, sf, mut_output, target_execution):
         depends(request, [f'{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]'])
     
         events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
@@ -355,7 +479,7 @@ class TestIntegration:
         assert out['StatusCode'] == 200
 
     @pytest.mark.dependency()
-    def test_approval_response(self, request, sf, scenario, mut_output, target_execution):
+    def test_approval_response(self, request, sf, action, mut_output, target_execution):
         depends(request, [f'{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]'])
         log.info('Testing Approval Task')
 
@@ -369,7 +493,7 @@ class TestIntegration:
         log.debug(f'Approval URL: {approval_url}')
 
         body = {
-            'action': scenario['executions'][target_execution['cfg_path']]['action'],
+            'action': action,
             'recipient': mut_output['voters']
         }
 
@@ -381,12 +505,12 @@ class TestIntegration:
         assert json.loads(response.text)['statusCode'] == 302
 
     @pytest.mark.dependency()
-    def test_approval_denied(self, request, sf, target_execution, mut_output, scenario):
+    def test_approval_denied(self, request, sf, target_execution, mut_output, action):
         depends(request, [f'{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]'])
 
-        if scenario['executions'][target_execution['cfg_path']]['action'] == 'approve':
-            pytest.skip()
-        
+        if action == 'approve':
+            pytest.skip('Approval action is set to `approve`')
+
         log.debug(f'Execution ID: {target_execution["execution_id"]}')
         state = None
         out = None
@@ -404,11 +528,12 @@ class TestIntegration:
         assert out['status'] == 'failed'
 
     @pytest.mark.dependency()
-    def test_terra_run_deploy_codebuild(self, request, mut_output, sf, cb, target_execution, scenario):
-        if scenario['executions'][target_execution['cfg_path']]['action'] == 'reject':
-            pytest.skip()
+    def test_terra_run_deploy_codebuild(self, request, mut_output, sf, cb, target_execution, action):
         """Assert running execution record has a running Step Function execution"""
         depends(request, [f'{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]'])
+
+        if action == 'reject':
+            pytest.skip('Approval action is set to `reject`')
 
         log.info(f'Testing Deploy Task')
 
@@ -422,9 +547,9 @@ class TestIntegration:
         assert status == 'SUCCEEDED'
     
     @pytest.mark.dependency()
-    def test_sf_execution_status(self, request, mut_output, sf, target_execution, scenario, tested_executions):
+    def test_sf_execution_status(self, request, mut_output, sf, target_execution, action):
 
-        if scenario['executions'][target_execution['cfg_path']]['action'] == 'approve':
+        if action == 'approve':
             depends(request, [f'{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]'])
         else:
             depends(request, [f'{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]'])
@@ -434,8 +559,40 @@ class TestIntegration:
         assert response['status'] == 'SUCCEEDED'
 
     @pytest.mark.dependency()
-    def test_cw_event_sent(self, request, cb, mut_output, scenario, target_execution):
+    @pytest.mark.usefixtures('target_execution')
+    def test_cw_event_trigger_sf(self, request, cb, mut_output):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
         status = self.get_build_status(cb, mut_output['codebuild_trigger_sf_name'], filters={'initiator': mut_output['cw_rule_initiator']})[0]
 
         assert status == 'SUCCEEDED'
+
+    @pytest.mark.dependency()
+    def test_rollback_providers_executions_exists(self, request, conn, stage, expected_execution_count, pr, action):
+        """Assert that all expected scenario directories are within executions table"""
+        depends(request, [f'{request.cls.__name__}::test_cw_event_trigger_sf[{request.node.callspec.id}]'])
+
+        if stage != 'deploy':
+            pytest.skip('Rollback to base commit PR will not be creating new providers')
+        elif action != 'reject':
+            pytest.skip('Expected approval action is not set to `reject` so rollback provider executions will not be created')
+        with conn.cursor() as cur:
+            cur.execute(f"""
+            SELECT array_agg(execution_id::TEXT)
+            FROM executions 
+            WHERE commit_id = '{pr["head_commit_id"]}'
+            AND is_rollback = true
+            AND cardinality(new_providers) > 0
+            """
+            )
+            ids = cur.fetchone()[0]
+        conn.commit()
+
+        if ids == None:
+            target_execution_ids = []
+        else:
+            target_execution_ids = [id for id in ids]
+        
+        log.debug(f'Commit execution IDs:\n{target_execution_ids}')
+        log.debug(f'Stages execution count mapping: {expected_execution_count}')
+
+        assert expected_execution_count['rollback_providers'] == len(target_execution_ids)
