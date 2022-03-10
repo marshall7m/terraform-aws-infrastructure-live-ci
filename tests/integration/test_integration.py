@@ -171,32 +171,62 @@ class TestIntegration:
         for commit in reversed(merge_commits):
             log.debug(f'Merge Commit ID: {commit.sha}')
             try:
-                git_repo.git.revert('-m', '1', str(commit.sha), no_edit=True)
+                git_repo.git.revert('-m', '1', '--no-commit', str(commit.sha))
+                git_repo.git.commit('-m', 'Revert scenario PR changes within fixture teardown')
                 git_repo.git.push('origin')
             except Exception as e:
                 print(e)
+    
+    @pytest.fixture(scope='module')
+    def base(self, repo, git_repo, scenario_param):
+        os.environ['BASE_REF'] = 'master'
+
+        elements = []
+        for dir, cfg in scenario_param.items():
+            if 'base_file_content' in cfg:
+                for content in cfg['base_file_content']:
+                    filepath = dir + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
+                    log.debug(f'Creating file: {filepath}')
+                    blob = repo.create_git_blob(content, "utf-8")
+                    elements.append(github.InputGitTreeElement(path=filepath, mode='100644', type='blob', sha=blob.sha))
+
+        head_sha = repo.get_branch(os.environ['BASE_REF']).commit.sha
+        base_tree = repo.get_git_tree(sha=head_sha)
+        tree = repo.create_git_tree(elements, base_tree)
+        parent = repo.get_git_commit(sha=head_sha)
+        commit_id = repo.create_git_commit('scenario base changes', tree, [parent]).sha
+        master_refs = repo.get_git_ref(f'heads/{os.environ["BASE_REF"]}')
+        master_refs.edit(sha=commit_id)
+
+        yield commit_id
+
+        log.debug('Reverting scenario base changes')
+        git_repo = git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir, branch=os.environ['BASE_REF'])
+        git_repo.git.revert('-m', '1', '--no-commit', commit_id)
+        git_repo.git.commit('-m', 'Revert scenario base changes')
+        git_repo.git.push('origin')
 
     @pytest.fixture(scope='class')
-    def pr(self, request, stage, repo, scenario_param, git_repo, merge_pr, tmp_path_factory):
+    def pr(self, request, base, stage, repo, scenario_param, git_repo, merge_pr, tmp_path_factory):
         if stage == 'deploy':
-            os.environ['BASE_REF'] = 'master'
             os.environ['HEAD_REF'] = f'feature-{uuid.uuid4()}'
 
             base_commit = repo.get_branch(os.environ['BASE_REF'])
             head_ref = repo.create_git_ref(ref='refs/heads/' + os.environ['HEAD_REF'], sha=base_commit.commit.sha)
             elements = []
             for dir, cfg in scenario_param.items():
-                if 'new_file_content' in cfg:
-                    filepath = dir + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
-                    log.debug(f'Creating file: {filepath}')
-                    blob = repo.create_git_blob(cfg['new_file_content'], "utf-8")
-                    elements.append(github.InputGitTreeElement(path=filepath, mode='100644', type='blob', sha=blob.sha))
+                if 'pr_file_content' in cfg:
+                    for content in cfg['pr_file_content']:
+                        filepath = dir + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
+                        log.debug(f'Creating file: {filepath}')
+                        blob = repo.create_git_blob(content, "utf-8")
+                        elements.append(github.InputGitTreeElement(path=filepath, mode='100644', type='blob', sha=blob.sha))
 
             head_sha = repo.get_branch(os.environ['HEAD_REF']).commit.sha
             base_tree = repo.get_git_tree(sha=head_sha)
             tree = repo.create_git_tree(elements, base_tree)
             parent = repo.get_git_commit(sha=head_sha)
-            commit_id = repo.create_git_commit("commit_message", tree, [parent]).sha
+            commit_id = repo.create_git_commit("scenario pr changes", tree, [parent]).sha
             head_ref.edit(sha=commit_id)
 
             
@@ -227,8 +257,8 @@ class TestIntegration:
             merge_commit = merge_pr()
             log.debug(f'Merged Commits: {merge_commit}')
             log.debug(f'Reverting merge commit: {merge_commit[0].sha}')
-            git_repo.git.revert('-m', '1', str(merge_commit[0].sha), no_edit=True)
-                        
+            git_repo.git.revert('-m', '1', '--no-commit', str(merge_commit[0].sha))
+            git_repo.git.commit('-m', 'Revert scenario PR changes withing rollback stage')
             git_repo.git.push('origin')
 
             log.debug('Creating PR')
@@ -255,7 +285,7 @@ class TestIntegration:
 
         return sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
     
-    def get_build_status(self, client, name, ids=[], filters={}):
+    def get_build_status(self, client, name, ids=[], filters={}, sf_execution_filter={}):
         
         statuses = ['IN_PROGRESS']
         wait = 30
@@ -273,10 +303,27 @@ class TestIntegration:
                 sys.exit(1)
             
             log.debug(f'Build Filters:\n{filters}')
+            log.debug(f'Step Function Execution Output Filters:\n{sf_execution_filter}')
             for build in client.batch_get_builds(ids=ids)['builds']:
+                skip_sf_filter = False
                 for key, value in filters.items():
-                    if build.get(key, None) != value and build['id'] in ids:
+                    if build.get(key, None) != value:
                         ids.remove(build['id'])
+                        skip_sf_filter = True
+                        break
+                
+                if skip_sf_filter:
+                    continue
+
+                sf_execution_env_var = {}
+                for env_var in build['environment']['environmentVariables']:
+                    if env_var['name'] == 'EXECUTION_OUTPUT':
+                        sf_execution_env_var = json.loads(env_var)
+                
+                for key, value in sf_execution_filter.items():
+                    if (key, value) not in sf_execution_env_var.items():
+                        ids.remove(build['id'])
+                        break
             
             if len(ids) == 0:
                 log.error(f'No builds have met provided filters')
@@ -540,6 +587,7 @@ class TestIntegration:
         events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
 
         for event in events:
+            #TODO: differentiate between plan/deploy tasks
             if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'codebuild':
                 plan_build_id = json.loads(event['taskSubmittedEventDetails']['output'])['Build']['Id']
                 status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], ids=[plan_build_id])[0]
@@ -559,10 +607,9 @@ class TestIntegration:
         assert response['status'] == 'SUCCEEDED'
 
     @pytest.mark.dependency()
-    @pytest.mark.usefixtures('target_execution')
-    def test_cw_event_trigger_sf(self, request, cb, mut_output):
+    def test_cw_event_trigger_sf(self, request, cb, mut_output, target_execution):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
-        status = self.get_build_status(cb, mut_output['codebuild_trigger_sf_name'], filters={'initiator': mut_output['cw_rule_initiator']})[0]
+        status = self.get_build_status(cb, mut_output['codebuild_trigger_sf_name'], filters={'initiator': mut_output['cw_rule_initiator']}, sf_execution_filter={'execution_id': target_execution['execution_id']})[0]
 
         assert status == 'SUCCEEDED'
 
