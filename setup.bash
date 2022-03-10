@@ -1,5 +1,4 @@
 #!/bin/bash
-TESTING_ENV="remote"
 
 echo "TESTING_ENV: $TESTING_ENV"
 if [ "$TESTING_ENV" == "local" ]; then
