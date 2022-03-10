@@ -25,7 +25,7 @@ INSERT INTO executions (
         deploy_role_arn
     )
 SELECT
-    'run-' || {pr_id} || '-' || substring({commit_id}, 1, 4) || '-' || regexp_replace({stack.cfg_path}, '.*/', '') || '-'  || substr(md5(random()::text), 0, 4),
+    'run-' || {pr_id} || '-' || substring({commit_id}, 1, 4) || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-'  || substr(md5(random()::text), 0, 4),
     false,
     {pr_id},
     {commit_id},
