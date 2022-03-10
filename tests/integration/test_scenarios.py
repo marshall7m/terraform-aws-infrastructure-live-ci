@@ -36,15 +36,16 @@ class TestScenarioTwo(test_integration.TestIntegration):
                 'rollback_providers': 'approve',
                 'rollback_base': 'approve'
             },
-            'new_resources': [],
-            'new_file_content': test_null_resource,
+            'new_resources': ['null_resource.this'],
+            'pr_file_content': [test_null_resource],
             'new_providers': ['hashicorp/null']
         },
         'directory_dependency/dev-account/us-west-2/env-one/baz': {
             'actions': {
                 'deploy': 'approve',
                 'rollback_base': 'approve'
-            }
+            },
+            'base_file_content': [test_null_resource]
         },
         'directory_dependency/dev-account/us-west-2/env-one/bar': {
             'actions': {
