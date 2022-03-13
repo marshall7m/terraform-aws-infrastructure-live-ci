@@ -427,14 +427,19 @@ EOT
 
   role_policy_statements = [
     {
-      sid    = "StepFunctionAccess"
+      sid    = "StateMachineAccess"
       effect = "Allow"
       actions = [
         "states:StartExecution",
-        "states:StopExecution",
         "states:ListExecutions"
       ]
       resources = [local.state_machine_arn]
+    },
+    {
+      sid       = "StateMachineExecutionAccess"
+      effect    = "Allow"
+      actions   = ["states:StopExecution"]
+      resources = ["arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:execution:${var.step_function_name}:*"]
     },
     {
       sid       = "SSMParamMergeLockAccess"
