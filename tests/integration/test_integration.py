@@ -22,6 +22,8 @@ import re
 import tftest
 import requests
 import aurora_data_api
+from pytest_lazyfixture import lazy_fixture
+
 
 # def pytest_collection_modifyitems(config, items):
     # """Rearrange testing order so that rollback test classes are always executed after PR test classes"""
@@ -47,7 +49,7 @@ log.setLevel(logging.DEBUG)
 @pytest.mark.usefixtures('stage', 'scenario_param')
 class TestIntegration:
 
-    @pytest.fixture(scope='module', params=['deploy', 'rollback_base'])
+    @pytest.fixture(scope='class', autouse=True)
     def stage(self, request):
         return request.param
 
@@ -81,7 +83,7 @@ class TestIntegration:
             with conn.cursor() as cur:
                 cur.execute("TRUNCATE executions")
 
-    @pytest.fixture(scope='class', autouse=True)
+    @pytest.fixture(scope='module', autouse=True)
     def abort_hanging_sf_executions(self, sf, mut_output):
         yield None
 
@@ -176,39 +178,11 @@ class TestIntegration:
                 git_repo.git.push('origin')
             except Exception as e:
                 print(e)
-    
-    @pytest.fixture(scope='module')
-    def base(self, repo, git_repo, scenario_param):
-        os.environ['BASE_REF'] = 'master'
 
-        elements = []
-        for dir, cfg in scenario_param.items():
-            if 'base_file_content' in cfg:
-                for content in cfg['base_file_content']:
-                    filepath = dir + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
-                    log.debug(f'Creating file: {filepath}')
-                    blob = repo.create_git_blob(content, "utf-8")
-                    elements.append(github.InputGitTreeElement(path=filepath, mode='100644', type='blob', sha=blob.sha))
-
-        head_sha = repo.get_branch(os.environ['BASE_REF']).commit.sha
-        base_tree = repo.get_git_tree(sha=head_sha)
-        tree = repo.create_git_tree(elements, base_tree)
-        parent = repo.get_git_commit(sha=head_sha)
-        commit_id = repo.create_git_commit('scenario base changes', tree, [parent]).sha
-        master_refs = repo.get_git_ref(f'heads/{os.environ["BASE_REF"]}')
-        master_refs.edit(sha=commit_id)
-
-        yield commit_id
-
-        log.debug('Reverting scenario base changes')
-        git_repo = git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git', dir, branch=os.environ['BASE_REF'])
-        git_repo.git.revert('-m', '1', '--no-commit', commit_id)
-        git_repo.git.commit('-m', 'Revert scenario base changes')
-        git_repo.git.push('origin')
-
-    @pytest.fixture(scope='class')
-    def pr(self, request, base, stage, repo, scenario_param, git_repo, merge_pr, tmp_path_factory):
+    @pytest.fixture(scope='class', autouse=True)
+    def pr(self, stage, repo, scenario_param, git_repo, merge_pr, tmp_path_factory):
         if stage == 'deploy':
+            os.environ['BASE_REF'] = 'master'
             os.environ['HEAD_REF'] = f'feature-{uuid.uuid4()}'
 
             base_commit = repo.get_branch(os.environ['BASE_REF'])
@@ -314,17 +288,18 @@ class TestIntegration:
                 
                 if skip_sf_filter:
                     continue
-
-                sf_execution_env_var = {}
-                for env_var in build['environment']['environmentVariables']:
-                    if env_var['name'] == 'EXECUTION_OUTPUT':
-                        sf_execution_env_var = json.loads(env_var)
                 
-                for key, value in sf_execution_filter.items():
-                    if (key, value) not in sf_execution_env_var.items():
-                        ids.remove(build['id'])
-                        break
-            
+                if sf_execution_filter != {}:
+                    sf_execution_env_var = {}
+                    for env_var in build['environment']['environmentVariables']:
+                        if env_var['name'] == 'EXECUTION_OUTPUT':
+                            sf_execution_env_var = json.loads(env_var['value'])
+                    
+                    for key, value in sf_execution_filter.items():
+                        if (key, value) not in sf_execution_env_var.items():
+                            ids.remove(build['id'])
+                            break
+                
             if len(ids) == 0:
                 log.error(f'No builds have met provided filters')
                 sys.exit(1)
@@ -338,7 +313,7 @@ class TestIntegration:
     
         return statuses
 
-    @pytest.fixture(scope="module")
+    @pytest.fixture(scope="class", autouse=True)
     def scenario_param(self, request):
         return request.param
 
@@ -416,9 +391,9 @@ class TestIntegration:
         log.debug(f'Stages execution count mapping: {expected_execution_count}')
 
         assert expected_execution_count[stage] == len(target_execution_ids)
-    
+        
     @pytest.fixture(scope="class")
-    def target_execution(self, conn, pr, tested_executions):
+    def target_execution(self, request, conn, pr, tested_executions, scenario_param, stage):
         
         log.debug(f'Already tested execution IDs:\n{tested_executions()}')
         with conn.cursor() as cur:
@@ -614,7 +589,7 @@ class TestIntegration:
         assert status == 'SUCCEEDED'
 
     @pytest.mark.dependency()
-    def test_rollback_providers_executions_exists(self, request, conn, stage, expected_execution_count, pr, action):
+    def test_rollback_providers_executions_exists(self, request, conn, stage, expected_execution_count, pr, action, target_execution):
         """Assert that all expected scenario directories are within executions table"""
         depends(request, [f'{request.cls.__name__}::test_cw_event_trigger_sf[{request.node.callspec.id}]'])
 

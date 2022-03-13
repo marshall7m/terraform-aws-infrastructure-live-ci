@@ -10,6 +10,7 @@ import sys
 import shutil
 import aurora_data_api
 import git
+from pytest_lazyfixture import lazy_fixture
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -26,12 +27,17 @@ def pytest_generate_tests(metafunc):
     if metafunc.config.getoption('skip_apply'):
         metafunc.parametrize('mut_output', [True], scope='session', indirect=True)
 
-    if 'scenario_param' in metafunc.fixturenames:
-        metafunc.parametrize('scenario_param', [metafunc.cls.scenario], scope='module', indirect=True)
+    #TODO: See if pytest_cases can conslidate parameters into cases and then unpack them into separate fixtures
+    if hasattr(metafunc.cls, 'zo'):
+        if 'stage' in metafunc.fixturenames:
+            metafunc.parametrize('stage', ['deploy', 'rollback_base'], scope='class', indirect=True)
 
-    if 'target_execution' in metafunc.fixturenames:
-        rollback_execution_count = len([1 for scenario in metafunc.cls.scenario.values() if scenario['actions'].get('rollback_providers', None) != None])
-        metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.scenario) + rollback_execution_count)), scope='class', indirect=True)
+        if 'scenario_param' in metafunc.fixturenames:
+            metafunc.parametrize('scenario_param', [metafunc.cls.zo], scope='class', indirect=True)
+
+        if 'target_execution' in metafunc.fixturenames:
+            rollback_execution_count = len([1 for scenario in metafunc.cls.zo.values() if scenario['actions'].get('rollback_providers', None) != None])
+            metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.zo) + rollback_execution_count)), scope='class', indirect=True)
 
 @pytest.fixture(scope="session")
 def mut(request, tf_version):

@@ -29,40 +29,54 @@ output "{random}" {{
 #     }
 
 class TestScenarioTwo(test_integration.TestIntegration):
-    scenario = {
-        'directory_dependency/dev-account/global': {
-            'actions': {
-                'deploy': 'approve',
-                'rollback_providers': 'approve',
-                'rollback_base': 'approve'
-            },
-            'new_resources': ['null_resource.this'],
-            'pr_file_content': [test_null_resource],
-            'new_providers': ['hashicorp/null']
-        },
-        'directory_dependency/dev-account/us-west-2/env-one/baz': {
-            'actions': {
-                'deploy': 'approve',
-                'rollback_base': 'approve'
-            },
-            'base_file_content': [test_null_resource]
-        },
-        'directory_dependency/dev-account/us-west-2/env-one/bar': {
-            'actions': {
-                'deploy': 'reject',
-                'rollback_base': 'approve'
-            }
-        },
-        'directory_dependency/dev-account/us-west-2/env-one/doo': {
-            'actions': {
-                'deploy': 'approve',
-                'rollback_base': 'approve'
-            }
-        },
-        'directory_dependency/dev-account/us-west-2/env-one/foo': {
-            'actions': {
-                'deploy': 'approve',
-                'rollback_base': 'approve'
+    class TestBasePRIntegration(test_integration.TestIntegration):
+        zo = {
+            'directory_dependency/dev-account/us-west-2/env-one/baz': {
+                'actions': {
+                    'deploy': 'approve',
+                    'rollback_base': 'approve'
+                },
+                'new_resources': ['null_resource.this'],
+                'pr_file_content': [test_null_resource],
+                'new_providers': ['hashicorp/null']
             }
         }
-    }
+
+    class TestHeadPRIntegration(test_integration.TestIntegration):
+        zo = {
+            'directory_dependency/dev-account/global': {
+                'actions': {
+                    'deploy': 'approve',
+                    'rollback_providers': 'approve',
+                    'rollback_base': 'approve'
+                },
+                'new_resources': ['null_resource.this'],
+                'pr_file_content': [test_null_resource],
+                'new_providers': ['hashicorp/null']
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/baz': {
+                'actions': {
+                    'deploy': 'approve',
+                    'rollback_base': 'approve'
+                },
+                'base_file_content': [test_null_resource]
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/bar': {
+                'actions': {
+                    'deploy': 'reject',
+                    'rollback_base': 'approve'
+                }
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/doo': {
+                'actions': {
+                    'deploy': 'approve',
+                    'rollback_base': 'approve'
+                }
+            },
+            'directory_dependency/dev-account/us-west-2/env-one/foo': {
+                'actions': {
+                    'deploy': 'approve',
+                    'rollback_base': 'approve'
+                }
+            }
+        }
