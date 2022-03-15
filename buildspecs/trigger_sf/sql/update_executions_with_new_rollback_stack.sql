@@ -71,7 +71,7 @@ SELECT
     deploy_role_arn
 FROM (
     SELECT
-        'run-rollback-' || pr_id || '-' || substring(commit_id, 1, 4) || '-' || regexp_replace(cfg_path, '.*/', '') || '-'  || substr(md5(random()::text), 0, 4) AS execution_id,
+        'run-rollback-' || pr_id || '-' || substring(commit_id, 1, 4) || '-' || account_name || '-' || regexp_replace(cfg_path, '.*/', '') || '-'  || substr(md5(random()::text), 0, 4) AS execution_id,
         true AS is_rollback,
         pr_id,
         commit_id,
