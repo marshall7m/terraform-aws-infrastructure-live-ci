@@ -122,3 +122,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 ### Requirements
 
 # TODO:
+
+- Replace Codebuild version of merge lock process with Lambda version. Using AGW webhook with Lambda response would likely be faster than codebuild
+- 

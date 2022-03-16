@@ -451,7 +451,7 @@ EOT
       sid       = "CrossAccountTerraformPlanAccess"
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
-      resources = [for account in var.account_parent_cfg : account.plan_role_arn]
+      resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
     }
   ]
 }
