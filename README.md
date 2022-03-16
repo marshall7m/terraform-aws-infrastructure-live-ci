@@ -90,8 +90,6 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | Name | Description |
 |------|-------------|
 | approval\_url | n/a |
-| codebuild\_merge\_lock\_arn | n/a |
-| codebuild\_merge\_lock\_name | n/a |
 | codebuild\_terra\_run\_arn | n/a |
 | codebuild\_terra\_run\_name | n/a |
 | codebuild\_terra\_run\_role\_arn | n/a |

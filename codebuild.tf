@@ -71,7 +71,7 @@ data "aws_iam_policy_document" "merge_lock_ssm_param_access" {
 
 resource "aws_iam_policy" "merge_lock_ssm_param_access" {
   name        = "${aws_ssm_parameter.merge_lock.name}-ssm-access"
-  description = "Allows read access to merge lock ssm param"
+  description = "Allows read access to merge lock and github token ssm param"
   policy      = data.aws_iam_policy_document.merge_lock_ssm_param_access.json
 }
 
@@ -203,103 +203,103 @@ module "ecr_trigger_sf" {
   }
 }
 
-module "codebuild_merge_lock" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
-  name   = local.merge_lock_name
+# module "codebuild_merge_lock" {
+#   source = "github.com/marshall7m/terraform-aws-codebuild"
+#   name   = local.merge_lock_name
 
-  environment = {
-    compute_type = "BUILD_GENERAL1_SMALL"
-    image        = "aws/codebuild/standard:3.0"
-    type         = "LINUX_CONTAINER"
-    environment_variables = [
-      {
-        name  = "REPO_FULL_NAME"
-        value = data.github_repository.this.full_name
-        type  = "PLAINTEXT"
-      },
-      {
-        name  = "PGUSER"
-        type  = "PLAINTEXT"
-        value = var.metadb_ci_username
-      },
-      {
-        name  = "PGPORT"
-        type  = "PLAINTEXT"
-        value = var.metadb_port
-      },
-      {
-        name  = "PGDATABASE"
-        type  = "PLAINTEXT"
-        value = local.metadb_name
-      },
-      {
-        name  = "PGHOST"
-        type  = "PLAINTEXT"
-        value = aws_rds_cluster.metadb.endpoint
-      },
-      {
-        name  = "MERGE_LOCK"
-        type  = "PARAMETER_STORE"
-        value = aws_ssm_parameter.merge_lock.name
-      },
-      {
-        name  = "GITHUB_TOKEN"
-        type  = "PARAMETER_STORE"
-        value = var.github_token_ssm_key
-      },
-      {
-        name  = "PGPASSWORD"
-        type  = "PARAMETER_STORE"
-        value = aws_ssm_parameter.metadb_ci_password.name
-      }
-    ]
-  }
+#   environment = {
+#     compute_type = "BUILD_GENERAL1_SMALL"
+#     image        = "aws/codebuild/standard:3.0"
+#     type         = "LINUX_CONTAINER"
+#     environment_variables = [
+#       {
+#         name  = "REPO_FULL_NAME"
+#         value = data.github_repository.this.full_name
+#         type  = "PLAINTEXT"
+#       },
+#       {
+#         name  = "PGUSER"
+#         type  = "PLAINTEXT"
+#         value = var.metadb_ci_username
+#       },
+#       {
+#         name  = "PGPORT"
+#         type  = "PLAINTEXT"
+#         value = var.metadb_port
+#       },
+#       {
+#         name  = "PGDATABASE"
+#         type  = "PLAINTEXT"
+#         value = local.metadb_name
+#       },
+#       {
+#         name  = "PGHOST"
+#         type  = "PLAINTEXT"
+#         value = aws_rds_cluster.metadb.endpoint
+#       },
+#       {
+#         name  = "MERGE_LOCK"
+#         type  = "PARAMETER_STORE"
+#         value = aws_ssm_parameter.merge_lock.name
+#       },
+#       {
+#         name  = "GITHUB_TOKEN"
+#         type  = "PARAMETER_STORE"
+#         value = var.github_token_ssm_key
+#       },
+#       {
+#         name  = "PGPASSWORD"
+#         type  = "PARAMETER_STORE"
+#         value = aws_ssm_parameter.metadb_ci_password.name
+#       }
+#     ]
+#   }
 
-  webhook_filter_groups = [
-    [
-      {
-        pattern = "PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED"
-        type    = "EVENT"
-      },
-      {
-        pattern = var.base_branch
-        type    = "BASE_REF"
-      },
-      {
-        pattern = var.file_path_pattern
-        type    = "FILE_PATH"
-      }
-    ]
-  ]
+#   webhook_filter_groups = [
+#     [
+#       {
+#         pattern = "PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED"
+#         type    = "EVENT"
+#       },
+#       {
+#         pattern = var.base_branch
+#         type    = "BASE_REF"
+#       },
+#       {
+#         pattern = var.file_path_pattern
+#         type    = "FILE_PATH"
+#       }
+#     ]
+#   ]
 
-  vpc_config = local.codebuild_vpc_config
+#   vpc_config = local.codebuild_vpc_config
 
-  artifacts = {
-    type = "NO_ARTIFACTS"
-  }
-  # use inline buildspec with formatted bash script instead of downloading secondary source resulting in longer download phase
-  build_source = {
-    type      = "GITHUB"
-    location  = data.github_repository.this.http_clone_url
-    buildspec = <<-EOT
-version: 0.2
-env:
-  shell: bash
-phases:
-  build:
-    commands:
-      - |
-        ${replace(replace(file("${path.module}/buildspecs/merge_lock/merge_lock.bash"), "\t", "  "), "\n", "\n        ")}
-EOT
-  }
+#   artifacts = {
+#     type = "NO_ARTIFACTS"
+#   }
+#   # use inline buildspec with formatted bash script instead of downloading secondary source resulting in longer download phase
+#   build_source = {
+#     type      = "GITHUB"
+#     location  = data.github_repository.this.http_clone_url
+#     buildspec = <<-EOT
+# version: 0.2
+# env:
+#   shell: bash
+# phases:
+#   build:
+#     commands:
+#       - |
+#         ${replace(replace(file("${path.module}/buildspecs/merge_lock/merge_lock.bash"), "\t", "  "), "\n", "\n        ")}
+# EOT
+#   }
 
-  role_policy_arns = [
-    aws_iam_policy.merge_lock_ssm_param_access.arn,
-    aws_iam_policy.ci_metadb_access.arn,
-    aws_iam_policy.codebuild_vpc_access.arn,
-    aws_iam_policy.codebuild_ssm_access.arn
-  ]
-}
+#   role_policy_arns = [
+#     aws_iam_policy.merge_lock_ssm_param_access.arn,
+#     aws_iam_policy.ci_metadb_access.arn,
+#     aws_iam_policy.codebuild_vpc_access.arn,
+#     aws_iam_policy.codebuild_ssm_access.arn
+#   ]
+# }
 
 module "codebuild_trigger_sf" {
   source = "github.com/marshall7m/terraform-aws-codebuild"

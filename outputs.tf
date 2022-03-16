@@ -39,13 +39,13 @@ output "codebuild_trigger_sf_role_arn" {
   value = module.codebuild_trigger_sf.role_arn
 }
 
-output "codebuild_merge_lock_name" {
-  value = module.codebuild_merge_lock.name
-}
+# output "codebuild_merge_lock_name" {
+#   value = module.codebuild_merge_lock.name
+# }
 
-output "codebuild_merge_lock_arn" {
-  value = module.codebuild_merge_lock.arn
-}
+# output "codebuild_merge_lock_arn" {
+#   value = module.codebuild_merge_lock.arn
+# }
 
 output "codebuild_terra_run_name" {
   value = module.codebuild_terra_run.name
@@ -81,7 +81,7 @@ output "metadb_secret_manager_master_arn" {
 }
 
 output "approval_url" {
-  value = "${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}"
+  value = local.approval_url
 }
 
 output "cw_rule_initiator" {

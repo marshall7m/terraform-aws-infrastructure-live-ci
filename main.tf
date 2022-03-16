@@ -2,6 +2,7 @@ locals {
   cloudwatch_event_rule_name = coalesce(var.cloudwatch_event_rule_name, "${var.step_function_name}-finished-execution")
   state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${var.step_function_name}"
   cw_event_terra_run_rule    = "${local.terra_run_build_name}-rule"
+  approval_url               = "${module.github_webhook_validator.deployment_invoke_url}${module.github_webhook_validator.api_stage_name}${aws_api_gateway_resource.approval.path}"
 }
 
 resource "aws_sfn_state_machine" "this" {
@@ -61,7 +62,7 @@ resource "aws_sfn_state_machine" "this" {
             }
             "Voters.$"        = "$.voters"
             "Path.$"          = "$.cfg_path"
-            "ApprovalAPI.$"   = "States.Format('${aws_api_gateway_deployment.approval.invoke_url}${aws_api_gateway_stage.approval.stage_name}${aws_api_gateway_resource.approval.path}?ex={}&sm={}&taskToken={}', $$.Execution.Name, $$.StateMachine.Id, $$.Task.Token)"
+            "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&sm={}&taskToken={}', $$.Execution.Name, $$.StateMachine.Id, $$.Task.Token)"
             "ExecutionName.$" = "$$.Execution.Name"
           }
         }

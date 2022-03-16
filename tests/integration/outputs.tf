@@ -10,13 +10,13 @@ output "state_machine_name" {
   value = module.mut_infrastructure_live_ci.sf_name
 }
 
-output "codebuild_merge_lock_name" {
-  value = module.mut_infrastructure_live_ci.codebuild_merge_lock_name
-}
+# output "codebuild_merge_lock_name" {
+#   value = module.mut_infrastructure_live_ci.codebuild_merge_lock_name
+# }
 
-output "codebuild_merge_lock_arn" {
-  value = module.mut_infrastructure_live_ci.codebuild_merge_lock_arn
-}
+# output "codebuild_merge_lock_arn" {
+#   value = module.mut_infrastructure_live_ci.codebuild_merge_lock_arn
+# }
 
 output "codebuild_trigger_sf_name" {
   value = module.mut_infrastructure_live_ci.codebuild_trigger_sf_name

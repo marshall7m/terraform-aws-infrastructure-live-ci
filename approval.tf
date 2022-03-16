@@ -6,27 +6,83 @@ locals {
   approval_response_deps_zip_path = replace("${path.module}/${local.approval_response_name}_deps.zip", "-", "_")
   approval_deps_dir               = "${path.module}/deps"
 }
-resource "aws_api_gateway_rest_api" "approval" {
+
+resource "aws_api_gateway_rest_api" "this" {
   name        = local.approval_logs
-  description = "HTTP Endpoint backed by API Gateway and Lambda used for Step Function approval"
+  description = "HTTP Endpoint backed by API Gateway that is used for handling PR merge lock status resquests and Step Function approvals"
+}
+
+module "github_webhook_validator" {
+  source = "github.com/marshall7m/terraform-aws-github-webhook"
+
+  deployment_triggers = {
+    approval = filesha1("${path.module}/approval.tf")
+  }
+  create_github_token_ssm_param   = false
+  create_api                      = false
+  github_token_ssm_key            = var.github_token_ssm_key
+  api_name                        = aws_api_gateway_rest_api.this.name
+  lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
+  repos = [
+    {
+      name = data.github_repository.this.name
+      filter_groups = [
+        {
+          events     = ["pull_request"]
+          pr_actions = ["opened", "edited", "reopened"]
+          file_paths = [var.file_path_pattern]
+          base_refs  = [var.base_branch]
+        }
+      ]
+    }
+  ]
+  # approval api resources needs to be created before this module since the module manages the deployment of the api
+  depends_on = [
+    aws_api_gateway_resource.approval,
+    aws_api_gateway_integration.approval,
+    aws_api_gateway_method.approval
+  ]
+}
+
+data "archive_file" "lambda_merge_lock" {
+  type        = "zip"
+  source_dir  = "${path.module}/functions/merge_lock"
+  output_path = "${path.module}/merge_lock.zip"
+}
+
+module "lambda_merge_lock" {
+  source           = "github.com/marshall7m/terraform-aws-lambda"
+  filename         = data.archive_file.lambda_merge_lock.output_path
+  source_code_hash = data.archive_file.lambda_merge_lock.output_base64sha256
+  function_name    = local.merge_lock_name
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.8"
+  env_vars = {
+    MERGE_LOCK_SSM_KEY   = aws_ssm_parameter.merge_lock.name
+    GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
+  }
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    aws_iam_policy.merge_lock_ssm_param_access.arn
+  ]
 }
 
 resource "aws_api_gateway_resource" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.approval.id
-  parent_id   = aws_api_gateway_rest_api.approval.root_resource_id
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
   path_part   = "approval"
 }
 
 resource "aws_api_gateway_method" "approval" {
-  rest_api_id   = aws_api_gateway_rest_api.approval.id
+  rest_api_id   = aws_api_gateway_rest_api.this.id
   resource_id   = aws_api_gateway_resource.approval.id
   http_method   = "POST"
   authorization = "NONE"
 }
 
 resource "aws_api_gateway_method_settings" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.approval.id
-  stage_name  = aws_api_gateway_stage.approval.stage_name
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  stage_name  = module.github_webhook_validator.api_stage_name
   method_path = "*/*"
 
   settings {
@@ -37,7 +93,7 @@ resource "aws_api_gateway_method_settings" "approval" {
 }
 
 resource "aws_api_gateway_integration" "approval" {
-  rest_api_id             = aws_api_gateway_rest_api.approval.id
+  rest_api_id             = aws_api_gateway_rest_api.this.id
   resource_id             = aws_api_gateway_resource.approval.id
   http_method             = aws_api_gateway_method.approval.http_method
   integration_http_method = "POST"
@@ -80,7 +136,7 @@ resource "aws_api_gateway_integration" "approval" {
 
 
 resource "aws_api_gateway_integration_response" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.approval.id
+  rest_api_id = aws_api_gateway_rest_api.this.id
   resource_id = aws_api_gateway_resource.approval.id
   http_method = aws_api_gateway_method.approval.http_method
 
@@ -92,7 +148,7 @@ resource "aws_api_gateway_integration_response" "approval" {
 }
 
 resource "aws_api_gateway_method_response" "response_302" {
-  rest_api_id = aws_api_gateway_rest_api.approval.id
+  rest_api_id = aws_api_gateway_rest_api.this.id
   resource_id = aws_api_gateway_resource.approval.id
   http_method = aws_api_gateway_method.approval.http_method
 
@@ -129,32 +185,6 @@ module "agw_role" {
 
 resource "aws_cloudwatch_log_group" "agw" {
   name = local.approval_logs
-}
-
-resource "aws_api_gateway_deployment" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.approval.id
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  triggers = {
-    redeployment = filesha1("${path.module}/approval.tf")
-  }
-
-  depends_on = [
-    aws_api_gateway_resource.approval,
-    aws_api_gateway_method.approval,
-    aws_api_gateway_method_response.response_302,
-    aws_api_gateway_integration.approval,
-    aws_api_gateway_integration_response.approval
-  ]
-}
-
-resource "aws_api_gateway_stage" "approval" {
-  deployment_id = aws_api_gateway_deployment.approval.id
-  rest_api_id   = aws_api_gateway_rest_api.approval.id
-  stage_name    = "prod"
 }
 
 data "archive_file" "lambda_approval_request" {
