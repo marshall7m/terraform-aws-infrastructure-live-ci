@@ -7,7 +7,23 @@ locals {
   voters                = local.test_approval_content ? [data.aws_ssm_parameter.testing_sender_email.value] : ["success@simulator.amazonses.com"]
 }
 
+provider "aws" {
+  alias = "secondary"
+  assume_role {
+    role_arn     = "arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:role/cross-account-admin-access"
+    session_name = "${local.mut_id}-testing"
+  }
+}
+
 data "aws_caller_identity" "current" {}
+
+data "aws_ssm_parameter" "testing_sender_email" {
+  name = "testing-ses-email-address"
+}
+
+data "aws_ssm_parameter" "secondary_testing_account" {
+  name = "secondary-testing-account-id"
+}
 
 resource "random_string" "this" {
   length      = 10
@@ -140,6 +156,29 @@ module "deploy_role" {
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
 
+module "secondary_plan_role" {
+  source    = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name = local.plan_role_name
+  trusted_entities = [
+    module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn,
+    module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn
+  ]
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+  providers = {
+    aws = aws.secondary
+  }
+}
+
+module "secondary_deploy_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  role_name               = local.deploy_role_name
+  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn]
+  custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
+  providers = {
+    aws = aws.secondary
+  }
+}
+
 
 data "aws_iam_policy_document" "trigger_sf_tf_state_access" {
   statement {
@@ -209,20 +248,26 @@ module "mut_infrastructure_live_ci" {
     {
       name                = "dev"
       path                = "directory_dependency/dev-account"
-      dependencies        = []
+      dependencies        = ["shared_services"]
       voters              = local.voters
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
       deploy_role_arn     = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.deploy_role_name}"
+    },
+    {
+      name                = "shared_services"
+      path                = "directory_dependency/shared-services-account"
+      dependencies        = []
+      voters              = local.voters
+      min_approval_count  = 1
+      min_rejection_count = 1
+      plan_role_arn       = "arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:role/${local.plan_role_name}"
+      deploy_role_arn     = "arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:role/${local.deploy_role_name}"
     }
   ]
 
   depends_on = [
     github_repository.testing
   ]
-}
-
-data "aws_ssm_parameter" "testing_sender_email" {
-  name = "testing-ses-email-address"
 }
