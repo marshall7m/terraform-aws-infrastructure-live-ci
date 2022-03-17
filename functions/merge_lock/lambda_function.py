@@ -27,7 +27,7 @@ def lambda_handler(event, context):
     if merge_lock != 'none':
         data = {
             'state': 'pending', 
-            'description': f'Merging Terragrunt changes is locked. Integration is running for PR #{}'
+            'description': f'Merging Terragrunt changes is locked. Integration is running for PR #{merge_lock}'
         }
     elif merge_lock == 'none':
         data = {
@@ -40,5 +40,5 @@ def lambda_handler(event, context):
     log.debug(f'Data:\n{data}')
 
     log.info('Sending response')
-    response = requests.post(approval_url, data=body)
+    response = requests.post(approval_url, data=data)
     log.debug(f'Response:\n{response}')

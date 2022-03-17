@@ -107,7 +107,7 @@ def gh():
 def repo(gh, mut_output):
     repo = gh.get_user().get_repo(mut_output['repo_name'])
     os.environ['REPO_FULL_NAME'] = repo.full_name
-    repo.edit(default_branch='master')
+    # repo.edit(default_branch='master')
 
     return repo
 
