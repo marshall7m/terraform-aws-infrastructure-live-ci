@@ -97,6 +97,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | codebuild\_trigger\_sf\_name | n/a |
 | codebuild\_trigger\_sf\_role\_arn | n/a |
 | cw\_rule\_initiator | n/a |
+| merge\_lock\_github\_webhook\_id | n/a |
 | metadb\_address | n/a |
 | metadb\_arn | n/a |
 | metadb\_ci\_password | n/a |

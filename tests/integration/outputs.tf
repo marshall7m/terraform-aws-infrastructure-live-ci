@@ -18,6 +18,11 @@ output "state_machine_name" {
 #   value = module.mut_infrastructure_live_ci.codebuild_merge_lock_arn
 # }
 
+output "merge_lock_github_webhook_id" {
+  value     = module.mut_infrastructure_live_ci.merge_lock_github_webhook_id
+  sensitive = true
+}
+
 output "codebuild_trigger_sf_name" {
   value = module.mut_infrastructure_live_ci.codebuild_trigger_sf_name
 }

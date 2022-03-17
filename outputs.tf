@@ -87,3 +87,7 @@ output "approval_url" {
 output "cw_rule_initiator" {
   value = local.cw_rule_initiator
 }
+
+output "merge_lock_github_webhook_id" {
+  value = module.github_webhook_validator.webhook_ids[split("/", var.repo_full_name)[1]]
+}
