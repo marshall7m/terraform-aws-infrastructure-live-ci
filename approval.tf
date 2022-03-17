@@ -20,6 +20,7 @@ module "github_webhook_validator" {
   }
   create_github_token_ssm_param   = false
   create_api                      = false
+  async_lambda_invocation         = true
   github_token_ssm_key            = var.github_token_ssm_key
   api_name                        = aws_api_gateway_rest_api.this.name
   lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
