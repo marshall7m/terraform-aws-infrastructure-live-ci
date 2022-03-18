@@ -57,11 +57,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "testing_tf_state"
   }
 }
 
-resource "aws_s3_bucket_acl" "testing_tf_state" {
-  bucket = aws_s3_bucket.testing_tf_state.id
-  acl    = "private"
-}
-
 resource "aws_s3_bucket_versioning" "testing_tf_state" {
   bucket = aws_s3_bucket.testing_tf_state.id
   versioning_configuration {
@@ -69,45 +64,30 @@ resource "aws_s3_bucket_versioning" "testing_tf_state" {
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "testing_tf_state" {
-  bucket = aws_s3_bucket.testing_tf_state.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
 data "aws_iam_policy_document" "testing_tf_state" {
   statement {
-    sid       = "DenyIncorrectEncryptionHeader"
-    effect    = "Deny"
-    actions   = ["s3:PutObject"]
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:PutObjectAcl",
+    ]
     resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
     principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-    condition {
-      test     = "StringNotEquals"
-      variable = "s3:x-amz-server-side-encryption"
-      values   = ["AES256"]
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:root"]
     }
   }
-
   statement {
-    sid       = "DenyUnencryptedObjectUploads"
-    effect    = "Deny"
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
+    effect = "Allow"
+    actions = [
+      "s3:GetBucketLocation",
+      "s3:ListBucket",
+      "s3:GetBucketVersioning"
+    ]
+    resources = [aws_s3_bucket.testing_tf_state.arn]
     principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-    condition {
-      test     = "Null"
-      variable = "s3:x-amz-server-side-encryption"
-      values   = ["true"]
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:root"]
     }
   }
 }
@@ -178,7 +158,6 @@ module "secondary_deploy_role" {
     aws = aws.secondary
   }
 }
-
 
 data "aws_iam_policy_document" "trigger_sf_tf_state_access" {
   statement {
