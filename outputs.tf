@@ -39,14 +39,6 @@ output "codebuild_trigger_sf_role_arn" {
   value = module.codebuild_trigger_sf.role_arn
 }
 
-# output "codebuild_merge_lock_name" {
-#   value = module.codebuild_merge_lock.name
-# }
-
-# output "codebuild_merge_lock_arn" {
-#   value = module.codebuild_merge_lock.arn
-# }
-
 output "codebuild_terra_run_name" {
   value = module.codebuild_terra_run.name
 }
@@ -90,4 +82,8 @@ output "cw_rule_initiator" {
 
 output "merge_lock_github_webhook_id" {
   value = module.github_webhook_validator.webhook_ids[split("/", var.repo_full_name)[1]]
+}
+
+output "merge_lock_ssm_key" {
+  value = aws_ssm_parameter.merge_lock.name
 }

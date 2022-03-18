@@ -2,8 +2,8 @@ locals {
   #replace with var.prefix?
   merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
 
-  trigger_step_function_build_name    = coalesce(var.merge_lock_build_name, "${var.step_function_name}-trigger-sf")
-  terra_run_build_name                = coalesce(var.merge_lock_build_name, "${var.step_function_name}-terra-run")
+  trigger_step_function_build_name    = coalesce(var.trigger_step_function_build_name, "${var.step_function_name}-trigger-sf")
+  terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
   codebuild_vpc_config                = merge(var.codebuild_vpc_config, { "security_group_ids" = [aws_security_group.codebuilds.id] })
   cw_rule_initiator                   = "rule/${local.cloudwatch_event_rule_name}"
@@ -202,104 +202,6 @@ module "ecr_trigger_sf" {
     TERRAGRUNT_VERSION = var.terragrunt_version
   }
 }
-
-# module "codebuild_merge_lock" {
-#   source = "github.com/marshall7m/terraform-aws-codebuild"
-#   name   = local.merge_lock_name
-
-#   environment = {
-#     compute_type = "BUILD_GENERAL1_SMALL"
-#     image        = "aws/codebuild/standard:3.0"
-#     type         = "LINUX_CONTAINER"
-#     environment_variables = [
-#       {
-#         name  = "REPO_FULL_NAME"
-#         value = data.github_repository.this.full_name
-#         type  = "PLAINTEXT"
-#       },
-#       {
-#         name  = "PGUSER"
-#         type  = "PLAINTEXT"
-#         value = var.metadb_ci_username
-#       },
-#       {
-#         name  = "PGPORT"
-#         type  = "PLAINTEXT"
-#         value = var.metadb_port
-#       },
-#       {
-#         name  = "PGDATABASE"
-#         type  = "PLAINTEXT"
-#         value = local.metadb_name
-#       },
-#       {
-#         name  = "PGHOST"
-#         type  = "PLAINTEXT"
-#         value = aws_rds_cluster.metadb.endpoint
-#       },
-#       {
-#         name  = "MERGE_LOCK"
-#         type  = "PARAMETER_STORE"
-#         value = aws_ssm_parameter.merge_lock.name
-#       },
-#       {
-#         name  = "GITHUB_TOKEN"
-#         type  = "PARAMETER_STORE"
-#         value = var.github_token_ssm_key
-#       },
-#       {
-#         name  = "PGPASSWORD"
-#         type  = "PARAMETER_STORE"
-#         value = aws_ssm_parameter.metadb_ci_password.name
-#       }
-#     ]
-#   }
-
-#   webhook_filter_groups = [
-#     [
-#       {
-#         pattern = "PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED"
-#         type    = "EVENT"
-#       },
-#       {
-#         pattern = var.base_branch
-#         type    = "BASE_REF"
-#       },
-#       {
-#         pattern = var.file_path_pattern
-#         type    = "FILE_PATH"
-#       }
-#     ]
-#   ]
-
-#   vpc_config = local.codebuild_vpc_config
-
-#   artifacts = {
-#     type = "NO_ARTIFACTS"
-#   }
-#   # use inline buildspec with formatted bash script instead of downloading secondary source resulting in longer download phase
-#   build_source = {
-#     type      = "GITHUB"
-#     location  = data.github_repository.this.http_clone_url
-#     buildspec = <<-EOT
-# version: 0.2
-# env:
-#   shell: bash
-# phases:
-#   build:
-#     commands:
-#       - |
-#         ${replace(replace(file("${path.module}/buildspecs/merge_lock/merge_lock.bash"), "\t", "  "), "\n", "\n        ")}
-# EOT
-#   }
-
-#   role_policy_arns = [
-#     aws_iam_policy.merge_lock_ssm_param_access.arn,
-#     aws_iam_policy.ci_metadb_access.arn,
-#     aws_iam_policy.codebuild_vpc_access.arn,
-#     aws_iam_policy.codebuild_ssm_access.arn
-#   ]
-# }
 
 module "codebuild_trigger_sf" {
   source = "github.com/marshall7m/terraform-aws-codebuild"

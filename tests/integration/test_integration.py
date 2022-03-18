@@ -177,38 +177,15 @@ class Integration:
                 statuses.append(build['buildStatus'])
     
         return statuses
-
-    # @pytest.mark.dependency()
-    # @timeout_decorator.timeout(300)
-    # def test_merge_lock_codebuild(self, request, pr, cb, mut_output):
-    #     """Assert scenario's associated merge_lock codebuild was successful"""
-
-    #     log.info('Waiting on merge lock Codebuild executions to finish')
-    #     status = self.get_build_status(cb, mut_output["codebuild_merge_lock_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})
-
-    #     log.info('Assert build succeeded')
-    #     assert all(status == 'SUCCEEDED' for status in status)
-
-    # @pytest.mark.dependency()
-    # @timeout_decorator.timeout(300)
-    # def test_merge_lock_codebuild(self, request, pr, mut_output):
-    #     """Assert scenario's associated merge_lock lambda response was successful"""
-
-    #     log.info('Waiting on merge lock Codebuild executions to finish')
-    #     status = self.get_build_status(cb, mut_output["codebuild_merge_lock_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})
-
-    #     log.info('Assert build succeeded')
-    #     assert all(status == 'SUCCEEDED' for status in status)
          
     @timeout_decorator.timeout(120)
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
-        # depends(request, [f'{request.cls.__name__}::test_merge_lock_codebuild[{request.node.callspec.id}]'])
-        wait = 10
+        wait = 3
 
-        statuses = []
-        while len(statuses) == 0:
+        statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
+        while statuses.totalCount == 0:
             log.debug(f'Waiting {wait} seconds')
             time.sleep(wait)
 
@@ -217,7 +194,7 @@ class Integration:
         log.info('Assert PR head commit status is successful')
         log.debug(f'PR head commit: {pr["head_commit_id"]}')
 
-        assert len(statuses) == 1
+        assert statuses.totalCount == 1
         assert statuses[0].state == 'success'
         
     @timeout_decorator.timeout(300)
