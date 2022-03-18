@@ -5,6 +5,9 @@ locals {
 
   approval_response_deps_zip_path = replace("${path.module}/${local.approval_response_name}_deps.zip", "-", "_")
   approval_deps_dir               = "${path.module}/deps"
+
+  merge_lock_dep_zip = "${path.module}/merge_lock_deps.zip"
+  merge_lock_dep_dir = "${path.module}/functions/merge_lock/deps"
 }
 
 resource "aws_api_gateway_rest_api" "this" {
@@ -51,6 +54,24 @@ data "archive_file" "lambda_merge_lock" {
   output_path = "${path.module}/merge_lock.zip"
 }
 
+resource "null_resource" "lambda_merge_lock_deps" {
+  triggers = {
+    zip_hash = fileexists(local.merge_lock_dep_zip) ? 0 : timestamp()
+  }
+  provisioner "local-exec" {
+    command = "pip install --target ${local.merge_lock_dep_dir}/python requests==2.27.1"
+  }
+}
+
+data "archive_file" "lambda_merge_lock_deps" {
+  type        = "zip"
+  source_dir  = local.merge_lock_dep_dir
+  output_path = local.merge_lock_dep_zip
+  depends_on = [
+    null_resource.lambda_merge_lock_deps
+  ]
+}
+
 module "lambda_merge_lock" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
   filename         = data.archive_file.lambda_merge_lock.output_path
@@ -65,6 +86,15 @@ module "lambda_merge_lock" {
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.merge_lock_ssm_param_access.arn
+  ]
+  lambda_layers = [
+    {
+      filename         = data.archive_file.lambda_merge_lock_deps.output_path
+      name             = "${local.merge_lock_name}-deps"
+      runtimes         = ["python3.8"]
+      source_code_hash = data.archive_file.lambda_merge_lock_deps.output_base64sha256
+      description      = "Dependencies for lambda function: ${local.merge_lock_name}"
+    }
   ]
 }
 
