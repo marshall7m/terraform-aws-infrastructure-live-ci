@@ -199,33 +199,26 @@ class Integration:
 
     #     log.info('Assert build succeeded')
     #     assert all(status == 'SUCCEEDED' for status in status)
-
-    @pytest.fixture(scope='class')
-    def pre_pr_webhook_delivery_count(self, mut_output):
-        deliveries = requests.get(f'https://{os.environ["GITHUB_TOKEN"]}:x-oauth-basic@api.github.com/repos/{os.environ["REPO_FULL_NAME"]}/hooks/{mut_output["merge_lock_github_webhook_id"]}/deliveries', headers={'Accept': 'application/vnd.github.v3+json'})
-        return len(deliveries.json())
          
     @timeout_decorator.timeout(120)
     @pytest.mark.dependency()
-    def test_merge_lock_pr_status(self, request, repo, mut_output, pr, pre_pr_webhook_delivery_count):
+    def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
         # depends(request, [f'{request.cls.__name__}::test_merge_lock_codebuild[{request.node.callspec.id}]'])
         wait = 10
 
-        delivery_count = pre_pr_webhook_delivery_count
-        log.debug(f'Pre-PR webhook delivery count: {pre_pr_webhook_delivery_count}')
-        while pre_pr_webhook_delivery_count == delivery_count:
+        statuses = []
+        while len(statuses) == 0:
             log.debug(f'Waiting {wait} seconds')
             time.sleep(wait)
 
-            deliveries = requests.get(f'https://{os.environ["GITHUB_TOKEN"]}:x-oauth-basic@api.github.com/repos/{os.environ["REPO_FULL_NAME"]}/hooks/{mut_output["merge_lock_github_webhook_id"]}/deliveries', headers={'Accept': 'application/vnd.github.v3+json'})
-            delivery_count = len(deliveries.json())
-            log.debug(f'Delivery Count: {delivery_count}')
+            statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
         
         log.info('Assert PR head commit status is successful')
         log.debug(f'PR head commit: {pr["head_commit_id"]}')
-        
-        assert repo.get_commit(pr["head_commit_id"]).get_statuses()[0].state == 'success'
+
+        assert len(statuses) == 1
+        assert statuses[0].state == 'success'
         
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
