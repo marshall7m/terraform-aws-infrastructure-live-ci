@@ -17,13 +17,13 @@ class TestSucceededDeployment(test_integration.Integration):
     case = {
         'head_ref': f'feature-{uuid.uuid4()}',
         'executions': {
-            'directory_dependency/dev-account/global': {
+            'directory_dependency/dev-account/us-west-2/env-one/doo': {
                 'actions': {
                     'deploy': 'approve'
                 },
                 'pr_files_content': [test_output]
             },
-            'directory_dependency/shared-services-account/global': {
+            'directory_dependency/shared-services-account/us-west-2/env-one/doo': {
                 'actions': {
                     'deploy': 'approve'
                 },

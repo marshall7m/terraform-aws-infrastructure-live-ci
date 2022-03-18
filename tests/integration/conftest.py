@@ -132,7 +132,7 @@ def merge_pr(repo, git_repo):
 
     yield _merge
     
-    log.info(f'Removing PR changes from branch: {git_repo.git.branch_name}')
+    log.info(f'Removing PR changes from branch: {git_repo.git.branch_name()}')
 
     log.debug('Pulling remote changes')
     git_repo.git.reset('--hard')
@@ -162,6 +162,11 @@ def truncate_executions(mut_output):
     ) as conn:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE executions")
+
+@pytest.fixture(scope='module', autouse=True)
+def reset_merge_lock_ssm_value(mut_output):
+    ssm = boto3.client('ssm')
+    yield ssm.put_parameter(Name=mut_output['merge_lock_ssm_key'], Value='none', Type='String', Overwrite=True)
 
 @pytest.fixture(scope='module', autouse=True)
 def abort_hanging_sf_executions(sf, mut_output):
