@@ -336,15 +336,23 @@ class Integration:
 
         assert status == 'SUCCEEDED'
 
+    @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_approval_request(self, request, sf, mut_output, target_execution):
         depends(request, [f'{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]'])
-    
-        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
 
-        for event in events:
-            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resource'] == 'invoke.waitForTaskToken':
-                out = json.loads(event['taskSubmittedEventDetails']['output'])
+        submitted = False
+        wait = 5
+        while not submitted:
+            log.debug(f'Giving Step Function {wait} to submit approval request')
+            time.sleep(wait)
+            
+            events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+
+            for event in events:
+                if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resource'] == 'invoke.waitForTaskToken':
+                    submitted = True
+                    out = json.loads(event['taskSubmittedEventDetails']['output'])
 
         assert out['StatusCode'] == 200
 
