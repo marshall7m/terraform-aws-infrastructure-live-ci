@@ -83,14 +83,14 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
                 SELECT ARRAY(
                     SELECT DISTINCT account_name
                     FROM commit_executions
-                    WHERE "status" = ANY(ARRAY['waiting', 'running', 'aborted', 'failed',])
+                    WHERE "status" = ANY(ARRAY['waiting', 'running', 'aborted', 'failed'])
                 )
             ) = FALSE
             AND cfg_deps && (
                 SELECT ARRAY(
                     SELECT DISTINCT cfg_path
                     FROM commit_executions
-                    WHERE "status" = ANY(ARRAY['waiting', 'running', 'aborted', 'failed',])
+                    WHERE "status" = ANY(ARRAY['waiting', 'running', 'aborted', 'failed'])
                 )
             ) = FALSE
         );
