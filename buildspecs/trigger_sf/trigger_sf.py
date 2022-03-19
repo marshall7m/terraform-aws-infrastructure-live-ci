@@ -270,12 +270,13 @@ class TriggerSF:
         else:
             for id in target_execution_ids:
                 log.info(f'Execution ID: {id}')
-
-                #TODO: Change status from waiting to running for sf input
+                
+                log.debug('Updating execution status to running')
                 self.cur.execute(sql.SQL("""
-                    SELECT *
-                    FROM queued_executions 
+                    UPDATE executions
+                    SET status = 'running'
                     WHERE execution_id = {}
+                    RETURNING *
                 """).format(sql.Literal(id)))
 
                 sf_input = json.dumps(self.cur.fetchone())
@@ -283,13 +284,6 @@ class TriggerSF:
 
                 log.debug('Starting sf execution')
                 sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
-
-                log.debug('Updating execution status to running')
-                self.cur.execute(sql.SQL("""
-                    UPDATE executions
-                    SET status = 'running'
-                    WHERE execution_id = {}
-                """).format(sql.Literal(id)))
             
     def main(self):   
         ssm = boto3.client('ssm')
