@@ -47,7 +47,7 @@ class Integration:
         ids = []
 
     @pytest.fixture(scope='class', autouse=True)
-    def pr(self, repo, case_param, git_repo, merge_pr, tmp_path_factory):
+    def pr(self, request, repo, case_param, git_repo, merge_pr, tmp_path_factory):
         os.environ['BASE_REF'] = 'master'
         if 'revert_ref' not in case_param:
             base_commit = repo.get_branch(os.environ['BASE_REF'])
@@ -70,7 +70,7 @@ class Integration:
 
             
             log.info('Creating PR')
-            pr = repo.create_pull(title=f"test-{case_param['head_ref']}", body='test', base=os.environ['BASE_REF'], head=case_param['head_ref'])
+            pr = repo.create_pull(title=f"test-{case_param['head_ref']}", body=f'test PR class: {request.cls.__name__}', base=os.environ['BASE_REF'], head=case_param['head_ref'])
             
             log.debug(f'head ref commit: {commit_id}')
             log.debug(f'pr commits: {pr.commits}')

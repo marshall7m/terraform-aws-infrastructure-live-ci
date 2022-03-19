@@ -132,17 +132,17 @@ def merge_pr(repo, git_repo):
 
     yield _merge
     
-    log.info(f'Removing PR changes from branch: {git_repo.git.branch_name()}')
+    log.info(f'Removing PR changes from branch: {git_repo.git.branch("--show-current")}')
 
     log.debug('Pulling remote changes')
     git_repo.git.reset('--hard')
     git_repo.git.pull()
 
-    for commit in reversed(merge_commits.values()):
+    for ref, commit in reversed(merge_commits.items()):
         log.debug(f'Merge Commit ID: {commit.sha}')
         try:
             git_repo.git.revert('-m', '1', '--no-commit', str(commit.sha))
-            git_repo.git.commit('-m', 'Revert scenario PR changes within fixture teardown')
+            git_repo.git.commit('-m', f'Revert changes from PR: {ref} within fixture teardown')
             git_repo.git.push('origin')
         except Exception as e:
             print(e)
@@ -164,8 +164,9 @@ def truncate_executions(mut_output):
             cur.execute("TRUNCATE executions")
 
 @pytest.fixture(scope='module', autouse=True)
-def reset_merge_lock_ssm_value(mut_output):
+def reset_merge_lock_ssm_value(request, mut_output):
     ssm = boto3.client('ssm')
+    log.info(f'Resetting merge lock SSM value for module: {request.fspath}')
     yield ssm.put_parameter(Name=mut_output['merge_lock_ssm_key'], Value='none', Type='String', Overwrite=True)
 
 @pytest.fixture(scope='module', autouse=True)
