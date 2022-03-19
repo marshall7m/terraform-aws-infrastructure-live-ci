@@ -315,7 +315,7 @@ class TriggerSF:
             sys.exit(1)
 
         log.info('Checking if commit executions are in progress')
-        # use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
+        # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
         self.cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
 
         if self.cur.rowcount > 0:
