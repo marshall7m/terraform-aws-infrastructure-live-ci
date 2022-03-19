@@ -85,14 +85,14 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
                     FROM commit_executions
                     WHERE "status" = ANY(ARRAY['waiting', 'running', 'aborted', 'failed'])
                 )
-            ) = FALSE
+            )::TEXT[] = FALSE
             AND cfg_deps && (
                 SELECT ARRAY(
                     SELECT DISTINCT cfg_path
                     FROM commit_executions
                     WHERE "status" = ANY(ARRAY['waiting', 'running', 'aborted', 'failed'])
                 )
-            ) = FALSE
+            )::TEXT[] = FALSE
         );
     END;
 $$ LANGUAGE plpgsql;
