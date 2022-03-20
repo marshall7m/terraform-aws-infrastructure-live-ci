@@ -1,16 +1,11 @@
 import os
 import sys
 import logging
-import subprocess
-import psycopg2
-from psycopg2 import sql
-from psycopg2.extras import execute_values
-import re
 import json
 import boto3
 from pprint import pformat
 import sys
-import contextlib
+import aurora_data_api
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -22,27 +17,22 @@ ssm = boto3.client('ssm')
 
 def execution_finished(cur, output):
     log.info('Updating execution record status')
-    cur.execute(sql.SQL("""
+    cur.execute(f"""
     UPDATE executions
-    SET "status" = {}
-    WHERE execution_id = {}
-    """).format(
-        sql.Literal(output['status']),
-        sql.Literal(output['execution_id'])
-    ))
+    SET "status" = {output['status']}
+    WHERE execution_id = {output['execution_id']}
+    """)
     
     if not output['is_rollback'] and output['status'] == 'failed':
         log.info('Aborting all deployments for commit')
-        cur.execute(
-            sql.SQL("""
-            UPDATE executions
-            SET "status" = 'aborted'
-            WHERE "status" IN ('waiting', 'running')
-            AND commit_id = {}
-            AND is_rollback = false
-            RETURNING execution_id
-            """).format(sql.Literal(output['commit_id']))
-        )
+        cur.execute(f"""
+        UPDATE executions
+        SET "status" = 'aborted'
+        WHERE "status" IN ('waiting', 'running')
+        AND commit_id = {output['commit_id']}
+        AND is_rollback = false
+        RETURNING execution_id
+        """)
 
         log.info('Aborting Step Function executions')
         results = cur.fetchall()
@@ -66,7 +56,7 @@ def execution_finished(cur, output):
 
         log.info('Creating rollback executions if needed')
         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
-            cur.execute(sql.SQL(f.read()).format(commit_id=sql.Literal(output['commit_id'])))
+            cur.execute(f.read()).format(commit_id=output['commit_id'])
             results = cur.fetchall()
             log.debug(f'Results:\n{results}')
             if results != None:
@@ -85,7 +75,8 @@ def start_sf_executions(conn):
             with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
                 cur.execute(f.read())
                 ids = cur.fetchone()[0]
-        except psycopg2.errors.CardinalityViolation:
+        except Exception as e:
+            log.debug(f'Exception: {e}')
             ssm = boto3.client('ssm')
             log.error('More than one commit ID is waiting')
             log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
@@ -112,12 +103,12 @@ def start_sf_executions(conn):
             log.info(f'Execution ID: {id}')
             
             log.debug('Updating execution status to running')
-            cur.execute(sql.SQL("""
+            cur.execute(f"""
                 UPDATE executions
                 SET status = 'running'
-                WHERE execution_id = {}
+                WHERE execution_id = {id}
                 RETURNING *
-            """).format(sql.Literal(id)))
+            """)
 
             sf_input = json.dumps(cur.fetchone())
             log.debug(f'SF input:\n{pformat(sf_input)}')
@@ -126,10 +117,14 @@ def start_sf_executions(conn):
             sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
 
 def lambda_handler(event, context):
-    conn = psycopg2.connect(password=ssm.get_parameter(Name=os.environ['PGPASSWORD_SSM_KEY'], WithDecryption=True)['Parameter']['Value'])
-    conn.set_session(autocommit=True)
 
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    conn = aurora_data_api.connect(
+        aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
+        secret_arn=os.environ['METADB_SECRET_ARN'],
+        database=os.environ['METADB_NAME']
+    )
+    cur = conn.cursor()
+
     if 'EXECUTION_OUTPUT' in os.environ:
         log.info('Triggered via Step Function Event')
         output = json.loads(os.environ['EXECUTION_OUTPUT'])

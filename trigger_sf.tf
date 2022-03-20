@@ -15,7 +15,7 @@ resource "null_resource" "lambda_trigger_sf_deps" {
     zip_hash = fileexists(local.trigger_sf_dep_zip) ? 0 : timestamp()
   }
   provisioner "local-exec" {
-    command = "python3 -m pip install --upgrade pip && python3 -m pip install --upgrade --target ${local.trigger_sf_dep_dir}/python psycopg2-binary==2.9.2 awscli==1.22.5 boto3==1.20.5"
+    command = "python3 -m pip install --upgrade pip && python3 -m pip install --upgrade --target ${local.trigger_sf_dep_dir}/python aurora-data-api==0.4.0 awscli==1.22.5 boto3==1.20.5"
   }
 }
 
@@ -41,9 +41,9 @@ module "lambda_trigger_sf" {
     STATE_MACHINE_ARN         = local.state_machine_arn
     PGUSER                    = var.metadb_ci_username
     PGPORT                    = var.metadb_port
-    PGDATABASE                = local.metadb_name
-    PGHOST                    = aws_rds_cluster.metadb.endpoint
-    PGPASSWORD_SSM_KEY        = aws_ssm_parameter.metadb_ci_password.name
+    METADB_NAME               = local.metadb_name
+    METADB_CLUSTER_ARN        = aws_rds_cluster.metadb.arn
+    METADB_SECRET_ARN         = aws_secretsmanager_secret_version.master_metadb_user.arn
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
