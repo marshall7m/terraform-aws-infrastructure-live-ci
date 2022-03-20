@@ -27,16 +27,16 @@ output "metadb_arn" {
   value = aws_rds_cluster.metadb.arn
 }
 
-output "codebuild_trigger_sf_name" {
-  value = module.codebuild_trigger_sf.name
+output "codebuild_create_deploy_stack_name" {
+  value = module.codebuild_create_deploy_stack.name
 }
 
-output "codebuild_trigger_sf_arn" {
-  value = module.codebuild_trigger_sf.arn
+output "codebuild_create_deploy_stack_arn" {
+  value = module.codebuild_create_deploy_stack.arn
 }
 
-output "codebuild_trigger_sf_role_arn" {
-  value = module.codebuild_trigger_sf.role_arn
+output "codebuild_create_deploy_stack_role_arn" {
+  value = module.codebuild_create_deploy_stack.role_arn
 }
 
 output "codebuild_terra_run_name" {
@@ -86,4 +86,8 @@ output "merge_lock_github_webhook_id" {
 
 output "merge_lock_ssm_key" {
   value = aws_ssm_parameter.merge_lock.name
+}
+
+output "lambda_trigger_sf_arn" {
+  value = module.lambda_trigger_sf.function_arn
 }

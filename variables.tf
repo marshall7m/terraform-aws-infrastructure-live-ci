@@ -67,18 +67,18 @@ variable "terra_run_img" {
 }
 
 variable "tf_state_read_access_policy" {
-  description = "AWS IAM policy ARN that allows trigger_sf Codebuild project to read from Terraform remote state resource"
+  description = "AWS IAM policy ARN that allows create deploy stack Codebuild project to read from Terraform remote state resource"
   type        = string
 }
 
 variable "terraform_version" {
-  description = "Terraform version used for trigger_sf and terra_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended"
+  description = "Terraform version used for create_deploy_stack and terra_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended"
   type        = string
   default     = "1.0.2"
 }
 
 variable "terragrunt_version" {
-  description = "Terragrunt version used for trigger_sf and terra_run builds"
+  description = "Terragrunt version used for create_deploy_stack and terra_run builds"
   type        = string
   default     = "0.31.0"
 }
@@ -196,8 +196,8 @@ variable "cloudwatch_event_rule_name" {
   default     = null
 }
 
-variable "trigger_step_function_build_name" {
-  description = "Name of AWS CodeBuild project that will trigger the AWS Step Function"
+variable "create_deploy_stack_build_name" {
+  description = "Name of AWS CodeBuild project that will create the PR deployment stack into the metadb"
   type        = string
   default     = null
 }
@@ -284,4 +284,10 @@ variable "metadb_ci_password" {
 variable "lambda_subnet_ids" {
   description = "Subnets to host Lambda approval response function in. Subnet doesn't need internet access but does need to be the same VPC that the metadb is hosted in"
   type        = list(string)
+}
+
+variable "trigger_sf_function_name" {
+  description = "Name of the AWS Lambda function used to trigger Step Function deployments"
+  type        = string
+  default     = null
 }

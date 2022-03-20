@@ -105,6 +105,21 @@ resource "aws_sfn_state_machine" "this" {
               Name      = "TG_COMMAND"
               Type      = "PLAINTEXT"
               "Value.$" = "$.deploy_command"
+            },
+            {
+              Name      = "EXECUTION_ID"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.execution_id"
+            },
+            {
+              Name      = "CFG_PATH"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.cfg_path"
+            },
+            {
+              Name      = "NEW_PROVIDERS"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$.new_providers"
             }
           ]
           ProjectName = module.codebuild_terra_run.name
@@ -192,9 +207,8 @@ module "sf_role" {
 
 resource "aws_cloudwatch_event_target" "sf_execution" {
   rule      = aws_cloudwatch_event_rule.sf_execution.name
-  target_id = "CodeBuildTriggerStepFunction"
-  arn       = module.codebuild_trigger_sf.arn
-  role_arn  = module.cw_event_rule_role.role_arn
+  target_id = "LambdaTriggerStepFunction"
+  arn       = module.lambda_trigger_sf.function_arn
   input_transformer {
     input_paths = {
       output = "$.detail.output"
@@ -215,7 +229,7 @@ EOF
 
 resource "aws_cloudwatch_event_rule" "sf_execution" {
   name        = local.cloudwatch_event_rule_name
-  description = "Triggers Codebuild project when Step Function execution is complete"
+  description = "Triggers Lambda function: ${local.trigger_sf_function_name} when Step Function execution is complete"
   role_arn    = module.cw_event_rule_role.role_arn
 
   event_pattern = jsonencode({
@@ -237,9 +251,10 @@ module "cw_event_rule_role" {
     {
       effect = "Allow"
       actions = [
-        "codebuild:StartBuild"
+        "lambda:GetFunction",
+        "lambda:InvokeFunction"
       ]
-      resources = [module.codebuild_trigger_sf.arn]
+      resources = [module.lambda_trigger_sf.function_arn]
     }
   ]
 }

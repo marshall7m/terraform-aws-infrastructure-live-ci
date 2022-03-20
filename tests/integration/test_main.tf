@@ -123,7 +123,7 @@ module "plan_role" {
   source    = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name = local.plan_role_name
   trusted_entities = [
-    module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn,
+    module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
     module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn
   ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
@@ -140,7 +140,7 @@ module "secondary_plan_role" {
   source    = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name = local.plan_role_name
   trusted_entities = [
-    module.mut_infrastructure_live_ci.codebuild_trigger_sf_role_arn,
+    module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
     module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn
   ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]

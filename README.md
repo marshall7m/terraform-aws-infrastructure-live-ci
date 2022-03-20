@@ -53,6 +53,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | codebuild\_common\_env\_vars | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commmands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | n/a | yes |
 | codebuild\_vpc\_config | AWS VPC configurations associated with all CodeBuild projects within this module. <br>The subnets must have the approriate security groups to reach the subnet that the db is associated with.<br>Ensure that there are enough IP addresses within the subnet to host the two codebuild projects. | <pre>object({<br>    vpc_id  = string<br>    subnets = list(string)<br>  })</pre> | n/a | yes |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
+| create\_deploy\_stack\_build\_name | Name of AWS CodeBuild project that will create the PR deployment stack into the metadb | `string` | `null` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | enable\_metadb\_http\_endpoint | Enables AWS SDK connection to the metadb via data API HTTP endpoint. Needed in order to connect to metadb from outside of metadb's associated VPC | `bool` | `false` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
@@ -80,23 +81,24 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions | `string` | `null` | no |
 | terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | terra\_run\_img | Docker, ECR or AWS CodeBuild managed image to use for the terra\_run CodeBuild project that runs plan/apply commands | `string` | `null` | no |
-| terraform\_version | Terraform version used for trigger\_sf and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `"1.0.2"` | no |
-| terragrunt\_version | Terragrunt version used for trigger\_sf and terra\_run builds | `string` | `"0.31.0"` | no |
-| tf\_state\_read\_access\_policy | AWS IAM policy ARN that allows trigger\_sf Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
-| trigger\_step\_function\_build\_name | Name of AWS CodeBuild project that will trigger the AWS Step Function | `string` | `null` | no |
+| terraform\_version | Terraform version used for create\_deploy\_stack and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `"1.0.2"` | no |
+| terragrunt\_version | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `"0.31.0"` | no |
+| tf\_state\_read\_access\_policy | AWS IAM policy ARN that allows create deploy stack Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
+| trigger\_sf\_function\_name | Name of the AWS Lambda function used to trigger Step Function deployments | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
 | approval\_url | n/a |
+| codebuild\_create\_deploy\_stack\_arn | n/a |
+| codebuild\_create\_deploy\_stack\_name | n/a |
+| codebuild\_create\_deploy\_stack\_role\_arn | n/a |
 | codebuild\_terra\_run\_arn | n/a |
 | codebuild\_terra\_run\_name | n/a |
 | codebuild\_terra\_run\_role\_arn | n/a |
-| codebuild\_trigger\_sf\_arn | n/a |
-| codebuild\_trigger\_sf\_name | n/a |
-| codebuild\_trigger\_sf\_role\_arn | n/a |
 | cw\_rule\_initiator | n/a |
+| lambda\_trigger\_sf\_arn | n/a |
 | merge\_lock\_github\_webhook\_id | n/a |
 | merge\_lock\_ssm\_key | n/a |
 | metadb\_address | n/a |

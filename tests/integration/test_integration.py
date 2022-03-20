@@ -199,7 +199,7 @@ class Integration:
         
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
-    def test_trigger_sf_codebuild(self, request, case_param, mut_output, merge_pr, pr, cb):
+    def test_create_deploy_stack_codebuild(self, request, case_param, mut_output, merge_pr, pr, cb):
         """Assert scenario's associated trigger_sf codebuild was successful"""
         depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
 
@@ -207,7 +207,7 @@ class Integration:
 
         log.info('Waiting on trigger sf Codebuild execution to finish')
 
-        status = self.get_build_status(cb, mut_output["codebuild_trigger_sf_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})[0]
+        status = self.get_build_status(cb, mut_output["codebuild_create_deploy_stack_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})[0]
         
         if case_param.get('expect_failed_trigger_sf', False):
             log.info('Assert build failed')
@@ -219,7 +219,7 @@ class Integration:
     @pytest.mark.dependency()
     def test_deploy_execution_records_exist(self, request, conn, case_param, pr):
         """Assert that all expected scenario directories are within executions table"""
-        depends(request, [f'{request.cls.__name__}::test_trigger_sf_codebuild[{request.node.callspec.id}]'])
+        depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild[{request.node.callspec.id}]'])
 
         with conn.cursor() as cur:
             cur.execute(f"""
@@ -440,7 +440,7 @@ class Integration:
     @pytest.mark.dependency()
     def test_cw_event_trigger_sf(self, request, cb, mut_output, target_execution, action):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
-        status = self.get_build_status(cb, mut_output['codebuild_trigger_sf_name'], filters={'initiator': mut_output['cw_rule_initiator']}, sf_execution_filter={'execution_id': target_execution['execution_id']})[0]
+        status = self.get_build_status(cb, mut_output['codebuild_create_deploy_stack_name'], filters={'initiator': mut_output['cw_rule_initiator']}, sf_execution_filter={'execution_id': target_execution['execution_id']})[0]
 
         if action == 'reject' and target_execution['is_rollback'] == 'true':
             assert status == 'FAILED'

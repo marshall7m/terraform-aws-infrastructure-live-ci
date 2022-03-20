@@ -2,7 +2,7 @@ locals {
   #replace with var.prefix?
   merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
 
-  trigger_step_function_build_name    = coalesce(var.trigger_step_function_build_name, "${var.step_function_name}-trigger-sf")
+  create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.step_function_name}-create-deploy-stack")
   terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
   codebuild_vpc_config                = merge(var.codebuild_vpc_config, { "security_group_ids" = [aws_security_group.codebuilds.id] })
@@ -186,16 +186,16 @@ module "ecr_terra_run" {
   }
 }
 
-module "ecr_trigger_sf" {
+module "ecr_create_deploy_stack" {
   source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
 
   create_repo      = true
   codebuild_access = true
-  source_path      = "${path.module}/buildspecs/trigger_sf"
-  repo_name        = local.trigger_step_function_build_name
+  source_path      = "${path.module}/buildspecs/create_deploy_stack"
+  repo_name        = local.create_deploy_stack_build_name
   tag              = "latest"
   trigger_build_paths = [
-    "${path.module}/buildspecs/trigger_sf"
+    "${path.module}/buildspecs/create_deploy_stack"
   ]
   build_args = {
     TERRAFORM_VERSION  = var.terraform_version
@@ -203,10 +203,10 @@ module "ecr_trigger_sf" {
   }
 }
 
-module "codebuild_trigger_sf" {
+module "codebuild_create_deploy_stack" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
-  name = local.trigger_step_function_build_name
+  name = local.create_deploy_stack_build_name
 
   source_auth_token          = var.github_token_ssm_value
   source_auth_server_type    = "GITHUB"
@@ -229,7 +229,7 @@ env:
 phases:
   build:
     commands:
-      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/trigger_sf/trigger_sf.py"
+      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/create_deploy_stack/create_deploy_stack.py"
 EOT
   }
 
@@ -241,7 +241,7 @@ EOT
     insecure_ssl        = false
     location            = data.github_repository.build_scripts.http_clone_url
     #TODO: use github tag after development
-    source_version = "merge-trigger"
+    source_version = "lambda-trigger-sf"
   }
 
   artifacts = {
@@ -250,23 +250,13 @@ EOT
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = module.ecr_trigger_sf.full_image_url
+    image        = module.ecr_create_deploy_stack.full_image_url
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.codebuild_common_env_vars, [
-      {
-        name  = "STATE_MACHINE_ARN"
-        value = local.state_machine_arn
-        type  = "PLAINTEXT"
-      },
       {
         name  = "SECONDARY_SOURCE_IDENTIFIER"
         type  = "PLAINTEXT"
         value = local.buildspec_scripts_source_identifier
-      },
-      {
-        name  = "EVENTBRIDGE_FINISHED_RULE"
-        type  = "PLAINTEXT"
-        value = local.cw_rule_initiator
       },
       {
         name  = "PGUSER"
@@ -328,21 +318,6 @@ EOT
   ]
 
   role_policy_statements = [
-    {
-      sid    = "StateMachineAccess"
-      effect = "Allow"
-      actions = [
-        "states:StartExecution",
-        "states:ListExecutions"
-      ]
-      resources = [local.state_machine_arn]
-    },
-    {
-      sid       = "StateMachineExecutionAccess"
-      effect    = "Allow"
-      actions   = ["states:StopExecution"]
-      resources = ["arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:execution:${var.step_function_name}:*"]
-    },
     {
       sid       = "SSMParamMergeLockAccess"
       effect    = "Allow"
@@ -412,6 +387,9 @@ phases:
         --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" \
         --output text))
       - "$${TG_COMMAND}"
+    finally:
+      - |
+        ${replace(replace(file("${path.module}/buildspecs/terra_run/update_new_resources.sh"), "\t", "  "), "\n", "\n        ")}
 EOT
   }
   role_policy_statements = [

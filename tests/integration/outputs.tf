@@ -19,12 +19,12 @@ output "merge_lock_ssm_key" {
   value = module.mut_infrastructure_live_ci.merge_lock_ssm_key
 }
 
-output "codebuild_trigger_sf_name" {
-  value = module.mut_infrastructure_live_ci.codebuild_trigger_sf_name
+output "codebuild_create_deploy_stack_name" {
+  value = module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_name
 }
 
-output "codebuild_trigger_sf_arn" {
-  value = module.mut_infrastructure_live_ci.codebuild_trigger_sf_arn
+output "codebuild_create_deploy_stack_arn" {
+  value = module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_arn
 }
 
 output "codebuild_terra_run_name" {
