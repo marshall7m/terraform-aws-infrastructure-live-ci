@@ -155,6 +155,7 @@ class CreateStack:
             log.info('Creating deployment execution records')
             self.update_executions_with_new_deploy_stack()
 
+            log.info(f'Invoking Lambda Function: {os.environ["TRIGGER_SF_FUNCTION_NAME"]}')
             lb.invoke(FunctionName=os.environ['TRIGGER_SF_FUNCTION_NAME'], InvocationType='Event')
         
         else:

@@ -151,7 +151,6 @@ resource "aws_secretsmanager_secret_version" "master_metadb_user" {
 }
 
 
-
 resource "null_resource" "metadb_setup" {
   provisioner "local-exec" {
     command     = local.metadb_setup_script
