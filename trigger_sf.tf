@@ -15,7 +15,7 @@ resource "null_resource" "lambda_trigger_sf_deps" {
     zip_hash = fileexists(local.trigger_sf_dep_zip) ? 0 : timestamp()
   }
   provisioner "local-exec" {
-    command = "pip install --target ${local.trigger_sf_dep_dir}/python psycopg2-binary==2.9.2 awscli==1.22.5 boto3==1.20.5"
+    command = "python3 -m pip install --upgrade pip && python3 -m pip install --upgrade --target ${local.trigger_sf_dep_dir}/python psycopg2-binary==2.9.2 awscli==1.22.5 boto3==1.20.5"
   }
 }
 
