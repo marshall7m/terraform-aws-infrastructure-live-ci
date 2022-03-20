@@ -52,6 +52,18 @@ module "lambda_trigger_sf" {
   ]
   statements = [
     {
+      sid    = "MetaDBAccess"
+      effect = "Allow"
+      actions = [
+        "rds-data:ExecuteStatement",
+        "rds-data:RollbackTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:BatchExecuteStatement",
+        "rds-data:BeginTransaction"
+      ]
+      resources = [aws_rds_cluster.metadb.arn]
+    },
+    {
       sid    = "StateMachineAccess"
       effect = "Allow"
       actions = [
