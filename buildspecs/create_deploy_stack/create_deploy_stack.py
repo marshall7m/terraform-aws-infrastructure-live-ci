@@ -11,6 +11,7 @@ import boto3
 from pprint import pformat
 import sys
 import contextlib
+import json
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -156,7 +157,7 @@ class CreateStack:
             self.update_executions_with_new_deploy_stack()
 
             log.info(f'Invoking Lambda Function: {os.environ["TRIGGER_SF_FUNCTION_NAME"]}')
-            lb.invoke(FunctionName=os.environ['TRIGGER_SF_FUNCTION_NAME'], InvocationType='Event')
+            lb.invoke(FunctionName=os.environ['TRIGGER_SF_FUNCTION_NAME'], InvocationType='Event', Payload=json.dumps({'pr_id': os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]}))
         
         else:
             log.error('Codebuild triggered action not handled')
