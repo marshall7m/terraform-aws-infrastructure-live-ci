@@ -134,7 +134,7 @@ def lambda_handler(event, context):
         log.info('Triggered via Step Function Event')
         output = json.loads(os.environ['EXECUTION_OUTPUT'])
         log.debug(f'Parsed Step Function Output:\n{pformat(output)}')
-        execution_finished(output)
+        execution_finished(cur, output)
 
     log.info('Checking if commit executions are in progress')
     # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
@@ -142,7 +142,7 @@ def lambda_handler(event, context):
 
     if cur.rowcount > 0:
         log.info('Starting Step Function Deployment Flow')
-        start_sf_executions()
+        start_sf_executions(conn)
     else:
         log.info('No executions are waiting or running -- unlocking merge action within target branch')
         ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
