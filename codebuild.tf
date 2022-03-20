@@ -287,6 +287,11 @@ EOT
         name  = "PGPASSWORD"
         type  = "PARAMETER_STORE"
         value = aws_ssm_parameter.metadb_ci_password.name
+      },
+      {
+        name  = "TRIGGER_SF_FUNCTION_NAME"
+        type  = "PLAINTEXT"
+        value = local.trigger_sf_function_name
       }
     ])
   }
