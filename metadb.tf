@@ -150,6 +150,13 @@ resource "aws_secretsmanager_secret_version" "master_metadb_user" {
   })
 }
 
+resource "aws_secretsmanager_secret_version" "ci_metadb_user" {
+  secret_id = aws_secretsmanager_secret.master_metadb_user.id
+  secret_string = jsonencode({
+    username = var.metadb_ci_username
+    password = var.metadb_ci_password
+  })
+}
 
 resource "null_resource" "metadb_setup" {
   provisioner "local-exec" {

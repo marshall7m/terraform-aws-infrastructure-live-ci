@@ -43,7 +43,7 @@ module "lambda_trigger_sf" {
     PGPORT                    = var.metadb_port
     METADB_NAME               = local.metadb_name
     METADB_CLUSTER_ARN        = aws_rds_cluster.metadb.arn
-    METADB_SECRET_ARN         = aws_secretsmanager_secret_version.master_metadb_user.arn
+    METADB_SECRET_ARN         = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
@@ -62,6 +62,12 @@ module "lambda_trigger_sf" {
         "rds-data:BeginTransaction"
       ]
       resources = [aws_rds_cluster.metadb.arn]
+    },
+    {
+      sid       = "MetaDBSecretAccess"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [aws_secretsmanager_secret_version.ci_metadb_user.arn]
     },
     {
       sid    = "StateMachineAccess"
