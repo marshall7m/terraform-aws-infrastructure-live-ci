@@ -334,6 +334,12 @@ EOT
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
+    },
+    {
+      sid       = "LambdaTriggerSFAccess"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [module.lambda_trigger_sf.function_arn]
     }
   ]
 }
