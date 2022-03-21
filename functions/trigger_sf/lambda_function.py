@@ -12,10 +12,9 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-sf = boto3.client('stepfunctions')
-ssm = boto3.client('ssm')
 
 def execution_finished(cur, output):
+    sf = boto3.client('stepfunctions')
     log.info('Updating execution record status')
     cur.execute(f"""
     UPDATE executions
@@ -69,12 +68,12 @@ def execution_finished(cur, output):
     
 def start_sf_executions(conn):
     log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
+    sf = boto3.client('stepfunctions')
 
     with conn.cursor() as cur:
         try:
             with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
                 cur.execute(f.read())
-                ids = cur.fetchone()[0]
         except Exception as e:
             log.debug(f'Exception: {e}')
             ssm = boto3.client('ssm')
@@ -87,11 +86,13 @@ def start_sf_executions(conn):
             """)
             log.error(f'Waiting commits:\n{pformat(cur.fetchall())}')
             sys.exit(1)
+
+        ids = cur.fetchone()
         if ids == None:
             log.info('No executions are ready')
             return
         else:
-            target_execution_ids = [id for id in ids]
+            target_execution_ids = [id for id in ids[0]]
 
     log.debug(f'IDs: {target_execution_ids}')
     log.info(f'Count: {len(target_execution_ids)}')
@@ -117,6 +118,8 @@ def start_sf_executions(conn):
             sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
 
 def lambda_handler(event, context):
+    log.debug(f'Event:\n{pformat(event)}')
+    ssm = boto3.client('ssm')
 
     conn = aurora_data_api.connect(
         aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
