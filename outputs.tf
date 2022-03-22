@@ -91,3 +91,7 @@ output "merge_lock_ssm_key" {
 output "lambda_trigger_sf_arn" {
   value = module.lambda_trigger_sf.function_arn
 }
+
+output "trigger_sf_log_group_name" {
+  value = module.lambda_trigger_sf.cw_log_group_name
+}

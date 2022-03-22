@@ -113,6 +113,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 | metadb\_username | n/a |
 | sf\_arn | n/a |
 | sf\_name | n/a |
+| trigger\_sf\_log\_group\_name | n/a |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 

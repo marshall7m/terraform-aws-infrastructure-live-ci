@@ -37,7 +37,6 @@ module "lambda_trigger_sf" {
   runtime          = "python3.8"
   env_vars = {
     GITHUB_MERGE_LOCK_SSM_KEY = aws_ssm_parameter.merge_lock.name
-    EVENTBRIDGE_FINISHED_RULE = var.github_token_ssm_key
     STATE_MACHINE_ARN         = local.state_machine_arn
     PGUSER                    = var.metadb_ci_username
     PGPORT                    = var.metadb_port
@@ -47,7 +46,7 @@ module "lambda_trigger_sf" {
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.merge_lock_ssm_param_access.arn,
+    aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn
   ]
   statements = [

@@ -73,7 +73,20 @@ module "lambda_merge_lock" {
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.merge_lock_ssm_param_access.arn
+    aws_iam_policy.github_token_ssm_access.arn
+  ]
+  statements = [
+    {
+      effect    = "Allow"
+      actions   = ["ssm:DescribeParameters"]
+      resources = ["*"]
+    },
+    {
+      sid       = "SSMParamMergeLockReadAccess"
+      effect    = "Allow"
+      actions   = ["ssm:GetParameter"]
+      resources = [aws_ssm_parameter.merge_lock.arn]
+    }
   ]
   lambda_layers = [
     {

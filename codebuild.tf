@@ -50,7 +50,27 @@ data "aws_ssm_parameter" "github_token" {
   name = var.github_token_ssm_key
 }
 
-data "aws_iam_policy_document" "merge_lock_ssm_param_access" {
+data "aws_iam_policy_document" "merge_lock_ssm_param_full_access" {
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "SSMParamMergeLockAccess"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter", "ssm:PutParameter"]
+    resources = [aws_ssm_parameter.merge_lock.arn]
+  }
+}
+
+resource "aws_iam_policy" "merge_lock_ssm_param_full_access" {
+  name        = "${aws_ssm_parameter.merge_lock.name}-ssm-full-access"
+  description = "Allows read/write access to merge lock SSM Parameter Store value"
+  policy      = data.aws_iam_policy_document.merge_lock_ssm_param_full_access.json
+}
+
+data "aws_iam_policy_document" "github_token_ssm_access" {
   statement {
     effect    = "Allow"
     actions   = ["ssm:DescribeParameters"]
@@ -63,16 +83,15 @@ data "aws_iam_policy_document" "merge_lock_ssm_param_access" {
       "ssm:GetParameter"
     ]
     resources = [
-      aws_ssm_parameter.merge_lock.arn,
       data.aws_ssm_parameter.github_token.arn
     ]
   }
 }
 
-resource "aws_iam_policy" "merge_lock_ssm_param_access" {
-  name        = "${aws_ssm_parameter.merge_lock.name}-ssm-access"
-  description = "Allows read access to merge lock and github token ssm param"
-  policy      = data.aws_iam_policy_document.merge_lock_ssm_param_access.json
+resource "aws_iam_policy" "github_token_ssm_access" {
+  name        = "${data.aws_ssm_parameter.github_token.name}-ssm-access"
+  description = "Allows read access to github token SSM Parameter Store value"
+  policy      = data.aws_iam_policy_document.github_token_ssm_access.json
 }
 
 data "aws_iam_policy_document" "codebuild_vpc_access" {
@@ -121,7 +140,7 @@ data "aws_kms_key" "ssm" {
   key_id = "alias/aws/ssm"
 }
 
-data "aws_iam_policy_document" "codebuild_ssm_access" {
+data "aws_iam_policy_document" "metadb_ci_ssm_param_access" {
   statement {
     effect    = "Allow"
     actions   = ["ssm:DescribeParameters"]
@@ -144,10 +163,10 @@ data "aws_iam_policy_document" "codebuild_ssm_access" {
   }
 }
 
-resource "aws_iam_policy" "codebuild_ssm_access" {
+resource "aws_iam_policy" "metadb_ci_ssm_param_access" {
   name        = "${var.metadb_ci_username}-password-access"
   description = "Allows Codebuild services to read associated metadb user credentials"
-  policy      = data.aws_iam_policy_document.codebuild_ssm_access.json
+  policy      = data.aws_iam_policy_document.metadb_ci_ssm_param_access.json
 }
 
 data "aws_iam_policy_document" "ci_metadb_access" {
@@ -315,10 +334,11 @@ EOT
   vpc_config = local.codebuild_vpc_config
 
   role_policy_arns = [
-    aws_iam_policy.merge_lock_ssm_param_access.arn,
+    aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
     aws_iam_policy.codebuild_vpc_access.arn,
-    aws_iam_policy.codebuild_ssm_access.arn,
+    aws_iam_policy.metadb_ci_ssm_param_access.arn,
+    aws_iam_policy.github_token_ssm_access.arn,
     var.tf_state_read_access_policy
   ]
 
@@ -410,5 +430,9 @@ EOT
       actions   = ["sts:AssumeRole"]
       resources = flatten([for account in var.account_parent_cfg : [account.plan_role_arn, account.deploy_role_arn]])
     }
+  ]
+  role_policy_arns = [
+    aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.metadb_ci_ssm_param_access.arn
   ]
 }

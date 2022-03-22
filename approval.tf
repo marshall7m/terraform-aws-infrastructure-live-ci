@@ -253,7 +253,7 @@ module "lambda_approval_response" {
 
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.codebuild_ssm_access.arn,
+    aws_iam_policy.metadb_ci_ssm_param_access.arn,
     aws_iam_policy.ci_metadb_access.arn
   ]
 
