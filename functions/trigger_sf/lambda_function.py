@@ -66,16 +66,15 @@ def execution_finished(cur, output):
         log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
         sys.exit(1)
     
-def start_sf_executions(conn):
+def start_sf_executions(cur):
     log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
     sf = boto3.client('stepfunctions')
-
-    with conn.cursor() as cur:
-        try:
-            with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
-                cur.execute(f.read())
-        except Exception as e:
-            log.debug(f'Exception: {e}')
+    try:
+        with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
+            cur.execute(f.read())
+    except aurora_data_api.exceptions.DatabaseError as e:
+        log.error(f'Exception:\n{e}')
+        if e.args[1] == 'subquery must return only one column':
             ssm = boto3.client('ssm')
             log.error('More than one commit ID is waiting')
             log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
@@ -85,14 +84,14 @@ def start_sf_executions(conn):
             WHERE "status" = 'waiting'
             """)
             log.error(f'Waiting commits:\n{pformat(cur.fetchall())}')
-            sys.exit(1)
+        sys.exit(1)
 
-        ids = cur.fetchone()
-        if ids == None:
-            log.info('No executions are ready')
-            return
-        else:
-            target_execution_ids = [id for id in ids[0]]
+    ids = cur.fetchone()
+    if ids == None:
+        log.info('No executions are ready')
+        return
+    else:
+        target_execution_ids = [id for id in ids[0]]
 
     log.debug(f'IDs: {target_execution_ids}')
     log.info(f'Count: {len(target_execution_ids)}')
@@ -120,27 +119,28 @@ def start_sf_executions(conn):
 def lambda_handler(event, context):
     log.debug(f'Event:\n{pformat(event)}')
     ssm = boto3.client('ssm')
-
-    conn = aurora_data_api.connect(
+    with aurora_data_api.connect(
         aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
         secret_arn=os.environ['METADB_SECRET_ARN'],
         database=os.environ['METADB_NAME']
-    )
-    cur = conn.cursor()
+    ) as conn:
+        with conn.cursor() as cur:
+            if 'EXECUTION_OUTPUT' in os.environ:
+                log.info('Triggered via Step Function Event')
+                output = json.loads(os.environ['EXECUTION_OUTPUT'])
+                log.debug(f'Parsed Step Function Output:\n{pformat(output)}')
+                execution_finished(cur, output)
 
-    if 'EXECUTION_OUTPUT' in os.environ:
-        log.info('Triggered via Step Function Event')
-        output = json.loads(os.environ['EXECUTION_OUTPUT'])
-        log.debug(f'Parsed Step Function Output:\n{pformat(output)}')
-        execution_finished(cur, output)
+            log.info('Checking if commit executions are in progress')
+            # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
+            
+            cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
 
-    log.info('Checking if commit executions are in progress')
-    # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
-    cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
-
-    if cur.rowcount > 0:
-        log.info('Starting Step Function Deployment Flow')
-        start_sf_executions(conn)
-    else:
-        log.info('No executions are waiting or running -- unlocking merge action within target branch')
-        ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
+            if cur.rowcount > 0:
+                log.info('Starting Step Function Deployment Flow')
+                start_sf_executions(cur)
+            else:
+                log.info('No executions are waiting or running -- unlocking merge action within target branch')
+                ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
+    
+    
