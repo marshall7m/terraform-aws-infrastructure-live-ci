@@ -10,6 +10,7 @@ import shutil
 import uuid
 import json
 import time
+from datetime import datetime, timedelta
 import github
 import git
 import timeout_decorator
@@ -68,10 +69,8 @@ class Integration:
             commit_id = repo.create_git_commit("scenario pr changes", tree, [parent]).sha
             head_ref.edit(sha=commit_id)
 
-            
             log.info('Creating PR')
             pr = repo.create_pull(title=f"test-{case_param['head_ref']}", body=f'test PR class: {request.cls.__name__}', base=os.environ['BASE_REF'], head=case_param['head_ref'])
-            
             log.debug(f'head ref commit: {commit_id}')
             log.debug(f'pr commits: {pr.commits}')
 
@@ -200,7 +199,7 @@ class Integration:
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
     def test_create_deploy_stack_codebuild(self, request, case_param, mut_output, merge_pr, pr, cb):
-        """Assert scenario's associated trigger_sf codebuild was successful"""
+        """Assert case's associated create deploy stack codebuild was successful"""
         depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
 
         merge_pr(pr['base_ref'], pr['head_ref'])
@@ -209,7 +208,7 @@ class Integration:
 
         status = self.get_build_status(cb, mut_output["codebuild_create_deploy_stack_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})[0]
         
-        if case_param.get('expect_failed_trigger_sf', False):
+        if case_param.get('expect_failed_create_deploy_stack', False):
             log.info('Assert build failed')
             assert status == 'FAILED'
         else:
@@ -438,14 +437,52 @@ class Integration:
         assert response['status'] == 'SUCCEEDED'
 
     @pytest.mark.dependency()
-    def test_cw_event_trigger_sf(self, request, cb, mut_output, target_execution, action):
+    def test_cw_event_trigger_sf(self, request, mut_output):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
-        status = self.get_build_status(cb, mut_output['codebuild_create_deploy_stack_name'], filters={'initiator': mut_output['cw_rule_initiator']}, sf_execution_filter={'execution_id': target_execution['execution_id']})[0]
+        
+        logs = boto3.client('logs')
 
-        if action == 'reject' and target_execution['is_rollback'] == 'true':
-            assert status == 'FAILED'
-        else:
-            assert status == 'SUCCEEDED'
+        log_group = mut_output['trigger_sf_log_group_name']
+        log.debug(f'Log Group: {log_group}')
+
+        latest_stream = logs.describe_log_streams(
+            logGroupName=log_group,
+            orderBy='LastEventTime',
+            limit=1
+        )["logStreams"]["logStreamName"]
+        log.debug(f'Log Stream: {latest_stream}')
+
+        response = logs.get_log_events(
+            logGroupName=log_group,
+            logStreamName=latest_stream
+        )
+
+        log.info('Searching latest log stream for any errors')
+        query = """fields @timestamp, @message
+        | filter @message like /ERROR/
+        | sort @timestamp desc
+        | limit 1
+        """  
+
+        start_query_response = logs.start_query(
+            logGroupName=log_group,
+            startTime=int((datetime.today() - timedelta(hours=5)).timestamp()),
+            endTime=int(datetime.now().timestamp()),
+            queryString=query
+        )
+
+        query_id = start_query_response['queryId']
+
+        response = None
+
+        while response == None or response['status'] == 'Running':
+            log.debug('Waiting for query to complete')
+            time.sleep(1)
+            response = logs.get_query_results(
+                queryId=query_id
+            )
+
+        assert len(response['results']) == 0
 
     @pytest.mark.dependency()
     def test_rollback_providers_executions_exists(self, request, conn, case_param, pr, action, target_execution):

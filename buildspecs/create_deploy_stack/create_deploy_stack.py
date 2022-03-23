@@ -145,8 +145,6 @@ class CreateStack:
             log.debug(f'Inserted executions:\n{pformat([dict(r) for r in res])}')
 
     def main(self):   
-        
-
         if os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
             ssm = boto3.client('ssm')
             lb = boto3.client('lambda')
