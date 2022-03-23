@@ -13,6 +13,16 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
         -- intentionally errors if there are more than one unique commit_id and/or is_rollback value
         WHERE commit_id = (SELECT commit_id FROM target_commit)
         AND is_rollback = (SELECT is_rollback FROM target_commit);
+        EXCEPTION 
+            WHEN SQLSTATE '21000' THEN 
+                RAISE EXCEPTION 'More than one commit ID is waiting: %', (SELECT array_agg(commit_id) FROM (
+                    SELECT DISTINCT commit_id, is_rollback 
+                    FROM executions
+                    WHERE "status" = 'waiting'
+                );
+        SELECT DISTINCT commit_id, is_rollback 
+            FROM executions
+            WHERE "status" = 'waiting'
             
         RETURN (
             SELECT array_agg(execution_id::TEXT)

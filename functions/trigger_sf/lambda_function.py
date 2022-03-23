@@ -75,17 +75,9 @@ def start_sf_executions(cur):
             cur.execute(f.read())
     except aurora_data_api.exceptions.DatabaseError as e:
         log.error(f'Exception:\n{e}')
-        if bool(re.search(r'SQLState:\s+?21000', e.__cause__.response['Error']['Message'])):
-            ssm = boto3.client('ssm')
-            log.error('More than one commit ID is waiting')
-            log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
-            cur.execute("""
-            SELECT DISTINCT commit_id, is_rollback 
-            FROM executions
-            WHERE "status" = 'waiting'
-            """)
-            log.error(f'Waiting commits:\n{pformat(cur.fetchall())}')
-            sys.exit(1)
+        ssm = boto3.client('ssm')
+        log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
+        sys.exit(1)
 
     ids = cur.fetchone()
     if ids == None:
