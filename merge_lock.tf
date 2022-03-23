@@ -17,7 +17,7 @@ module "github_webhook_validator" {
   lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
   repos = [
     {
-      name = data.github_repository.this.name
+      name = split("/", var.repo_full_name)[1]
       filter_groups = [
         {
           events     = ["pull_request"]
