@@ -13,7 +13,6 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-
 def execution_finished(cur, output):
     sf = boto3.client('stepfunctions')
     log.info('Updating execution record status')

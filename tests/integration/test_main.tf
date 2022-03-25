@@ -17,6 +17,10 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+data "github_user" "current" {
+  username = ""
+}
+
 data "aws_ssm_parameter" "testing_sender_email" {
   name = "testing-ses-email-address"
 }
@@ -32,6 +36,8 @@ resource "random_string" "this" {
   lower       = true
   upper       = false
 }
+
+
 
 resource "github_repository" "testing" {
   name        = local.mut_id
@@ -183,7 +189,8 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
 module "mut_infrastructure_live_ci" {
   source = "../.."
 
-  repo_full_name = github_repository.testing.full_name
+  #not using terraform created github_repository repo full_name attribute since github_validator tf sub-module uses repo_full_name as key within webhook for_each
+  repo_full_name = "${data.github_user.current.login}/${local.mut_id}"
   base_branch    = "master"
 
   metadb_publicly_accessible = true
