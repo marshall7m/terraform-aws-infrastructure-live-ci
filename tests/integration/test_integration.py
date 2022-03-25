@@ -71,6 +71,7 @@ class Integration:
 
             log.info('Creating PR')
             pr = repo.create_pull(title=f"test-{case_param['head_ref']}", body=f'test PR class: {request.cls.__name__}', base=os.environ['BASE_REF'], head=case_param['head_ref'])
+            log.debug(f'PR #{pr.number}')
             log.debug(f'head ref commit: {commit_id}')
             log.debug(f'pr commits: {pr.commits}')
 
@@ -126,9 +127,6 @@ class Integration:
     def get_build_status(self, client, name, ids=[], filters={}, sf_execution_filter={}):
         
         statuses = ['IN_PROGRESS']
-        wait = 30
-
-        time.sleep(wait)
 
         if len(ids) == 0:
             ids = client.list_builds_for_project(
@@ -140,16 +138,16 @@ class Integration:
                 log.error(f'No builds have runned for project: {name}')
                 sys.exit(1)
             
+            
             log.debug(f'Build Filters:\n{filters}')
             log.debug(f'Step Function Execution Output Filters:\n{sf_execution_filter}')
             for build in client.batch_get_builds(ids=ids)['builds']:
-                skip_sf_filter = False
+                skip_sf_filter = False                    
                 for key, value in filters.items():
                     if build.get(key, None) != value:
                         ids.remove(build['id'])
                         skip_sf_filter = True
                         break
-                
                 if skip_sf_filter:
                     continue
                 
@@ -170,14 +168,56 @@ class Integration:
 
         log.debug(f'Getting build statuses for the following IDs:\n{ids}')
         while 'IN_PROGRESS' in statuses:
-            time.sleep(wait)
+            time.sleep(15)
             statuses = []
             for build in client.batch_get_builds(ids=ids)['builds']:
                 statuses.append(build['buildStatus'])
     
         return statuses
+    
+    def get_latest_log_stream_errs(self, log_group):
+        logs = boto3.client('logs')
+
+        latest_stream = logs.describe_log_streams(
+            logGroupName=log_group,
+            orderBy='LastEventTime',
+            limit=1
+        )["logStreams"]["logStreamName"]
+        log.debug(f'Log Stream: {latest_stream}')
+
+        response = logs.get_log_events(
+            logGroupName=log_group,
+            logStreamName=latest_stream
+        )
+
+        log.info('Searching latest log stream for any errors')
+        query = """fields @timestamp, @message
+        | filter @message like /ERROR/
+        | sort @timestamp desc
+        | limit 1
+        """  
+
+        start_query_response = logs.start_query(
+            logGroupName=log_group,
+            startTime=int((datetime.today() - timedelta(minutes=5)).timestamp()),
+            endTime=int(datetime.now().timestamp()),
+            queryString=query
+        )
+
+        query_id = start_query_response['queryId']
+
+        response = None
+
+        while response == None or response['status'] == 'Running':
+            log.debug('Waiting for query to complete')
+            time.sleep(3)
+            response = logs.get_query_results(
+                queryId=query_id
+            )
+        
+        return response['results']
          
-    @timeout_decorator.timeout(120)
+    @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
@@ -196,7 +236,7 @@ class Integration:
         assert statuses.totalCount == 1
         assert statuses[0].state == 'success'
         
-    @timeout_decorator.timeout(300)
+    @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
     def test_create_deploy_stack_codebuild(self, request, case_param, mut_output, merge_pr, pr, cb):
         """Assert case's associated create deploy stack codebuild was successful"""
@@ -205,6 +245,9 @@ class Integration:
         merge_pr(pr['base_ref'], pr['head_ref'])
 
         log.info('Waiting on trigger sf Codebuild execution to finish')
+        # TODO: reduce once github webhooks delivery lag is gone -- see: https://www.githubstatus.com/
+        wait = 5
+        time.sleep(wait)
 
         status = self.get_build_status(cb, mut_output["codebuild_create_deploy_stack_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})[0]
         
@@ -238,7 +281,17 @@ class Integration:
         log.debug(f'Commit execution IDs:\n{target_execution_ids}')
 
         assert len(case_param['executions']) == len(target_execution_ids)
-        
+    
+    @pytest.mark.dependency()
+    def test_trigger_sf(self, request, mut_output):
+        depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild[{request.node.callspec.id}]'])
+
+        log_group = mut_output['trigger_sf_log_group_name']
+        log.debug(f'Log Group: {log_group}')
+        results = self.get_latest_log_stream_errs(log_group)
+
+        assert len(results) == 0
+
     @pytest.fixture(scope="class")
     def target_execution(self, conn, pr, tested_executions, case_param):
         
@@ -439,50 +492,12 @@ class Integration:
     @pytest.mark.dependency()
     def test_cw_event_trigger_sf(self, request, mut_output):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
-        
-        logs = boto3.client('logs')
 
         log_group = mut_output['trigger_sf_log_group_name']
         log.debug(f'Log Group: {log_group}')
+        results = self.get_latest_log_stream_errs(log_group)
 
-        latest_stream = logs.describe_log_streams(
-            logGroupName=log_group,
-            orderBy='LastEventTime',
-            limit=1
-        )["logStreams"]["logStreamName"]
-        log.debug(f'Log Stream: {latest_stream}')
-
-        response = logs.get_log_events(
-            logGroupName=log_group,
-            logStreamName=latest_stream
-        )
-
-        log.info('Searching latest log stream for any errors')
-        query = """fields @timestamp, @message
-        | filter @message like /ERROR/
-        | sort @timestamp desc
-        | limit 1
-        """  
-
-        start_query_response = logs.start_query(
-            logGroupName=log_group,
-            startTime=int((datetime.today() - timedelta(hours=5)).timestamp()),
-            endTime=int(datetime.now().timestamp()),
-            queryString=query
-        )
-
-        query_id = start_query_response['queryId']
-
-        response = None
-
-        while response == None or response['status'] == 'Running':
-            log.debug('Waiting for query to complete')
-            time.sleep(1)
-            response = logs.get_query_results(
-                queryId=query_id
-            )
-
-        assert len(response['results']) == 0
+        assert len(results) == 0
 
     @pytest.mark.dependency()
     def test_rollback_providers_executions_exists(self, request, conn, case_param, pr, action, target_execution):
