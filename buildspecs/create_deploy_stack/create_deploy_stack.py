@@ -12,6 +12,7 @@ from pprint import pformat
 import sys
 import contextlib
 import json
+from typing import List
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -26,7 +27,13 @@ class CreateStack:
         self.cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         self.git_repo = git.Repo(search_parent_directories=True)
 
-    def get_new_providers(self, path):
+    def get_new_providers(self, path: str) -> List[str]:
+        '''
+        Returns list of Terraform provider sources that are defined within the `path` that are not within the terraform state
+        
+        Arguments:
+            path: Absolute path to a directory that contains atleast one Terragrunt *.hcl file
+        '''
         log.debug(f'Path: {path}')
         cmd = f"terragrunt providers --terragrunt-working-dir {path}"
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
@@ -47,9 +54,16 @@ class CreateStack:
         return list(set(cfg_providers).difference(state_providers))
 
     @contextlib.contextmanager
-    def set_aws_env_vars(self, role_arn, session_name):
+    def set_aws_env_vars(self, role_arn: str, session_name: str) -> None:
+        '''
+        Sets environment variables for AWS credentials associated with AWS IAM role ARN
+        
+        Arguments:
+            role_arn: AWS IAM role ARN
+            session_name: Name of the session to be used while the role is assumed
+        '''
         sts = boto3.client('sts')
-        creds =sts.assume_role(RoleArn=role_arn, RoleSessionName=session_name)['Credentials']
+        creds = sts.assume_role(RoleArn=role_arn, RoleSessionName=session_name)['Credentials']
 
         os.environ['AWS_ACCESS_KEY_ID'] = creds['AccessKeyId']
         os.environ['AWS_SECRET_ACCESS_KEY'] = creds['SecretAccessKey']
@@ -61,7 +75,14 @@ class CreateStack:
         del os.environ['AWS_SECRET_ACCESS_KEY']
         del os.environ['AWS_SESSION_TOKEN']
         
-    def create_stack(self, path, git_root):
+    def create_stack(self, path: str, git_root: str) -> List[map]:
+        '''
+        Creates a list of Terragrunt paths that contain differences in their plan with their associated Terragrunt dependencies and new providers
+
+        Arguments:
+            path: Directory to run terragrunt run-all plan within. Directory must contain a `terragrunt.hcl` file.
+            git_root: The associated Github repository's root absolute directory
+        '''
         cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
 
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
@@ -93,7 +114,10 @@ class CreateStack:
 
         return stack
 
-    def update_executions_with_new_deploy_stack(self):
+    def update_executions_with_new_deploy_stack(self) -> None:
+        '''
+        Iterates through every parent account-level directory and insert it's associated deployment stack within the metadb
+        '''
         with self.conn.cursor() as cur:
             cur.execute('SELECT account_path, plan_role_arn FROM account_dim')
             accounts = [{'path': r[0], 'role': r[1]} for r in cur.fetchall()]
@@ -143,8 +167,13 @@ class CreateStack:
 
             res = execute_values(self.cur, query, stack, template=col_tpl, fetch=True)
             log.debug(f'Inserted executions:\n{pformat([dict(r) for r in res])}')
+            return None
 
-    def main(self):   
+    def main(self) -> None:
+        '''
+        When a PR that contains Terragrunt and/or Terraform changes is merged within the base branch, each of those new/modified Terragrunt directories will have an associated
+        deployment record inserted into the metadb. After all records are inserted, a downstream AWS Lambda function will choose which of those records to run through the deployment flow.
+        '''
         if os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
             ssm = boto3.client('ssm')
             lb = boto3.client('lambda')
@@ -163,6 +192,7 @@ class CreateStack:
             log.debug(f'CODEBUILD_WEBHOOK_TRIGGER: {os.environ["CODEBUILD_WEBHOOK_TRIGGER"]}')
             sys.exit(1)
 
+        return None
     def cleanup(self):
 
         log.debug('Closing metadb cursor')

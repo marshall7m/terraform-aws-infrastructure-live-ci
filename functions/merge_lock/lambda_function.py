@@ -11,6 +11,7 @@ log.setLevel(logging.DEBUG)
 ssm = boto3.client('ssm')
 
 def lambda_handler(event, context):
+    '''Creates a PR commit status that shows the current merge lock status'''
 
     log.debug(f'Event:\n{pformat(event)}')
 

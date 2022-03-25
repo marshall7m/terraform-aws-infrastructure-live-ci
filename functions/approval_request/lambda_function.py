@@ -9,7 +9,7 @@ ses = boto3.client('ses')
 log = logging.getLogger(__name__)
 
 def lambda_handler(event, context):
-    """Sends approval request email to email addresses asssociated with Terragrunt path."""
+    '''Sends approval request email to email addresses asssociated with Terragrunt path.'''
     
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
@@ -39,7 +39,9 @@ def lambda_handler(event, context):
                 })
             }
         )
+    log.debug(f'Destinations\n {destinations}')
 
+    log.info('Sending bulk email')
     response = ses.send_bulk_templated_email(
         Template=os.environ['SES_TEMPLATE'],
         Source=os.environ['SENDER_EMAIL_ADDRESS'],
@@ -50,6 +52,7 @@ def lambda_handler(event, context):
         Destinations=destinations
     )
     log.debug(f'Response:\n{response}')
+
     for msg in response['Status']:
         if msg['Status'] == 'Success':
             log.info("Email was succesfully sent")

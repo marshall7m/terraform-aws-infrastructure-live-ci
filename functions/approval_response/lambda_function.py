@@ -8,6 +8,10 @@ from psycopg2 import sql
 from pprint import pformat
 
 def lambda_handler(event, context):
+    '''
+    Updates the approval or rejection count associated with the Terragrunt path.
+    If the minimum approval or rejection count is met, a successful task token is sent to associated AWS Step Function
+    '''
 
     sf = boto3.client('stepfunctions')
     ssm = boto3.client('ssm')

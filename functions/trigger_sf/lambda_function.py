@@ -13,7 +13,14 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-def execution_finished(cur, output):
+def execution_finished(cur, output: map) -> None:
+    '''
+    Updates the Step Function's associated metadb record status and handles the case where the Step Function execution fails
+    
+    Arguments:
+        output: Cloudwatch event payload associated with finished Step Function execution
+    '''
+    
     sf = boto3.client('stepfunctions')
     log.info('Updating execution record status')
     cur.execute(f"""
@@ -66,7 +73,14 @@ def execution_finished(cur, output):
         log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
         sys.exit(1)
     
-def start_sf_executions(cur):
+def start_sf_executions(cur) -> None:
+    '''
+    Selects execution records to pass to Step Function deployment flow and starts the Step Function executions
+    
+    Arguments:
+        cur: Database cursor
+    '''
+
     log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
     sf = boto3.client('stepfunctions')
     try:
@@ -109,6 +123,8 @@ def start_sf_executions(cur):
             sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
 
 def lambda_handler(event, context):
+    '''Runs Step Function deployment flow or resets SSM Parameter Store merge lock value'''
+
     log.debug(f'Event:\n{pformat(event)}')
     ssm = boto3.client('ssm')
     with aurora_data_api.connect(
