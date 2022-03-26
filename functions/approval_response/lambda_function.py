@@ -2,9 +2,7 @@ import boto3
 import logging
 import json
 import os
-import psycopg2
-import psycopg2.extras
-from psycopg2 import sql
+import aurora_data_api
 from pprint import pformat
 
 def lambda_handler(event, context):
@@ -24,26 +22,21 @@ def lambda_handler(event, context):
     action = event['body']['action']
 
     try:
-        log.info('Connecting to metadb')
-        conn = psycopg2.connect(password=ssm.get_parameter(Name=os.environ['PGPASSWORD_SSM_KEY'], WithDecryption=True)['Parameter']['Value'])
-        conn.set_session(autocommit=True)
-    except (Exception, psycopg2.DatabaseError) as e:
-        log.error(e)
-        return {
-            'statusCode': 500,
-            'message': 'Error while connecting to PostgreSQL'
-        }
-
-    try:
         log.info('Updating vote count')
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            with open(f'{os.path.dirname(os.path.realpath(__file__))}/update_vote.sql', 'r') as f:
-                cur.execute(sql.SQL(f.read()).format(
-                    action=sql.Literal(action),
-                    recipient=sql.Literal(event['body']['recipient']),
-                    execution_id=sql.Literal(event['query']['ex'])
-                ))
-                record = dict(cur.fetchone())
+        with aurora_data_api.connect(
+            aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
+            secret_arn=os.environ['METADB_SECRET_ARN'],
+            database=os.environ['METADB_NAME']
+        ) as conn:
+            with conn.cursor() as cur:
+                with open(f'{os.path.dirname(os.path.realpath(__file__))}/update_vote.sql', 'r') as f:
+                    cur.execute(f.read().format(
+                        action=action,
+                        recipient=event['body']['recipient'],
+                        execution_id=event['query']['ex']
+                    ))
+                    record = dict(zip(['status', 'approval_voters', 'min_approval_count', 'rejection_voters', 'min_rejection_count'], list(cur.fetchone())))
+
         log.debug(f'Record:\n{pformat(record)}')
         
         if record['status'] == 'aborted':
@@ -57,15 +50,11 @@ def lambda_handler(event, context):
 
             log.info('Sending task token to Step Function Machine')
             sf.send_task_success(taskToken=event['query']['taskToken'], output=json.dumps(action))
-            return {
-                'statusCode': 302,
-                'message': 'Your choice has been submitted'
-            }
-        else:
-            return {
-                'statusCode': 302,
-                'message': 'Your choice has been submitted'
-            }
+
+        return {
+            'statusCode': 302,
+            'message': 'Your choice has been submitted'
+        }
     except Exception as e:
         log.error(e)
         return {

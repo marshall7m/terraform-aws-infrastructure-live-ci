@@ -64,7 +64,6 @@ FROM (
     WHERE account_dim.account_path = {account_path}
 ) a,
 (
-    SELECT * 
-    FROM (VALUES %s) stack({cols})
-) stack
+    SELECT :cfg_path, string_to_array(:cfg_deps, ','), string_to_array(:new_providers, ',')
+) stack(cfg_path, cfg_deps, new_providers)
 RETURNING *;

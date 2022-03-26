@@ -1,6 +1,4 @@
 #!/bin/bash
-apk update
-apk add --no-cache --virtual .build-deps libffi-dev make musl-dev gcc postgresql-dev 
 python -m venv $VIRTUAL_ENV
 source $VIRTUAL_ENV/bin/activate
 python3 -m pip install --upgrade pip
@@ -12,7 +10,4 @@ mv $(unzip -qql /tmp/terraform.zip | head -n1 | tr -s ' ' | cut -d' ' -f5-) /usr
 wget -q -O /usr/local/bin/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64
 
 chmod u+x /usr/local/bin/*
-
-apk del .build-deps
 rm -rf /tmp/*
-rm -rf /var/cache/apk/*

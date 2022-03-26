@@ -1,5 +1,2 @@
-psycopg2-binary==2.9.2
-awscli==1.22.5
 boto3==1.20.5
 GitPython==3.1.24
-PyGithub==1.55

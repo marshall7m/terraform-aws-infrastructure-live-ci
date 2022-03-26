@@ -19,4 +19,4 @@ SET
             )
     END
 WHERE execution_id = {execution_id}
-RETURNING *;
+RETURNING "status", approval_voters, min_approval_count, rejection_voters, min_rejection_count;

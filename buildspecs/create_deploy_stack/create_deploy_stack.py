@@ -3,9 +3,7 @@ import sys
 import logging
 import subprocess
 import git
-import psycopg2
-from psycopg2 import sql
-from psycopg2.extras import execute_values
+import aurora_data_api
 import re
 import boto3
 from pprint import pformat
@@ -21,10 +19,6 @@ log.setLevel(logging.DEBUG)
 
 class CreateStack:
     def __init__(self):
-        self.conn = psycopg2.connect()
-        self.conn.set_session(autocommit=True)
-
-        self.cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         self.git_repo = git.Repo(search_parent_directories=True)
 
     def get_new_providers(self, path: str) -> List[str]:
@@ -118,55 +112,61 @@ class CreateStack:
         '''
         Iterates through every parent account-level directory and insert it's associated deployment stack within the metadb
         '''
-        with self.conn.cursor() as cur:
-            cur.execute('SELECT account_path, plan_role_arn FROM account_dim')
-            accounts = [{'path': r[0], 'role': r[1]} for r in cur.fetchall()]
 
-        log.debug(f'Accounts:\n{accounts}')
+        with aurora_data_api.connect(
+            aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
+            secret_arn=os.environ['METADB_SECRET_ARN'],
+            database=os.environ['METADB_NAME']
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT account_path, plan_role_arn FROM account_dim')
+                accounts = [{'path': r[0], 'role': r[1]} for r in cur.fetchall()]
 
-        if len(accounts) == 0:
-            log.fatal('No account paths are defined in account_dim')
-            sys.exit(1)
+                log.debug(f'Accounts:\n{accounts}')
 
-        git_root = self.git_repo.git.rev_parse('--show-toplevel')
-        log.debug(f'Git root: {git_root}')
-        pr_id = os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]
+                if len(accounts) == 0:
+                    log.fatal('No account paths are defined in account_dim')
+                    sys.exit(1)
 
-        log.info('Getting account stacks')
-        for account in accounts:
-            log.info(f'Account path: {account["path"]}')
-            log.debug(f'Account plan role ARN: {account["role"]}')
+                git_root = self.git_repo.git.rev_parse('--show-toplevel')
+                log.debug(f'Git root: {git_root}')
+                pr_id = os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]
 
-            if not os.path.isdir(account['path']):
-                log.error('Account path does not exist within repo')
-                sys.exit(1)
-            
-            with self.set_aws_env_vars(account['role'], 'trigger-sf-terragrunt-plan-all'):
-                stack = self.create_stack(account['path'], git_root)
+                log.info('Getting account stacks')
+                for account in accounts:
+                    log.info(f'Account path: {account["path"]}')
+                    log.debug(f'Account plan role ARN: {account["role"]}')
 
-            log.debug(f'Stack:\n{stack}')
+                    if not os.path.isdir(account['path']):
+                        log.error('Account path does not exist within repo')
+                        sys.exit(1)
+                    
+                    with self.set_aws_env_vars(account['role'], 'trigger-sf-terragrunt-plan-all'):
+                        stack = self.create_stack(account['path'], git_root)
 
-            if len(stack) == 0:
-                log.debug('Stack is empty -- skipping')
-                continue
-            
-            stack_cols = set().union(*(s.keys() for s in stack))
-            
-            query = sql.SQL(open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r').read()).format(
-                pr_id=sql.Literal(pr_id),
-                commit_id=sql.Literal(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION']),
-                account_path=sql.Literal(account['path']),
-                cols=sql.SQL(', ').join(map(sql.Identifier, stack_cols)),
-                base_ref=sql.Literal(os.environ['CODEBUILD_WEBHOOK_BASE_REF']),
-                head_ref=sql.Literal(os.environ['CODEBUILD_WEBHOOK_HEAD_REF'])
-            )
-            log.debug(f'Query:\n{query.as_string(self.conn)}')
+                    log.debug(f'Stack:\n{stack}')
 
-            col_tpl = '(' + ', '.join([f'%({col})s' for col in stack_cols]) + ')'
-            log.debug(f'Stack column template: {col_tpl}')
+                    if len(stack) == 0:
+                        log.debug('Stack is empty -- skipping')
+                        continue
+                                
+                    with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r') as f:
+                        query = f.read().format(
+                            pr_id=pr_id,
+                            commit_id=os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'],
+                            account_path=account['path'],
+                            base_ref=os.environ['CODEBUILD_WEBHOOK_BASE_REF'],
+                            head_ref=os.environ['CODEBUILD_WEBHOOK_HEAD_REF']
+                        )
+                    log.debug(f'Query:\n{query}')
 
-            res = execute_values(self.cur, query, stack, template=col_tpl, fetch=True)
-            log.debug(f'Inserted executions:\n{pformat([dict(r) for r in res])}')
+                    for cfg in stack:
+                        for k, v in cfg.items():
+                            if type(v) == list:
+                                cfg.update({k: ','.join(v)})
+
+                    cur.executemany(query, stack)
+
             return None
 
     def main(self) -> None:

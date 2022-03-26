@@ -278,39 +278,29 @@ EOT
         value = local.buildspec_scripts_source_identifier
       },
       {
-        name  = "PGUSER"
-        type  = "PLAINTEXT"
-        value = var.metadb_ci_username
-      },
-      {
-        name  = "PGPORT"
-        type  = "PLAINTEXT"
-        value = var.metadb_port
-      },
-      {
-        name  = "PGDATABASE"
-        type  = "PLAINTEXT"
-        value = local.metadb_name
-      },
-      {
-        name  = "PGHOST"
-        type  = "PLAINTEXT"
-        value = aws_rds_cluster.metadb.endpoint
-      },
-      {
         name  = "GITHUB_MERGE_LOCK_SSM_KEY"
         type  = "PLAINTEXT"
         value = aws_ssm_parameter.merge_lock.name
       },
       {
-        name  = "PGPASSWORD"
-        type  = "PARAMETER_STORE"
-        value = aws_ssm_parameter.metadb_ci_password.name
-      },
-      {
         name  = "TRIGGER_SF_FUNCTION_NAME"
         type  = "PLAINTEXT"
         value = local.trigger_sf_function_name
+      },
+      {
+        name  = "METADB_NAME"
+        type  = "PLAINTEXT"
+        value = local.metadb_name
+      },
+      {
+        name  = "METADB_CLUSTER_ARN"
+        type  = "PLAINTEXT"
+        value = aws_rds_cluster.metadb.arn
+      },
+      {
+        name  = "METADB_SECRET_ARN"
+        type  = "PLAINTEXT"
+        value = aws_secretsmanager_secret_version.ci_metadb_user.arn
       }
     ])
   }

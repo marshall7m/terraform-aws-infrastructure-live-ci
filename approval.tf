@@ -197,7 +197,7 @@ resource "null_resource" "lambda_approval_response_deps" {
   }
   provisioner "local-exec" {
     command = <<EOF
-    python3 -m pip install --target ${local.approval_deps_dir}/python aws-psycopg2==1.2.1
+    python3 -m pip install --target ${local.approval_deps_dir}/python aurora-data-api==0.4.0
     EOF
   }
 }
@@ -244,11 +244,9 @@ module "lambda_approval_response" {
   timeout = 180
 
   env_vars = {
-    PGUSER             = var.metadb_ci_username
-    PGPORT             = var.metadb_port
-    PGDATABASE         = aws_rds_cluster.metadb.database_name
-    PGHOST             = aws_rds_cluster.metadb.endpoint
-    PGPASSWORD_SSM_KEY = aws_ssm_parameter.metadb_ci_password.name
+    METADB_NAME        = local.metadb_name
+    METADB_CLUSTER_ARN = aws_rds_cluster.metadb.arn
+    METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
 
   custom_role_policy_arns = [
