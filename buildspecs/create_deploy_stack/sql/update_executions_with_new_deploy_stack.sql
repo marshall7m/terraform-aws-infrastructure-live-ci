@@ -25,13 +25,13 @@ INSERT INTO executions (
         deploy_role_arn
     )
 SELECT
-    'run-' || {pr_id} || '-' || substring({commit_id}, 1, 4) || '-' || a.account_name || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-'  || substr(md5(random()::text), 0, 4),
+    'run-' || {pr_id} || '-' || substring('{commit_id}', 1, 4) || '-' || a.account_name || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-'  || substr(md5(random()::text), 0, 4),
     false,
     {pr_id},
-    {commit_id},
-    {base_ref},
-    {head_ref},
-    'refs/pull/' || {pr_id} || '/head^{{' || {commit_id} || '}}',
+    '{commit_id}',
+    '{base_ref}',
+    '{head_ref}',
+    'refs/pull/' || {pr_id} || '/head^{{' || '{commit_id}' || '}}',
     stack.cfg_path,
     stack.cfg_deps::TEXT[],
     'waiting',
@@ -61,7 +61,7 @@ FROM (
         account_dim.plan_role_arn,
         account_dim.deploy_role_arn
     FROM account_dim
-    WHERE account_dim.account_path = {account_path}
+    WHERE account_dim.account_path = '{account_path}'
 ) a,
 (
     SELECT :cfg_path, string_to_array(:cfg_deps, ','), string_to_array(:new_providers, ',')
