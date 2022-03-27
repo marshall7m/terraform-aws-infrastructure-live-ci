@@ -90,31 +90,6 @@ aws rds-data batch-execute-statement \
 EOF
 }
 
-data "aws_subnet" "codebuilds" {
-  count = length(local.codebuild_vpc_config.subnets)
-  id    = local.codebuild_vpc_config.subnets[count.index]
-}
-
-data "aws_subnet" "lambda" {
-  count = length(var.lambda_subnet_ids)
-  id    = var.lambda_subnet_ids[count.index]
-}
-
-resource "aws_security_group" "metadb" {
-  name        = local.metadb_name
-  description = "Allows Postgres connections from instances within private subnets"
-  vpc_id      = var.codebuild_vpc_config.vpc_id
-
-  ingress {
-    description = "Allows postgres inbound traffic"
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    #use cb sg id instead?
-    security_groups = concat(data.aws_subnet.codebuilds[*].cidr_block, data.aws_subnet.lambda[*].cidr_block)
-  }
-}
-
 resource "aws_rds_cluster" "metadb" {
   cluster_identifier = local.cluster_identifier
   engine             = "aurora-postgresql"
@@ -128,13 +103,10 @@ resource "aws_rds_cluster" "metadb" {
     min_capacity = 2
   }
 
-  # set to true for integration testing's db connection
-  enable_http_endpoint = var.enable_metadb_http_endpoint
+  enable_http_endpoint = true
   skip_final_snapshot  = true
-  #TODO: not available for serverless V1-V2. Add once available
-  # iam_database_authentication_enabled = true
 
-  vpc_security_group_ids = concat([aws_security_group.metadb.id], var.metadb_security_group_ids)
+  vpc_security_group_ids = var.metadb_security_group_ids
   db_subnet_group_name   = var.metadb_subnets_group_name
 }
 

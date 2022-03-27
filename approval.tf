@@ -174,6 +174,8 @@ module "lambda_approval_request" {
   function_name    = local.approval_request_name
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
+
+  vpc_config = var.lambda_approval_request_vpc_config
   env_vars = {
     SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
     SES_TEMPLATE         = aws_ses_template.approval.name
@@ -211,19 +213,6 @@ data "archive_file" "lambda_approval_response_deps" {
   ]
 }
 
-resource "aws_security_group" "lambda_approval_response" {
-  name_prefix = local.approval_response_name
-  description = "Allows Lambda function to connect to metadb and make AWS API calls"
-  vpc_id      = var.codebuild_vpc_config.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
 module "lambda_approval_response" {
   source           = "github.com/marshall7m/terraform-aws-lambda"
   filename         = data.archive_file.lambda_approval_response.output_path
@@ -237,11 +226,8 @@ module "lambda_approval_response" {
     }
   ]
 
-  vpc_config = {
-    subnet_ids         = var.lambda_subnet_ids
-    security_group_ids = [aws_security_group.lambda_approval_response.id]
-  }
-  timeout = 180
+  vpc_config = var.lambda_approval_response_vpc_config
+  timeout    = 180
 
   env_vars = {
     METADB_NAME        = local.metadb_name
@@ -251,7 +237,6 @@ module "lambda_approval_response" {
 
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.metadb_ci_ssm_param_access.arn,
     aws_iam_policy.ci_metadb_access.arn
   ]
 

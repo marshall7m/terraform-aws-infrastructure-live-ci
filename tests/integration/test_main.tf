@@ -203,13 +203,6 @@ module "mut_infrastructure_live_ci" {
 
   metadb_subnets_group_name = module.vpc.database_subnet_group_name
 
-  codebuild_vpc_config = {
-    vpc_id  = module.vpc.vpc_id
-    subnets = module.vpc.private_subnets
-  }
-
-  lambda_subnet_ids = module.vpc.private_subnets
-
   #required specific testing repo to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
     {

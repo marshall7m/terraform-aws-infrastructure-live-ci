@@ -99,16 +99,30 @@ variable "build_tags" {
   default     = {}
 }
 
-variable "codebuild_vpc_config" {
+variable "terra_run_vpc_config" {
   description = <<EOF
-AWS VPC configurations associated with all CodeBuild projects within this module. 
-The subnets must have the approriate security groups to reach the subnet that the db is associated with.
-Ensure that there are enough IP addresses within the subnet to host the two codebuild projects.
+AWS VPC configurations associated with terra_run CodeBuild project. 
+Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
 EOF
   type = object({
-    vpc_id  = string
-    subnets = list(string)
+    vpc_id             = string
+    subnets            = list(string)
+    security_group_ids = list(string)
   })
+  default = null
+}
+
+variable "create_deploy_stack_vpc_config" {
+  description = <<EOF
+AWS VPC configurations associated with terra_run CodeBuild project. 
+Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+EOF
+  type = object({
+    vpc_id             = string
+    subnets            = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
 }
 
 variable "codebuild_common_env_vars" {
@@ -247,7 +261,7 @@ variable "metadb_publicly_accessible" {
 }
 
 variable "metadb_security_group_ids" {
-  description = "AWS VPC security group to associate the metadb with. Must allow inbound traffic from the subnet(s) that the Codebuild projects are associated with under `var.codebuild_vpc_config`"
+  description = "AWS VPC security group to associate the metadb with"
   type        = list(string)
   default     = []
 }
@@ -281,9 +295,22 @@ variable "metadb_ci_password" {
   sensitive   = true
 }
 
-variable "lambda_subnet_ids" {
-  description = "Subnets to host Lambda approval response function in. Subnet doesn't need internet access but does need to be the same VPC that the metadb is hosted in"
-  type        = list(string)
+variable "lambda_approval_request_vpc_config" {
+  description = "VPC configuration for Lambda approval request function"
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "lambda_approval_response_vpc_config" {
+  description = "VPC configuration for Lambda approval response function"
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
 }
 
 variable "trigger_sf_function_name" {

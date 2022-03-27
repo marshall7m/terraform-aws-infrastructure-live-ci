@@ -5,7 +5,6 @@ locals {
   create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.step_function_name}-create-deploy-stack")
   terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
-  codebuild_vpc_config                = merge(var.codebuild_vpc_config, { "security_group_ids" = [aws_security_group.codebuilds.id] })
   cw_rule_initiator                   = "rule/${local.cloudwatch_event_rule_name}"
 }
 data "github_repository" "this" {
@@ -18,19 +17,6 @@ data "github_repository" "build_scripts" {
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
-
-resource "aws_security_group" "codebuilds" {
-  name_prefix = "${var.step_function_name}-codebuilds"
-  description = "Allows Codebuild projects to download associated repository source"
-  vpc_id      = var.codebuild_vpc_config.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
 
 resource "aws_ssm_parameter" "merge_lock" {
   name        = local.merge_lock_name
@@ -48,143 +34,6 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
 
 data "aws_ssm_parameter" "github_token" {
   name = var.github_token_ssm_key
-}
-
-data "aws_iam_policy_document" "merge_lock_ssm_param_full_access" {
-  statement {
-    effect    = "Allow"
-    actions   = ["ssm:DescribeParameters"]
-    resources = ["*"]
-  }
-  statement {
-    sid       = "SSMParamMergeLockAccess"
-    effect    = "Allow"
-    actions   = ["ssm:GetParameter", "ssm:PutParameter"]
-    resources = [aws_ssm_parameter.merge_lock.arn]
-  }
-}
-
-resource "aws_iam_policy" "merge_lock_ssm_param_full_access" {
-  name        = "${aws_ssm_parameter.merge_lock.name}-ssm-full-access"
-  description = "Allows read/write access to merge lock SSM Parameter Store value"
-  policy      = data.aws_iam_policy_document.merge_lock_ssm_param_full_access.json
-}
-
-data "aws_iam_policy_document" "github_token_ssm_access" {
-  statement {
-    effect    = "Allow"
-    actions   = ["ssm:DescribeParameters"]
-    resources = ["*"]
-  }
-  statement {
-    sid    = "GetSSMParameter"
-    effect = "Allow"
-    actions = [
-      "ssm:GetParameter"
-    ]
-    resources = [
-      data.aws_ssm_parameter.github_token.arn
-    ]
-  }
-}
-
-resource "aws_iam_policy" "github_token_ssm_access" {
-  name        = "${data.aws_ssm_parameter.github_token.name}-ssm-access"
-  description = "Allows read access to github token SSM Parameter Store value"
-  policy      = data.aws_iam_policy_document.github_token_ssm_access.json
-}
-
-data "aws_iam_policy_document" "codebuild_vpc_access" {
-  statement {
-    sid    = "VPCAcess"
-    effect = "Allow"
-    actions = [
-      "ec2:CreateNetworkInterface",
-      "ec2:DescribeDhcpOptions",
-      "ec2:DescribeNetworkInterfaces",
-      "ec2:DeleteNetworkInterface",
-      "ec2:DescribeSubnets",
-      "ec2:DescribeSecurityGroups",
-      "ec2:DescribeVpcs"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    effect = "Allow"
-    actions = [
-      "ec2:CreateNetworkInterfacePermission"
-    ]
-    resources = ["arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:network-interface/*"]
-    condition {
-      test     = "StringEquals"
-      variable = "ec2:AuthorizedService"
-      values   = ["codebuild.amazonaws.com"]
-    }
-
-    condition {
-      test     = "ArnEquals"
-      variable = "ec2:Subnet"
-      values   = [for subnet in local.codebuild_vpc_config.subnets : "arn:aws:ec2:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:subnet/${subnet}"]
-    }
-  }
-}
-
-resource "aws_iam_policy" "codebuild_vpc_access" {
-  name        = "${local.codebuild_vpc_config.vpc_id}-codebuild-access"
-  description = "Allows Codebuild services to connect to VPC"
-  policy      = data.aws_iam_policy_document.codebuild_vpc_access.json
-}
-
-data "aws_kms_key" "ssm" {
-  key_id = "alias/aws/ssm"
-}
-
-data "aws_iam_policy_document" "metadb_ci_ssm_param_access" {
-  statement {
-    effect    = "Allow"
-    actions   = ["ssm:DescribeParameters"]
-    resources = ["*"]
-  }
-  statement {
-    effect    = "Allow"
-    actions   = ["ssm:GetParameter"]
-    resources = [aws_ssm_parameter.metadb_ci_password.arn]
-  }
-  statement {
-    effect    = "Allow"
-    actions   = ["kms:Decrypt"]
-    resources = [data.aws_kms_key.ssm.arn]
-    condition {
-      test     = "StringEquals"
-      variable = "kms:EncryptionContext:PARAMETER_ARN"
-      values   = [aws_ssm_parameter.metadb_ci_password.arn]
-    }
-  }
-}
-
-resource "aws_iam_policy" "metadb_ci_ssm_param_access" {
-  name        = "${var.metadb_ci_username}-password-access"
-  description = "Allows Codebuild services to read associated metadb user credentials"
-  policy      = data.aws_iam_policy_document.metadb_ci_ssm_param_access.json
-}
-
-data "aws_iam_policy_document" "ci_metadb_access" {
-  statement {
-    sid    = "MetaDBConnectAccess"
-    effect = "Allow"
-    actions = [
-      "rds-db:connect"
-    ]
-    resources = [
-      "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:dbuser:${local.metadb_name}/${var.metadb_username}"
-    ]
-  }
-}
-resource "aws_iam_policy" "ci_metadb_access" {
-  name        = replace("${local.metadb_name}-access", "_", "-")
-  description = "Allows CI services to connect to metadb"
-  policy      = data.aws_iam_policy_document.ci_metadb_access.json
 }
 
 module "ecr_terra_run" {
@@ -321,13 +170,11 @@ EOT
       }
     ]
   ]
-  vpc_config = local.codebuild_vpc_config
+  vpc_config = var.create_deploy_stack_vpc_config
 
   role_policy_arns = [
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
-    aws_iam_policy.codebuild_vpc_access.arn,
-    aws_iam_policy.metadb_ci_ssm_param_access.arn,
     aws_iam_policy.github_token_ssm_access.arn,
     var.tf_state_read_access_policy
   ]
@@ -402,6 +249,8 @@ module "codebuild_terra_run" {
     ])
   }
 
+  vpc_config = var.terra_run_vpc_config
+
   source_version = var.base_branch
   artifacts = {
     type = "NO_ARTIFACTS"
@@ -439,7 +288,6 @@ EOT
     }
   ]
   role_policy_arns = [
-    aws_iam_policy.ci_metadb_access.arn,
-    aws_iam_policy.metadb_ci_ssm_param_access.arn
+    aws_iam_policy.ci_metadb_access.arn
   ]
 }
