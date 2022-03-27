@@ -87,7 +87,7 @@ def start_sf_executions(cur) -> None:
         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
             cur.execute(f.read())
     except aurora_data_api.exceptions.DatabaseError as e:
-        log.error(f'Exception:\n{e}')
+        log.error(e, exc_info=True)
         ssm = boto3.client('ssm')
         log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
         sys.exit(1)

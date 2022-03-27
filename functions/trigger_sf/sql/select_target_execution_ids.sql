@@ -19,11 +19,8 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
                     SELECT DISTINCT commit_id, is_rollback 
                     FROM executions
                     WHERE "status" = 'waiting'
-                );
-        SELECT DISTINCT commit_id, is_rollback 
-            FROM executions
-            WHERE "status" = 'waiting'
-            
+                ));
+
         RETURN (
             SELECT array_agg(execution_id::TEXT)
             FROM commit_executions
