@@ -19,12 +19,24 @@ module "github_webhook_validator" {
     {
       name = split("/", var.repo_full_name)[1]
       filter_groups = [
-        {
-          events     = ["pull_request"]
-          pr_actions = ["opened", "edited", "reopened"]
-          file_paths = [var.file_path_pattern]
-          base_refs  = [var.base_branch]
-        }
+        [
+          {
+            type    = "event"
+            pattern = "pull_request"
+          },
+          {
+            type    = "pr_actions"
+            pattern = "(opened|edited|reopened)"
+          },
+          {
+            type    = "file_paths"
+            pattern = var.file_path_pattern
+          },
+          {
+            type    = "base_ref"
+            pattern = var.base_branch
+          }
+        ]
       ]
     }
   ]
