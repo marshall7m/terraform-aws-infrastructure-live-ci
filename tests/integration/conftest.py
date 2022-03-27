@@ -21,6 +21,7 @@ def pytest_addoption(parser):
     #TODO: Add --skip-tfenv and transfer logic from --skip-init
     parser.addoption("--skip-init", action="store_true", help="skips initing tf module")
     parser.addoption("--skip-apply", action="store_true", help="skips applying tf module")
+    parser.addoption("--skip-truncate", action="store_true", help="skips truncating execution table")
 
 def pytest_generate_tests(metafunc):
     if metafunc.config.getoption('skip_init'):
@@ -28,6 +29,9 @@ def pytest_generate_tests(metafunc):
 
     if metafunc.config.getoption('skip_apply'):
         metafunc.parametrize('mut_output', [True], scope='session', ids=['skip_apply'], indirect=True)
+
+    if metafunc.config.getoption('skip_truncate'):
+        metafunc.parametrize('truncate_executions', [True], scope='session', ids=['skip_truncate'], indirect=True)
 
     if hasattr(metafunc.cls, 'case'):
 
@@ -148,20 +152,23 @@ def merge_pr(repo, git_repo):
             print(e)
 
 @pytest.fixture(scope='module', autouse=True)
-def truncate_executions(mut_output):
+def truncate_executions(request, mut_output):
     #table setup is within tf module
     #yielding none to define truncation as pytest teardown logic
     yield None
-    log.info('Truncating executions table')
-    with aurora_data_api.connect(
-        aurora_cluster_arn=mut_output['metadb_arn'],
-        secret_arn=mut_output['metadb_secret_manager_master_arn'],
-        database=mut_output['metadb_name'],
-        #recommended for DDL statements
-        continue_after_timeout=True
-    ) as conn:
-        with conn.cursor() as cur:
-            cur.execute("TRUNCATE executions")
+    if getattr(request, 'param', False):
+        log.info('Skip truncating execution table')
+    else:    
+        log.info('Truncating executions table')
+        with aurora_data_api.connect(
+            aurora_cluster_arn=mut_output['metadb_arn'],
+            secret_arn=mut_output['metadb_secret_manager_master_arn'],
+            database=mut_output['metadb_name'],
+            #recommended for DDL statements
+            continue_after_timeout=True
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("TRUNCATE executions")
 
 @pytest.fixture(scope='module', autouse=True)
 def reset_merge_lock_ssm_value(request, mut_output):
