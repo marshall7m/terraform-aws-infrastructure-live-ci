@@ -2,6 +2,7 @@ locals {
   metadb_name        = coalesce(var.metadb_name, replace("${var.step_function_name}", "-", "_"))
   cluster_identifier = replace("${var.step_function_name}-cluster", "_", "-")
   metadb_setup_script = <<EOF
+  echo "Creating tables"
   aws rds-data execute-statement \
   --continue-after-timeout \
   --resource-arn ${aws_rds_cluster.metadb.arn} \
@@ -9,6 +10,7 @@ locals {
   --database ${aws_rds_cluster.metadb.database_name} \
   --sql "${templatefile("${path.module}/sql/create_metadb_tables.sql", { metadb_schema = var.metadb_schema, metadb_name = local.metadb_name })}";
 
+  echo "Creating CI user"
   aws rds-data execute-statement \
   --continue-after-timeout \
   --resource-arn ${aws_rds_cluster.metadb.arn} \
@@ -22,6 +24,7 @@ locals {
   metadb_schema      = var.metadb_schema
   })}";
 
+echo "Inserting account records into account_dim"
 aws rds-data batch-execute-statement \
   --resource-arn ${aws_rds_cluster.metadb.arn} \
   --secret-arn ${aws_secretsmanager_secret_version.master_metadb_user.arn} \
@@ -111,7 +114,7 @@ resource "aws_rds_cluster" "metadb" {
 }
 
 resource "aws_secretsmanager_secret" "master_metadb_user" {
-  name = "${local.cluster_identifier}-data-api-master-credentials"
+  name = "${local.cluster_identifier}-data-api-${var.metadb_username}-credentials"
 }
 
 resource "aws_secretsmanager_secret_version" "master_metadb_user" {
@@ -122,8 +125,12 @@ resource "aws_secretsmanager_secret_version" "master_metadb_user" {
   })
 }
 
+resource "aws_secretsmanager_secret" "ci_metadb_user" {
+  name = "${local.cluster_identifier}-data-api-${var.metadb_ci_username}-credentials"
+}
+
 resource "aws_secretsmanager_secret_version" "ci_metadb_user" {
-  secret_id = aws_secretsmanager_secret.master_metadb_user.id
+  secret_id = aws_secretsmanager_secret.ci_metadb_user.id
   secret_string = jsonencode({
     username = var.metadb_ci_username
     password = var.metadb_ci_password
@@ -135,5 +142,5 @@ resource "null_resource" "metadb_setup" {
     command     = local.metadb_setup_script
     interpreter = ["bash", "-c"]
   }
-  triggers = merge({ for file in formatlist("${path.module}/%s", fileset("${path.module}", "sql/*")) : basename(file) => filesha256(file) }, { setup_script = sha256(local.metadb_setup_script) })
+  triggers = { "execute" : timestamp() }
 }
