@@ -159,7 +159,8 @@ class CreateStack:
                             head_ref=os.environ['CODEBUILD_WEBHOOK_HEAD_REF']
                         )
                     log.debug(f'Query:\n{query}')
-
+                    
+                    #convert lists to comma-delimitted strings that will parsed to TEXT[] within query
                     for cfg in stack:
                         for k, v in cfg.items():
                             if type(v) == list:

@@ -178,61 +178,35 @@ class Integration:
     def get_latest_log_stream_errs(self, log_group):
         logs = boto3.client('logs')
 
-        latest_stream = logs.describe_log_streams(
+        stream = logs.describe_log_streams(
             logGroupName=log_group,
             orderBy='LastEventTime',
+            descending=True,
             limit=1
-        )["logStreams"]["logStreamName"]
-        log.debug(f'Log Stream: {latest_stream}')
+        )['logStreams'][0]['logStreamName']
 
-        response = logs.get_log_events(
-            logGroupName=log_group,
-            logStreamName=latest_stream
-        )
-
-        log.info('Searching latest log stream for any errors')
-        query = """fields @timestamp, @message
-        | filter @message like /ERROR/
-        | sort @timestamp desc
-        | limit 1
-        """  
-
-        start_query_response = logs.start_query(
-            logGroupName=log_group,
-            startTime=int((datetime.today() - timedelta(minutes=5)).timestamp()),
-            endTime=int(datetime.now().timestamp()),
-            queryString=query
-        )
-
-        query_id = start_query_response['queryId']
-
-        response = None
-
-        while response == None or response['status'] == 'Running':
-            log.debug('Waiting for query to complete')
-            time.sleep(3)
-            response = logs.get_query_results(
-                queryId=query_id
-            )
+        log.debug(f'Latest Stream: {stream}')
         
-        return response['results']
+        log.info('Searching latest log stream for any errors')
+        return logs.filter_log_events(
+            logGroupName='/aws/lambda/infrastructure-live-ci-trigger-sf',
+            logStreamNames=[stream],    
+            filterPattern='ERROR'
+        )['events']    
          
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
-        wait = 3
+        wait = 1
 
         statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
         while statuses.totalCount == 0:
             log.debug(f'Waiting {wait} seconds')
             time.sleep(wait)
-
             statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
         
-        log.info('Assert PR head commit status is successful')
-        log.debug(f'PR head commit: {pr["head_commit_id"]}')
-
+        log.info('Assert PR head commit status is successful')        
         assert statuses.totalCount == 1
         assert statuses[0].state == 'success'
         
@@ -294,7 +268,6 @@ class Integration:
 
     @pytest.fixture(scope="class")
     def target_execution(self, conn, pr, tested_executions, case_param):
-        
         log.debug(f'Already tested execution IDs:\n{tested_executions()}')
         with conn.cursor() as cur:
             cur.execute(f"""
@@ -341,7 +314,10 @@ class Integration:
                 f"{request.cls.__name__}::test_cw_event_trigger_sf[{re.sub(r'^.+?-', f'{int(target_execution_param) - 1}-', request.node.callspec.id)}]"
             ])
         else:
-            depends(request, [f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]"])
+            depends(request, [
+                f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]",
+                f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id.rsplit('-', 1)[0]}]"
+            ])
 
         if target_execution['status'] != 'aborted':
             pytest.skip('Execution approval action is not set to `aborted`')
@@ -358,7 +334,10 @@ class Integration:
     def test_sf_execution_exists(self, request, mut_output, sf, target_execution):
         """Assert execution record has an associated Step Function execution"""
 
-        depends(request, [f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]"])
+        depends(request, [
+            f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]",
+            f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id.rsplit('-', 1)[0]}]"
+        ])
 
         if target_execution['status'] == 'aborted':
             pytest.skip('Execution approval action is set to `aborted`')
@@ -429,10 +408,10 @@ class Integration:
 
         log.debug(f'Request Body:\n{body}')
 
-        response = requests.post(approval_url, data=body)
+        response = requests.post(approval_url, data=body).json()
         log.debug(f'Response:\n{response}')
 
-        assert json.loads(response.text)['statusCode'] == 302
+        assert response['statusCode'] == 302
 
     @pytest.mark.dependency()
     def test_approval_denied(self, request, sf, target_execution, mut_output, action):
