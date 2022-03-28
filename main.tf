@@ -215,13 +215,7 @@ resource "aws_cloudwatch_event_target" "sf_execution" {
     }
     input_template = <<EOF
 {
-  "environmentVariablesOverride": [
-    {
-      "name": "EXECUTION_OUTPUT",
-      "type": "PLAINTEXT",
-      "value": <output>
-    }
-  ]
+  "execution_output": <output>
 }
 EOF
   }
