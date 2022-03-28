@@ -1,5 +1,5 @@
 locals {
-  mut_id                = "mut-terraform-aws-infrastructure-live-ci-${random_string.this.result}"
+  mut_id                = "mut-terraform-aws-infrastructure-live-ci"
   plan_role_name        = "${local.mut_id}-plan"
   deploy_role_name      = "${local.mut_id}-deploy"
   approval_key          = "approval"
@@ -28,16 +28,6 @@ data "aws_ssm_parameter" "testing_sender_email" {
 data "aws_ssm_parameter" "secondary_testing_account" {
   name = "secondary-testing-account-id"
 }
-
-resource "random_string" "this" {
-  length      = 10
-  min_numeric = 5
-  special     = false
-  lower       = true
-  upper       = false
-}
-
-
 
 resource "github_repository" "testing" {
   name        = local.mut_id
@@ -109,22 +99,6 @@ resource "random_password" "metadb" {
   special  = false
 }
 
-module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
-
-  name                 = local.mut_id
-  cidr                 = "10.0.0.0/16"
-  azs                  = ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"]
-  enable_dns_hostnames = true
-  private_subnets      = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets       = ["10.0.21.0/24", "10.0.22.0/24"]
-  database_subnets     = ["10.0.101.0/24", "10.0.102.0/24"]
-
-  enable_nat_gateway     = true
-  single_nat_gateway     = true
-  one_nat_gateway_per_az = false
-}
-
 module "plan_role" {
   source    = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
   role_name = local.plan_role_name
@@ -189,9 +163,8 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
 module "mut_infrastructure_live_ci" {
   source = "../.."
 
-  #not using terraform created github_repository repo full_name attribute since github_validator tf sub-module uses repo_full_name as key within webhook for_each
-  repo_full_name = "${data.github_user.current.login}/${local.mut_id}"
-  base_branch    = "master"
+  repo_name   = local.mut_id
+  base_branch = "master"
 
   metadb_publicly_accessible = true
   metadb_username            = "mut_user"
@@ -200,8 +173,6 @@ module "mut_infrastructure_live_ci" {
   metadb_ci_username          = "mut_ci_user"
   metadb_ci_password          = random_password.metadb["ci"].result
   enable_metadb_http_endpoint = true
-
-  metadb_subnets_group_name = module.vpc.database_subnet_group_name
 
   #required specific testing repo to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
