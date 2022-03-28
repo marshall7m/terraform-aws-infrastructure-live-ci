@@ -86,6 +86,7 @@ def start_sf_executions(cur) -> None:
     try:
         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
             cur.execute(f.read())
+            cur.execute('SELECT get_target_execution_ids()')
     except aurora_data_api.exceptions.DatabaseError as e:
         log.error(e, exc_info=True)
         ssm = boto3.client('ssm')
@@ -112,14 +113,14 @@ def start_sf_executions(cur) -> None:
             cur.execute(f"""
                 UPDATE executions
                 SET status = 'running'
-                WHERE execution_id = {id}
+                WHERE execution_id = '{id}'
                 RETURNING *
             """)
 
-            sf_input = json.dumps(cur.fetchone())
+            sf_input = json.dumps(dict(zip([desc.name for desc in cur.description], cur.fetchone())))
             log.debug(f'SF input:\n{pformat(sf_input)}')
 
-            log.debug('Starting sf execution')
+            log.info('Starting sf execution')
             sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
 
 def lambda_handler(event, context):
@@ -133,15 +134,13 @@ def lambda_handler(event, context):
         database=os.environ['METADB_NAME']
     ) as conn:
         with conn.cursor() as cur:
-            if 'EXECUTION_OUTPUT' in os.environ:
-                log.info('Triggered via Step Function Event')
-                output = json.loads(os.environ['EXECUTION_OUTPUT'])
-                log.debug(f'Parsed Step Function Output:\n{pformat(output)}')
+            if 'execution_output' in event:
+                output = json.loads(event['execution_output'])
+                log.info(f'Triggered via Step Function Event:\n{pformat(output)}')
                 execution_finished(cur, output)
 
             log.info('Checking if commit executions are in progress')
             # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
-            
             cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
 
             if cur.rowcount > 0:
@@ -150,5 +149,3 @@ def lambda_handler(event, context):
             else:
                 log.info('No executions are waiting or running -- unlocking merge action within target branch')
                 ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
-    
-    

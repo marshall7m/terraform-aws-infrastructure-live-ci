@@ -1,29 +1,20 @@
-DROP TABLE IF EXISTS commit_executions;
-
 CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
     BEGIN
-        CREATE TABLE commit_executions AS
-        WITH target_commit AS (
-            SELECT DISTINCT commit_id, is_rollback 
-            FROM executions
-            WHERE "status" = 'waiting'
-        )
-        SELECT *
-        FROM executions
-        -- intentionally errors if there are more than one unique commit_id and/or is_rollback value
-        WHERE commit_id = (SELECT commit_id FROM target_commit)
-        AND is_rollback = (SELECT is_rollback FROM target_commit);
-        EXCEPTION 
-            WHEN SQLSTATE '21000' THEN 
-                RAISE EXCEPTION 'More than one commit ID is waiting: %', (SELECT array_agg(commit_id) FROM (
+        RETURN (
+            WITH commit_executions AS (
+                WITH target_commit AS (
                     SELECT DISTINCT commit_id, is_rollback 
                     FROM executions
                     WHERE "status" = 'waiting'
-                ));
-
-        RETURN (
+                )
+                SELECT *
+                FROM executions
+                -- intentionally errors if there are more than one unique commit_id and/or is_rollback value
+                WHERE commit_id = (SELECT commit_id FROM target_commit)
+                AND is_rollback = (SELECT is_rollback FROM target_commit)
+            )
             SELECT array_agg(execution_id::TEXT)
-            FROM commit_executions
+            FROM  commit_executions
             WHERE "status" = 'waiting'
             AND account_deps && (
                 SELECT ARRAY(
@@ -40,8 +31,12 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
                 )
             )::TEXT[] = FALSE
         );
+    EXCEPTION 
+        WHEN SQLSTATE '21000' THEN 
+            RAISE EXCEPTION 'More than one commit ID is waiting: %', (SELECT array_agg(commit_id) FROM (
+                SELECT DISTINCT commit_id, is_rollback 
+                FROM executions
+                WHERE "status" = 'waiting'
+            ) ids );
     END;
 $$ LANGUAGE plpgsql;
-
-
-SELECT get_target_execution_ids();
