@@ -8,7 +8,7 @@ locals {
   cw_rule_initiator                   = "rule/${local.cloudwatch_event_rule_name}"
 }
 data "github_repository" "this" {
-  full_name = var.repo_full_name
+  name = var.repo_name
 }
 
 data "github_repository" "build_scripts" {
@@ -42,6 +42,7 @@ module "ecr_terra_run" {
 
   create_repo      = true
   codebuild_access = true
+  cache            = false
   source_path      = "${path.module}/buildspecs/terra_run"
   repo_name        = local.terra_run_build_name
   tag              = "latest"
@@ -59,6 +60,7 @@ module "ecr_create_deploy_stack" {
 
   create_repo      = true
   codebuild_access = true
+  cache            = false
   source_path      = "${path.module}/buildspecs/create_deploy_stack"
   repo_name        = local.create_deploy_stack_build_name
   tag              = "latest"
@@ -269,10 +271,11 @@ phases:
   build:
     commands:
       # serviceRoleOverride.$ within step function definition is not supported yet so extra step of setting up AWS credentials within buildspec is needed
-      - cat << EOF > ~/.aws/config
-[profile $AWS_PROFILE]
-role_arn=$ROLE_ARN
-EOF
+      - |
+        mkdir -p ~/.aws && cat <<EOF > ~/.aws/config
+        [profile $AWS_PROFILE] 
+        role_arn=$ROLE_ARN 
+        EOF
       - "$${TG_COMMAND}"
     finally:
       - |

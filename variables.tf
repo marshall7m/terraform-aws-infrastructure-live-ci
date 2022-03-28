@@ -136,8 +136,8 @@ variable "codebuild_common_env_vars" {
 
 # GITHUB-WEBHOOK #
 
-variable "repo_full_name" {
-  description = "Full name of the GitHub repository in the form of `user/repo`"
+variable "repo_name" {
+  description = "Name of the GitHub repository that is owned by the Github provider"
   type        = string
 }
 
@@ -269,6 +269,7 @@ variable "metadb_security_group_ids" {
 variable "metadb_subnets_group_name" {
   description = "AWS VPC subnet group name to associate the metadb with"
   type        = string
+  default     = null
 }
 
 variable "metadb_availability_zones" {
@@ -306,6 +307,15 @@ variable "lambda_approval_request_vpc_config" {
 
 variable "lambda_approval_response_vpc_config" {
   description = "VPC configuration for Lambda approval response function"
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "lambda_trigger_sf_vpc_config" {
+  description = "VPC configuration for Lambda trigger_sf function"
   type = object({
     subnet_ids         = list(string)
     security_group_ids = list(string)

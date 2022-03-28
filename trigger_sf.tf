@@ -35,6 +35,8 @@ module "lambda_trigger_sf" {
   function_name    = local.trigger_sf_function_name
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
+  vpc_config       = var.lambda_trigger_sf_vpc_config
+
   env_vars = {
     GITHUB_MERGE_LOCK_SSM_KEY = aws_ssm_parameter.merge_lock.name
     STATE_MACHINE_ARN         = local.state_machine_arn
