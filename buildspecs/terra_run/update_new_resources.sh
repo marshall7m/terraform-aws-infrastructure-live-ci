@@ -1,10 +1,7 @@
 #!/bin/bash
 
-if [ -n "$NEW_PROVIDERS" ]; then
+if [ -n "$NEW_PROVIDERS" ] && [ "$NEW_PROVIDERS" != "[]" ]; then
     echo "Adding new provider resources to execution record"
-
-    echo "Switching back to CodeBuild base IAM role"
-
     
     new_resources="$(terragrunt state pull --terragrunt-working-dir "$CFG_PATH" | jq -r \
     --arg new_providers "$NEW_PROVIDERS" '
@@ -20,7 +17,6 @@ if [ -n "$NEW_PROVIDERS" ]; then
     echo "$new_resources"
 
     params="$(echo "$new_resources" | jq \
-    --arg new_providers "$NEW_PROVIDERS" \
     --arg execution_id "$EXECUTION_ID" '
         [
             {
@@ -46,6 +42,7 @@ if [ -n "$NEW_PROVIDERS" ]; then
     echo "$params"
 
     # use base codebuild role to connect to metadb
+    echo "Switching back to CodeBuild base IAM role"
     echo "Unsetting AWS_PROFILE: $AWS_PROFILE"
     unset "$AWS_PROFILE"
 
@@ -54,7 +51,7 @@ if [ -n "$NEW_PROVIDERS" ]; then
     --resource-arn "$METADB_CLUSTER_ARN" \
     --database "$METADB_NAME" \
     --secret-arn "$METADB_SECRET_ARN" \
-    --sql "UPDATE executions SET new_resources = string_to_array('', ' ') WHERE execution_id = :id;" \
+    --sql "UPDATE executions SET new_resources = string_to_array(:new_resources, ' ') WHERE execution_id = :execution_id;" \
     --parameters "$params"
 else
     echo "New provider resources were not created -- skipping"

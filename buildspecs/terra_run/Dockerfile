@@ -4,7 +4,7 @@ FROM hashicorp/terraform:${TERRAFORM_VERSION}
 
 ARG TERRAGRUNT_VERSION
 
-RUN apk add --update --no-cache bash git openssh aws-cli
+RUN apk add --update --no-cache bash git openssh aws-cli jq
 
 ADD https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64 /usr/local/bin/terragrunt
 
