@@ -118,11 +118,20 @@ class Integration:
         except Exception:
             pass
 
-    def get_execution_history(self, sf, arn, id):
-        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=arn)['executions'] if execution['name'] == id][0]
-
-        return sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
+    def get_execution_task_status(self, sf, arn, execution_id, task_id):
+        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=arn)['executions'] if execution['name'] == execution_id][0]
+        events = sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
+        
+        try:
+            task_status_id = [event['previousEventId'] for event in events if event.get('stateExitedEventDetails', {}).get('name', None) == task_id][0]
+        except IndexError:
+            return None
     
+        log.debug(f'Task status id: {task_status_id}')
+
+        for event in events:
+            if event['id'] == task_status_id:
+                return event['type']
 
     def get_build_status(self, client, name, ids=[], filters={}, sf_execution_filter={}):
         
@@ -346,46 +355,34 @@ class Integration:
 
         assert sf.describe_execution(executionArn=execution_arn)['status'] in ['RUNNING', 'SUCCEEDED', 'FAILED', 'TIMED_OUT']
 
+    @timeout_decorator.timeout(300, exception_message='Task was not submitted')
     @pytest.mark.dependency()
-    def test_terra_run_plan_codebuild(self, request, mut_output, sf, cb, target_execution):
+    def test_terra_run_plan_codebuild(self, request, mut_output, sf, target_execution):
         """Assert running execution record has a running Step Function execution"""
         depends(request, [f'{request.cls.__name__}::test_sf_execution_exists[{request.node.callspec.id}]'])
 
         log.info(f'Testing Plan Task')
-
-        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
-
         status = None
-        for event in events:
-            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'codebuild':
-                plan_build_id = json.loads(event['taskSubmittedEventDetails']['output'])['Build']['Id']
-                status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], ids=[plan_build_id])[0]
-                break
+        while status == None:
+            time.sleep(10)
+            status = self.get_execution_task_status(sf, mut_output['state_machine_arn'], target_execution['execution_id'], 'Plan')
         
-        if status == None:
-            pytest.fail('Task was not submitted')
+        assert status == 'TaskSucceeded'
 
-        assert status == 'SUCCEEDED'
-
-    @timeout_decorator.timeout(30)
+    @timeout_decorator.timeout(30, exception_message='Task was not submitted')
     @pytest.mark.dependency()
     def test_approval_request(self, request, sf, mut_output, target_execution):
         depends(request, [f'{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]'])
+        
+        status = None
+        while status == None:
+            status = self.get_execution_task_status(sf, mut_output['state_machine_arn'], target_execution['execution_id'], 'Request Approval')
 
-        submitted = False
-        wait = 5
-        while not submitted:
-            log.debug(f'Giving Step Function {wait} to submit approval request')
-            time.sleep(wait)
-            
-            events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+        if status == None:
+            time.sleep(10)
+            pytest.fail('Task was not submitted')
 
-            for event in events:
-                if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resource'] == 'invoke.waitForTaskToken':
-                    submitted = True
-                    out = json.loads(event['taskSubmittedEventDetails']['output'])
-
-        assert out['StatusCode'] == 200
+        assert status == 'TaskSucceeded'
 
     @pytest.mark.dependency()
     def test_approval_response(self, request, sf, action, mut_output, target_execution):
@@ -436,8 +433,9 @@ class Integration:
         assert state is not None
         assert out['status'] == 'failed'
 
+    @timeout_decorator.timeout(300, exception_message='Task was not submitted')
     @pytest.mark.dependency()
-    def test_terra_run_deploy_codebuild(self, request, mut_output, sf, cb, target_execution, action):
+    def test_terra_run_deploy_codebuild(self, request, mut_output, sf, target_execution, action):
         """Assert running execution record has a running Step Function execution"""
         depends(request, [f'{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]'])
 
@@ -446,15 +444,12 @@ class Integration:
 
         log.info(f'Testing Deploy Task')
 
-        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+        status = None
+        while status == None:
+            time.sleep(10)
+            status = self.get_execution_task_status(sf, mut_output['state_machine_arn'], target_execution['execution_id'], 'Deploy')
 
-        for event in events:
-            #TODO: differentiate between plan/deploy tasks
-            if event['type'] == 'TaskSubmitted' and event['taskSubmittedEventDetails']['resourceType'] == 'codebuild':
-                plan_build_id = json.loads(event['taskSubmittedEventDetails']['output'])['Build']['Id']
-                status = self.get_build_status(cb, mut_output["codebuild_terra_run_name"], ids=[plan_build_id])[0]
-
-        assert status == 'SUCCEEDED'
+        assert status == 'TaskSucceeded'
     
     @pytest.mark.dependency()
     def test_sf_execution_status(self, request, mut_output, sf, target_execution, action):
