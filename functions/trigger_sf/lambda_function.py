@@ -25,8 +25,8 @@ def execution_finished(cur, output: map) -> None:
     log.info('Updating execution record status')
     cur.execute(f"""
     UPDATE executions
-    SET "status" = {output['status']}
-    WHERE execution_id = {output['execution_id']}
+    SET "status" = '{output['status']}'
+    WHERE execution_id = '{output['execution_id']}'
     """)
     
     if not output['is_rollback'] and output['status'] == 'failed':
@@ -35,18 +35,19 @@ def execution_finished(cur, output: map) -> None:
         UPDATE executions
         SET "status" = 'aborted'
         WHERE "status" IN ('waiting', 'running')
-        AND commit_id = {output['commit_id']}
+        AND commit_id = '{output['commit_id']}'
         AND is_rollback = false
         RETURNING execution_id
         """)
 
-        log.info('Aborting Step Function executions')
         results = cur.fetchall()
         log.debug(f'Results: {results}')
-        if results != None:
-            aborted_ids = [dict(r)['execution_id'] for r in results]
+        if len(results) != 0:
+            aborted_ids = [r[0] for r in results]
 
+            log.info('Aborting Step Function executions')
             for id in aborted_ids:
+                log.debug(f'Execution ID: {id}')
                 try:
                     execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=os.environ["STATE_MACHINE_ARN"])['executions'] if execution['name'] == id][0]
                 except IndexError:
@@ -65,8 +66,8 @@ def execution_finished(cur, output: map) -> None:
             cur.execute(f.read()).format(commit_id=output['commit_id'])
             results = cur.fetchall()
             log.debug(f'Results:\n{results}')
-            if results != None:
-                rollback_records = [dict(r) for r in results]
+            if len(results) != 0:
+                rollback_records = dict(zip([desc.name for desc in cur.description], results))
                 log.debug(f'Rollback records:\n{pformat(rollback_records)}')
                 
     elif output['is_rollback'] == True and output['status'] == 'failed':

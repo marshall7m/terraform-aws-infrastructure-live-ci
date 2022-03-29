@@ -51,7 +51,7 @@ SELECT
         SELECT cfg_path
         FROM executions
         WHERE d.cfg_path=ANY(cfg_deps)
-        AND commit_id = {commit_id}
+        AND commit_id = '{commit_id}'
         AND cardinality(new_resources) > 0
     ) AS cfg_deps,
     "status",
@@ -96,14 +96,14 @@ FROM (
         plan_role_arn,
         deploy_role_arn
     FROM executions
-    WHERE commit_id = {commit_id} 
+    WHERE commit_id = '{commit_id}'
     AND cardinality(new_resources) > 0
     -- ensures that duplicate rollback executions are not created
     AND NOT exists (
         SELECT 1 
         FROM executions 
         WHERE is_rollback = true
-        AND commit_id = {commit_id}
+        AND commit_id = '{commit_id}'
     )
 ) d
 RETURNING *;
