@@ -119,7 +119,7 @@ resource "aws_sfn_state_machine" "this" {
             {
               Name      = "NEW_PROVIDERS"
               Type      = "PLAINTEXT"
-              "Value.$" = "$.new_providers"
+              "Value.$" = "States.JsonToString($.new_providers)"
             }
           ]
           ProjectName = module.codebuild_terra_run.name
@@ -211,7 +211,7 @@ resource "aws_cloudwatch_event_target" "sf_execution" {
   arn       = module.lambda_trigger_sf.function_arn
   input_transformer {
     input_paths = {
-      output = "$.detail.output"
+      output = "$"
     }
     input_template = <<EOF
 {
