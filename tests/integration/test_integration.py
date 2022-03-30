@@ -133,7 +133,7 @@ class Integration:
             if event['id'] == task_status_id:
                 return event['type']
 
-    def get_build_status(self, client, name, ids=[], filters={}, sf_execution_filter={}):
+    def get_build_status(self, client, name, ids=[], filters={}):
         
         statuses = ['IN_PROGRESS']
 
@@ -147,30 +147,12 @@ class Integration:
                 log.error(f'No builds have runned for project: {name}')
                 sys.exit(1)
             
-            
             log.debug(f'Build Filters:\n{filters}')
-            log.debug(f'Step Function Execution Output Filters:\n{sf_execution_filter}')
             for build in client.batch_get_builds(ids=ids)['builds']:
-                skip_sf_filter = False                    
                 for key, value in filters.items():
                     if build.get(key, None) != value:
                         ids.remove(build['id'])
-                        skip_sf_filter = True
                         break
-                if skip_sf_filter:
-                    continue
-                
-                if sf_execution_filter != {}:
-                    sf_execution_env_var = {}
-                    for env_var in build['environment']['environmentVariables']:
-                        if env_var['name'] == 'EXECUTION_OUTPUT':
-                            sf_execution_env_var = json.loads(env_var['value'])
-                    
-                    for key, value in sf_execution_filter.items():
-                        if (key, value) not in sf_execution_env_var.items():
-                            ids.remove(build['id'])
-                            break
-                
             if len(ids) == 0:
                 log.error(f'No builds have met provided filters')
                 sys.exit(1)
@@ -198,10 +180,10 @@ class Integration:
         
         log.info('Searching latest log stream for any errors')
         return logs.filter_log_events(
-            logGroupName='/aws/lambda/infrastructure-live-ci-trigger-sf',
+            logGroupName=log_group,
             logStreamNames=[stream],    
             filterPattern='ERROR'
-        )['events']    
+        )['events']
          
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
@@ -371,25 +353,23 @@ class Integration:
 
     @timeout_decorator.timeout(30, exception_message='Task was not submitted')
     @pytest.mark.dependency()
-    def test_approval_request(self, request, sf, mut_output, target_execution):
+    @pytest.mark.usefixtures('target_execution')
+    def test_approval_request(self, request, mut_output):
         depends(request, [f'{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]'])
         
-        status = None
-        while status == None:
-            status = self.get_execution_task_status(sf, mut_output['state_machine_arn'], target_execution['execution_id'], 'Request Approval')
+        log_group = mut_output['approval_request_log_group_name']
+        log.debug(f'Log Group: {log_group}')
+        results = self.get_latest_log_stream_errs(log_group)
 
-        if status == None:
-            time.sleep(10)
-            pytest.fail('Task was not submitted')
-
-        assert status == 'TaskSucceeded'
+        assert len(results) == 0
 
     @pytest.mark.dependency()
     def test_approval_response(self, request, sf, action, mut_output, target_execution):
         depends(request, [f'{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]'])
         log.info('Testing Approval Task')
 
-        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
+        events = sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
 
         for event in events:
             if event['type'] == 'TaskScheduled' and event['taskScheduledEventDetails']['resource'] == 'invoke.waitForTaskToken':
@@ -416,21 +396,15 @@ class Integration:
 
         if action == 'approve':
             pytest.skip('Approval action is set to `approve`')
-
-        log.debug(f'Execution ID: {target_execution["execution_id"]}')
-        state = None
-        out = None
-        events = self.get_execution_history(sf, mut_output['state_machine_arn'], target_execution['execution_id'])
+        
+        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
+        events = sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
 
         for event in events:
-            if event['type'] == 'PassStateEntered':
-                state = event
-            elif event['type'] == 'PassStateExited':
-                if event['stateExitedEventDetails']['name'] == 'Reject':
-                    out = json.loads(event['stateExitedEventDetails']['output'])
+            if event['type'] == 'PassStateExited' and event['stateExitedEventDetails']['name'] == 'Reject':
+                out = json.loads(event['stateExitedEventDetails']['output'])
 
         log.debug(f'Rejection State Output:\n{pformat(out)}')
-        assert state is not None
         assert out['status'] == 'failed'
 
     @timeout_decorator.timeout(300, exception_message='Task was not submitted')
