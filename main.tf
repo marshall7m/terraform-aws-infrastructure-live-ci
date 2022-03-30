@@ -211,11 +211,17 @@ resource "aws_cloudwatch_event_target" "sf_execution" {
   arn       = module.lambda_trigger_sf.function_arn
   input_transformer {
     input_paths = {
-      output = "$"
+      output = "$.detail.output",
+      input  = "$.detail.input",
+      status = "$.detail.status"
     }
     input_template = <<EOF
 {
-  "execution_output": <output>
+  "execution": {
+    "output": <output>,
+    "input": <input>,
+    "status": <status>
+  }
 }
 EOF
   }
