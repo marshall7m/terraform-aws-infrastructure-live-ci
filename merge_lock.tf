@@ -9,11 +9,16 @@ module "github_webhook_validator" {
   deployment_triggers = {
     approval = filesha1("${path.module}/approval.tf")
   }
-  create_github_token_ssm_param   = false
-  create_api                      = false
-  async_lambda_invocation         = true
-  github_token_ssm_key            = var.github_token_ssm_key
-  api_name                        = aws_api_gateway_rest_api.this.name
+  create_github_token_ssm_param = false
+  async_lambda_invocation       = true
+
+  github_token_ssm_key = var.github_token_ssm_key
+  api_id               = aws_api_gateway_rest_api.this.id
+  root_resource_id     = aws_api_gateway_rest_api.this.root_resource_id
+  execution_arn        = aws_api_gateway_rest_api.this.execution_arn
+
+  function_name = "${var.step_function_name}-github-webhook-request-validator"
+
   lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
   repos = [
     {
