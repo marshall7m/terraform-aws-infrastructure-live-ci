@@ -42,8 +42,7 @@ if [ -n "$NEW_PROVIDERS" ] && [ "$NEW_PROVIDERS" != "[]" ]; then
 
         # use base codebuild role to connect to metadb
         echo "Switching back to CodeBuild base IAM role"
-        echo "Unsetting AWS_PROFILE: $AWS_PROFILE"
-        unset "$AWS_PROFILE"
+        unset "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"
 
         echo "Adding new resources to execution record"
         aws rds-data execute-statement \

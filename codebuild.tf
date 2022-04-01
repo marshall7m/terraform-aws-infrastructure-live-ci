@@ -229,11 +229,6 @@ module "codebuild_terra_run" {
         type  = "PLAINTEXT"
       },
       {
-        name  = "AWS_PROFILE"
-        value = "terra-run"
-        type  = "PLAINTEXT"
-      },
-      {
         name  = "METADB_NAME"
         value = local.metadb_name
         type  = "PLAINTEXT"
@@ -272,10 +267,13 @@ phases:
     commands:
       # serviceRoleOverride.$ within step function definition is not supported yet so extra step of setting up AWS credentials within buildspec is needed
       - |
-        mkdir -p ~/.aws && cat <<EOF > ~/.aws/config
-        [profile $AWS_PROFILE] 
-        role_arn=$ROLE_ARN 
-        EOF
+        export $(printf "AWS_ACCESS_KEY_ID=%s AWS_SECRET_ACCESS_KEY=%s AWS_SESSION_TOKEN=%s" \
+        $(aws sts assume-role \
+          --role-arn "$${ROLE_ARN}" \
+          --role-session-name ${local.terra_run_build_name} \
+          --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" \
+          --output text)
+        )
       - "$${TG_COMMAND}"
     finally:
       - |
