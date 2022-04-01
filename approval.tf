@@ -129,7 +129,7 @@ module "agw_role" {
 }
 
 resource "aws_cloudwatch_log_group" "agw" {
-  name = local.approval_logs
+  name = "aws/apigateway/${local.approval_logs}"
 }
 
 data "archive_file" "lambda_approval_request" {
