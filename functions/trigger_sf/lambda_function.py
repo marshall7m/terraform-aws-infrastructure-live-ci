@@ -3,7 +3,6 @@ import sys
 import logging
 import json
 import boto3
-from pprint import pformat
 import sys
 import re
 import aurora_data_api
@@ -27,7 +26,7 @@ def execution_finished(cur, execution: map) -> None:
         # use step function execution input since the output is none when execution is aborted
         record = {**json.loads(execution['input']), **{'status': execution['status'].lower()}}
     else:
-        record = execution['output']
+        record = json.loads(execution['output'])
 
     log.info('Updating execution record status')
     cur.execute(f"""
@@ -70,12 +69,12 @@ def execution_finished(cur, execution: map) -> None:
 
         log.info('Creating rollback executions if needed')
         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
-            cur.execute(f.read()).format(commit_id=record['commit_id'])
+            cur.execute(f.read().format(commit_id=record['commit_id']))
             results = cur.fetchall()
             log.debug(f'Results:\n{results}')
             if len(results) != 0:
-                rollback_records = dict(zip([desc.name for desc in cur.description], results))
-                log.debug(f'Rollback records:\n{pformat(rollback_records)}')
+                rollback_records = [dict(zip([desc.name for desc in cur.description], record)) for record in results]
+                log.debug(f'Rollback records:\n{rollback_records}')
                 
     elif record['is_rollback'] == True and record['status'] in ['failed', 'aborted']:
         log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
@@ -126,7 +125,7 @@ def start_sf_executions(cur) -> None:
             """)
 
             sf_input = json.dumps(dict(zip([desc.name for desc in cur.description], cur.fetchone())))
-            log.debug(f'SF input:\n{pformat(sf_input)}')
+            log.debug(f'SF input:\n{sf_input}')
 
             log.info('Starting sf execution')
             sf.start_execution(stateMachineArn=os.environ['STATE_MACHINE_ARN'], name=id, input=sf_input)
@@ -134,7 +133,7 @@ def start_sf_executions(cur) -> None:
 def lambda_handler(event, context):
     '''Runs Step Function deployment flow or resets SSM Parameter Store merge lock value'''
 
-    log.debug(f'Event:\n{pformat(event)}')
+    log.debug(f'Event:\n{event}')
     ssm = boto3.client('ssm')
     with aurora_data_api.connect(
         aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
@@ -143,7 +142,7 @@ def lambda_handler(event, context):
     ) as conn:
         with conn.cursor() as cur:
             if 'execution' in event:
-                log.info(f'Triggered via Step Function Event:\n{pformat(event["execution"])}')
+                log.info(f'Triggered via Step Function Event:\n{event["execution"]}')
                 execution_finished(cur, event['execution'])
 
             log.info('Checking if commit executions are in progress')

@@ -93,6 +93,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description |
 |------|-------------|
+| approval\_request\_log\_group\_name | n/a |
 | approval\_url | n/a |
 | codebuild\_create\_deploy\_stack\_arn | n/a |
 | codebuild\_create\_deploy\_stack\_name | n/a |
