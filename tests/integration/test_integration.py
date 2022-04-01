@@ -251,6 +251,7 @@ class Integration:
     def test_trigger_sf(self, request, mut_output):
         depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild[{request.node.callspec.id}]'])
 
+        time.sleep(10)
         log_group = mut_output['trigger_sf_log_group_name']
         log.debug(f'Log Group: {log_group}')
         results = self.get_latest_log_stream_errs(log_group)
@@ -281,7 +282,19 @@ class Integration:
             log.debug(f'Target Execution Record:\n{pformat(record)}')
             yield record
         else:
-            pytest.skip('No new running or finished execution records')
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT execution_id
+                    FROM executions 
+                    WHERE commit_id = '{pr["head_commit_id"]}'
+                    AND "status" = 'waiting'
+                """)
+                results = cur.fetchall()
+            conn.commit()
+
+            if len(results) != 0:
+                log.debug(f'Waiting execution IDs: {results}')
+                pytest.fail("Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')")
 
         log.debug('Adding execution ID to tested executions list')
         if record != {}:
@@ -301,7 +314,7 @@ class Integration:
         if target_execution_param != '0':
             depends(request, [
                 f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]",
-                # depends on previous target_execution param's cw event trigger sf build finished status
+                # depends on previous target_execution param's cw event trigger sf finished status
                 f"{request.cls.__name__}::test_cw_event_trigger_sf[{re.sub(r'^.+?-', f'{int(target_execution_param) - 1}-', request.node.callspec.id)}]"
             ])
         else:
@@ -440,7 +453,8 @@ class Integration:
     @pytest.mark.dependency()
     def test_cw_event_trigger_sf(self, request, mut_output):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
-
+        #TODO: Fix race-condition where log stream assertions are runned before related logs are created
+        # possible using a cw filter pattern within while loop to wait till related logs are created
         log_group = mut_output['trigger_sf_log_group_name']
         log.debug(f'Log Group: {log_group}')
         results = self.get_latest_log_stream_errs(log_group)
