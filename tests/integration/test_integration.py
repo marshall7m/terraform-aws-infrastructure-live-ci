@@ -29,6 +29,52 @@ log.setLevel(logging.DEBUG)
 
 class Integration:
 
+    # @pytest.fixture(scope='class', autouse=True)
+    # def dependencies(self, request):
+    #     if request.cls.get('depends_on', False):
+    #         for cls in request.cls['depends_on']:
+    #             if 'failed' in session[cls]:
+    #                 pytest.skip(f'Dependency test class failed: {cls}')
+
+    @pytest.fixture(scope='class', autouse=True)
+    def class_start_time(self):
+        time = datetime.today()
+        return time
+
+    @pytest.fixture(scope='class')
+    def cls_lambda_invocation_count(self, class_start_time):
+        invocations = []
+
+        def _get_count(function_name, refresh=False):
+            if refresh:
+                cw = boto3.client('cloudwatch')
+
+                response = cw.get_metric_statistics(
+                    Namespace='AWS/Lambda',
+                    MetricName='Invocations',
+                    Dimensions=[
+                        {
+                            'Name': 'FunctionName',
+                            'Value': function_name
+                        }
+                    ],
+                    StartTime=class_start_time, 
+                    EndTime=datetime.today(),
+                    Period=60,
+                    Statistics=[
+                        'SampleCount'
+                    ],
+                    Unit='Count'
+                )
+                for data in response['Datapoints']:
+                    invocations.append(data['SampleCount'])
+                    
+            return len(invocations)
+
+        yield _get_count
+
+        invocations = []
+
     @pytest.fixture(scope='class')
     def case_param(self, request):
         return request.param
@@ -189,7 +235,7 @@ class Integration:
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
-        wait = 1
+        wait = 3
 
         statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
         while statuses.totalCount == 0:
@@ -225,7 +271,7 @@ class Integration:
 
     @pytest.mark.dependency()
     def test_deploy_execution_records_exist(self, request, conn, case_param, pr):
-        """Assert that all expected scenario directories are within executions table"""
+        """Assert that all expected case directories are within executions table"""
         depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild[{request.node.callspec.id}]'])
 
         with conn.cursor() as cur:
@@ -259,7 +305,18 @@ class Integration:
         assert len(results) == 0
 
     @pytest.fixture(scope="class")
-    def target_execution(self, conn, pr, tested_executions, case_param):
+    @timeout_decorator.timeout(30, exception_message='Lambda funciton was not invoked')
+    def target_execution(self, conn, pr, mut_output, cls_lambda_invocation_count, tested_executions, case_param):
+
+        current_count = cls_lambda_invocation_count(mut_output['trigger_sf_function_name'])
+
+        log.debug('Waiting on trigger SF Lambda invocation to complete')
+        refresh_count = current_count
+        while current_count == refresh_count:
+            time.sleep(5)
+            refresh_count = cls_lambda_invocation_count(mut_output['trigger_sf_function_name'], refresh=True)
+            log.debug(f'Refresh Count: {refresh_count}')
+
         log.debug(f'Already tested execution IDs:\n{tested_executions()}')
         with conn.cursor() as cur:
             cur.execute(f"""
