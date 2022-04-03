@@ -153,6 +153,12 @@ variable "api_name" {
   default     = null
 }
 
+variable "api_stage_name" {
+  description = "API deployment stage name"
+  type        = string
+  default     = "prod"
+}
+
 ## SSM ##
 
 ### MERGE-LOCK ##

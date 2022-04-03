@@ -96,6 +96,10 @@ output "trigger_sf_log_group_name" {
   value = module.lambda_trigger_sf.cw_log_group_name
 }
 
+output "trigger_sf_function_name" {
+  value = module.lambda_trigger_sf.function_name
+}
+
 output "approval_request_log_group_name" {
   value = module.lambda_approval_request.cw_log_group_name
 }
