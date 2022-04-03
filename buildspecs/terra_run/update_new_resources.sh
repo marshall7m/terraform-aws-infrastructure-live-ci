@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ -n "$NEW_PROVIDERS" ] && [ "$NEW_PROVIDERS" != "[]" ]; then
+if [ -n "$NEW_PROVIDERS" ] && [ "$NEW_PROVIDERS" != "[]" ] && [ "$IS_ROLLBACK" == false ]; then
     echo "Adding new provider resources to execution record"
     
     new_resources="$(terragrunt state pull --terragrunt-working-dir "$CFG_PATH" | jq -r \

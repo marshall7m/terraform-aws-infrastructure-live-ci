@@ -128,10 +128,6 @@ module "agw_role" {
   ]
 }
 
-resource "aws_cloudwatch_log_group" "agw" {
-  name = "aws/apigateway/${local.approval_logs}"
-}
-
 data "archive_file" "lambda_approval_request" {
   type        = "zip"
   source_dir  = "${path.module}/functions/approval_request"

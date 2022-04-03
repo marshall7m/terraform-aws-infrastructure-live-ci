@@ -120,6 +120,11 @@ resource "aws_sfn_state_machine" "this" {
               Name      = "NEW_PROVIDERS"
               Type      = "PLAINTEXT"
               "Value.$" = "States.JsonToString($.new_providers)"
+            },
+            {
+              Name      = "IS_ROLLBACK"
+              Type      = "PLAINTEXT"
+              "Value.$" = "States.JsonToString($.is_rollback)"
             }
           ]
           ProjectName = module.codebuild_terra_run.name
