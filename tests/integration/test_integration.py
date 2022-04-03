@@ -212,7 +212,7 @@ class Integration:
     
         return statuses
     
-    def get_latest_log_stream_errs(self, log_group):
+    def get_latest_log_stream_errs(self, log_group, start_time=None, end_time=None):
         logs = boto3.client('logs')
 
         stream = logs.describe_log_streams(
@@ -225,12 +225,20 @@ class Integration:
         log.debug(f'Latest Stream: {stream}')
         
         log.info('Searching latest log stream for any errors')
-        return logs.filter_log_events(
-            logGroupName=log_group,
-            logStreamNames=[stream],    
-            filterPattern='ERROR'
-        )['events']
-         
+        if start_time and end_time:
+            return logs.filter_log_events(
+                logGroupName=log_group,
+                logStreamNames=[stream],    
+                filterPattern='ERROR',
+                startTime=start_time,
+                endTime=end_time
+            )['events']
+        else:
+         return logs.filter_log_events(
+                logGroupName=log_group,
+                logStreamNames=[stream],    
+                filterPattern='ERROR'
+            )['events']
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
@@ -294,28 +302,47 @@ class Integration:
         assert len(case_param['executions']) == len(target_execution_ids)
     
     @pytest.mark.dependency()
-    def test_trigger_sf(self, request, mut_output):
+    def test_trigger_sf(self, request, mut_output, class_start_time, wait_for_lambda_invocation):
         depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild[{request.node.callspec.id}]'])
 
-        time.sleep(10)
+        log.debug('Waiting on trigger SF Lambda invocation to complete')
+        wait_for_lambda_invocation(mut_output['trigger_sf_function_name'])
+
         log_group = mut_output['trigger_sf_log_group_name']
         log.debug(f'Log Group: {log_group}')
-        results = self.get_latest_log_stream_errs(log_group)
+        results = self.get_latest_log_stream_errs(log_group, start_time=int(class_start_time.timestamp() * 1000), end_time=int(datetime.now().timestamp() * 1000))
 
         assert len(results) == 0
 
+    @pytest.fixture(scope='class')
+    def wait_for_lambda_invocation(self, cls_lambda_invocation_count):
+        def _wait(function_name):
+            current_count = cls_lambda_invocation_count(function_name)
+            timeout = time.time() + 60
+            refresh_count = current_count
+            while current_count == refresh_count:
+                if time.time() > timeout:
+                    pytest.fail('Trigger SF Lambda Function was not invoked')
+                time.sleep(5)
+                refresh_count = cls_lambda_invocation_count(function_name, refresh=True)
+                log.debug(f'Refresh Count: {refresh_count}')
+            return None
+        yield _wait
+
+    @pytest.fixture(scope='class')
+    def execution_testing_start_time(self):
+        start_time = []
+        def _get_start_time(new=False):
+            if new:
+                start_time.clear()
+                start_time.append(int(datetime.now().timestamp() * 1000))
+            return start_time[0]
+        yield _get_start_time
+
+        start_time.clear()
+
     @pytest.fixture(scope="class")
-    @timeout_decorator.timeout(30, exception_message='Lambda funciton was not invoked')
-    def target_execution(self, conn, pr, mut_output, cls_lambda_invocation_count, tested_executions, case_param):
-
-        current_count = cls_lambda_invocation_count(mut_output['trigger_sf_function_name'])
-
-        log.debug('Waiting on trigger SF Lambda invocation to complete')
-        refresh_count = current_count
-        while current_count == refresh_count:
-            time.sleep(5)
-            refresh_count = cls_lambda_invocation_count(mut_output['trigger_sf_function_name'], refresh=True)
-            log.debug(f'Refresh Count: {refresh_count}')
+    def target_execution(self, conn, pr, mut_output, wait_for_lambda_invocation, tested_executions, case_param, execution_testing_start_time):
 
         log.debug(f'Already tested execution IDs:\n{tested_executions()}')
         with conn.cursor() as cur:
@@ -337,6 +364,11 @@ class Integration:
                 record[description.name] = row[i]
 
             log.debug(f'Target Execution Record:\n{pformat(record)}')
+
+            # needed for filtering out any trigger sf cloudwatch logs from previous executions for test_cw_event_trigger_sf assertions
+            log.debug('Pinning target execution testing start time')
+            execution_testing_start_time(new=True)
+
             yield record
         else:
             with conn.cursor() as cur:
@@ -351,7 +383,8 @@ class Integration:
 
             if len(results) != 0:
                 log.debug(f'Waiting execution IDs: {results}')
-                pytest.fail("Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')")
+
+            pytest.fail("Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')")
 
         log.debug('Adding execution ID to tested executions list')
         if record != {}:
@@ -508,15 +541,20 @@ class Integration:
         assert response['status'] == 'SUCCEEDED'
 
     @pytest.mark.dependency()
-    def test_cw_event_trigger_sf(self, request, mut_output):
+    def test_cw_event_trigger_sf(self, request, mut_output, target_execution, case_param, wait_for_lambda_invocation, execution_testing_start_time):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
-        #TODO: Fix race-condition where log stream assertions are runned before related logs are created
-        # possible using a cw filter pattern within while loop to wait till related logs are created
+        
+        wait_for_lambda_invocation(mut_output['trigger_sf_function_name'])
+        
         log_group = mut_output['trigger_sf_log_group_name']
         log.debug(f'Log Group: {log_group}')
-        results = self.get_latest_log_stream_errs(log_group)
+        log.debug(f'zozo: {execution_testing_start_time()}')
+        results = self.get_latest_log_stream_errs(log_group, start_time=execution_testing_start_time(), end_time=int(datetime.now().timestamp() * 1000))
 
-        assert len(results) == 0
+        if target_execution['is_rollback'] and case_param['executions'][target_execution['cfg_path']].get('expect_failed_rollback_providers_cw_trigger_sf', False):
+            assert len(results) > 0
+        else:
+            assert len(results) == 0
 
     @pytest.mark.dependency()
     def test_rollback_providers_executions_exists(self, request, conn, case_param, pr, action, target_execution):
