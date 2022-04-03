@@ -100,20 +100,22 @@ def start_sf_executions(cur) -> None:
         log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
         sys.exit(1)
 
-    ids = cur.fetchone()
-    if ids == None:
+    results = cur.fetchone()
+    log.debug(f'Results: {results}')
+
+    if results[0] == None:
         log.info('No executions are ready')
         return
     else:
-        target_execution_ids = [id for id in ids[0]]
+        ids = results[0]
 
-    log.debug(f'IDs: {target_execution_ids}')
-    log.info(f'Count: {len(target_execution_ids)}')
+    log.debug(f'IDs: {ids}')
+    log.info(f'Count: {len(ids)}')
 
     if 'DRY_RUN' in os.environ:
         log.info('DRY_RUN was set -- skip starting sf executions')
     else:
-        for id in target_execution_ids:
+        for id in ids:
             log.info(f'Execution ID: {id}')
             
             log.debug('Updating execution status to running')
