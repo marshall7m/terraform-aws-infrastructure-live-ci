@@ -13,10 +13,12 @@ module "github_webhook_validator" {
   async_lambda_invocation       = true
 
   github_token_ssm_key = var.github_token_ssm_key
+  create_api           = false
   api_id               = aws_api_gateway_rest_api.this.id
   root_resource_id     = aws_api_gateway_rest_api.this.root_resource_id
   execution_arn        = aws_api_gateway_rest_api.this.execution_arn
 
+  stage_name    = var.api_stage_name
   function_name = "${var.step_function_name}-github-webhook-request-validator"
 
   lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
