@@ -12,8 +12,6 @@ pytest-dependency==0.5.1
 timeout-decorator==0.5.0
 tftest==1.6.2
 
-psycopg2-binary==2.9.2
-
 GitPython==3.1.24
 PyGithub==1.55
 
