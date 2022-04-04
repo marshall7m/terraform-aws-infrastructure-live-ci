@@ -62,7 +62,7 @@ resource "aws_sfn_state_machine" "this" {
             }
             "Voters.$"        = "$.voters"
             "Path.$"          = "$.cfg_path"
-            "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&sm={}&taskToken={}', $$.Execution.Name, $$.StateMachine.Id, $$.Task.Token)"
+            "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
             "ExecutionName.$" = "$$.Execution.Name"
           }
         }

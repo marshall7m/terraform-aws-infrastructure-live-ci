@@ -238,10 +238,14 @@ module "lambda_approval_response" {
 
   statements = [
     {
-      sid       = "SendTaskSuccess"
       effect    = "Allow"
       actions   = ["states:SendTaskSuccess"]
       resources = [aws_sfn_state_machine.this.arn]
+    },
+    {
+      effect    = "Allow"
+      actions   = ["states:DescribeExecution"]
+      resources = ["*"]
     }
   ]
   lambda_layers = [

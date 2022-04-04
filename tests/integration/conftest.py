@@ -105,7 +105,7 @@ def sf():
 
 @pytest.fixture(scope='module')
 def gh():
-    return github.Github(os.environ['GITHUB_TOKEN'])
+    return github.Github(os.environ['GITHUB_TOKEN'], retry=3)
 
 @pytest.fixture(scope='module')
 def repo(gh, mut_output):
