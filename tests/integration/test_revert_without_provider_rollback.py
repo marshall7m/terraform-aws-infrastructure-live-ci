@@ -4,37 +4,12 @@ import uuid
 import os
 import logging
 from pytest_dependency import depends
+from tests.integration.helpers import dummy_tf_github_repo
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 dummy_repo = f'dummy-repo-{uuid.uuid4()}'
-
-test_gh_resource = f"""
-terraform {{
-  required_providers {{
-    github = {{
-      source  = "integrations/github"
-      version = "4.9.3"
-    }}
-  }}
-}}
-provider "aws" {{}}
-
-data "aws_ssm_parameter" "github_token" {{
-    name = "admin-github-token"
-}}
-
-provider "github" {{
-    owner = "marshall7m"
-    token = data.aws_ssm_parameter.github_token.value
-}}
-
-resource "github_repository" "dummy" {{
-  name        = "{dummy_repo}"
-  visibility  = "public"
-}}
-"""
 
 @pytest.fixture(scope='module', autouse=True)
 def cleanup_dummy_repo(gh):
@@ -50,8 +25,7 @@ class TestDeployPR(test_integration.Integration):
                 'actions': {
                     'deploy': 'approve'
                 },
-                'new_resources': ['github_branch.this'],
-                'pr_files_content': [test_gh_resource]
+                'pr_files_content': [dummy_tf_github_repo(dummy_repo)]
             }
         }
     }

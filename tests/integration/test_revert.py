@@ -1,16 +1,6 @@
 from tests.integration import test_integration
 import uuid
-test_null_resource = """
-provider "null" {}
-
-resource "null_resource" "this" {}
-"""
-
-test_output = """
-output "{random}" {{
-    value = "{random}"
-}}
-"""
+from tests.integration.helpers import dummy_tf_provider_resource
 
 class TestBasePR(test_integration.Integration):
     case = {
@@ -20,9 +10,7 @@ class TestBasePR(test_integration.Integration):
                 'actions': {
                     'deploy': 'approve'
                 },
-                'new_resources': ['null_resource.this'],
-                'pr_files_content': [test_null_resource],
-                'new_providers': ['hashicorp/null']
+                'pr_files_content': [dummy_tf_provider_resource()]
             },
             'directory_dependency/dev-account/us-west-2/env-one/bar': {
                 'actions': {
@@ -38,6 +26,10 @@ class TestBasePR(test_integration.Integration):
     }
 
 class TestDeployPR(test_integration.Integration):
+    depends_on = {
+        'class': ['TestBasePR'],
+        'tests': []
+    }
     case = {
         'head_ref': f'feature-{uuid.uuid4()}',
         'executions': {
@@ -46,9 +38,7 @@ class TestDeployPR(test_integration.Integration):
                     'deploy': 'approve',
                     'rollback_providers': 'approve'
                 },
-                'new_resources': ['null_resource.this'],
-                'pr_files_content': [test_null_resource],
-                'new_providers': ['hashicorp/null']
+                'pr_files_content': [dummy_tf_provider_resource()]
             },
             'directory_dependency/dev-account/us-west-2/env-one/baz': {
                 'actions': {

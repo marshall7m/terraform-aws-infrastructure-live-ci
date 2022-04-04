@@ -1,17 +1,6 @@
 from tests.integration import test_integration
 import uuid
-
-test_null_resource = """
-provider "null" {}
-
-resource "null_resource" "this" {}
-"""
-
-test_output = f"""
-output "_{uuid.uuid4()}" {{
-    value = "_{uuid.uuid4()}"
-}}
-"""
+from tests.integration.helpers import dummy_tf_output, dummy_tf_provider_resource
 
 class TestRejectRollbackProvider(test_integration.Integration):
     case = {
@@ -22,16 +11,14 @@ class TestRejectRollbackProvider(test_integration.Integration):
                     'deploy': 'approve',
                     'rollback_providers': 'reject'
                 },
-                'new_resources': ['null_resource.this'],
-                'pr_files_content': [test_null_resource],
-                'new_providers': ['hashicorp/null'],
+                'pr_files_content': [dummy_tf_provider_resource()],
                 'expect_failed_rollback_providers_cw_trigger_sf': True
             },
             'directory_dependency/dev-account/us-west-2/env-one/foo': {
                 'actions': {
                     'deploy': 'reject'
                 },
-                'pr_files_content': [test_output]
+                'pr_files_content': [dummy_tf_output()]
             }
         }
     }

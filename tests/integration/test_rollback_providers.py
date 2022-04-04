@@ -2,6 +2,7 @@ from tests.integration import test_integration
 import pytest
 import uuid
 import os
+import github
 import logging
 from pytest_dependency import depends
 
@@ -57,8 +58,7 @@ class TestDeployPR(test_integration.Integration):
                     'deploy': 'approve',
                     'rollback_providers': 'approve'
                 },
-                'new_resources': ['github_branch.this'],
-                'pr_files_content': [test_gh_resource]
+                'pr_files_content': [test_gh_resource, test_output]
             },
             'directory_dependency/dev-account/us-west-2/env-one/foo': {
                 'actions': {
@@ -90,4 +90,7 @@ class TestRevertPR(test_integration.Integration):
     def test_gh_resource_exists(self, gh, request, target_execution):
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
         log.info(f'Assert GitHub repo was deleted: {dummy_repo}')
-        print(gh.get_user().get_repo(dummy_repo))
+        try:
+            gh.get_user().get_repo(dummy_repo)
+        except github.GithubException.UnknownObjectException:
+            pass
