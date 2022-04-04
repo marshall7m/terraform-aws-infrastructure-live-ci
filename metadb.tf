@@ -142,5 +142,5 @@ resource "null_resource" "metadb_setup" {
     command     = local.metadb_setup_script
     interpreter = ["bash", "-c"]
   }
-  triggers = { "execute" : timestamp() }
+  triggers = merge({ for file in formatlist("${path.module}/%s", fileset("${path.module}", "sql/*")) : basename(file) => filesha256(file) }, { setup_script = sha256(local.metadb_setup_script) })
 }
