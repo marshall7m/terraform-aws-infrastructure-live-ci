@@ -5,7 +5,6 @@ from unittest.mock import patch
 import os
 import logging
 import sys
-from psycopg2.sql import SQL
 import shutil
 import uuid
 import json
@@ -310,7 +309,11 @@ class Integration:
 
         log_group = mut_output['trigger_sf_log_group_name']
         log.debug(f'Log Group: {log_group}')
-        results = self.get_latest_log_stream_errs(log_group, start_time=int(class_start_time.timestamp() * 1000), end_time=int(datetime.now().timestamp() * 1000))
+        
+        start_time = int(class_start_time.timestamp() * 1000)
+        end_time = int(class_start_time.timestamp() * 1000)
+        log.debug(f'Start Time: {start_time} -- End Time: {end_time}')
+        results = self.get_latest_log_stream_errs(log_group, start_time=start_time, end_time=end_time)
 
         assert len(results) == 0
 
@@ -476,14 +479,16 @@ class Integration:
 
         for event in events:
             if event['type'] == 'TaskScheduled' and event['taskScheduledEventDetails']['resource'] == 'invoke.waitForTaskToken':
-                task_token = json.loads(event['taskScheduledEventDetails']['parameters'])['Payload']['PathApproval']['TaskToken']
+                payload = json.loads(event['taskScheduledEventDetails']['parameters'])['Payload']
+                approval_url = payload['ApprovalAPI']
+                voter = payload['Voters'][0]
 
-        approval_url = f'{mut_output["approval_url"]}?ex={target_execution["execution_id"]}&sm={mut_output["state_machine_arn"]}&taskToken={task_token}'
         log.debug(f'Approval URL: {approval_url}')
+        log.debug(f'Voter: {voter}')
 
         body = {
             'action': action,
-            'recipient': mut_output['voters']
+            'recipient': voter
         }
 
         log.debug(f'Request Body:\n{body}')
