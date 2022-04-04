@@ -3,11 +3,11 @@ output "repo_name" {
 }
 
 output "state_machine_arn" {
-  value = module.mut_infrastructure_live_ci.sf_arn
+  value = module.mut_infrastructure_live_ci.step_function_arn
 }
 
 output "state_machine_name" {
-  value = module.mut_infrastructure_live_ci.sf_name
+  value = module.mut_infrastructure_live_ci.step_function_name
 }
 
 output "merge_lock_github_webhook_id" {
@@ -74,10 +74,6 @@ output "voters" {
 
 output "approval_url" {
   value = module.mut_infrastructure_live_ci.approval_url
-}
-
-output "cw_rule_initiator" {
-  value = module.mut_infrastructure_live_ci.cw_rule_initiator
 }
 
 output "trigger_sf_log_group_name" {

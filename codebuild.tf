@@ -1,12 +1,11 @@
 locals {
-  #replace with var.prefix?
   merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
 
   create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.step_function_name}-create-deploy-stack")
   terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
-  cw_rule_initiator                   = "rule/${local.cloudwatch_event_rule_name}"
 }
+
 data "github_repository" "this" {
   name = var.repo_name
 }

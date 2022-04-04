@@ -94,32 +94,30 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 | Name | Description |
 |------|-------------|
-| approval\_request\_log\_group\_name | n/a |
-| approval\_url | n/a |
-| codebuild\_create\_deploy\_stack\_arn | n/a |
-| codebuild\_create\_deploy\_stack\_name | n/a |
-| codebuild\_create\_deploy\_stack\_role\_arn | n/a |
-| codebuild\_terra\_run\_arn | n/a |
-| codebuild\_terra\_run\_name | n/a |
-| codebuild\_terra\_run\_role\_arn | n/a |
-| cw\_rule\_initiator | n/a |
-| lambda\_trigger\_sf\_arn | n/a |
-| merge\_lock\_github\_webhook\_id | n/a |
-| merge\_lock\_ssm\_key | n/a |
-| metadb\_address | n/a |
-| metadb\_arn | n/a |
-| metadb\_ci\_password | n/a |
-| metadb\_ci\_username | n/a |
-| metadb\_endpoint | n/a |
-| metadb\_name | n/a |
-| metadb\_password | n/a |
-| metadb\_port | n/a |
-| metadb\_secret\_manager\_master\_arn | n/a |
-| metadb\_username | n/a |
-| sf\_arn | n/a |
-| sf\_name | n/a |
-| trigger\_sf\_function\_name | n/a |
-| trigger\_sf\_log\_group\_name | n/a |
+| approval\_request\_log\_group\_name | Cloudwatch log group associated with the Lambda function used for processing deployment approval responses |
+| approval\_url | API URL used for requesting deployment approvals |
+| codebuild\_create\_deploy\_stack\_arn | ARN of the CodeBuild project that creates the deployment records within the metadb |
+| codebuild\_create\_deploy\_stack\_name | Name of the CodeBuild project that creates the deployment records within the metadb |
+| codebuild\_create\_deploy\_stack\_role\_arn | IAM role ARN of the CodeBuild project that creates the deployment records within the metadb |
+| codebuild\_terra\_run\_arn | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| codebuild\_terra\_run\_name | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| codebuild\_terra\_run\_role\_arn | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| lambda\_trigger\_sf\_arn | ARN of the Lambda function used for triggering Step Function execution(s) |
+| merge\_lock\_github\_webhook\_id | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda function |
+| merge\_lock\_ssm\_key | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
+| metadb\_arn | ARN for the metadb |
+| metadb\_ci\_password | Password used by CI services to connect to the metadb |
+| metadb\_ci\_username | Username used by CI services to connect to the metadb |
+| metadb\_endpoint | AWS RDS endpoint for the metadb |
+| metadb\_name | Name of the metadb |
+| metadb\_password | Master password for the metadb |
+| metadb\_port | Port used for the metadb |
+| metadb\_secret\_manager\_master\_arn | Secret Manager ARN of the metadb master user credentials |
+| metadb\_username | Master username for the metadb |
+| step\_function\_arn | ARN of the Step Function |
+| step\_function\_name | Name of the Step Function |
+| trigger\_sf\_function\_name | Name of the Lambda function used for triggering Step Function execution(s) |
+| trigger\_sf\_log\_group\_name | Cloudwatch log group associated with the Lambda function used for triggering Step Function execution(s) |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 

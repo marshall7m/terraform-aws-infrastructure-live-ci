@@ -9,7 +9,7 @@ locals {
 
 resource "aws_api_gateway_rest_api" "this" {
   name        = local.approval_logs
-  description = "HTTP Endpoint backed by API Gateway that is used for handling PR merge lock status resquests and Step Function approvals"
+  description = "HTTP Endpoint backed by API Gateway that is used for handling PR merge lock status requests and Step Function approvals"
 }
 
 resource "aws_api_gateway_resource" "approval" {
@@ -188,11 +188,12 @@ data "archive_file" "lambda_approval_response" {
   output_path = "${path.module}/approval_response.zip"
 }
 
-# pip install runtime packages needed for function
+
 resource "null_resource" "lambda_approval_response_deps" {
   triggers = {
     zip_hash = fileexists(local.approval_response_deps_zip_path) ? 0 : timestamp()
   }
+  # pip install runtime packages needed for function
   provisioner "local-exec" {
     command = <<EOF
     python3 -m pip install --target ${local.approval_deps_dir}/python aurora-data-api==0.4.0
