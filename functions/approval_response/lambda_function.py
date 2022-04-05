@@ -25,7 +25,7 @@ def lambda_handler(event, context):
         status = sf.describe_execution(executionArn=event['query']['exId'])['status']
         if status == 'RUNNING':
             log.info('Updating vote count')
-            # TODO: If query at scale takes longer to execute, invoke async lambda with query and return submission response from this function
+            # TODO: If query execution time is too long and causes downstream timeouts, invoke async lambda with query and return submission response from this function
             with aurora_data_api.connect(
                 aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
                 secret_arn=os.environ['METADB_SECRET_ARN'],
