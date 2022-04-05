@@ -87,3 +87,7 @@ output "trigger_sf_function_name" {
 output "approval_request_log_group_name" {
   value = module.mut_infrastructure_live_ci.approval_request_log_group_name
 }
+
+output "base_branch" {
+  value = module.mut_infrastructure_live_ci.base_branch
+}
