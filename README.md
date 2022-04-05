@@ -96,6 +96,7 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 |------|-------------|
 | approval\_request\_log\_group\_name | Cloudwatch log group associated with the Lambda function used for processing deployment approval responses |
 | approval\_url | API URL used for requesting deployment approvals |
+| base\_branch | Base branch for repository that all PRs will compare to |
 | codebuild\_create\_deploy\_stack\_arn | ARN of the CodeBuild project that creates the deployment records within the metadb |
 | codebuild\_create\_deploy\_stack\_name | Name of the CodeBuild project that creates the deployment records within the metadb |
 | codebuild\_create\_deploy\_stack\_role\_arn | IAM role ARN of the CodeBuild project that creates the deployment records within the metadb |

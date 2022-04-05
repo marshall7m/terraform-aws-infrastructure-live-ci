@@ -1,3 +1,8 @@
+output "base_branch" {
+  description = "Base branch for repository that all PRs will compare to"
+  value       = var.base_branch
+}
+
 output "metadb_endpoint" {
   description = "AWS RDS endpoint for the metadb"
   value       = aws_rds_cluster.metadb.endpoint
