@@ -1,5 +1,4 @@
 import pytest
-import psycopg2
 import os
 import tftest
 import boto3
@@ -18,9 +17,9 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 def pytest_addoption(parser):
-    #TODO: Add --skip-tfenv and transfer logic from --skip-init
-    parser.addoption("--skip-init", action="store_true", help="skips initing tf module")
-    parser.addoption("--skip-apply", action="store_true", help="skips applying tf module")
+
+    parser.addoption("--skip-init", action="store_true", help="skips initing testing Terraform module")
+    parser.addoption("--skip-apply", action="store_true", help="skips applying testing Terraform module")
     parser.addoption("--skip-truncate", action="store_true", help="skips truncating execution table")
 
 def pytest_generate_tests(metafunc):
@@ -33,8 +32,8 @@ def pytest_generate_tests(metafunc):
     if metafunc.config.getoption('skip_truncate'):
         metafunc.parametrize('truncate_executions', [True], scope='session', ids=['skip_truncate'], indirect=True)
 
+    #TODO: Since only one case per cls, see if it's possible to get class case within request objected via request.cls.case to remove need to use parametrization
     if hasattr(metafunc.cls, 'case'):
-
         if 'case_param' in metafunc.fixturenames:
             metafunc.parametrize('case_param', [metafunc.cls.case], scope='class', ids=['case'], indirect=True)
 
@@ -94,14 +93,6 @@ def cur(conn):
     cur = conn.cursor()
     yield cur
     cur.close()
-
-@pytest.fixture(scope="session")
-def cb():
-    return boto3.client('codebuild')
-
-@pytest.fixture(scope='session')
-def sf():
-    return boto3.client('stepfunctions')
 
 @pytest.fixture(scope='module')
 def gh():
@@ -177,8 +168,10 @@ def reset_merge_lock_ssm_value(request, mut_output):
     yield ssm.put_parameter(Name=mut_output['merge_lock_ssm_key'], Value='none', Type='String', Overwrite=True)
 
 @pytest.fixture(scope='module', autouse=True)
-def abort_hanging_sf_executions(sf, mut_output):
+def abort_hanging_sf_executions(mut_output):
     yield None
+
+    sf = boto3.client('stepfunctions')
 
     log.info('Stopping step function execution if left hanging')
     execution_arns = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'], statusFilter='RUNNING')['executions']]
@@ -193,9 +186,12 @@ def abort_hanging_sf_executions(sf, mut_output):
         )
 
 @pytest.fixture(scope='module', autouse=True)
-def destroy_scenario_tf_resources(cb, conn, mut_output):
+def destroy_scenario_tf_resources(conn, mut_output):
 
     yield None
+
+    cb = boto3.client('codebuild')
+
     log.info('Destroying Terraform provisioned resources from test repository')
 
     with conn.cursor() as cur:
@@ -239,6 +235,15 @@ def destroy_scenario_tf_resources(cb, conn, mut_output):
         ids.append(response['build']['id'])
     
     log.info('Waiting on destroy builds to finish')
-    statuses = Integration().get_build_status(cb, mut_output['codebuild_terra_run_name'], ids=ids)
+    statuses = Integration().get_build_status(mut_output['codebuild_terra_run_name'], ids=ids)
 
     log.info(f'Finished Statuses:\n{statuses}')
+
+@pytest.fixture(scope='module')
+def cleanup_dummy_repo(gh, request):
+    yield request.param
+    try:
+        log.info(f'Deleting dummy GitHub repo: {request.param}')
+        gh.get_user().get_repo(request.param).delete()
+    except github.GithubException.UnknownObjectException:
+        log.info('GitHub repo does not exist')
