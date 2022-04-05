@@ -3,6 +3,7 @@ import uuid
 from tests.integration.helpers import dummy_tf_provider_resource
 
 class TestBasePR(test_integration.Integration):
+    '''TODO'''
     case = {
         'head_ref': f'feature-{uuid.uuid4()}',
         'executions': {
@@ -26,10 +27,11 @@ class TestBasePR(test_integration.Integration):
     }
 
 class TestDeployPR(test_integration.Integration):
-    depends_on = {
-        'class': ['TestBasePR'],
-        'tests': []
-    }
+    '''TODO'''
+    # depends_on = {
+    #     'class': ['TestBasePR'],
+    #     'tests': []
+    # }
     case = {
         'head_ref': f'feature-{uuid.uuid4()}',
         'executions': {
@@ -63,6 +65,7 @@ class TestDeployPR(test_integration.Integration):
     }
 
 class TestRevertPR(test_integration.Integration):
+    '''TODO'''
     case = {
         'head_ref': f'revert-{TestDeployPR.case["head_ref"]}',
         'revert_ref': TestDeployPR.case['head_ref'],

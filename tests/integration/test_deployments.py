@@ -3,6 +3,10 @@ from tests.integration.helpers import dummy_tf_output
 import uuid
 
 class TestSucceededDeployment(test_integration.Integration):
+    '''
+    Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
+    See the account_dim table to see the account dependency testing layout.
+    '''
     case = {
         'head_ref': f'feature-{uuid.uuid4()}',
         'executions': {
@@ -22,6 +26,12 @@ class TestSucceededDeployment(test_integration.Integration):
     }
 
 class TestRejectedDeployment(test_integration.Integration):
+    '''
+    Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
+    See the account_dim table to see the account dependency testing layout.
+    The rejection of the first deployment's approval should cause the second planned deployment to be aborted
+    and not have an associated Step Function execution created.
+    '''
     case = {
         'head_ref': f'feature-{uuid.uuid4()}',
         'executions': {
