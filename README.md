@@ -4,11 +4,31 @@
 
 `terragrunt run-all xxx` commands have a limitation of inaccurately outputting the dependency values for child terraform configurations if the parent terraform configuration changes. The current advice is to exclude `terragrunt run-all xxx` from CI systems and run individual `terragrunt xxx` within each target directory. This imposes the tedious process of manually updating what directories to run on and the explicit ordering between them within the CI pipeline. 
 
+TODO: Reference SO/GitHub posts: 
+
+ https://github.com/gruntwork-io/terragrunt/issues/720#issuecomment-497888756
+
+ https://github.com/gruntwork-io/terragrunt/issues/262
+
+## Design
+
+TODO: Insert cloudcraft design architecture here
 
 ## Use Cases
 
+- Monolithic repo structure
+- Multi AWS account deployments
+- Account-level approval management
 
-## Update Process 
+## Why AWS Step Function for deployment flow?
+
+### Dynamic Conditional Workflow
+It would seem like CodePipeline would be a simple and approriate service for hosting the deployment workflow. Given the benefits of integrated
+approval flows managed via IAM users/roles, simple and intuitive GUI and .. it seems like a viable option. Even with these benefits, CodePipeline limitation for handling dynamic and conditinal workflows was enough of a reason to use Step Function instread. Step Funciton has the ability to handle complex conditional workflows by using what called [](). Given the output or results of one task, Step Function can dynamically choose what task to run next. 
+
+### Pricing
+
+### Updating Process
 
 CodePipeline:
 """
@@ -21,6 +41,15 @@ Step Function:
 When you update a state machine, your updates are eventually consistent. After a few seconds or minutes, all newly started executions will reflect your state machine's updated definition and roleARN. All currently running executions will run to completion under the previous definition and roleARN before updating.
 """
 https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update-state-machine-step-3
+
+
+## CLI Requirements
+| Name | Version |
+|------|---------|
+| awscli | >= 1.22.5 |
+| python3 | >= 3.9 |
+| pip | >= 22.0.4 |
+| docker | >= 20.10.8 |
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -122,6 +151,22 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
+# Deploy the Terraform Module
+
+For a demo of the module that will cleanup any resources created, see the `Integration` section of this README. The step below are meant for implementing the module into your current AWS ecosytem.
+1. Open a terragrunt `.hcl` or terraform `.tf` file
+2. Ensure that the module will be deployed within an AWS account that will have access to roles within other AWS accounts that
+2. Create a module block using this repo as the source
+3. Fill in the required module variables
+4. Run `terraform init` to download the module
+5. Run `terraform plan` to see what resources will be created
+6. Run `terraform apply` and enter `yes` to the approval prompt
+7. Refill coffee and wait for resources to be created
+8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in tfstate file
+9. Merge the PR
+10. Wait for the approval email to be sent to the email associated with the changed directory's tfstate
+11. Click either the approval or deny link
+12. Check to see if the Terraform changes have been deployed
 
 # Testing
 
@@ -129,7 +174,33 @@ https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update
 
 ### Requirements
 
-# TODO:
+The following tools are required:
+- [Docker](https://docs.docker.com/get-docker/)
 
-- Replace Codebuild version of merge lock process with Lambda version. Using AGW webhook with Lambda response would likely be faster than codebuild
-- 
+The following environment variables are required to be set:
+- AWS Credentials:
+    - `AWS_ACCESS_KEY_ID`
+    - `AWS_SECRET_ACCESS_KEY`
+    - `AWS_REGION`
+    - `AWS_DEFAULT_REGION`
+    - `AWS_SESSION_TOKEN`
+- Github personal access token of the GitHub account that will host dummy GitHub resources
+    - `GITHUB_TOKEN`
+
+The steps below will setup a testing Docker environment for running integration tests.
+
+1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/mut-terraform-aws-infrastructure-live-ci.git`
+2. Within your CLI, change into the root of the repo
+3. Ensure that the environment variables for the AWS credentials are set for the AWS account that will provision the Terraform module resources
+4. Exec into the testing docker container by running the command: `bash setup.sh --remote`
+5. Change to the integration testing directory: `cd tests/integration`
+6. To see a simple demo of how the CI pipeline works:
+    - If you want to run simple integration test cases run `pytest test_deployments.py`
+    - If you want to cleanup all the resouces created after running the tests: `pytest test_deployments.py --tf-destroy` 
+7. If you want to run subsequent tests after the initial pytest command, run `pytest test_deployments.py --skip-init --skip-apply` to skip running `terraform init` and `terraform apply` since the resources will still be alive
+8. As mentioned above, cleanup any resources created by running a test file with the `--tf-destroy` flag like so: `pytest test_deployments.py --tf-destroy`
+
+# TODO:
+- Implement --tf-destroy pytest flag
+- Implement --remote and --local setup flags
+- Update Lambda Function unit tests
