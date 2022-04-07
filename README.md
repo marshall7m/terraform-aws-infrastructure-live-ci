@@ -12,7 +12,120 @@ TODO: Reference SO/GitHub posts:
 
 ## Design
 
-TODO: Insert cloudcraft design architecture here
+![Cloudcraft](cloudcraft.png)
+
+1. GitHub user commits to a feature branch and creates a PR to merge into the source branch. The source branch represents the live Terraform configurations and and should be reflected within the Terraform state files. As the user continues to push Terraform related commit changes to the PR, a Lambda function will update the commit status notifying if merging the PR is available or not. Merging will be locked if a merged PR is in the process of the CI pipeline. Once the CI pipeline is finished, the downstream Lambda function (see #4) will update the merge lock status value. 
+
+    `**NOTE The PR committer will have to create another commit once the merge lock status is unlocked to get an updated merge lock commit status. **`
+
+2. If the merge lock commit status is unlocked, a user with merge permissions can then merge the PR.
+
+3. Once the PR is merged, a Codebuild project will update the merge lock status and then scan the source branch for changes made from the PR. The build will insert records into the metadb for each directory that contains differences in it's respective Terraform plan. After the records are inserted, the build will invoke another Lambda function.
+
+4. A Lambda function will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into json objects and pass each json into separate Step Function executions. An in-depth description of the Step Function flow can be found under the `Step Execution Flow` section.
+
+5. After every Step Function execution, a Cloudwatch event rule will invoke the Lambda Function mentioned in step #4 above. The Lambda function will update the Step Function execution's associated metadb record status with the Step Function execution status. The Lambda function will then repeat the same process as mentioned in step #4 until there are no records that are waiting to be runned with a Step Function execution. As stated above, the Lambda function will update the merge lock status value to allow other Terraform related PRs to be merged.
+
+## Step Function Execution Flow
+
+### Input
+
+Each execution is passed a json input that contains record attributes that will help configure the tasks within the Step Function. A sample json input will contain the following:
+
+```
+{
+  "execution_id": "run-1-c8c5-dev-baz-729",
+  "is_rollback": false,
+  "pr_id": 1,
+  "commit_id": "c8c5f6afc7345bd21cd79acaf740dc18b60755e3",
+  "base_ref": "refs/heads/master",
+  "head_ref": "refs/heads/feature-5320d796-6511-4b05-8adf-47382b46afe2",
+  "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
+  "cfg_deps": [
+    "directory_dependency/dev-account/global"
+  ],
+  "status": "running",
+  "plan_command": "terragrunt plan --terragrunt-working-dir directory_dependency/dev-account/us-west-2/env-one/baz",
+  "deploy_command": "terragrunt apply --terragrunt-working-dir directory_dependency/dev-account/us-west-2/env-one/baz -auto-approve",
+  "new_providers": ["registry.terraform.io/hashicorp/null"],
+  "new_resources": ["null_resource.this"],
+  "account_name": "dev",
+  "account_path": "directory_dependency/dev-account",
+  "account_deps": [
+    "shared_services"
+  ],
+  "voters": [
+    "success@simulator.amazonses.com"
+  ],
+  "approval_voters": [],
+  "min_approval_count": 1,
+  "rejection_voters": [],
+  "min_rejection_count": 1,
+  "plan_role_arn": "arn:aws:iam::111111111111:role/terraform-aws-infrastructure-live-ci-plan",
+  "deploy_role_arn": "arn:aws:iam::111111111111:role/terraform-aws-infrastructure-live-ci-deploy"
+}
+```
+
+`execution_id`: An unique idenifier that represents the execution name. The ID is formatted to to be `run-{pr_id}-{first four digits of commit_id}-{account_name}-{leaf child directory of cfg_path}-{random three digits}`. Only three random digits are used because if the record has a long account_name and/or cfg_path, the execution_id may exceed Step Function's 80 character or less execution name limit.
+
+`is_rollback`: Determines if the execution pertains to a deployment that will rollback changes from a previous execution. (See section `Rollbacks` for more info)
+
+`pr_id`: Pull Request Number
+
+`commit_id`: Pull Request merge commit ID
+
+`base_ref`: Branch that the pull request was merged into
+
+`head_ref`: Branch that was merged into the base branch
+
+`cfg_path`: A directories relative path to the GitHub repository's root path
+
+`cfg_deps`: List of `cfg_path` directories that this `cfg_path` depends on. Dependencies are defined via Terragrunt dependencies blocks (see this [Terragrunt page referernce](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#dependencies) for more info)
+
+`status`: Status of the Step Function execution. Statuses can be `waiting|running|succeeded|failed|aborted`
+
+`plan_command`: Terragrunt command used to display the Terraform plan within the Step Function `Plan` task
+
+`deploy_command`: Terragrunt command used to deploy the Terraform configurations within the Step Function `Deploy` task
+
+`new_providers`: List of new providers introduced by the pull request (See section `Rollbacks` for more info)
+
+`new_resources`: List of new provider resources that were deployed (See section `Rollbacks` for more info)
+
+`account_name`: AWS account the `cfg_path` will deploy resources to
+
+`account_deps`: List of AWS accounts (`account_name`) the record's `account_name` depends on
+
+`voters`: List of email addresses to send approval request to
+
+`approval_voters`: List of `voters` who have approved the deployment
+
+`min_approval_count`: Minimum number of approvals needed to deploy
+
+`rejection_voters`: List of `voters` who have rejected the deployment
+
+`min_rejection_count`: Minimum number of rejections needed to decline the deployment
+
+`plan_role_arn`: AWS IAM role used to run `plan_command`
+
+`deploy_role_arn`: AWS IAM role used to run `deploy_command`
+
+
+### Definition
+
+The Step Function definition comprises of six tasks. 
+
+`Plan`:
+
+`Request Approval`:
+
+`Approval Results`
+
+`Deploy`:
+
+`Success`:
+
+`Reject`:
 
 ## Use Cases
 
@@ -201,6 +314,12 @@ The steps below will setup a testing Docker environment for running integration 
 8. As mentioned above, cleanup any resources created by running a test file with the `--tf-destroy` flag like so: `pytest test_deployments.py --tf-destroy`
 
 # TODO:
+
+Testing:
 - Implement --tf-destroy pytest flag
 - Implement --remote and --local setup flags
 - Update Lambda Function unit tests
+
+ReadME:
+- Problem section
+- Rollback section
