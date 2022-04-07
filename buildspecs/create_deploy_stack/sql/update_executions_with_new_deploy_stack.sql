@@ -5,7 +5,6 @@ INSERT INTO executions (
         commit_id,
         base_ref,
         head_ref,
-        head_source_version,
         cfg_path,
         cfg_deps,
         "status",

@@ -18,7 +18,6 @@ INSERT INTO executions (
     commit_id,
     base_ref,
     head_ref,
-    head_source_version,
     cfg_path,
     cfg_deps,
     "status",
@@ -44,7 +43,6 @@ SELECT
     commit_id,
     base_ref,
     head_ref,
-    head_source_version,
     cfg_path,
     -- gets cfg dependencies that depend on cfg_path (essentially reversing the dependency tree)
     ARRAY(
@@ -77,7 +75,6 @@ FROM (
         commit_id,
         base_ref,
         head_ref,
-        head_source_version,
         cfg_path,
         cfg_deps,
         'waiting' AS "status",

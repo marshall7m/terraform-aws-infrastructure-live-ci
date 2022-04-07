@@ -140,10 +140,6 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
             SELECT DISTINCT(e.head_ref) INTO NEW.head_ref FROM executions e;
         END IF;
 
-        IF NEW.head_source_version IS NULL THEN
-            NEW.head_source_version := 'refs/pull/' || NEW.pr_id || '/head^{' || NEW.commit_id || '}';
-        END IF;
-
         IF NEW.plan_command IS NULL THEN
             IF NEW.cfg_path IS NOT NULL THEN
                 NEW.plan_command := CASE
@@ -197,7 +193,6 @@ WHEN (
     OR NEW.status IS NULL
     OR NEW.base_ref IS NULL
     OR NEW.head_ref IS NULL
-    OR NEW.head_source_version IS NULL
     OR NEW.is_rollback IS NULL
     OR NEW.commit_id IS NULL
     OR NEW.account_name IS NULL
