@@ -115,17 +115,17 @@ Each execution is passed a json input that contains record attributes that will 
 
 The Step Function definition comprises of six tasks. 
 
-`Plan`:
+`Plan`: A CodeBuild project will spin up a build that will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created/modified.
 
-`Request Approval`:
+`Request Approval`: A Lambda Function will send an approval request via AWS SES to every email address defined under the record's `voters` attribute. When a voter approves/reject a deployment, a separate Lambda Function updates the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a task success token back to the associated Step Function execution.
 
-`Approval Results`
+`Approval Results`: Based on which minimum approval count is met, this task will conditionally choose which task to run next. If the approval count is met, the `Deploy` task will be runned. If the rejection count is met, the `Reject` task will be runned.
 
-`Deploy`:
+`Deploy`: A CodeBuild project will spin up a build that will run the record's associated `deploy_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created/modified. If the deployment created new provider resources, a bash script will update the record's associated `new_resources` attribute with the new provider resource addresses that were created.
 
-`Success`:
+`Success`: If all Step Function tasks were successful, this task will output a status of `succeeded` along other output attributes.
 
-`Reject`:
+`Reject`: If any Step Function tasks was unsuccessful, this task will output a status of `failed` along other output attributes.
 
 ## Use Cases
 
@@ -139,7 +139,27 @@ The Step Function definition comprises of six tasks.
 It would seem like CodePipeline would be a simple and approriate service for hosting the deployment workflow. Given the benefits of integrated
 approval flows managed via IAM users/roles, simple and intuitive GUI and .. it seems like a viable option. Even with these benefits, CodePipeline limitation for handling dynamic and conditinal workflows was enough of a reason to use Step Function instread. Step Funciton has the ability to handle complex conditional workflows by using what called [](). Given the output or results of one task, Step Function can dynamically choose what task to run next. 
 
-### Pricing
+## Pricing
+
+### Lambda
+
+All six Lambda Functions, use the x86 architechure. The price is $0.0000166667 for every GB-second and $0.20 per million requests. The AWS Lambda free tier includes one million free requests per month and 400,000 GB-seconds of compute time per month. Given use of the Lambda Functions are revolved around infrastructure changes, the total amount of invocations will likely be minimal and will probably only chip away a tiny fraction the free tier allocation.
+
+### CodeBuild
+
+The build.general1.small instance type is used for both builds within this module. The cost for the instance is $0.00425 per build minute. The price per build will vary since the amount of resources within Terraform configurations will also vary. The more Terraform resources the configuration manages, the longer the build will be.
+
+### Step Function
+
+For the `us-west-2a` region, the cost for the [standard workflow](https://docs.aws.amazon.com/en_us/step-functions/latest/dg/concepts-standard-vs-express.html) is $0.0279 per state transition. The Step Function definition contains only four state transitions. So .0279 * 4 = $0.1116 every Step Function execution.
+
+### RDS
+
+The metadb uses a [Aurora Serverless](https://aws.amazon.com/rds/aurora/serverless/) PostgreSQL database type. Essentially a serverless database will allow users to only pay for when the database is in use and free up users from managing the database capacity given that it will automatically scale based on demand. The serverless type is benefitial for this use case given that the metadb is only used when a PR is merged. Since this module is dealing with live infrastructure and not application changes, there will likely be long periods of time between PR merges. The serverless type starts with one ACU (Aurora Capacity Units) which contains two GB of memory. The use of the database is likely never to scale beyond using two GB of memory so using one ACU will likely be constant. The pricing is $0.08 per ACU Hour for the `us-west-2a` region.
+
+### EventBridge
+
+Given EventBridge rules and event deliveries are free, the Step Function execution rule and event delivery to the Lambda Function produces no cost.
 
 ### Updating Process
 
@@ -323,3 +343,5 @@ Testing:
 ReadME:
 - Problem section
 - Rollback section
+- Why AWS Step Function for deployment flow?
+- Use Cases
