@@ -126,7 +126,7 @@ EOF
 }
 
 variable "codebuild_common_env_vars" {
-  description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commmands."
+  description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
   type = list(object({
     name  = string
     value = string
@@ -223,7 +223,7 @@ variable "create_deploy_stack_build_name" {
 }
 
 variable "terra_run_build_name" {
-  description = "Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions"
+  description = "Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions"
   type        = string
   default     = null
 }

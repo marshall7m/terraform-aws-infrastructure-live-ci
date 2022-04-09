@@ -208,24 +208,24 @@ Requirements below are needed in order to run `terraform apply` within this modu
  
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
- 
+
 | Name | Version |
 |------|---------|
 | terraform | >= 0.14.0 |
 | aws | >= 3.44 |
 | github | ~> 4.0 |
- 
+
 ## Providers
- 
+
 | Name | Version |
 |------|---------|
 | archive | n/a |
 | aws | >= 3.44 |
 | github | ~> 4.0 |
 | null | n/a |
- 
+
 ## Inputs
- 
+
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | account\_parent\_cfg | AWS account-level configurations.<br>  - name: AWS account name (e.g. dev, staging, prod, etc.)<br>  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)<br>  - voters: List of email addresses that will be sent approval request to<br>  - min\_approval\_count: Minimum approval count needed for CI pipeline to run deployment<br>  - min\_rejection\_count: Minimum rejection count needed for CI pipeline to decline deployment<br>  - dependencies: List of AWS account names that this account depends on before running any of it's deployments <br>    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),<br>      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a<br>      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.<br>  - plan\_role\_arn: IAM role ARN within the account that the plan build will assume<br>    - \*\*CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised\*\*<br>  - deploy\_role\_arn: IAM role ARN within the account that the deploy build will assume<br>    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before\_hook block that<br>      conditionally defines that assume\_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,<br>      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then<br>      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles. | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>    plan_role_arn       = string<br>    deploy_role_arn     = string<br>  }))</pre> | n/a | yes |
@@ -265,7 +265,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | prefix | Prefix to attach to all resources | `string` | `null` | no |
 | repo\_name | Name of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
-| terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commmands withing Step Function executions | `string` | `null` | no |
+| terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions | `string` | `null` | no |
 | terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | terra\_run\_img | Docker, ECR or AWS CodeBuild managed image to use for the terra\_run CodeBuild project that runs plan/apply commands | `string` | `null` | no |
 | terra\_run\_vpc\_config | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
@@ -273,9 +273,9 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | terragrunt\_version | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `"0.31.0"` | no |
 | tf\_state\_read\_access\_policy | AWS IAM policy ARN that allows create deploy stack Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
 | trigger\_sf\_function\_name | Name of the AWS Lambda function used to trigger Step Function deployments | `string` | `null` | no |
- 
+
 ## Outputs
- 
+
 | Name | Description |
 |------|-------------|
 | approval\_request\_log\_group\_name | Cloudwatch log group associated with the Lambda function used for processing deployment approval responses |
@@ -303,7 +303,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | step\_function\_name | Name of the Step Function |
 | trigger\_sf\_function\_name | Name of the Lambda function used for triggering Step Function execution(s) |
 | trigger\_sf\_log\_group\_name | Cloudwatch log group associated with the Lambda function used for triggering Step Function execution(s) |
- 
+
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
  
 # Deploy the Terraform Module
