@@ -18,16 +18,21 @@ log.setLevel(logging.DEBUG)
 
 def pytest_addoption(parser):
 
-    parser.addoption("--skip-init", action="store_true", help="skips initing testing Terraform module")
-    parser.addoption("--skip-apply", action="store_true", help="skips applying testing Terraform module")
+    parser.addoption("--tf-init", action="store_true", help="inits testing Terraform module")
+    parser.addoption("--tf-apply", action="store_true", help="applys testing Terraform module")
+    parser.addoption("--tf-destroy", action="store_true", help="destroys testing Terraform module")
+
     parser.addoption("--skip-truncate", action="store_true", help="skips truncating execution table")
 
 def pytest_generate_tests(metafunc):
-    if metafunc.config.getoption('skip_init'):
-        metafunc.parametrize('mut', [True], scope='session', ids=['skip_init'], indirect=True)
+    if metafunc.config.getoption('tf_init'):
+        metafunc.parametrize('mut', [True], scope='session', ids=['tf_init'], indirect=True)
 
-    if metafunc.config.getoption('skip_apply'):
-        metafunc.parametrize('mut_output', [True], scope='session', ids=['skip_apply'], indirect=True)
+    if metafunc.config.getoption('tf_apply'):
+        metafunc.parametrize('mut_output', [True], scope='session', ids=['tf_apply'], indirect=True)
+    
+    if metafunc.config.getoption('tf_destroy'):
+        metafunc.parametrize('mut_output', [True], scope='session', ids=['tf_destroy'], indirect=True)
 
     if metafunc.config.getoption('skip_truncate'):
         metafunc.parametrize('truncate_executions', [True], scope='session', ids=['skip_truncate'], indirect=True)
@@ -53,10 +58,10 @@ def mut(request, tf_version):
     tf = tftest.TerraformTest(tf_dir)
 
     if getattr(request, 'param', False):
-        log.info('Skip initing testing tf module')
-    else:
         log.info('Initing testing tf module')
         tf.init()
+    else:
+        log.info('Skip initing testing tf module')
 
     yield tf
     
@@ -67,15 +72,19 @@ def mut_plan(mut, request):
 
 @pytest.fixture(scope="session")
 def mut_output(mut, request):
-    if getattr(request, 'param', False):
-        log.info('Skip applying testing tf module')
-    else:    
+    if getattr(getattr(request, 'param', False), 'tf_apply', False):
         log.info('Applying testing tf module')
         mut.apply(auto_approve=True)
+    else:    
+        log.info('Skip applying testing tf module')
+    
     yield {k: v['value'] for k, v in mut.output().items()}
 
-    # create flag for cleaning up testing module?
-    # tf.destroy(auto_approve=True)
+    if getattr(getattr(request, 'param', False), 'tf_destroy', False):
+        log.info('Destroying testing tf module')
+        mut.apply(destroy=True)
+    else:    
+        log.info('Skip destroying testing tf module')
 
 @pytest.fixture(scope="session")
 def conn(mut_output):
