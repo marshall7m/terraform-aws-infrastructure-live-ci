@@ -279,7 +279,7 @@ class Integration:
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
-        """Assert PR's head commit ID has a successful merge lock status"""
+        '''Assert PR's head commit ID has a successful merge lock status'''
         wait = 3
 
         statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
@@ -291,6 +291,19 @@ class Integration:
         log.info('Assert PR head commit status is successful')        
         assert statuses.totalCount == 1
         assert statuses[0].state == 'success'
+    
+    @timeout_decorator.timeout(30)
+    @pytest.mark.dependency()
+    def test_pr_plan_codebuild(self, mut_output, pr):
+        '''Assert PR plan codebuild status matches it's expected status'''
+
+        log.info('Giving build time to start')
+        time.sleep(5)
+
+        status = self.get_build_finished_status(mut_output["codebuild_pr_plan_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})[0]
+
+        log.info('Assert build succeeded')
+        assert status == 'SUCCEEDED'
 
     @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
@@ -302,6 +315,7 @@ class Integration:
         convoluted with multiple PR records to be staged for deployment
         '''
         depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
+        depends(request, [f'{request.cls.__name__}::test_pr_plan_codebuild[{request.node.callspec.id}]'])
 
         log.info('Merging PR')
         merge_pr(pr['base_ref'], pr['head_ref'])
