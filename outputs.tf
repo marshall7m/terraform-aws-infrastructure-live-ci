@@ -50,6 +50,11 @@ output "metadb_ci_password" {
   sensitive   = true
 }
 
+output "codebuild_pr_plan_name" {
+  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PR"
+  value       = module.codebuild_pr_plan.name
+}
+
 output "codebuild_create_deploy_stack_name" {
   description = "Name of the CodeBuild project that creates the deployment records within the metadb"
   value       = module.codebuild_create_deploy_stack.name

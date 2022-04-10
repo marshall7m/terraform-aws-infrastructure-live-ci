@@ -1,6 +1,7 @@
 locals {
   merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
 
+  pr_plan_build_name                  = coalesce(var.pr_plan_build_name, "${var.step_function_name}-pr-plan")
   create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.step_function_name}-create-deploy-stack")
   terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
@@ -198,6 +199,103 @@ EOT
   ]
 }
 
+module "codebuild_pr_plan" {
+  source = "github.com/marshall7m/terraform-aws-codebuild"
+  name   = local.pr_plan_build_name
+
+  environment = {
+    compute_type = "BUILD_GENERAL1_SMALL"
+    image        = coalesce(var.terra_run_img, module.ecr_terra_run[0].full_image_url)
+    type         = "LINUX_CONTAINER"
+    environment_variables = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
+      {
+        name  = "TF_IN_AUTOMATION"
+        value = "true"
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "TF_INPUT"
+        value = "false"
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "METADB_NAME"
+        value = local.metadb_name
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "METADB_CLUSTER_ARN"
+        value = aws_rds_cluster.metadb.arn
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "METADB_SECRET_ARN"
+        value = aws_secretsmanager_secret_version.ci_metadb_user.arn
+        type  = "PLAINTEXT"
+      },
+      {
+        name  = "ACCOUNT_DIM"
+        value = "${jsonencode(var.account_parent_cfg)}"
+        type  = "PLAINTEXT"
+      }
+    ])
+  }
+
+  vpc_config = var.pr_plan_vpc_config
+
+  source_version             = var.base_branch
+  source_auth_token          = var.github_token_ssm_value
+  source_auth_server_type    = "GITHUB"
+  source_auth_type           = "PERSONAL_ACCESS_TOKEN"
+  source_auth_ssm_param_name = var.github_token_ssm_key
+
+  artifacts = {
+    type = "NO_ARTIFACTS"
+  }
+
+  webhook_filter_groups = [
+    [
+      {
+        pattern = "PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED"
+        type    = "EVENT"
+      },
+      {
+        pattern = var.base_branch
+        type    = "BASE_REF"
+      },
+      {
+        pattern = var.file_path_pattern
+        type    = "FILE_PATH"
+      }
+    ]
+  ]
+
+  build_source = {
+    type                = "GITHUB"
+    git_clone_depth     = 1
+    insecure_ssl        = false
+    location            = data.github_repository.this.http_clone_url
+    report_build_status = true
+    buildspec           = <<-EOT
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - |
+        ${replace(replace(file("${path.module}/buildspecs/pr_plan/plan.sh"), "\t", "  "), "\n", "\n        ")}
+EOT
+  }
+  role_policy_statements = [
+    {
+      sid       = "CrossAccountTerraformPlanAccess"
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
+    }
+  ]
+}
 
 module "codebuild_terra_run" {
   source = "github.com/marshall7m/terraform-aws-codebuild"

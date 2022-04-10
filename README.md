@@ -12,7 +12,6 @@ Before getting into how the entire module works, we'll dive into the proposed so
  
 The process of figuring out what dependency paths to select involves using `terragrunt run-all plan -detailed-exitcode` (command is shortened to include only relevant arguments). The `terragrunt run-all plan` portion will traverse from the root terragrunt directory down to every child Terragrunt directory. It will then run `teraform plan -detailed-exitcode` within each directory and output the [exitcode](https://www.terraform.io/cli/commands/plan#detailed-exitcode) that represents whether the plan contains changes or not. If the directory does contain changes, the directory path and its associated dependencies directory paths that also have changes will be collected. For example, if `dev/bar` has changed and has a dependency on unchanged `dev/foo` and changed `dev/baz`, `dev/bar` and `dev/baz` but not `dev/foo` will be collected. After all directories and their associated dependencies are gathered, they are put into separate database records that will then be used by an downstream Lambda Function for processing the order in which they are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./buildspecs/create_deploy_stack/create_deploy_stack.py).
  
-Checkout the next section to see how it all works.
  
 ## Design
  
@@ -84,7 +83,7 @@ Each execution is passed a json input that contains record attributes that will 
  
 `cfg_path`: A directories relative path to the GitHub repository's root path
  
-`cfg_deps`: List of `cfg_path` directories that this `cfg_path` depends on. Dependencies are defined via Terragrunt dependencies blocks (see this [Terragrunt page referernce](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#dependencies) for more info)
+`cfg_deps`: List of `cfg_path` directories that this `cfg_path` depends on. Dependencies are defined via Terragrunt dependencies blocks (see this [Terragrunt page](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#dependencies) for more info)
  
 `status`: Status of the Step Function execution. Statuses can be `waiting|running|succeeded|failed|aborted`
  
@@ -262,6 +261,9 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
 | metadb\_username | Master username of the metadb | `string` | `"root"` | no |
+| pr\_plan\_build\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PR | `string` | `null` | no |
+| pr\_plan\_env\_vars | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
+| pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | prefix | Prefix to attach to all resources | `string` | `null` | no |
 | repo\_name | Name of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
@@ -284,6 +286,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | codebuild\_create\_deploy\_stack\_arn | ARN of the CodeBuild project that creates the deployment records within the metadb |
 | codebuild\_create\_deploy\_stack\_name | Name of the CodeBuild project that creates the deployment records within the metadb |
 | codebuild\_create\_deploy\_stack\_role\_arn | IAM role ARN of the CodeBuild project that creates the deployment records within the metadb |
+| codebuild\_pr\_plan\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PR |
 | codebuild\_terra\_run\_arn | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | codebuild\_terra\_run\_name | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | codebuild\_terra\_run\_role\_arn | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
@@ -350,16 +353,14 @@ The steps below will setup a testing Docker environment for running integration 
 4. Exec into the testing docker container by running the command: `bash setup.sh --remote`
 5. Change to the integration testing directory: `cd tests/integration`
 6. To see a simple demo of how the CI pipeline works:
-   - If you want to run simple integration test cases run `pytest test_deployments.py`
+   - If you want to run simple integration test cases run `pytest test_deployments.py --tf-init --tf-apply`
    - If you want to cleanup all the resources created after running the tests: `pytest test_deployments.py --tf-destroy`
-7. If you want to run subsequent tests after the initial pytest command, run `pytest test_deployments.py --skip-init --skip-apply` to skip running `terraform init` and `terraform apply` since the resources will still be alive
+7. If you want to run subsequent tests after the initial pytest command, run `pytest test_deployments.py` to skip running `terraform init` and `terraform apply` since the resources will still be alive
 8. As mentioned above, cleanup any resources created by running a test file with the `--tf-destroy` flag like so: `pytest test_deployments.py --tf-destroy`
  
 # TODO:
  
 Testing:
-- Implement --tf-destroy pytest flag
-- Implement --remote and --local setup flags
 - Update Lambda Function unit tests
  
 Critical:
@@ -369,3 +370,5 @@ Features:
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 
+-- see how --terragrunt-iam-role sets credentials and use by interpolating it with plan/apply_role_arn into the TG_COMMAND env var
+if pr plan build with flag works then change

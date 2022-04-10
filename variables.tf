@@ -60,6 +60,35 @@ variable "merge_lock_build_name" {
   default     = null
 }
 
+variable "pr_plan_build_name" {
+  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PR"
+  type        = string
+  default     = null
+}
+
+variable "pr_plan_vpc_config" {
+  description = <<EOF
+AWS VPC configurations associated with PR planning CodeBuild project. 
+Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+EOF
+  type = object({
+    vpc_id             = string
+    subnets            = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "pr_plan_env_vars" {
+  description = "Environment variables that will be provided to open PR's Terraform planning builds"
+  type = list(object({
+    name  = string
+    value = string
+    type  = optional(string)
+  }))
+  default = []
+}
+
 variable "terra_run_img" {
   description = "Docker, ECR or AWS CodeBuild managed image to use for the terra_run CodeBuild project that runs plan/apply commands"
   type        = string

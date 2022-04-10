@@ -19,6 +19,10 @@ output "merge_lock_ssm_key" {
   value = module.mut_infrastructure_live_ci.merge_lock_ssm_key
 }
 
+output "codebuild_pr_plan_name" {
+  value = module.mut_infrastructure_live_ci.codebuild_pr_plan_name
+}
+
 output "codebuild_create_deploy_stack_name" {
   value = module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_name
 }
@@ -49,7 +53,7 @@ output "pg_database" {
 }
 
 output "pg_host" {
-  value = module.mut_infrastructure_live_ci.metadb_address
+  value = module.mut_infrastructure_live_ci.metadb_endpoint
 }
 
 output "pg_port" {
