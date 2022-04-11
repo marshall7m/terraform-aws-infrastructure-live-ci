@@ -30,7 +30,6 @@ SELECT
     '{commit_id}',
     '{base_ref}',
     '{head_ref}',
-    'refs/pull/' || {pr_id} || '/head^{{' || '{commit_id}' || '}}',
     stack.cfg_path,
     stack.cfg_deps::TEXT[],
     'waiting',
