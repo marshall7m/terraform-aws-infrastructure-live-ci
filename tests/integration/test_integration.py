@@ -292,7 +292,7 @@ class Integration:
         assert statuses.totalCount == 1
         assert statuses[0].state == 'success'
     
-    @timeout_decorator.timeout(30)
+    @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
     def test_pr_plan_codebuild(self, mut_output, pr):
         '''Assert PR plan codebuild status matches it's expected status'''

@@ -244,7 +244,7 @@ def destroy_scenario_tf_resources(conn, mut_output):
         ids.append(response['build']['id'])
     
     log.info('Waiting on destroy builds to finish')
-    statuses = Integration().get_build_status(mut_output['codebuild_terra_run_name'], ids=ids)
+    statuses = Integration().get_build_finished_status(mut_output['codebuild_terra_run_name'], ids=ids)
 
     log.info(f'Finished Statuses:\n{statuses}')
 

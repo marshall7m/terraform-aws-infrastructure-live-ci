@@ -14,7 +14,7 @@ class TestSucceededDeployment(test_integration.Integration):
                 'actions': {
                     'deploy': 'approve'
                 },
-                'pr_files_content': [dummy_tf_output()]
+                'pr_files_content': [dummy_tf_output(), dummy_tf_output(), dummy_tf_output()]
             },
             'directory_dependency/dev-account/us-west-2/env-one/doo': {
                 'actions': {
