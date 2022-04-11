@@ -271,8 +271,9 @@ module "codebuild_pr_plan" {
   ]
 
   build_source = {
-    type                = "GITHUB"
-    git_clone_depth     = 1
+    type = "GITHUB"
+    # full clone needed to run `git branch` cmd in plan.sh
+    git_clone_depth     = 0
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
     report_build_status = true
