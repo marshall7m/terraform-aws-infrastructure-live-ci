@@ -286,7 +286,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | codebuild\_create\_deploy\_stack\_arn | ARN of the CodeBuild project that creates the deployment records within the metadb |
 | codebuild\_create\_deploy\_stack\_name | Name of the CodeBuild project that creates the deployment records within the metadb |
 | codebuild\_create\_deploy\_stack\_role\_arn | IAM role ARN of the CodeBuild project that creates the deployment records within the metadb |
-| codebuild\_pr\_plan\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PR |
+| codebuild\_pr\_plan\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PRs |
+| codebuild\_pr\_plan\_role\_arn | IAM role ARN of the CodeBuild project that creates Terraform plans for new/modified configurations within PRs |
 | codebuild\_terra\_run\_arn | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | codebuild\_terra\_run\_name | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | codebuild\_terra\_run\_role\_arn | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |

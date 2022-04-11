@@ -51,8 +51,13 @@ output "metadb_ci_password" {
 }
 
 output "codebuild_pr_plan_name" {
-  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PR"
+  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PRs"
   value       = module.codebuild_pr_plan.name
+}
+
+output "codebuild_pr_plan_role_arn" {
+  description = "IAM role ARN of the CodeBuild project that creates Terraform plans for new/modified configurations within PRs"
+  value       = module.codebuild_pr_plan.role_arn
 }
 
 output "codebuild_create_deploy_stack_name" {

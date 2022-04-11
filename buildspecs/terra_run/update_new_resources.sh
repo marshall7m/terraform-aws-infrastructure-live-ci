@@ -46,11 +46,11 @@ if [ -n "$NEW_PROVIDERS" ] && [ "$NEW_PROVIDERS" != "[]" ] && [ "$IS_ROLLBACK" =
 
         echo "Adding new resources to execution record"
         aws rds-data execute-statement \
-        --resource-arn "$METADB_CLUSTER_ARN" \
-        --database "$METADB_NAME" \
-        --secret-arn "$METADB_SECRET_ARN" \
-        --sql "UPDATE executions SET new_resources = string_to_array(:new_resources, ' ') WHERE execution_id = :execution_id;" \
-        --parameters "$params"
+            --resource-arn "$METADB_CLUSTER_ARN" \
+            --database "$METADB_NAME" \
+            --secret-arn "$METADB_SECRET_ARN" \
+            --sql "UPDATE executions SET new_resources = string_to_array(:new_resources, ' ') WHERE execution_id = :execution_id;" \
+            --parameters "$params"
     else
         echo "New provider resources were not created -- skipping"
     fi
