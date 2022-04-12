@@ -261,11 +261,13 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
 | metadb\_username | Master username of the metadb | `string` | `"root"` | no |
+| pr\_approval\_acount | Number of GitHub approvals required to merge a PR with infrastructure changes | `number` | `1` | no |
 | pr\_plan\_build\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PR | `string` | `null` | no |
 | pr\_plan\_env\_vars | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | prefix | Prefix to attach to all resources | `string` | `null` | no |
 | repo\_name | Name of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
+| status\_check\_name | Name of the merge lock GitHub status | `string` | `"IAC Merge Lock"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions | `string` | `null` | no |
 | terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
@@ -364,12 +366,9 @@ The steps below will setup a testing Docker environment for running integration 
 Testing:
 - Update Lambda Function unit tests
  
-Critical:
-- Implement codebuild plan for open PR
- 
 Features:
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 
--- see how --terragrunt-iam-role sets credentials and use by interpolating it with plan/apply_role_arn into the TG_COMMAND env var
-if pr plan build with flag works then change
+- merge into master
+- create first release!

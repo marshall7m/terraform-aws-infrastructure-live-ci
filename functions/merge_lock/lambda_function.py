@@ -4,11 +4,18 @@ import json
 import os
 import requests
 import sys
+import urllib
+import re
 from pprint import pformat
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 ssm = boto3.client('ssm')
+
+def aws_encode(value):
+    value = urllib.parse.quote_plus(value)
+    value = re.sub(r"\+", " ", value)
+    return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
 def lambda_handler(event, context):
     '''Creates a PR commit status that shows the current merge lock status'''
@@ -27,16 +34,21 @@ def lambda_handler(event, context):
     log.info(f'Merge lock value: {merge_lock}')
 
     approval_url = f'https://{token}:x-oauth-basic@api.github.com/repos/{repo_full_name}/statuses/{commit_id}'
-    
+    target_url = f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'
+
     if merge_lock != 'none':
         data = {
             'state': 'pending', 
-            'description': f'Merging Terragrunt changes is locked. Integration is running for PR #{merge_lock}'
+            'description': f'Locked -- In Progress PR #{merge_lock}',
+            'context': os.environ['STATUS_CHECK_NAME'],
+            'target_url': target_url
         }
     elif merge_lock == 'none':
         data = {
             'state': 'success',
-            'description': 'Merging infrastructure changes are unlocked'
+            'description': 'Unlocked',
+            'context': os.environ['STATUS_CHECK_NAME'],
+            'target_url': target_url
         }
     else:
         log.error(f'Invalid merge lock value: {merge_lock}')

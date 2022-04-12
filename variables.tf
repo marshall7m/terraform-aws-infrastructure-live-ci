@@ -198,6 +198,18 @@ variable "merge_lock_ssm_key" {
   default     = null
 }
 
+variable "status_check_name" {
+  description = "Name of the merge lock GitHub status"
+  type        = string
+  default     = "IAC Merge Lock"
+}
+
+variable "pr_approval_acount" {
+  description = "Number of GitHub approvals required to merge a PR with infrastructure changes"
+  type        = number
+  default     = 1
+}
+
 ### GITHUB-TOKEN ###
 
 variable "github_token_ssm_description" {
