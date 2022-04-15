@@ -2,21 +2,22 @@ import boto3
 import logging
 import json
 import os
+import sys
 import aurora_data_api
 from pprint import pformat
+
+sf = boto3.client('stepfunctions')
+
+log = logging.getLogger(__name__)
+stream = logging.StreamHandler(sys.stdout)
+log.addHandler(stream)
+log.setLevel(logging.DEBUG)
 
 def lambda_handler(event, context):
     '''
     Updates the approval or rejection count associated with the Terragrunt path.
     If the minimum approval or rejection count is met, a successful task token is sent to associated AWS Step Function
     '''
-
-    sf = boto3.client('stepfunctions')
-    ssm = boto3.client('ssm')
-    
-    log = logging.getLogger(__name__)
-    log.setLevel(logging.DEBUG)
-
     log.info(event)
 
     action = event['body']['action']
@@ -38,8 +39,10 @@ def lambda_handler(event, context):
                             recipient=event['body']['recipient'],
                             execution_id=event['query']['ex']
                         ))
-                        record = dict(zip(['status', 'approval_voters', 'min_approval_count', 'rejection_voters', 'min_rejection_count'], list(cur.fetchone())))
-
+                        try:
+                            record = dict(zip(['status', 'approval_voters', 'min_approval_count', 'rejection_voters', 'min_rejection_count'], list(cur.fetchone())))
+                        except TypeError:
+                            raise ClientException(f'Record with execution ID: {event["query"]["ex"]} does not exist')
             log.debug(f'Record:\n{pformat(record)}')
     
             if len(record['approval_voters']) == record['min_approval_count'] or len(record['rejection_voters']) == record['min_rejection_count']:
@@ -58,8 +61,12 @@ def lambda_handler(event, context):
                 'message': f'Approval submissions are not available anymore -- Execution Status: {status}'
             }
     except Exception as e:
-        log.error(e)
+        log.error(e, exc_info=True)
         return {
             'statusCode': 500,
             'message': 'Error while processing approval action'
         }
+
+class ClientException(Exception):
+    """Wraps around client-related errors"""
+    pass
