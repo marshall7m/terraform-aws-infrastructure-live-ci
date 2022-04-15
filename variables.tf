@@ -207,7 +207,7 @@ variable "status_check_name" {
 variable "pr_approval_acount" {
   description = "Number of GitHub approvals required to merge a PR with infrastructure changes"
   type        = number
-  default     = 1
+  default     = null
 }
 
 ### GITHUB-TOKEN ###
