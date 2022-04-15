@@ -41,7 +41,6 @@ if [ "$type" == "local" ]; then
   export PGDATABASE=testing_metadb
   export PGHOST=postgres
   export PGPORT=5432
-  export ADDITIONAL_PATH=/src/node_modules/.bin
 
   docker-compose up --detach
   docker-compose exec testing /bin/bash
