@@ -17,3 +17,4 @@ def tf_version():
         out = subprocess.run('tfenv install min-required && tfenv use min-required', shell=True, capture_output=True, check=True, text=True
         )
         log.debug(f'tfenv out: {out.stdout}')
+

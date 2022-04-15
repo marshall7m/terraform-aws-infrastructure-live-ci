@@ -126,8 +126,8 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
 
         IF NEW.status IS NULL THEN
             NEW.status := CASE
-                WHEN NEW.approval_count IS NOT NULL AND NEW.approval_count = NEW.min_approval_count THEN 'succeeded'
-                WHEN NEW.rejection_count IS NOT NULL AND NEW.rejection_count = NEW.min_rejection_count  THEN 'failed'
+                WHEN NEW.approval_voters IS NOT NULL AND CARDINALITY(NEW.approval_voters) = NEW.min_approval_count THEN 'succeeded'
+                WHEN NEW.rejection_voters IS NOT NULL AND CARDINALITY(NEW.rejection_voters) = NEW.min_rejection_count  THEN 'failed'
                 ELSE NULL
             END;
         END IF;
