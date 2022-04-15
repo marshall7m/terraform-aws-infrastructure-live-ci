@@ -22,7 +22,7 @@ log.setLevel(logging.DEBUG)
 class AssertionFailures(Exception):
     pass
 
-class TestSetup:
+class SetupUnit:
     def __init__(self, conn, git_url, git_dir, gh_token, remote_changes=False):
         self.remote_changes = remote_changes
         self.conn = conn
@@ -108,7 +108,7 @@ class TestSetup:
             cur.execute(query)
 
     @classmethod
-    def create_records(cls, conn, table, records, enable_defaults=None, update_parents=None):
+    def create_records(cls, conn, table, records, enable_defaults=None):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             if type(records) == dict:
                 records = [records]
@@ -119,10 +119,6 @@ class TestSetup:
             try:
                 if enable_defaults != None:
                     cls.toggle_trigger(conn, table, f'{table}_default', enable=enable_defaults)
-                
-                if update_parents != None:
-                    cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=update_parents)
-
                 for record in records:
                     cols = record.keys()
 
@@ -147,9 +143,6 @@ class TestSetup:
             finally:
                 if enable_defaults != None:
                     cls.toggle_trigger(conn, table, f'{table}_default', enable=False)
-
-                if update_parents != None:
-                    cls.toggle_trigger(conn, table, f'{table}_update_parents', enable=False)
 
         return results
 
@@ -242,7 +235,7 @@ class TestSetup:
             except AssertFailure:
                 log.error('Assertion was not met')
                 return False
-class PR(TestSetup):
+class PR(SetupUnit):
     def __init__(self, base_ref, head_ref, **kwargs):
         # self.test_setup = test_setup
         self.base_ref = base_ref
