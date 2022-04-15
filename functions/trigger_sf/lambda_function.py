@@ -12,6 +12,9 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
+sf = boto3.client('stepfunctions')
+ssm = boto3.client('ssm')
+
 def execution_finished(cur, execution: map) -> None:
     '''
     Updates the Step Function's associated metadb record status and handles the case where the Step Function execution fails or is aborted
@@ -19,8 +22,6 @@ def execution_finished(cur, execution: map) -> None:
     Arguments:
         execution: Cloudwatch event payload associated with finished Step Function execution
     '''
-    
-    sf = boto3.client('stepfunctions')
 
     if execution['output'] == None:
         # use step function execution input since the output is none when execution is aborted
@@ -89,14 +90,12 @@ def start_sf_executions(cur) -> None:
     '''
 
     log.info('Getting executions that have all account dependencies and terragrunt dependencies met')
-    sf = boto3.client('stepfunctions')
     try:
         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/select_target_execution_ids.sql') as f:
             cur.execute(f.read())
             cur.execute('SELECT get_target_execution_ids()')
     except aurora_data_api.exceptions.DatabaseError as e:
         log.error(e, exc_info=True)
-        ssm = boto3.client('ssm')
         log.error(f'Merge lock value: {ssm.get_parameter(Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"])["Parameter"]["Value"]}')
         sys.exit(1)
 
@@ -136,24 +135,30 @@ def lambda_handler(event, context):
     '''Runs Step Function deployment flow or resets SSM Parameter Store merge lock value'''
 
     log.debug(f'Event:\n{event}')
-    ssm = boto3.client('ssm')
-    with aurora_data_api.connect(
-        aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
-        secret_arn=os.environ['METADB_SECRET_ARN'],
-        database=os.environ['METADB_NAME']
-    ) as conn:
-        with conn.cursor() as cur:
-            if 'execution' in event:
-                log.info(f'Triggered via Step Function Event:\n{event["execution"]}')
-                execution_finished(cur, event['execution'])
+    try:
+        with aurora_data_api.connect(
+            aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
+            secret_arn=os.environ['METADB_SECRET_ARN'],
+            database=os.environ['METADB_NAME']
+        ) as conn:
+            with conn.cursor() as cur:
+                if 'execution' in event:
+                    log.info(f'Triggered via Step Function Event:\n{event["execution"]}')
+                    execution_finished(cur, event['execution'])
 
-            log.info('Checking if commit executions are in progress')
-            # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
-            cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
+                log.info('Checking if commit executions are in progress')
+                # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
+                cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
 
-            if cur.rowcount > 0:
-                log.info('Starting Step Function Deployment Flow')
-                start_sf_executions(cur)
-            else:
-                log.info('No executions are waiting or running -- unlocking merge action within target branch')
-                ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
+                if cur.rowcount > 0:
+                    log.info('Starting Step Function Deployment Flow')
+                    start_sf_executions(cur)
+                else:
+                    log.info('No executions are waiting or running -- unlocking merge action within target branch')
+                    ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
+    except Exception as e:
+        log.error(e, exc_info=True)
+        return {
+            'statusCode': 500,
+            'message': e
+        }
