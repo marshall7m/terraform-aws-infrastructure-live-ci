@@ -4,7 +4,6 @@ import json
 import os
 from botocore.exceptions import ClientError
 
-s3 = boto3.client('s3')
 ses = boto3.client('ses')
 log = logging.getLogger(__name__)
 
@@ -52,10 +51,22 @@ def lambda_handler(event, context):
         Destinations=destinations
     )
     log.debug(f'Response:\n{response}')
-
+    failed_count = 0
     for msg in response['Status']:
         if msg['Status'] == 'Success':
             log.info("Email was succesfully sent")
         else:
-            log.error('Email was not sent')
+            failed_count += 1
+            log.error('Email was not successfully sent')
             log.debug(f"Email Status:\n{msg}")
+
+    if failed_count > 0:
+        return {
+            'statusCode': 500,
+            'message': f'{failed_count}/{len(response["Status"])} emails failed to send'
+        }
+    
+    return {
+        'statusCode': 302,
+        'message': f'All emails were successfully sent'
+    }
