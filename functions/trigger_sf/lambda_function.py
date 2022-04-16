@@ -15,7 +15,7 @@ log.setLevel(logging.DEBUG)
 sf = boto3.client('stepfunctions')
 ssm = boto3.client('ssm')
 
-def execution_finished(cur, execution: map) -> None:
+def _execution_finished(cur, execution: map) -> None:
     '''
     Updates the Step Function's associated metadb record status and handles the case where the Step Function execution fails or is aborted
     
@@ -23,26 +23,20 @@ def execution_finished(cur, execution: map) -> None:
         execution: Cloudwatch event payload associated with finished Step Function execution
     '''
 
-    if execution['output'] == None:
-        # use step function execution input since the output is none when execution is aborted
-        record = {**json.loads(execution['input']), **{'status': execution['status'].lower()}}
-    else:
-        record = json.loads(execution['output'])
-
     log.info('Updating execution record status')
     cur.execute(f"""
     UPDATE executions
-    SET "status" = '{record['status']}'
-    WHERE execution_id = '{record['execution_id']}'
+    SET "status" = '{execution['status']}'
+    WHERE execution_id = '{execution['execution_id']}'
     """)
     
-    if not record['is_rollback'] and record['status'] in ['failed', 'aborted']:
+    if not execution['is_rollback'] and execution['status'] in ['failed', 'aborted']:
         log.info('Aborting all deployments for commit')
         cur.execute(f"""
         UPDATE executions
         SET "status" = 'aborted'
         WHERE "status" IN ('waiting', 'running')
-        AND commit_id = '{record['commit_id']}'
+        AND commit_id = '{execution['commit_id']}'
         AND is_rollback = false
         RETURNING execution_id
         """)
@@ -65,23 +59,23 @@ def execution_finished(cur, execution: map) -> None:
                 sf.stop_execution(
                     executionArn=execution_arn,
                     error='DependencyError',
-                    cause=f'cfg_path dependency failed: {record["cfg_path"]}'
+                    cause=f'cfg_path dependency failed: {execution["cfg_path"]}'
                 )
 
         log.info('Creating rollback executions if needed')
         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_rollback_stack.sql', 'r') as f:
-            cur.execute(f.read().format(commit_id=record['commit_id']))
+            cur.execute(f.read().format(commit_id=execution['commit_id']))
             results = cur.fetchall()
             log.debug(f'Results:\n{results}')
             if len(results) != 0:
                 rollback_records = [dict(zip([desc.name for desc in cur.description], record)) for record in results]
                 log.debug(f'Rollback records:\n{rollback_records}')
                 
-    elif record['is_rollback'] == True and record['status'] in ['failed', 'aborted']:
+    elif execution['is_rollback'] == True and execution['status'] in ['failed', 'aborted']:
         log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
         sys.exit(1)
     
-def start_sf_executions(cur) -> None:
+def _start_sf_executions(cur) -> None:
     '''
     Selects execution records to pass to Step Function deployment flow and starts the Step Function executions
     
@@ -143,8 +137,14 @@ def lambda_handler(event, context):
         ) as conn:
             with conn.cursor() as cur:
                 if 'execution' in event:
+                    execution = event['execution']
                     log.info(f'Triggered via Step Function Event:\n{event["execution"]}')
-                    execution_finished(cur, event['execution'])
+                    if execution['output'] == None:
+                        # use step function execution input since the output is none when execution is aborted
+                        record = {**json.loads(execution['input']), **{'status': execution['status'].lower()}}
+                    else:
+                        record = json.loads(execution['output'])
+                    _execution_finished(cur, record)
 
                 log.info('Checking if commit executions are in progress')
                 # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
@@ -152,10 +152,15 @@ def lambda_handler(event, context):
 
                 if cur.rowcount > 0:
                     log.info('Starting Step Function Deployment Flow')
-                    start_sf_executions(cur)
+                    _start_sf_executions(cur)
                 else:
                     log.info('No executions are waiting or running -- unlocking merge action within target branch')
                     ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
+                
+                return {
+                    'statusCode': 302,
+                    'message': 'Invocation was successful'
+                }
     except Exception as e:
         log.error(e, exc_info=True)
         return {
