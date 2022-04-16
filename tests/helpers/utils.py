@@ -67,20 +67,6 @@ class SetupUnit:
             return git.remote.Remote(self.git_repo, remote_name)
 
     @classmethod
-    def toggle_trigger(cls, conn, table, trigger, enable=False):
-        with conn.cursor() as cur:
-            log.debug('Creating triggers for table')
-            cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/testing_triggers.sql').read())
-
-            cur.execute(sql.SQL("ALTER TABLE {tbl} {action} TRIGGER {trigger}").format(
-                tbl=sql.Identifier(table),
-                action=sql.SQL('ENABLE' if enable else 'DISABLE'),
-                trigger=sql.Identifier(trigger)
-            ))
-
-            conn.commit()
-
-    @classmethod
     def truncate_if_exists(cls, conn, schema, catalog, table):
         with conn.cursor() as cur:
             query = sql.SQL("""
@@ -106,6 +92,20 @@ class SetupUnit:
             )
             log.debug(f'Query:\n{query.as_string(conn)}')
             cur.execute(query)
+
+    @classmethod
+    def toggle_trigger(cls, conn, table, trigger, enable=False):
+        with conn.cursor() as cur:
+            log.debug('Creating triggers for table')
+            cur.execute(open(f'{os.path.dirname(os.path.realpath(__file__))}/testing_triggers.sql').read())
+
+            cur.execute(sql.SQL("ALTER TABLE {tbl} {action} TRIGGER {trigger}").format(
+                tbl=sql.Identifier(table),
+                action=sql.SQL('ENABLE' if enable else 'DISABLE'),
+                trigger=sql.Identifier(trigger)
+            ))
+
+            conn.commit()
 
     @classmethod
     def create_records(cls, conn, table, records, enable_defaults=None):
