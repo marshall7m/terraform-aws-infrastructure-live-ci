@@ -72,7 +72,7 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
 
         IF NEW.account_path IS NULL THEN
-            NEW.account_path := account_dim_ref.account_path;
+            NEW.account_path := COALESCE(account_dim_ref.account_path, NEW.account_name);
         END IF;
 
         IF NEW.account_deps IS NULL THEN
@@ -100,11 +100,11 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
 
         IF NEW.plan_role_arn IS NULL THEN
-            NEW.plan_role_arn := account_dim_ref.plan_role_arn;
+            NEW.plan_role_arn := COALESCE(account_dim_ref.plan_role_arn, NEW.account_name || '-plan-role');
         END IF;
 
         IF NEW.deploy_role_arn IS NULL THEN
-            NEW.deploy_role_arn := account_dim_ref.deploy_role_arn;
+            NEW.deploy_role_arn := COALESCE(account_dim_ref.deploy_role_arn, NEW.account_name || '-deploy-role');
         END IF;
 
         IF NEW.cfg_deps IS NULL THEN
@@ -132,8 +132,12 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
             END;
         END IF;
         
+        IF NEW.cfg_path IS NULL THEN
+            NEW.cfg_path := NEW.account_path || '/' || substr(md5(random()::text), 0, 8);
+        END IF;
+
         IF NEW.base_ref IS NULL THEN
-            SELECT DISTINCT(e.base_ref) INTO NEW.base_ref FROM executions e;
+            NEW.base_ref := COALESCE((SELECT DISTINCT(e.base_ref) FROM executions e), 'master');
         END IF;
 
         IF NEW.head_ref IS NULL THEN
@@ -141,27 +145,23 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
         END IF;
 
         IF NEW.plan_command IS NULL THEN
-            IF NEW.cfg_path IS NOT NULL THEN
-                NEW.plan_command := CASE
-                    WHEN NEW.is_rollback = 't' THEN 
-                        'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path
-                    WHEN NEW.is_rollback = 'f' THEN 
-                        'terragrunt plan ' || '--terragrunt-working-dir ' || NEW.cfg_path
-                    ELSE NULL
-                END;
-            END IF;
+            NEW.plan_command := CASE
+                WHEN NEW.is_rollback = 't' THEN 
+                    'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path
+                WHEN NEW.is_rollback = 'f' THEN 
+                    'terragrunt plan ' || '--terragrunt-working-dir ' || NEW.cfg_path
+                ELSE NULL
+            END;
         END IF;
 
         IF NEW.deploy_command IS NULL THEN
-            IF NEW.cfg_path IS NOT NULL THEN
-                NEW.deploy_command := CASE
-                    WHEN NEW.is_rollback = 't' THEN 
-                        'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
-                    WHEN NEW.is_rollback = 'f' THEN 
-                        'terragrunt apply ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
-                    ELSE NULL
-                END;
-            END IF;
+            NEW.deploy_command := CASE
+                WHEN NEW.is_rollback = 't' THEN 
+                    'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
+                WHEN NEW.is_rollback = 'f' THEN 
+                    'terragrunt apply ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
+                ELSE NULL
+            END;
         END IF;
 
         IF NEW.new_providers IS NULL THEN
