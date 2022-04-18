@@ -16,6 +16,8 @@ log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
+ssm = boto3.client('ssm')
+lb = boto3.client('lambda')
 
 class CreateStack:
     def __init__(self):
@@ -84,10 +86,9 @@ class CreateStack:
         return_code = run.returncode
 
         if return_code not in [0, 2]:
-            log.fatal('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
             log.debug(f'Return code: {return_code}')
             log.debug(run.stderr)
-            sys.exit(1)
+            raise TerragruntException('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
         
         diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', run.stderr, re.DOTALL)
         if len(diff_paths) == 0:
@@ -132,43 +133,45 @@ class CreateStack:
                 git_root = self.git_repo.git.rev_parse('--show-toplevel')
                 log.debug(f'Git root: {git_root}')
                 pr_id = os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]
+                try:
+                    log.info('Getting account stacks')
+                    for account in accounts:
+                        log.info(f'Account path: {account["path"]}')
+                        log.debug(f'Account plan role ARN: {account["role"]}')
 
-                log.info('Getting account stacks')
-                for account in accounts:
-                    log.info(f'Account path: {account["path"]}')
-                    log.debug(f'Account plan role ARN: {account["role"]}')
+                        if not os.path.isdir(account['path']):
+                            raise ClientException(f'Account path does not exist within repo: {account["path"]}')
+                        
+                        with self.set_aws_env_vars(account['role'], 'trigger-sf-terragrunt-plan-all'):
+                            stack = self.create_stack(account['path'], git_root)
 
-                    if not os.path.isdir(account['path']):
-                        log.error('Account path does not exist within repo')
-                        sys.exit(1)
-                    
-                    with self.set_aws_env_vars(account['role'], 'trigger-sf-terragrunt-plan-all'):
-                        stack = self.create_stack(account['path'], git_root)
+                        log.debug(f'Stack:\n{stack}')
 
-                    log.debug(f'Stack:\n{stack}')
+                        if len(stack) == 0:
+                            log.debug('Stack is empty -- skipping')
+                            continue
+        
+                        with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r') as f:
+                            query = f.read().format(
+                                pr_id=pr_id,
+                                commit_id=os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'],
+                                account_path=account['path'],
+                                base_ref=os.environ['CODEBUILD_WEBHOOK_BASE_REF'],
+                                head_ref=os.environ['CODEBUILD_WEBHOOK_HEAD_REF']
+                            )
+                        log.debug(f'Query:\n{query}')
+                        
+                        #convert lists to comma-delimitted strings that will parsed to TEXT[] within query
+                        for cfg in stack:
+                            for k, v in cfg.items():
+                                if type(v) == list:
+                                    cfg.update({k: ','.join(v)})
 
-                    if len(stack) == 0:
-                        log.debug('Stack is empty -- skipping')
-                        continue
-                                
-                    with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r') as f:
-                        query = f.read().format(
-                            pr_id=pr_id,
-                            commit_id=os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'],
-                            account_path=account['path'],
-                            base_ref=os.environ['CODEBUILD_WEBHOOK_BASE_REF'],
-                            head_ref=os.environ['CODEBUILD_WEBHOOK_HEAD_REF']
-                        )
-                    log.debug(f'Query:\n{query}')
-                    
-                    #convert lists to comma-delimitted strings that will parsed to TEXT[] within query
-                    for cfg in stack:
-                        for k, v in cfg.items():
-                            if type(v) == list:
-                                cfg.update({k: ','.join(v)})
-
-                    cur.executemany(query, stack)
-
+                        cur.executemany(query, stack)
+                except Exception as e:
+                    log.info('Rolling back execution insertions')
+                    cur.rollback()
+                    raise e
             return None
 
     def main(self) -> None:
@@ -177,14 +180,17 @@ class CreateStack:
         deployment record inserted into the metadb. After all records are inserted, a downstream AWS Lambda function will choose which of those records to run through the deployment flow.
         '''
         if os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
-            ssm = boto3.client('ssm')
-            lb = boto3.client('lambda')
-
             log.info('Locking merge action within target branch')
             ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1], Type='String', Overwrite=True)
 
-            log.info('Creating deployment execution records')
-            self.update_executions_with_new_deploy_stack()
+            try:
+                log.info('Creating deployment execution records')
+                self.update_executions_with_new_deploy_stack()
+            except Exception as e:
+                log.error(e, exc_info=True)
+                log.info('Unlocking merge action within target branch')
+                ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
+                raise e
 
             log.info(f'Invoking Lambda Function: {os.environ["TRIGGER_SF_FUNCTION_NAME"]}')
             lb.invoke(FunctionName=os.environ['TRIGGER_SF_FUNCTION_NAME'], InvocationType='Event', Payload=json.dumps({'pr_id': os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]}))
@@ -207,3 +213,9 @@ class CreateStack:
 if __name__ == '__main__':
     run = CreateStack()
     run.main()
+
+class TerragruntException(Exception):
+    pass
+
+class ClientException(Exception):
+    pass
