@@ -43,7 +43,7 @@ def truncate_executions(cur):
 @pytest.fixture(autouse=True)
 def mock_conn(mocker, conn):
     '''Patches AWS RDS client with psycopg2 client that connects to the local docker container Postgres database'''
-    mocker.patch('aurora_data_api.connect', return_value=conn)
+    return mocker.patch('aurora_data_api.connect', return_value=conn, autospec=True)
 
 @pytest.fixture(scope='function')
 def aws_credentials():

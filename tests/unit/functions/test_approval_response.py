@@ -14,7 +14,7 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-def run_lambda(event=None, context=None):
+def lambda_handler(event=None, context=None):
     '''Imports Lambda function after boto3 client patch has been created to prevent boto3 region_name not specified error'''
     from functions.approval_response.lambda_function import lambda_handler
     return lambda_handler(event, context)
@@ -138,7 +138,7 @@ def test_lambda_handler(mock_sf, conn, cur, event, record, status, expected_stat
         log.info(f'Record: {pformat(record)}')
     
     log.info('Running Lambda Function')
-    response = run_lambda(event, {})
+    response = lambda_handler(event, {})
 
     assert response['statusCode'] == expected_status_code
 

@@ -9,10 +9,15 @@ import shlex
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-def dummy_tf_output():
+def dummy_tf_output(name=None, value=None):
+    if not name:
+        name = f'_{uuid.uuid4()}'
+    if not value:
+        value = f'_{uuid.uuid4()}'
+
     return f"""
-    output "_{uuid.uuid4()}" {{
-        value = "_{uuid.uuid4()}"
+    output "{name}" {{
+        value = "{value}"
     }}
     """
 
