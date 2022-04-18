@@ -11,7 +11,7 @@ import aurora_data_api
 import git
 from tests.integration.test_integration import Integration
 from pprint import pformat
-
+from tests.helpers.utils import tf_version
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -47,7 +47,9 @@ def pytest_generate_tests(metafunc):
             metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.case['executions']) + rollback_execution_count)), scope='class', indirect=True)
 
 @pytest.fixture(scope="session")
-def mut(request, tf_version):
+def mut(request):
+    tf_version()
+
     tf_dir = os.path.dirname(os.path.realpath(__file__))
 
     if 'GITHUB_TOKEN' not in os.environ:
