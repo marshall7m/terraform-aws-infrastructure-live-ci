@@ -363,12 +363,12 @@ The steps below will setup a testing Docker environment for running integration 
  
 # TODO:
  
-Testing:
-- Update Lambda Function unit tests
- 
 Features:
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 
 - merge into master
 - create first release!
+
+TODO:
+- create integration deployment with invalid terraform file that causes error with create_deploy_stack codebuild
