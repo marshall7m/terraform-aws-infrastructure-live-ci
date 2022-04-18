@@ -78,6 +78,7 @@ class CreateStack:
             git_root: The associated Github repository's root absolute directory
         '''
         cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
+        log.debug(f'Running command: {cmd}')
 
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
         return_code = run.returncode
@@ -175,9 +176,11 @@ class CreateStack:
         When a PR that contains Terragrunt and/or Terraform changes is merged within the base branch, each of those new/modified Terragrunt directories will have an associated
         deployment record inserted into the metadb. After all records are inserted, a downstream AWS Lambda function will choose which of those records to run through the deployment flow.
         '''
+
         if os.environ['CODEBUILD_INITIATOR'].split('/')[0] == 'GitHub-Hookshot' and os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[0] == 'pr':
             ssm = boto3.client('ssm')
             lb = boto3.client('lambda')
+            
             log.info('Locking merge action within target branch')
             ssm.put_parameter(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value=os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1], Type='String', Overwrite=True)
 

@@ -72,8 +72,9 @@ def _execution_finished(cur, execution: map) -> None:
                 log.debug(f'Rollback records:\n{rollback_records}')
                 
     elif execution['is_rollback'] == True and execution['status'] in ['failed', 'aborted']:
-        log.error("Rollback execution failed -- User with administrative privileges will need to manually fix configuration")
-        sys.exit(1)
+        # not aborting waiting and running rollback executions to allow CI flow to continue after admin intervention since future PR deployments
+        # will break if the new provider resources are not destroyed beforehand
+        raise ClientException('Rollback execution failed -- User with administrative privileges will need to manually fix configuration')
     
 def _start_sf_executions(cur) -> None:
     '''
@@ -167,3 +168,7 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'message': e
         }
+    
+class ClientException(Exception):
+    """Wraps around client-related errors"""
+    pass
