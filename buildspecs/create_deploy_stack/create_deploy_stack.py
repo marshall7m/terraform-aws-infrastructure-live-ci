@@ -19,6 +19,14 @@ log.setLevel(logging.DEBUG)
 ssm = boto3.client('ssm')
 lb = boto3.client('lambda')
 
+class TerragruntException(Exception):
+    '''Wraps around Terragrunt-related errors'''
+    pass
+
+class ClientException(Exception):
+    """Wraps around client-related errors"""
+    pass
+
 class CreateStack:
     def __init__(self):
         self.git_repo = git.Repo(search_parent_directories=True)
@@ -170,7 +178,7 @@ class CreateStack:
                         cur.executemany(query, stack)
                 except Exception as e:
                     log.info('Rolling back execution insertions')
-                    cur.rollback()
+                    conn.rollback()
                     raise e
             return None
 
@@ -213,9 +221,3 @@ class CreateStack:
 if __name__ == '__main__':
     run = CreateStack()
     run.main()
-
-class TerragruntException(Exception):
-    pass
-
-class ClientException(Exception):
-    pass
