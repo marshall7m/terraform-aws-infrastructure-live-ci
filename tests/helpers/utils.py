@@ -9,12 +9,7 @@ import shlex
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-def dummy_tf_output(name=None, value=None):
-    if not name:
-        name = f'_{uuid.uuid4()}'
-    if not value:
-        value = f'_{uuid.uuid4()}'
-
+def dummy_tf_output(name=f'_{uuid.uuid4()}', value=f'_{uuid.uuid4()}'):
     return f"""
     output "{name}" {{
         value = "{value}"
@@ -28,6 +23,14 @@ def dummy_tf_provider_resource():
     resource "null_resource" "this" {}
     """
 
+def dummy_tf_ssm_param_data_source(key, resource_name=f'_{uuid.uuid4()}'):
+    return f"""
+    provider "aws" {{}}
+
+    data "aws_ssm_parameter" "{resource_name}" {{
+        name = "{key}"
+    }}
+    """
 
 def dummy_tf_github_repo(repo_name=f'dummy-repo-{uuid.uuid4()}'):
     return f"""
@@ -108,13 +111,29 @@ def insert_records(conn, table, records, enable_defaults=None):
                 toggle_trigger(conn, table, f'{table}_default', enable=False)
     return results
 
-def tf_version(version='min-required'):
-    version = subprocess.run(shlex.split('terraform --version'), capture_output=True, text=True)
-    if version.returncode == 0:
-        log.info('Terraform found in $PATH -- skip installing Terraform with tfenv')
-        log.info(f'Terraform Version: {version.stdout}')
-    else:
-        log.info('Terraform not found in $PATH -- installing Terraform with tfenv')
-        out = subprocess.run(shlex.split(f'tfenv install {version} && tfenv use {version}'), capture_output=True, check=True, text=True
-        )
-        log.debug(f'tfenv out: {out.stdout}')
+def terra_version(binary, version, overwrite=False):
+    '''
+    Installs Terraform via tfenv or Terragrunt via tgswitch.
+    If version='min-required' for Terraform installations, tfenv will scan the cwd for the minimum version required within Terraform blocks
+
+    Arguments:
+        binary: Binary to manage version for
+        version: Semantic version to install and/or use
+        overwrite: If true, version manager will install and/or switch to the specified version even if the binary is found in $PATH.
+    '''
+    cmds = {
+        'terraform': f'tfenv install {version} && tfenv use {version}',
+        'terragrunt': f'tgswitch {version}'
+    }
+
+    if not overwrite:
+        check_version = subprocess.run(shlex.split('{binary} --version'), capture_output=True, text=True)
+        if check_version.returncode == 0:
+            log.info('Terraform found in $PATH -- skip installing Terraform with tfenv')
+            log.info(f'Terraform Version: {check_version.stdout}')
+            return
+        else:
+            log.info('{binary} not found in $PATH -- installing {binary}')
+    
+    out = subprocess.run(cmds[binary], shell=True, capture_output=True, check=True, text=True)
+    log.debug(f'Command out: {out.stdout}')
