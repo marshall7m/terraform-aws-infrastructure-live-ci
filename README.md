@@ -261,7 +261,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
 | metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
 | metadb\_username | Master username of the metadb | `string` | `"root"` | no |
-| pr\_approval\_acount | Number of GitHub approvals required to merge a PR with infrastructure changes | `number` | `null` | no |
+| pr\_approval\_count | Number of GitHub approvals required to merge a PR with infrastructure changes | `number` | `null` | no |
 | pr\_plan\_build\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PR | `string` | `null` | no |
 | pr\_plan\_env\_vars | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
@@ -372,3 +372,15 @@ Features:
 
 TODO:
 - create integration deployment with invalid terraform file that causes error with create_deploy_stack codebuild
+   - skip down stream test after asserting that create_deploy_stack failed
+
+   - create error handling for pr tf plan that fails build on any tf plan errors
+   scenarios:
+      - change tf data source to be invalid after merge (ssm param?)
+         - after tf plan test, delete data source from aws
+      - remove plan role from create_deploy_stack permission
+         - figure out how to inject parent cls fixture to be a depedency for create_deploy_stack test
+- add Terraform/Terragrunt version pytest parameterization to check if different versions create invalid parsing of stdout
+   - create_deploy_stack create_stack()
+   - terra_run create_resources()
+

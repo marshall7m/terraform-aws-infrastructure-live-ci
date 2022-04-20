@@ -131,8 +131,11 @@ resource "github_branch_protection" "merge_lock" {
     contexts = [var.status_check_name]
   }
 
-  required_pull_request_reviews {
-    dismiss_stale_reviews           = true
-    required_approving_review_count = var.pr_approval_acount
+  dynamic "required_pull_request_reviews" {
+    for_each = var.pr_approval_count != null ? [1] : []
+    content {
+      dismiss_stale_reviews           = true
+      required_approving_review_count = var.pr_approval_count
+    }
   }
 }

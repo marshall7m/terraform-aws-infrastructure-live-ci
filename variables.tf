@@ -204,7 +204,7 @@ variable "status_check_name" {
   default     = "IAC Merge Lock"
 }
 
-variable "pr_approval_acount" {
+variable "pr_approval_count" {
   description = "Number of GitHub approvals required to merge a PR with infrastructure changes"
   type        = number
   default     = null
