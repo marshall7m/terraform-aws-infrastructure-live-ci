@@ -32,8 +32,11 @@ mv /tmp/gh_${GH_VERSION}_linux_amd64/bin/gh /usr/local/bin/
 wget -q -O /tmp/tfenv.tar.gz https://github.com/tfutils/tfenv/archive/refs/tags/v${TFENV_VERSION}.tar.gz
 tar -zxf /tmp/tfenv.tar.gz -C /tmp
 mkdir /usr/local/.tfenv && mv /tmp/tfenv-${TFENV_VERSION}/* /usr/local/.tfenv && chmod u+x /usr/local/.tfenv/bin/tfenv
-chmod u+x /usr/local/bin/*
+wget -q -O /tmp/tgswitch.tar.gz https://github.com/warrensbox/tgswitch/releases/download/${TGSWITCH_VERSION}/tgswitch_${TGSWITCH_VERSION}_linux_arm64.tar.gz
+tar -zxf /tmp/tgswitch.tar.gz -C /tmp
+mv /tmp/tgswitch /usr/local/bin/
 
+chmod u+x /usr/local/bin/*
 apk del .build-deps
 rm -rf /tmp/*
 rm -rf /var/cache/apk/*
