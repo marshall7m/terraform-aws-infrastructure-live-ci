@@ -9,7 +9,7 @@ import logging
 import git
 from unittest.mock import patch
 from unittest.mock import mock_open
-from tests.helpers.utils import dummy_tf_output, dummy_tf_provider_resource, insert_records, tf_version
+from tests.helpers.utils import dummy_tf_output, dummy_tf_provider_resource, insert_records, terra_version
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -64,7 +64,16 @@ def repo_changes(request, git_repo):
                 text_file.write(content)
 
     return request.param
+@pytest.fixture(params=['latest', '1.0.0', '0.15.0', '0.14.0'])
+def terraform_version(request):
+    terra_version('terraform', request.param, overwrite=True)
+    return request.param
 
+@pytest.fixture(params=['0.36.7', '0.36.0', '0.35.0', '0.34.0'])
+def terragrunt_version(request):
+    terra_version('terragrunt', request.param, overwrite=True)
+    return request.param
+    
 @pytest.mark.parametrize('repo_changes,expected_stack', [
     pytest.param(
         {'directory_dependency/dev-account/us-west-2/env-one/doo': [dummy_tf_output()]},
@@ -120,8 +129,8 @@ def repo_changes(request, git_repo):
         id='multi_deps'
     )
 ], indirect=['repo_changes'])
-@pytest.mark.usefixtures('aws_credentials')
-def test_create_stack(git_repo, repo_changes, expected_stack):
+@pytest.mark.usefixtures('aws_credentials,terraform_version,terragrunt_version')
+def test_create_stack(git_repo, repo_changes, expected_stack, terraform_version, terragrunt_version):
     '''
     Ensures that create_stack() parses the Terragrunt command output correctly, 
     filters out any directories that don't have changes and detects any new 
@@ -132,7 +141,6 @@ def test_create_stack(git_repo, repo_changes, expected_stack):
     log.debug("Changing to the test repo's root directory")
     git_root = git_repo.git.rev_parse('--show-toplevel')
     os.chdir(git_root)
-    tf_version('latest')
 
     log.debug('Running create_stack()')
     create_stack = CreateStack()
@@ -198,7 +206,6 @@ def test_main(mock_conn, mock_lambda, mock_ssm, mock_set_aws_env_vars, repo_chan
     log.debug("Changing to the test repo's root directory")
     git_root = git_repo.git.rev_parse('--show-toplevel')
     os.chdir(git_root)
-    tf_version('latest')
 
     # get nested conn.cursor() context manager mock
     mock_cur = mock_conn.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value

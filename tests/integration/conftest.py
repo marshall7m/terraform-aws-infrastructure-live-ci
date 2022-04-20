@@ -11,7 +11,7 @@ import aurora_data_api
 import git
 from tests.integration.test_integration import Integration
 from pprint import pformat
-from tests.helpers.utils import tf_version
+from tests.helpers.utils import terra_version
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -48,7 +48,7 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture(scope="session")
 def mut(request):
-    tf_version()
+    terra_version('terraform', '1.0.2', overwrite=True)
 
     tf_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -152,6 +152,7 @@ def merge_pr(repo, git_repo):
             git_repo.git.push('origin')
         except Exception as e:
             print(e)
+            raise e
 
 @pytest.fixture(scope='module', autouse=True)
 def truncate_executions(request, mut_output):
