@@ -21,6 +21,7 @@ log.setLevel(logging.DEBUG)
 
 class Integration:
 
+    #TODO: create test cls level dependencies that will skip entire classes if dependency cls fails
     # @pytest.fixture(scope='class', autouse=True)
     # def dependencies(self, request):
     #     if request.cls.get('depends_on', False):
@@ -294,7 +295,7 @@ class Integration:
     
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
-    def test_pr_plan_codebuild(self, mut_output, pr):
+    def test_pr_plan_codebuild(self, mut_output, pr, case_param):
         '''Assert PR plan codebuild status matches it's expected status'''
 
         log.info('Giving build time to start')
@@ -302,23 +303,34 @@ class Integration:
 
         status = self.get_build_finished_status(mut_output["codebuild_pr_plan_name"], filters={'sourceVersion': f'pr/{pr["number"]}'})[0]
 
-        log.info('Assert build succeeded')
-        assert status == 'SUCCEEDED'
+        if case_param.get('expect_failed_pr_plan', False):
+            log.info('Assert build failed')
+            assert status == 'FAILED'
+        else:
+            log.info('Assert build succeeded')
+            assert status == 'SUCCEEDED'
 
-    @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
-    def test_create_deploy_stack_codebuild(self, request, case_param, mut_output, merge_pr, pr):
-        '''
-        Assert create deploy stack codebuild status matches it's expected status
-        
-        Depends on merge lock status test because if the merge lock value is "unlocked" then merging the PR can cause the metadb to be
-        convoluted with multiple PR records to be staged for deployment
-        '''
+    def test_pr_merge(request, case_param, merge_pr, pr):
         depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
         depends(request, [f'{request.cls.__name__}::test_pr_plan_codebuild[{request.node.callspec.id}]'])
 
-        log.info('Merging PR')
-        merge_pr(pr['base_ref'], pr['head_ref'])
+        try:
+            log.info('Merging PR')
+            merge_pr(pr['base_ref'], pr['head_ref'])
+        except Exception as e:
+            if case_param.get('expect_failed_pr_plan', False):
+                log.debug(f'zozo: {e}')
+                pytest.skip('Skipping downstream tests since `expect_failed_pr_plan` is set to True')
+                #TODO: assert merge exception is raised
+            else:
+                raise e
+
+    @timeout_decorator.timeout(600)
+    @pytest.mark.dependency()
+    def test_create_deploy_stack_codebuild(self, request, conn, case_param, mut_output, pr):
+        '''Assert create deploy stack codebuild status matches it's expected status'''
+        depends(request, [f'{request.cls.__name__}::test_pr_merge[{request.node.callspec.id}]'])
 
         log.info('Giving build time to start')
         time.sleep(5)
@@ -329,6 +341,20 @@ class Integration:
         if case_param.get('expect_failed_create_deploy_stack', False):
             log.info('Assert build failed')
             assert status == 'FAILED'
+
+            log.info(f'Assert no execution records exists for commit_id: {pr["head_commit_id"]}')
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT COUNT(*)
+                    FROM executions 
+                    WHERE commit_id = '{pr["head_commit_id"]}'
+                """)
+                results = cur.fetchone()
+            conn.commit()
+            log.debug(f'Results: {results}')
+            assert results[0] == 0
+
+            pytest.skip('Skipping downstream tests since `expect_failed_create_deploy_stack` is set to True')
         else:
             log.info('Assert build succeeded')
             assert status == 'SUCCEEDED'
@@ -432,6 +458,9 @@ class Integration:
         Returns the execution record associated with the Step Function to be tested. Only running or finished executions are selected to be tested 
         given that waiting execution records won't have an associated Step Function execution.
         '''
+        if case_param.get('expect_failed_create_deploy_stack', False):
+            pytest.skip('Skipping downstream tests since `expect_failed_create_deploy_stack` is set to True')
+
         log.debug(f'Already tested execution IDs:\n{tested_executions()}')
         with conn.cursor() as cur:
             cur.execute(f"""
