@@ -65,7 +65,9 @@ module "ecr_create_deploy_stack" {
   repo_name        = local.create_deploy_stack_build_name
   tag              = "latest"
   trigger_build_paths = [
-    "${path.module}/buildspecs/create_deploy_stack"
+    "${path.module}/buildspecs/create_deploy_stack/Dockerfile",
+    "${path.module}/buildspecs/create_deploy_stack/install.sh",
+    "${path.module}/buildspecs/create_deploy_stack/requirements.txt"
   ]
   build_args = {
     TERRAFORM_VERSION  = var.terraform_version
