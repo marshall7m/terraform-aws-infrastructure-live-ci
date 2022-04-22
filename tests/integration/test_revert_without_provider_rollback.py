@@ -4,7 +4,7 @@ import uuid
 import os
 import logging
 from pytest_dependency import depends
-from tests.integration.helpers import dummy_tf_github_repo
+from tests.helpers.utils import dummy_tf_github_repo
 import github
 
 log = logging.getLogger(__name__)

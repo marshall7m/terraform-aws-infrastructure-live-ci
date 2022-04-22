@@ -1,5 +1,5 @@
 from tests.integration import test_integration
-from tests.integration.helpers import dummy_tf_output
+from tests.helpers.utils import dummy_tf_output
 import uuid
 
 class TestSucceededDeployment(test_integration.Integration):

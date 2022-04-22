@@ -1,6 +1,6 @@
 from tests.integration import test_integration
 import uuid
-from tests.integration.helpers import dummy_tf_output, dummy_tf_provider_resource
+from tests.helpers.utils import dummy_tf_output, dummy_tf_provider_resource
 
 class TestRejectRollbackProvider(test_integration.Integration):
     '''

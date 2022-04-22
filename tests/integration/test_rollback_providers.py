@@ -1,5 +1,5 @@
 from tests.integration import test_integration
-from tests.integration.helpers import dummy_tf_github_repo, dummy_tf_output
+from tests.helpers.utils import dummy_tf_github_repo, dummy_tf_output
 import pytest
 import uuid
 import os
