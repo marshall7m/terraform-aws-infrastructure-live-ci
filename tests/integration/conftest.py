@@ -39,9 +39,6 @@ def pytest_generate_tests(metafunc):
 
     #TODO: Since only one case per cls, see if it's possible to get class case within request objected via request.cls.case to remove need to use parametrization
     if hasattr(metafunc.cls, 'case'):
-        if 'case_param' in metafunc.fixturenames:
-            metafunc.parametrize('case_param', [metafunc.cls.case], scope='class', ids=['case'], indirect=True)
-
         if 'target_execution' in metafunc.fixturenames:
             rollback_execution_count = len([1 for scenario in metafunc.cls.case['executions'].values() if scenario.get('actions', {}).get('rollback_providers', None) != None])
             metafunc.parametrize('target_execution', list(range(0, len(metafunc.cls.case['executions']) + rollback_execution_count)), scope='class', indirect=True)
@@ -144,15 +141,21 @@ def merge_pr(repo, git_repo):
     git_repo.git.reset('--hard')
     git_repo.git.pull()
 
+    log.debug('Removing admin enforcement from branch proection to allow revert pushes to trunk branch')
+    branch = repo.get_branch(branch="master")
+    branch.remove_admin_enforcement()
+
     for ref, commit in reversed(merge_commits.items()):
         log.debug(f'Merge Commit ID: {commit.sha}')
         try:
             git_repo.git.revert('-m', '1', '--no-commit', str(commit.sha))
             git_repo.git.commit('-m', f'Revert changes from PR: {ref} within fixture teardown')
-            git_repo.git.push('origin')
+            git_repo.git.push('origin', '--force')
         except Exception as e:
-            print(e)
             raise e
+        finally:
+            log.debug('Adding admin enforcement back')
+            branch.set_admin_enforcement()
 
 @pytest.fixture(scope='module', autouse=True)
 def truncate_executions(request, mut_output):
@@ -196,60 +199,6 @@ def abort_hanging_sf_executions(mut_output):
             error='IntegrationTestsError',
             cause='Failed integrations tests prevented execution from finishing'
         )
-
-@pytest.fixture(scope='module', autouse=True)
-def destroy_scenario_tf_resources(conn, mut_output):
-
-    yield None
-
-    cb = boto3.client('codebuild')
-
-    log.info('Destroying Terraform provisioned resources from test repository')
-
-    with conn.cursor() as cur:
-        cur.execute(f"""
-        SELECT account_name, account_path, deploy_role_arn
-        FROM account_dim 
-        """
-        )
-
-        accounts = []
-        for result in cur.fetchall():
-            record = {}
-            for i, description in enumerate(cur.description):
-                record[description.name] = result[i]
-            accounts.append(record)
-    conn.commit()
-        
-    log.debug(f'Accounts:\n{pformat(accounts)}')
-
-    ids = []
-    log.info("Starting account-level terraform destroy builds")
-    for account in accounts:
-        log.debug(f'Account Name: {account["account_name"]}')
-
-        response = cb.start_build(
-            projectName=mut_output['codebuild_terra_run_name'],
-            environmentVariablesOverride=[
-                {
-                    'name': 'TG_COMMAND',
-                    'type': 'PLAINTEXT',
-                    'value': f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} -auto-approve'
-                },
-                {
-                    'name': 'ROLE_ARN',
-                    'type': 'PLAINTEXT',
-                    'value': account['deploy_role_arn']
-                }
-            ]
-        )
-
-        ids.append(response['build']['id'])
-    
-    log.info('Waiting on destroy builds to finish')
-    statuses = Integration().get_build_finished_status(mut_output['codebuild_terra_run_name'], ids=ids)
-
-    log.info(f'Finished Statuses:\n{statuses}')
 
 @pytest.fixture(scope='module')
 def cleanup_dummy_repo(gh, request):

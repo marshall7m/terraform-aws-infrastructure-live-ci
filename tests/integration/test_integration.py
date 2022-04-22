@@ -82,7 +82,7 @@ class Integration:
     @pytest.fixture(scope='class')
     def case_param(self, request):
         '''Class case fixture used to determine the actions within the CI flow and the expected test assertions'''
-        return request.param
+        return request.cls.case
 
     @pytest.fixture(scope='class')
     def tested_executions(self):
@@ -240,7 +240,60 @@ class Integration:
                 statuses.append(build['buildStatus'])
     
         return statuses
-    
+
+    @pytest.fixture(scope='module')
+    def destroy_scenario_tf_resources(self, conn, mut_output):
+        yield None
+
+        cb = boto3.client('codebuild')
+
+        log.info('Destroying Terraform provisioned resources from test repository')
+
+        with conn.cursor() as cur:
+            cur.execute(f"""
+            SELECT account_name, account_path, deploy_role_arn
+            FROM account_dim 
+            """
+            )
+
+            accounts = []
+            for result in cur.fetchall():
+                record = {}
+                for i, description in enumerate(cur.description):
+                    record[description.name] = result[i]
+                accounts.append(record)
+        conn.commit()
+            
+        log.debug(f'Accounts:\n{pformat(accounts)}')
+
+        ids = []
+        log.info("Starting account-level terraform destroy builds")
+        for account in accounts:
+            log.debug(f'Account Name: {account["account_name"]}')
+
+            response = cb.start_build(
+                projectName=mut_output['codebuild_terra_run_name'],
+                environmentVariablesOverride=[
+                    {
+                        'name': 'TG_COMMAND',
+                        'type': 'PLAINTEXT',
+                        'value': f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} -auto-approve'
+                    },
+                    {
+                        'name': 'ROLE_ARN',
+                        'type': 'PLAINTEXT',
+                        'value': account['deploy_role_arn']
+                    }
+                ]
+            )
+
+            ids.append(response['build']['id'])
+        
+        log.info('Waiting on destroy builds to finish')
+        statuses = Integration().get_build_finished_status(mut_output['codebuild_terra_run_name'], ids=ids)
+
+        log.info(f'Finished Statuses:\n{statuses}')
+
     def get_latest_log_stream_errs(self, log_group: str, start_time=None, end_time=None) -> list:
         '''
         Gets a list of log events that contain the word `ERROR` within the latest stream of the CloudWatch log group
@@ -311,9 +364,9 @@ class Integration:
             assert status == 'SUCCEEDED'
 
     @pytest.mark.dependency()
-    def test_pr_merge(request, case_param, merge_pr, pr):
-        depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status[{request.node.callspec.id}]'])
-        depends(request, [f'{request.cls.__name__}::test_pr_plan_codebuild[{request.node.callspec.id}]'])
+    def test_pr_merge(self, request, case_param, merge_pr, pr):
+        depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status'])
+        depends(request, [f'{request.cls.__name__}::test_pr_plan_codebuild'])
 
         try:
             log.info('Merging PR')
@@ -330,7 +383,7 @@ class Integration:
     @pytest.mark.dependency()
     def test_create_deploy_stack_codebuild(self, request, conn, case_param, mut_output, pr):
         '''Assert create deploy stack codebuild status matches it's expected status'''
-        depends(request, [f'{request.cls.__name__}::test_pr_merge[{request.node.callspec.id}]'])
+        depends(request, [f'{request.cls.__name__}::test_pr_merge'])
 
         log.info('Giving build time to start')
         time.sleep(5)
@@ -367,7 +420,7 @@ class Integration:
         Depends on create deploy stack codebuild status check because if the build fails or is still in progress, the below query
         will return premature or invalid results.
         '''
-        depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild[{request.node.callspec.id}]'])
+        depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild'])
 
         with conn.cursor() as cur:
             cur.execute(f"""
@@ -396,7 +449,7 @@ class Integration:
         Depends on create deploy stack codebuild status to be successful to ensure that errors produce by
         the Lambda function are not caused by the build
         '''
-        depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild[{request.node.callspec.id}]'])
+        depends(request, [f'{request.cls.__name__}::test_create_deploy_stack_codebuild'])
 
         log.debug('Waiting on trigger SF Lambda invocation to complete')
         wait_for_lambda_invocation(mut_output['trigger_sf_function_name'])
@@ -453,7 +506,7 @@ class Integration:
         start_time.clear()
 
     @pytest.fixture(scope="class")
-    def target_execution(self, conn, pr, mut_output, wait_for_lambda_invocation, tested_executions, case_param, execution_testing_start_time):
+    def target_execution(self, request, conn, pr, mut_output, wait_for_lambda_invocation, tested_executions, case_param, execution_testing_start_time):
         '''
         Returns the execution record associated with the Step Function to be tested. Only running or finished executions are selected to be tested 
         given that waiting execution records won't have an associated Step Function execution.
@@ -488,20 +541,7 @@ class Integration:
 
             yield record
         else:
-            with conn.cursor() as cur:
-                cur.execute(f"""
-                    SELECT execution_id
-                    FROM executions 
-                    WHERE commit_id = '{pr["head_commit_id"]}'
-                    AND "status" = 'waiting'
-                """)
-                results = cur.fetchall()
-            conn.commit()
-
-            if len(results) != 0:
-                log.debug(f'Waiting execution IDs: {results}')
-
-            pytest.fail("Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')")
+            yield {}
 
         log.debug('Adding execution ID to tested executions list')
         if record != {}:
@@ -514,27 +554,37 @@ class Integration:
             return case_param['executions'][target_execution['cfg_path']]['actions']['rollback_providers']
         else:
             return case_param['executions'][target_execution['cfg_path']].get('actions', {}).get('deploy', None)
-    
+
+    @pytest.mark.dependency()
+    def test_target_execution_record_exists(self, request, conn, pr, target_execution):
+        depends(request, [
+            f"{request.cls.__name__}::test_deploy_execution_records_exist",
+            f"{request.cls.__name__}::test_trigger_sf"
+        ])
+
+        if target_execution == {}:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT execution_id
+                    FROM executions 
+                    WHERE commit_id = '{pr["head_commit_id"]}'
+                    AND "status" = 'waiting'
+                """)
+                results = cur.fetchall()
+            conn.commit()
+
+            log.debug(f'Waiting execution IDs: {results}')
+            pytest.fail("Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')")
+
     @pytest.mark.dependency()
     def test_sf_execution_aborted(self, request, target_execution, mut_output, case_param):
         '''
         Assert that the execution record has an assoicated Step Function execution that is aborted or doesn't exist if 
         the upstream execution was rejected before the target Step Function execution was created
         '''
-        sf = boto3.client('stepfunctions')
+        depends(request, [f'{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]'])
 
-        target_execution_param = request.node.callspec.id.split('-')[-1]
-        if target_execution_param != '0':
-            depends(request, [
-                f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]",
-                # depends on previous target_execution param's cw event trigger sf finished status
-                f"{request.cls.__name__}::test_cw_event_trigger_sf[{re.sub(r'^.+?-', f'{int(target_execution_param) - 1}-', request.node.callspec.id)}]"
-            ])
-        else:
-            depends(request, [
-                f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]",
-                f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id.rsplit('-', 1)[0]}]"
-            ])
+        sf = boto3.client('stepfunctions')
 
         if target_execution['status'] != 'aborted':
             pytest.skip('Execution approval action is not set to `aborted`')
@@ -550,12 +600,8 @@ class Integration:
     @pytest.mark.dependency()
     def test_sf_execution_exists(self, request, mut_output, target_execution):
         '''Assert execution record has an associated Step Function execution that hasn't been aborted'''
+        depends(request, [f'{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]'])
 
-        depends(request, [
-            f"{request.cls.__name__}::test_deploy_execution_records_exist[{request.node.callspec.id.rsplit('-', 1)[0]}]",
-            f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id.rsplit('-', 1)[0]}]"
-        ])
-        
         sf = boto3.client('stepfunctions')
 
         if target_execution['status'] == 'aborted':
@@ -663,6 +709,8 @@ class Integration:
         assert status == 'TaskSucceeded'
     
     @pytest.mark.dependency()
+    # runs cleanup builds only if step function deploy task was executed
+    @pytest.mark.usefixtures('destroy_scenario_tf_resources')
     def test_sf_execution_status(self, request, mut_output, target_execution, action):
         '''Assert Step Function execution succeeded'''
         sf = boto3.client('stepfunctions')
