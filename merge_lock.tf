@@ -89,7 +89,7 @@ module "lambda_merge_lock" {
   env_vars = {
     MERGE_LOCK_SSM_KEY   = aws_ssm_parameter.merge_lock.name
     GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
-    STATUS_CHECK_NAME    = var.status_check_name
+    STATUS_CHECK_NAME    = var.merge_lock_status_check_name
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
@@ -123,12 +123,12 @@ resource "github_branch_protection" "merge_lock" {
   repository_id = var.repo_name
 
   pattern          = var.base_branch
-  enforce_admins   = true
+  enforce_admins   = var.enfore_admin_branch_protection
   allows_deletions = true
 
   required_status_checks {
     strict   = false
-    contexts = [var.status_check_name]
+    contexts = [var.merge_lock_status_check_name]
   }
 
   dynamic "required_pull_request_reviews" {

@@ -167,6 +167,8 @@ module "mut_infrastructure_live_ci" {
 
   repo_name   = local.mut_id
   base_branch = "master"
+  # for testing purposes, admin is allowed to push to trunk branch for cleaning up testing changes without having to create a PR and triggering the entire CI pipeline
+  enfore_admin_branch_protection = false
 
   metadb_publicly_accessible = true
   metadb_username            = "mut_user"

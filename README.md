@@ -240,6 +240,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | create\_deploy\_stack\_vpc\_config | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | enable\_metadb\_http\_endpoint | Enables AWS SDK connection to the metadb via data API HTTP endpoint. Needed in order to connect to metadb from outside of metadb's associated VPC | `bool` | `false` | no |
+| enfore\_admin\_branch\_protection | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
 | github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used for setting PR merge locks for live infrastructure repo"` | no |
 | github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
@@ -250,6 +251,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | lambda\_trigger\_sf\_vpc\_config | VPC configuration for Lambda trigger\_sf function | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | merge\_lock\_build\_name | Codebuild project name used for determine if infrastructure related PR can be merged into base branch | `string` | `null` | no |
 | merge\_lock\_ssm\_key | SSM Parameter Store key used for locking infrastructure related PR merges | `string` | `null` | no |
+| merge\_lock\_status\_check\_name | Name of the merge lock GitHub status | `string` | `"IAC Merge Lock"` | no |
 | metadb\_availability\_zones | AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones. | `list(string)` | `null` | no |
 | metadb\_ci\_password | Password for the metadb user used for the Codebuild projects | `string` | n/a | yes |
 | metadb\_ci\_username | Name of the metadb user used for the Codebuild projects | `string` | `"ci_user"` | no |
@@ -267,7 +269,6 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | prefix | Prefix to attach to all resources | `string` | `null` | no |
 | repo\_name | Name of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
-| status\_check\_name | Name of the merge lock GitHub status | `string` | `"IAC Merge Lock"` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions | `string` | `null` | no |
 | terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
@@ -371,16 +372,8 @@ Features:
 - create first release!
 
 TODO:
-- create integration deployment with invalid terraform file that causes error with create_deploy_stack codebuild
-   - skip down stream test after asserting that create_deploy_stack failed
-
-   - create error handling for pr tf plan that fails build on any tf plan errors
-   scenarios:
-      - change tf data source to be invalid after merge (ssm param?)
-         - after tf plan test, delete data source from aws
-      - remove plan role from create_deploy_stack permission
-         - figure out how to inject parent cls fixture to be a depedency for create_deploy_stack test
 - add Terraform/Terragrunt version pytest parameterization to check if different versions create invalid parsing of stdout
    - create_deploy_stack create_stack()
    - terra_run create_resources()
 
+- figure out how to skip cleanup codebuilds if tests fails before step function tests

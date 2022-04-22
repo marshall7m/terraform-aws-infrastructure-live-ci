@@ -198,7 +198,7 @@ variable "merge_lock_ssm_key" {
   default     = null
 }
 
-variable "status_check_name" {
+variable "merge_lock_status_check_name" {
   description = "Name of the merge lock GitHub status"
   type        = string
   default     = "IAC Merge Lock"
@@ -208,6 +208,15 @@ variable "pr_approval_count" {
   description = "Number of GitHub approvals required to merge a PR with infrastructure changes"
   type        = number
   default     = null
+}
+
+variable "enfore_admin_branch_protection" {
+  description = <<EOF
+  Determines if the branch protection rule is enforced for the GitHub repository's admins. 
+  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline.
+EOF
+  type        = bool
+  default     = false
 }
 
 ### GITHUB-TOKEN ###
