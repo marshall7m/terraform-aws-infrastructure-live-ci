@@ -129,7 +129,7 @@ class CreateStack:
             database=os.environ['METADB_NAME']
         ) as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT account_path, plan_role_arn FROM account_dim')
+                cur.execute('SELECT account_path, plan_role_arn FROM account_dim ORDER BY account_name')
                 accounts = [{'path': r[0], 'role': r[1]} for r in cur.fetchall()]
 
                 log.debug(f'Accounts:\n{accounts}')
