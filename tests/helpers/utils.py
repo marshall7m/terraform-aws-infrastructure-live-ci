@@ -9,7 +9,13 @@ import shlex
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-def dummy_tf_output(name=f'_{uuid.uuid4()}', value=f'_{uuid.uuid4()}'):
+def dummy_tf_output(name=None, value=None):
+    if not name:
+        name = f'_{uuid.uuid4()}'
+    
+    if not value:
+        value = f'_{uuid.uuid4()}'
+
     return f"""
     output "{name}" {{
         value = "{value}"
@@ -23,16 +29,10 @@ def dummy_tf_provider_resource():
     resource "null_resource" "this" {}
     """
 
-def dummy_tf_ssm_param_data_source(key, resource_name=f'_{uuid.uuid4()}'):
-    return f"""
-    provider "aws" {{}}
+def dummy_tf_github_repo(repo_name=None):
+    if not repo_name:
+        repo_name = f'dummy-repo-{uuid.uuid4()}'
 
-    data "aws_ssm_parameter" "{resource_name}" {{
-        name = "{key}"
-    }}
-    """
-
-def dummy_tf_github_repo(repo_name=f'dummy-repo-{uuid.uuid4()}'):
     return f"""
     terraform {{
     required_providers {{
