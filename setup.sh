@@ -43,7 +43,7 @@ if [ "$type" == "local" ]; then
   export PGPORT=5432
 
   docker-compose up --detach
-  docker-compose exec testing /bin/bash
+  docker-compose exec -e GITHUB_TOKEN testing /bin/bash
 elif [ "$type" == "remote" ]; then
   
   docker-compose run \
