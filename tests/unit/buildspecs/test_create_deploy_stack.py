@@ -1,6 +1,3 @@
-from distutils.command.check import check
-from pickle import FALSE
-from venv import create
 import pytest
 import os
 import random
@@ -14,66 +11,30 @@ from tests.helpers.utils import dummy_tf_output, dummy_tf_provider_resource, ins
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-@pytest.fixture(scope='module', autouse=True)
-def account_dim(conn, cur):
-    '''Creates account records within local db'''
-    results = insert_records(conn, 'account_dim', [
-        {
-            'account_name': 'dev',
-            'account_path': 'directory_dependency/dev-account',
-            'account_deps': ['shared-services'],
-        },
-        {
-            'account_name': 'shared-services',
-            'account_path': 'directory_dependency/shared-services-account',
-            'account_deps': []
-        }
-    ])
-
-    yield results
-
-    cur.execute('TRUNCATE account_dim')
-
-@pytest.fixture(scope='module')
-def base_git_repo(tmp_path_factory):
-    '''Clones template infrastructure-live repo from GitHub into local tmp dir'''
-    root_dir = str(tmp_path_factory.mktemp('test-create-deploy-stack-'))
-    yield git.Repo.clone_from(f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/marshall7m/infrastructure-live-testing-template.git', root_dir)
-
-@pytest.fixture(scope='function')
-def git_repo(tmp_path_factory, base_git_repo):
-    '''Clones template infrastructure-live repo from tmp dir to another tmp dir for each test function. Reason for fixture is to reduce amount of remote clones needed for testing'''
-    param_git_dir = str(tmp_path_factory.mktemp('test-create-deploy-stack-param-'))
-    yield git.Repo.clone_from(str(base_git_repo.git.rev_parse('--show-toplevel')), param_git_dir)
-    
-@pytest.fixture(scope='function')
-def repo_changes(request, git_repo):
-    '''
-    Creates Terraform files within the test's version of the local repo
-    
-    Arguments:
-    request.param: Map keys consisting of directory paths that are relative to the root directory of the repo and 
-        list values containing the content to write to the directory path with each representing a new file
-    '''
-    for dir, contents in request.param.items():
-        for content in contents:
-            abs_path = str(git_repo.git.rev_parse('--show-toplevel')) + '/' + dir + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
-            
-            log.debug(f'Creating file: {abs_path}')
-            with open(abs_path, 'w') as text_file:
-                text_file.write(content)
-
-    return request.param
-@pytest.fixture(params=['latest', '1.0.0', '0.15.0', '0.14.0'])
+tf_versions = [
+    pytest.param('latest'),
+    pytest.param('1.0.0', marks=pytest.mark.skip()), 
+    pytest.param('0.15.0', marks=pytest.mark.skip()), 
+    pytest.param('0.14.0', marks=pytest.mark.skip())
+]
+@pytest.fixture(params=tf_versions, ids=[f'tf_{v}' for v in tf_versions])
 def terraform_version(request):
+    '''Terraform version that will be installed and used'''
     terra_version('terraform', request.param, overwrite=True)
     return request.param
 
-@pytest.fixture(params=['0.36.7', '0.36.0', '0.35.0', '0.34.0'])
+tg_versions = [
+    pytest.param('0.36.7'),
+    pytest.param('0.36.0', marks=pytest.mark.skip()), 
+    pytest.param('0.35.0', marks=pytest.mark.skip()), 
+    pytest.param('0.34.0', marks=pytest.mark.skip())
+]
+@pytest.fixture(params=tg_versions, ids=[f'tg_{v}' for v in tg_versions])
 def terragrunt_version(request):
+    '''Terragrunt version that will be installed and used'''
     terra_version('terragrunt', request.param, overwrite=True)
     return request.param
-    
+
 @pytest.mark.parametrize('repo_changes,expected_stack', [
     pytest.param(
         {'directory_dependency/dev-account/us-west-2/env-one/doo': [dummy_tf_output()]},
@@ -96,7 +57,7 @@ def terragrunt_version(request):
             }
         ],
         id='no_deps_new_provider'
-    ),
+    )
     pytest.param(
         {'directory_dependency/dev-account/global': [dummy_tf_output()]},
         [
@@ -129,8 +90,9 @@ def terragrunt_version(request):
         id='multi_deps'
     )
 ], indirect=['repo_changes'])
-@pytest.mark.usefixtures('aws_credentials,terraform_version,terragrunt_version')
-def test_create_stack(git_repo, repo_changes, expected_stack, terraform_version, terragrunt_version):
+@patch.dict(os.environ, {'TG_BACKEND': 'local'})
+@pytest.mark.usefixtures('aws_credentials', 'terraform_version', 'terragrunt_version')
+def test_create_stack(git_repo, repo_changes, expected_stack):
     '''
     Ensures that create_stack() parses the Terragrunt command output correctly, 
     filters out any directories that don't have changes and detects any new 
@@ -164,7 +126,7 @@ def test_create_stack(git_repo, repo_changes, expected_stack, terraform_version,
     'STATE_MACHINE_ARN': 'mock',
     'GITHUB_MERGE_LOCK_SSM_KEY': 'mock-ssm-key',
     'TRIGGER_SF_FUNCTION_NAME': 'mock-lambda',
-    'TG_BACKEND': 'local',
+    'TG_BACKEND': 'local'
 })
 #mock aws boto3 clients
 @patch('buildspecs.create_deploy_stack.create_deploy_stack.CreateStack.set_aws_env_vars')
@@ -207,9 +169,10 @@ def test_main(mock_conn, mock_lambda, mock_ssm, mock_set_aws_env_vars, repo_chan
     git_root = git_repo.git.rev_parse('--show-toplevel')
     os.chdir(git_root)
 
+    # get nested aurora.connect() context manager mock
+    mock_conn_context = mock_conn.return_value.__enter__.return_value
     # get nested conn.cursor() context manager mock
-    mock_cur = mock_conn.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
-    
+    mock_cur = mock_conn_context.cursor.return_value.__enter__.return_value
     # mock retrieval of [(account_path, plan_role_arn)] from account dim
     mock_cur.fetchall.return_value = accounts
     
@@ -221,7 +184,7 @@ def test_main(mock_conn, mock_lambda, mock_ssm, mock_set_aws_env_vars, repo_chan
 
     if expected_failure:
         log.info('Assert execution record creation was rolled back')
-        mock_cur.rollback.assert_called_once()
+        mock_conn_context.rollback.assert_called_once()
 
         log.info('Assert merge lock value was reset')
         mock_ssm.put_parameter.assert_called_with(Name=os.environ['GITHUB_MERGE_LOCK_SSM_KEY'], Value='none', Type='String', Overwrite=True)
