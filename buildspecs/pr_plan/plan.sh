@@ -24,7 +24,7 @@ for account in $(echo "$ACCOUNT_DIM" | jq -r -c '. | .[]'); do
         plan_role_arn=$(echo "$account" | jq -r '.plan_role_arn')
         echo "Plan Role ARN: $plan_role_arn"
         for path in "${diff_paths[@]}"; do
-            echo "Config Path: $path"
+            echo "Directory: $path"
             terragrunt plan --terragrunt-working-dir "$path" --terragrunt-iam-role "$plan_role_arn"
         done
     else
