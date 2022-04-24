@@ -367,13 +367,13 @@ The steps below will setup a testing Docker environment for running integration 
 Features:
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
+- create "fast-scan" for create_deploy_stack that uses git diff with *.tf|*.hcl filter to create stack without using the costly terragrunt run-all plan command
 
 - merge into master
 - create first release!
 
 TODO:
-- add Terraform/Terragrunt version pytest parameterization to check if different versions create invalid parsing of stdout
-   - create_deploy_stack create_stack()
-   - terra_run create_resources()
+add unit test for pr_plan
+add secondary source for terra_run and pr_plan
 
-- figure out how to skip cleanup codebuilds if tests fails before step function tests
+aurora to terra_run ecr image

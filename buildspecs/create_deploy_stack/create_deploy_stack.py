@@ -87,15 +87,19 @@ class CreateStack:
             path: Directory to run terragrunt run-all plan within. Directory must contain a `terragrunt.hcl` file.
             git_root: The associated Github repository's root absolute directory
         '''
-        cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
-        log.debug(f'Running command: {cmd}')
+        run_all_cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
+        log.debug(f'Running command: {run_all_cmd}')
 
-        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
+        run = subprocess.run(run_all_cmd.split(' '), capture_output=True, text=True)
         return_code = run.returncode
+
+        log.debug(f'Stderr for cmd: {run_all_cmd}')
+        log.debug(run.stderr)
+        log.debug(f'Stdout for cmd: {run_all_cmd}')
+        log.debug(run.stdout)
 
         if return_code not in [0, 2]:
             log.debug(f'Return code: {return_code}')
-            log.debug(run.stderr)
             raise TerragruntException('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
         
         diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', run.stderr, re.DOTALL)
@@ -104,18 +108,36 @@ class CreateStack:
             return []
         else:
             log.debug(f'Detected new/modified Terragrunt paths:\n{diff_paths}')
-        
+
+        graph_deps_cmd = f'terragrunt graph-dependencies --terragrunt-working-dir {path}'
+        log.debug(f'Running command: {graph_deps_cmd}')
+
+        graph_deps = subprocess.run(graph_deps_cmd.split(' '), capture_output=True, text=True, check=True)
+        log.debug(f'Stdout for cmd: {graph_deps_cmd} deps:')
+        log.debug(graph_deps.stdout)
         stack = []
-        for m in re.finditer(r'=>\sModule\s(?P<cfg_path>.+?)\s\(excluded:.+dependencies:\s\[(?P<cfg_deps>.+|)\]', run.stderr, re.MULTILINE):
+        
+        #use list of cfg_path values that have already been added to stack to skip running costly get_new_providers() on every iteration
+        added_cfg_paths = []
+        # needs no_deps group to capture directories without any dependencies
+        for m in re.finditer(r'(?<=\t")(?P<cfg_path>.+)"\s(->\s"(?P<cfg_deps>.+)"|(?P<no_deps>;))', graph_deps.stdout, re.MULTILINE):
             if m.group(1) in diff_paths:
                 cfg = m.groupdict()
+                del cfg['no_deps']
 
                 cfg['cfg_path'] = os.path.relpath(cfg['cfg_path'], git_root)
-                cfg['cfg_deps'] = [os.path.relpath(path, git_root) for path in cfg['cfg_deps'].replace(',', '').split() if path in diff_paths]
-                cfg['new_providers'] = self.get_new_providers(cfg['cfg_path'])
+                if cfg['cfg_path'] not in added_cfg_paths:
+                    # adds initial dependency list that future iterations can append to
+                    if not cfg['cfg_deps']:
+                        cfg['cfg_deps'] = []
+                    cfg['new_providers'] = self.get_new_providers(cfg['cfg_path'])
 
-                stack.append(cfg)
+                    stack.append(cfg)
 
+                    added_cfg_paths.append(cfg['cfg_path'])
+                else:
+                    if cfg['cfg_deps'] and cfg['cfg_deps'] in diff_paths:
+                        _ = [item.update(cfg_deps=item['cfg_deps'] + [os.path.relpath(cfg['cfg_deps'], git_root)]) for item in stack if item['cfg_path'] == cfg['cfg_path']]
         return stack
 
     def update_executions_with_new_deploy_stack(self) -> None:
