@@ -1,12 +1,9 @@
 import pytest
 import os
-import random
-import string
 import logging
-import git
 from unittest.mock import patch
-from unittest.mock import mock_open
-from tests.helpers.utils import dummy_tf_output, dummy_tf_provider_resource, insert_records, terra_version
+import uuid
+from tests.helpers.utils import dummy_tf_output, dummy_tf_provider_resource, terra_version
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -17,7 +14,7 @@ tf_versions = [
     pytest.param('0.15.0', marks=pytest.mark.skip()), 
     pytest.param('0.14.0', marks=pytest.mark.skip())
 ]
-@pytest.fixture(params=tf_versions, ids=[f'tf_{v}' for v in tf_versions])
+@pytest.fixture(params=tf_versions, ids=[f'tf_{v.values[0]}' for v in tf_versions])
 def terraform_version(request):
     '''Terraform version that will be installed and used'''
     terra_version('terraform', request.param, overwrite=True)
@@ -29,15 +26,24 @@ tg_versions = [
     pytest.param('0.35.0', marks=pytest.mark.skip()), 
     pytest.param('0.34.0', marks=pytest.mark.skip())
 ]
-@pytest.fixture(params=tg_versions, ids=[f'tg_{v}' for v in tg_versions])
+@pytest.fixture(params=tg_versions, ids=[f'tg_{v.values[0]}' for v in tg_versions])
 def terragrunt_version(request):
     '''Terragrunt version that will be installed and used'''
     terra_version('terragrunt', request.param, overwrite=True)
     return request.param
 
+@pytest.fixture(params=[pytest.param(True), pytest.param(False, marks=pytest.mark.skip())], ids=['graph_scan', 'plan_scan'])
+def scan_type(request):
+    '''Determiens if Terragrun graph depedencies or run-all plan command is used to detect directories with differences'''
+    if request.param:
+        os.environ['GRAPH_SCAN'] = 'true'
+    yield None
+    
+    del os.environ['GRAPH_SCAN']
+
 @pytest.mark.parametrize('repo_changes,expected_stack', [
     pytest.param(
-        {'directory_dependency/dev-account/us-west-2/env-one/doo': [dummy_tf_output()]},
+        {'directory_dependency/dev-account/us-west-2/env-one/doo/a.tf': dummy_tf_output()},
         [
             {
                 'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
@@ -48,7 +54,7 @@ def terragrunt_version(request):
         id='no_deps'
     ),
     pytest.param(
-        {'directory_dependency/dev-account/us-west-2/env-one/doo': [dummy_tf_provider_resource()]},
+        {'directory_dependency/dev-account/us-west-2/env-one/doo/a.tf': dummy_tf_provider_resource()},
         [
             {
                 'cfg_path': 'directory_dependency/dev-account/us-west-2/env-one/doo',
@@ -57,9 +63,9 @@ def terragrunt_version(request):
             }
         ],
         id='no_deps_new_provider'
-    )
+    ),
     pytest.param(
-        {'directory_dependency/dev-account/global': [dummy_tf_output()]},
+        {'directory_dependency/dev-account/global/a.tf': dummy_tf_output()},
         [
             {
                 'cfg_path': 'directory_dependency/dev-account/global',
@@ -92,7 +98,7 @@ def terragrunt_version(request):
 ], indirect=['repo_changes'])
 @patch.dict(os.environ, {'TG_BACKEND': 'local'})
 @pytest.mark.usefixtures('aws_credentials', 'terraform_version', 'terragrunt_version')
-def test_create_stack(git_repo, repo_changes, expected_stack):
+def test_create_stack(git_repo, repo_changes, expected_stack, scan_type):
     '''
     Ensures that create_stack() parses the Terragrunt command output correctly, 
     filters out any directories that don't have changes and detects any new 
@@ -103,6 +109,11 @@ def test_create_stack(git_repo, repo_changes, expected_stack):
     log.debug("Changing to the test repo's root directory")
     git_root = git_repo.git.rev_parse('--show-toplevel')
     os.chdir(git_root)
+    
+    test_branch = git_repo.create_head(f'test-{uuid.uuid4()}').checkout().repo
+    test_branch.index.add(list(repo_changes.keys()))
+    commit = test_branch.index.commit('Add terraform testing changes')
+    os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'] = f'{commit.hexsha}^'
 
     log.debug('Running create_stack()')
     create_stack = CreateStack()
@@ -136,21 +147,21 @@ def test_create_stack(git_repo, repo_changes, expected_stack):
 @pytest.mark.usefixtures('aws_credentials')
 @pytest.mark.parametrize('repo_changes,accounts,expected_failure', [
     pytest.param(
-        {'directory_dependency/dev-account/global': [dummy_tf_output()]},
+        {'directory_dependency/dev-account/global/a.tf': dummy_tf_output()},
         [('directory_dependency/dev-account', 'mock-plan-role-arn')],
         False,
         id='no_deps'
     ),
     pytest.param(
-        {'directory_dependency/dev-account/global': [dummy_tf_output()]},
+        {'directory_dependency/dev-account/global/a.tf': dummy_tf_output()},
         [('directory_dependency/invalid-account', 'mock-plan-role-arn')],
         True,
         id='invalid_account_path'
     ),
     pytest.param(
         {
-            'directory_dependency/dev-account/global': [dummy_tf_output(name="1_invalid_name")],
-            'directory_dependency/shared-services-account/global': [dummy_tf_output()]
+            'directory_dependency/dev-account/global/a.tf': dummy_tf_output(name="1_invalid_name"),
+            'directory_dependency/shared-services-account/global/a.tf': dummy_tf_output()
         },
         [
             ('directory_dependency/dev-account', 'mock-plan-role-arn'),

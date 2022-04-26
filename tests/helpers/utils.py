@@ -101,8 +101,7 @@ def insert_records(conn, table, records, enable_defaults=None):
                 cur.execute(query, record)
                 conn.commit()
 
-                record = cur.fetchone()
-                results.append(dict(record))
+                results.append(dict(cur.fetchone()))
         except Exception as e:
             log.error(e)
             raise
