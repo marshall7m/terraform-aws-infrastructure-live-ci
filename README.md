@@ -371,9 +371,3 @@ Features:
 
 - merge into master
 - create first release!
-
-TODO:
-add unit test for pr_plan
-add secondary source for terra_run and pr_plan
-
-aurora to terra_run ecr image
