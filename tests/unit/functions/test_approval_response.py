@@ -6,7 +6,7 @@ import sys
 import json
 from unittest.mock import patch
 from pprint import pformat
-from tests.helpers.utils import SetupUnit
+from tests.helpers.utils import insert_records
 from psycopg2 import sql
 
 log = logging.getLogger(__name__)
@@ -130,11 +130,9 @@ def lambda_handler(event=None, context=None):
 def test_lambda_handler(mock_sf, conn, cur, event, record, status, expected_status_code, expected_send_token):
     mock_sf.describe_execution.return_value = {'status': status}
 
-    if record == {}:
-        log.info('Skip creating test record')
-    else:
+    if record != {}:
         log.info('Creating test record')
-        record = SetupUnit.create_records(conn, 'executions', record, enable_defaults=True)
+        record = insert_records(conn, 'executions', record, enable_defaults=True)
         log.info(f'Record: {pformat(record)}')
     
     log.info('Running Lambda Function')

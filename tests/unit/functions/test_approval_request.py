@@ -3,18 +3,12 @@ import unittest
 import os
 import logging
 import sys
-import json
 from unittest.mock import patch
-from pprint import pformat
-from tests.helpers.utils import SetupUnit
-from psycopg2 import sql
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
-
-@pytest.mark.usefixtures('mock_conn', 'aws_credentials')
 
 def run_lambda(event=None, context=None):
     '''Imports Lambda function after boto3 client patch has been created to prevent boto3 region_name not specified error'''

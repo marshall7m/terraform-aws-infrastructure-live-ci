@@ -50,20 +50,20 @@ def tg_apply(dirs):
 @pytest.mark.usefixtures('terraform_version', 'terragrunt_version')
 @pytest.mark.parametrize('repo_changes,new_providers,expected', [
     pytest.param(
-        {'directory_dependency/dev-account/us-west-2/env-one/doo': [dummy_tf_provider_resource()]},
+        {'directory_dependency/dev-account/us-west-2/env-one/doo/a.tf': dummy_tf_provider_resource()},
         ['registry.terraform.io/hashicorp/null'],
         ['null_resource.this'],
         id='new_resource_exists'
     ),
     pytest.param(
-        {'directory_dependency/dev-account/us-west-2/env-one/doo': []},
+        {'directory_dependency/dev-account/us-west-2/env-one/doo/a.tf': ''},
         ['registry.terraform.io/hashicorp/null'],
         [],
         id='new_resource_not_exists'
     )
 ], indirect=['repo_changes'])
 def test_get_new_provider_resources(repo_changes, new_providers, expected):
-    target_path = list(repo_changes.keys())[0]
+    target_path = os.path.dirname(list(repo_changes.keys())[0])
     tg_apply([target_path])
     actual = update_new_resources.get_new_provider_resources(target_path, new_providers)
     

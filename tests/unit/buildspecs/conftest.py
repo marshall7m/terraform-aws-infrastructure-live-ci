@@ -47,15 +47,13 @@ def repo_changes(request, git_repo):
     Creates Terraform files within the test's version of the local repo
     
     Arguments:
-    request.param: Map keys consisting of directory paths that are relative to the root directory of the repo and 
-        list values containing the content to write to the directory path with each representing a new file
+    request.param: Map keys consisting of filepaths that are relative to the root directory of the repo and 
+        string content to write to the directory path
     '''
-    for dir, contents in request.param.items():
-        for content in contents:
-            abs_path = str(git_repo.git.rev_parse('--show-toplevel')) + '/' + dir + '/' + ''.join(random.choice(string.ascii_lowercase) for _ in range(8)) + '.tf'
-            
-            log.debug(f'Creating file: {abs_path}')
-            with open(abs_path, 'w') as text_file:
-                text_file.write(content)
+    for path, content in request.param.items():
+        abs_path = str(git_repo.git.rev_parse('--show-toplevel')) + '/' + path
+        log.debug(f'Creating file: {abs_path}')
+        with open(abs_path, 'w') as text_file:
+            text_file.write(content)
 
     return request.param

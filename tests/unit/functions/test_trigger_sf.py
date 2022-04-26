@@ -117,7 +117,7 @@ def test__execution_finished_status_update(mock_client, cur, conn, records, exec
     cur = conn.cursor()
     mock_client.list_executions.return_value = {'executions': [{'name': record['execution_id'], 'executionArn': 'mock-arn'} for record in records if record['status'] != 'waiting']}
     mock_client.stop_execution.return_value = None
-    records = insert_records('executions', records, enable_defaults=True)
+    records = insert_records(conn, 'executions', records, enable_defaults=True)
 
     try:
         lambda_function._execution_finished(cur, execution)
@@ -285,7 +285,7 @@ def test__start_executions(mock_client, conn, records, expected_running_ids):
     '''Test to ensure that the Lambda Function handles account and directory level dependencies before starting any Step Function executions'''
     from functions.trigger_sf import lambda_function
     cur = conn.cursor()
-    records = insert_records('executions', records, enable_defaults=True)
+    records = insert_records(conn, 'executions', records, enable_defaults=True)
 
     lambda_function._start_sf_executions(cur)
     
@@ -323,10 +323,10 @@ def test__start_executions(mock_client, conn, records, expected_running_ids):
 @patch('functions.trigger_sf.lambda_function.ssm')
 @pytest.mark.usefixtures('mock_conn', 'aws_credentials')
 @patch.dict(os.environ, {"METADB_CLUSTER_ARN": "mock","METADB_SECRET_ARN": "mock", "METADB_NAME": "mock", "STATE_MACHINE_ARN": "mock", 'GITHUB_MERGE_LOCK_SSM_KEY': 'mock-ssm-key'}, clear=True)
-def test_merge_lock(mock_client, records, expect_unlocked_merge_lock):
+def test_merge_lock(mock_client, conn, records, expect_unlocked_merge_lock):
     '''Test to ensure that the AWS System Manager Parameter Store merge lock value was reset to none if all executions within the metadb are finished'''
     from functions.trigger_sf.lambda_function import lambda_handler
-    records = insert_records('executions', records, enable_defaults=True)
+    records = insert_records(conn, 'executions', records, enable_defaults=True)
 
     lambda_handler({}, {})
     log.info('Assert merge lock value')
