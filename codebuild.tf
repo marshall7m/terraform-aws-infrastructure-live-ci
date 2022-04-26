@@ -286,9 +286,19 @@ env:
 phases:
   build:
     commands:
-      - |
-        ${replace(replace(file("${path.module}/buildspecs/pr_plan/plan.sh"), "\t", "  "), "\n", "\n        ")}
+      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/pr_plan/plan.py"
 EOT
+  }
+
+  secondary_build_source = {
+    source_identifier   = local.buildspec_scripts_source_identifier
+    type                = "GITHUB"
+    git_clone_depth     = 1
+    report_build_status = false
+    insecure_ssl        = false
+    location            = data.github_repository.build_scripts.http_clone_url
+    #TODO: use github tag after development
+    source_version = "lambda-trigger-sf"
   }
   role_policy_statements = [
     {
@@ -358,9 +368,18 @@ phases:
     commands:
       - "$${TG_COMMAND}"
     finally:
-      - |
-        ${replace(replace(file("${path.module}/buildspecs/terra_run/update_new_resources.sh"), "\t", "  "), "\n", "\n        ")}
+      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/terra_run/update_new_resources.py"
 EOT
+  }
+  secondary_build_source = {
+    source_identifier   = local.buildspec_scripts_source_identifier
+    type                = "GITHUB"
+    git_clone_depth     = 1
+    report_build_status = false
+    insecure_ssl        = false
+    location            = data.github_repository.build_scripts.http_clone_url
+    #TODO: use github tag after development
+    source_version = "lambda-trigger-sf"
   }
   role_policy_statements = [
     {
