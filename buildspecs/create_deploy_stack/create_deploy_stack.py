@@ -13,7 +13,6 @@ import json
 from typing import List
 from collections import defaultdict
 
-from buildspecs import TerragruntException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -21,6 +20,10 @@ log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 ssm = boto3.client('ssm')
 lb = boto3.client('lambda')
+
+class TerragruntException(Exception):
+    '''Wraps around Terragrunt-related errors'''
+    pass
 
 class ClientException(Exception):
     """Wraps around client-related errors"""

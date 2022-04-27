@@ -3,10 +3,13 @@ import json
 import logging
 import git
 import subprocess
-from buildspecs import TerragruntException
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+class TerragruntException(Exception):
+    '''Wraps around Terragrunt-related errors'''
+    pass
 
 
 def main():
