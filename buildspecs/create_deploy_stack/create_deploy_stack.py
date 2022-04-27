@@ -78,13 +78,12 @@ class CreateStack:
         del os.environ['AWS_SECRET_ACCESS_KEY']
         del os.environ['AWS_SESSION_TOKEN']
     
-    def create_stack(self, path: str, git_root: str) -> List[map]:
+    def create_stack(self, path: str) -> List[map]:
         '''
-        Creates a list of Terragrunt paths that contain differences in their plan with their associated Terragrunt dependencies and new providers
+        Creates a list of Terragrunt paths that contain differences in their respective plan with their associated Terragrunt dependencies and new providers
 
         Arguments:
             path: Directory to run terragrunt run-all plan within. Directory must contain a `terragrunt.hcl` file.
-            git_root: The associated Github repository's root absolute directory
         '''
 
         graph_deps_cmd = f'terragrunt graph-dependencies --terragrunt-working-dir {path}'
@@ -94,31 +93,42 @@ class CreateStack:
         log.debug(f'Stdout for cmd: {graph_deps_cmd}:')
         log.debug(graph_deps_out.stdout)
 
+        #parses output of command to create a map of directories and a list of their directory dependencies
         graph_deps = defaultdict(list)
-        for m in re.finditer(r'(?<=\t")(.+)"\s->\s"(.*)"', graph_deps_out.stdout, re.MULTILINE):
-            if m.group(2):
-                graph_deps[m.group(1)].append(m.group(2))
+        for m in re.finditer(r'\t"(.+?)("\s;|"\s->\s")(.+(?=";)|$)', graph_deps_out.stdout, re.MULTILINE):
+            if m.group(3) != '':
+                graph_deps[m.group(1)].append(m.group(3))
             else:
                 graph_deps[m.group(1)]
 
-        log.debug(f'Graph Dependency mapping: \n{graph_deps}')
-
+        graph_deps = dict(graph_deps)
+        log.debug(f'Graph Dependency mapping: \n{pformat(graph_deps)}')
+        
+        repo = git.Repo(search_parent_directories=True)
+        # if set, use graph-dependencies map to determine target execution directories
+        log.debug(f'$GRAPH_SCAN: {os.environ.get("GRAPH_SCAN", "")}')
         if os.environ.get('GRAPH_SCAN', False):
-            repo = git.Repo(search_parent_directories=True)
             diff_paths = []
+            # collects directories that contain new, modified and deleted .hcl/.tf files
             for diff in repo.heads.master.commit.diff('HEAD', paths=[f'{path}/**.hcl', f'{path}/**.tf']):
                 if diff.change_type in ['A', 'M', 'D']:
                     diff_paths.append(repo.working_dir + '/' + os.path.dirname(diff.a_path))
-            git_diff_paths = list(set(diff_paths))
+            target_diff_paths = list(set(diff_paths))
+
+            log.debug(f'Git detected differences:\n{target_diff_paths}')
             diff_paths = []
-            while len(git_diff_paths) > 0:
-                path = git_diff_paths.pop()
+            # recursively searches for the diff directories within the graph dependencies mapping to include chained dependencies
+            while len(target_diff_paths) > 0:
+                log.debug('Current Git diffs list:')
+                log.debug(target_diff_paths)
+                path = target_diff_paths.pop()
                 for cfg_path, cfg_deps in graph_deps.items():
                     if cfg_path == path:
                         diff_paths.append(path)
                     if path in cfg_deps:
-                        git_diff_paths.append(path)
+                        target_diff_paths.append(cfg_path)
         else:
+            # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
             run_all_cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
             log.debug(f'Running command: {run_all_cmd}')
 
@@ -133,7 +143,7 @@ class CreateStack:
             if return_code not in [0, 2]:
                 log.debug(f'Return code: {return_code}')
                 raise TerragruntException('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
-            
+            # selects directories that contains a exitcode of 2 meaning there is a difference in the terraform plan
             diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', run.stderr, re.DOTALL)
 
         if len(diff_paths) == 0:
@@ -143,12 +153,12 @@ class CreateStack:
             log.debug(f'Detected new/modified Terragrunt paths:\n{diff_paths}')
 
         stack = []
-
         for cfg_path, cfg_deps in graph_deps.items():
             if cfg_path in diff_paths:
                 stack.append({
-                    'cfg_path': cfg_path,
-                    'cfg_deps': [dep for dep in cfg_deps if dep in diff_paths],
+                    'cfg_path': os.path.relpath(cfg_path, repo.working_dir),
+                    # only selects dependencies that contains differences in their plan
+                    'cfg_deps': [os.path.relpath(dep, repo.working_dir) for dep in cfg_deps if dep in diff_paths],
                     'new_providers': self.get_new_providers(cfg_path)
                 })
         return stack
@@ -157,7 +167,6 @@ class CreateStack:
         '''
         Iterates through every parent account-level directory and insert it's associated deployment stack within the metadb
         '''
-
         with aurora_data_api.connect(
             aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
             secret_arn=os.environ['METADB_SECRET_ARN'],
@@ -173,9 +182,6 @@ class CreateStack:
                     log.fatal('No account paths are defined in account_dim')
                     sys.exit(1)
 
-                git_root = self.git_repo.git.rev_parse('--show-toplevel')
-                log.debug(f'Git root: {git_root}')
-                pr_id = os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]
                 try:
                     log.info('Getting account stacks')
                     for account in accounts:
@@ -186,7 +192,7 @@ class CreateStack:
                             raise ClientException(f'Account path does not exist within repo: {account["path"]}')
                         
                         with self.set_aws_env_vars(account['role'], 'trigger-sf-terragrunt-plan-all'):
-                            stack = self.create_stack(account['path'], git_root)
+                            stack = self.create_stack(account['path'])
 
                         log.debug(f'Stack:\n{stack}')
 
@@ -196,7 +202,7 @@ class CreateStack:
         
                         with open(f'{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql', 'r') as f:
                             query = f.read().format(
-                                pr_id=pr_id,
+                                pr_id=os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1],
                                 commit_id=os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'],
                                 account_path=account['path'],
                                 base_ref=os.environ['CODEBUILD_WEBHOOK_BASE_REF'],

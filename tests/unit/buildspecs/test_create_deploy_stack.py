@@ -32,14 +32,21 @@ def terragrunt_version(request):
     terra_version('terragrunt', request.param, overwrite=True)
     return request.param
 
-@pytest.fixture(params=[pytest.param(True), pytest.param(False, marks=pytest.mark.skip())], ids=['graph_scan', 'plan_scan'])
+def scan_type_idfn(val):
+    if val:
+        return 'graph_scan'
+    else:
+        return 'plan_scan'
+
+@pytest.fixture(params=[pytest.param(True), pytest.param(False)], ids=scan_type_idfn)
 def scan_type(request):
     '''Determiens if Terragrun graph depedencies or run-all plan command is used to detect directories with differences'''
     if request.param:
         os.environ['GRAPH_SCAN'] = 'true'
     yield None
     
-    del os.environ['GRAPH_SCAN']
+    if 'GRAPH_SCAN' in os.environ:
+        del os.environ['GRAPH_SCAN']
 
 @pytest.mark.parametrize('repo_changes,expected_stack', [
     pytest.param(
@@ -97,8 +104,8 @@ def scan_type(request):
     )
 ], indirect=['repo_changes'])
 @patch.dict(os.environ, {'TG_BACKEND': 'local'})
-@pytest.mark.usefixtures('aws_credentials', 'terraform_version', 'terragrunt_version')
-def test_create_stack(git_repo, repo_changes, expected_stack, scan_type):
+@pytest.mark.usefixtures('aws_credentials', 'terraform_version', 'terragrunt_version', 'scan_type')
+def test_create_stack(git_repo, repo_changes, expected_stack):
     '''
     Ensures that create_stack() parses the Terragrunt command output correctly, 
     filters out any directories that don't have changes and detects any new 
@@ -119,7 +126,7 @@ def test_create_stack(git_repo, repo_changes, expected_stack, scan_type):
     create_stack = CreateStack()
 
     # for sake of testing, using just one account directory
-    stack = create_stack.create_stack('directory_dependency/dev-account', git_root)
+    stack = create_stack.create_stack('directory_dependency/dev-account')
     log.debug(f'Stack:\n{stack}')
     #convert list of dict to list of list of tuples since dict are not ordered
     assert sorted(sorted(cfg.items()) for cfg in stack) == sorted(sorted(cfg.items()) for cfg in expected_stack)
@@ -145,16 +152,18 @@ def test_create_stack(git_repo, repo_changes, expected_stack, scan_type):
 @patch('buildspecs.create_deploy_stack.create_deploy_stack.lb')
 @patch('aurora_data_api.connect')
 @pytest.mark.usefixtures('aws_credentials')
-@pytest.mark.parametrize('repo_changes,accounts,expected_failure', [
+@pytest.mark.parametrize('repo_changes,accounts,scan_type,expected_failure', [
     pytest.param(
         {'directory_dependency/dev-account/global/a.tf': dummy_tf_output()},
         [('directory_dependency/dev-account', 'mock-plan-role-arn')],
+        True,
         False,
         id='no_deps'
     ),
     pytest.param(
         {'directory_dependency/dev-account/global/a.tf': dummy_tf_output()},
         [('directory_dependency/invalid-account', 'mock-plan-role-arn')],
+        True,
         True,
         id='invalid_account_path'
     ),
@@ -167,12 +176,12 @@ def test_create_stack(git_repo, repo_changes, expected_stack, scan_type):
             ('directory_dependency/dev-account', 'mock-plan-role-arn'),
             ('directory_dependency/shared-services-account', 'mock-plan-role-arn')
         ],
+        False,
         True,
         id='tg_error'
     )
-], indirect=['repo_changes'])
-
-def test_main(mock_conn, mock_lambda, mock_ssm, mock_set_aws_env_vars, repo_changes, accounts, expected_failure, git_repo):
+], indirect=['repo_changes', 'scan_type'])
+def test_main(mock_conn, mock_lambda, mock_ssm, mock_set_aws_env_vars, repo_changes, accounts, scan_type, expected_failure, git_repo):
     '''Ensures main() handles errors properly from top level'''
     from buildspecs.create_deploy_stack.create_deploy_stack import CreateStack
 

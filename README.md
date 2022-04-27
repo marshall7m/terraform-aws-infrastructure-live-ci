@@ -367,7 +367,6 @@ The steps below will setup a testing Docker environment for running integration 
 Features:
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
-- create "fast-scan" for create_deploy_stack that uses git diff with *.tf|*.hcl filter to create stack without using the costly terragrunt run-all plan command
 
 - merge into master
 - create first release!
