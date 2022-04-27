@@ -89,8 +89,8 @@ variable "pr_plan_env_vars" {
   default = []
 }
 
-variable "terra_run_img" {
-  description = "Docker, ECR or AWS CodeBuild managed image to use for the terra_run CodeBuild project that runs plan/apply commands"
+variable "build_img" {
+  description = "Docker, ECR or AWS CodeBuild managed image to use for the CodeBuild projects. If not specified, Terraform module will create an ECR image for them."
   type        = string
   default     = null
 }

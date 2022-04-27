@@ -36,39 +36,17 @@ data "aws_ssm_parameter" "github_token" {
   name = var.github_token_ssm_key
 }
 
-module "ecr_terra_run" {
-  count  = var.terra_run_img == null ? 1 : 0
+module "ecr_common_image" {
+  count  = var.build_img == null ? 1 : 0
   source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
 
-  create_repo      = true
-  codebuild_access = true
-  cache            = false
-  source_path      = "${path.module}/buildspecs/terra_run"
-  repo_name        = local.terra_run_build_name
-  tag              = "latest"
-  trigger_build_paths = [
-    "${path.module}/buildspecs/terra_run"
-  ]
-  build_args = {
-    TERRAFORM_VERSION  = var.terraform_version
-    TERRAGRUNT_VERSION = var.terragrunt_version
-  }
-}
-
-module "ecr_create_deploy_stack" {
-  source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
-
-  create_repo      = true
-  codebuild_access = true
-  cache            = false
-  source_path      = "${path.module}/buildspecs/create_deploy_stack"
-  repo_name        = local.create_deploy_stack_build_name
-  tag              = "latest"
-  trigger_build_paths = [
-    "${path.module}/buildspecs/create_deploy_stack/Dockerfile",
-    "${path.module}/buildspecs/create_deploy_stack/install.sh",
-    "${path.module}/buildspecs/create_deploy_stack/requirements.txt"
-  ]
+  create_repo         = true
+  codebuild_access    = true
+  cache               = false
+  source_path         = "${path.module}/buildspecs/img"
+  repo_name           = "${var.step_function_name}-codebuild"
+  tag                 = "latest"
+  trigger_build_paths = ["${path.module}/buildspecs/img"]
   build_args = {
     TERRAFORM_VERSION  = var.terraform_version
     TERRAGRUNT_VERSION = var.terragrunt_version
@@ -118,7 +96,7 @@ EOT
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = module.ecr_create_deploy_stack.full_image_url
+    image        = coalesce(var.build_img, module.ecr_common_image[0].full_image_url)
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.codebuild_common_env_vars, [
       {
@@ -212,7 +190,7 @@ module "codebuild_pr_plan" {
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = coalesce(var.terra_run_img, module.ecr_terra_run[0].full_image_url)
+    image        = coalesce(var.build_img, module.ecr_common_image[0].full_image_url)
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
       {
@@ -278,8 +256,7 @@ module "codebuild_pr_plan" {
   ]
 
   build_source = {
-    type = "GITHUB"
-    # full clone needed to run `git branch` cmd in plan.sh
+    type                = "GITHUB"
     git_clone_depth     = 0
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
@@ -321,7 +298,7 @@ module "codebuild_terra_run" {
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = coalesce(var.terra_run_img, module.ecr_terra_run[0].full_image_url)
+    image        = coalesce(var.build_img, module.ecr_common_image[0].full_image_url)
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.terra_run_env_vars, var.codebuild_common_env_vars, [
       {
