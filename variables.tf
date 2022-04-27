@@ -163,7 +163,7 @@ which results in need to refresh the terraform remote state to accurately detect
 Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan.
 EOF
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "codebuild_common_env_vars" {
