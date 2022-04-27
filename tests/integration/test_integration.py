@@ -550,7 +550,9 @@ class Integration:
     @pytest.fixture(scope="class")
     def action(self, target_execution, case_param):
         '''Returns the approval execution action associated with the target execution record'''
-        if target_execution['is_rollback']:
+        if target_execution == {}:
+            return None
+        elif target_execution['is_rollback']:
             return case_param['executions'][target_execution['cfg_path']]['actions']['rollback_providers']
         else:
             return case_param['executions'][target_execution['cfg_path']].get('actions', {}).get('deploy', None)
