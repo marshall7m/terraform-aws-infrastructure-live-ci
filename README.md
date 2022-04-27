@@ -234,9 +234,10 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
 | build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | cloudwatch\_event\_rule\_name | Name of the CloudWatch event rule that detects when the Step Function completes an execution | `string` | `null` | no |
-| codebuild\_common\_env\_vars | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | n/a | yes |
+| codebuild\_common\_env\_vars | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_deploy\_stack\_build\_name | Name of AWS CodeBuild project that will create the PR deployment stack into the metadb | `string` | `null` | no |
+| create\_deploy\_stack\_graph\_scan | If true, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If false, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `bool` | `false` | no |
 | create\_deploy\_stack\_vpc\_config | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | enable\_metadb\_http\_endpoint | Enables AWS SDK connection to the metadb via data API HTTP endpoint. Needed in order to connect to metadb from outside of metadb's associated VPC | `bool` | `false` | no |
@@ -367,6 +368,7 @@ The steps below will setup a testing Docker environment for running integration 
 Features:
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
+- Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
 
 - merge into master
 - create first release!

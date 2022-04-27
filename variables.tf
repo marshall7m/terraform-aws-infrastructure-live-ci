@@ -154,6 +154,18 @@ EOF
   default = null
 }
 
+variable "create_deploy_stack_graph_scan" {
+  description = <<EOF
+If true, the create_deploy_stack build will use the git detected differences to determine what directories to run Step Function executions for.
+If false, the build will use terragrunt run-all plan detected differences to determine the executions.
+Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)
+which results in need to refresh the terraform remote state to accurately detect changes.
+Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan.
+EOF
+  type        = bool
+  default     = false
+}
+
 variable "codebuild_common_env_vars" {
   description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
   type = list(object({
@@ -161,6 +173,7 @@ variable "codebuild_common_env_vars" {
     value = string
     type  = optional(string)
   }))
+  default = []
 }
 
 # GITHUB-WEBHOOK #

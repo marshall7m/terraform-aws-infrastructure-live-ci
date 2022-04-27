@@ -151,7 +151,12 @@ EOT
         type  = "PLAINTEXT"
         value = aws_secretsmanager_secret_version.ci_metadb_user.arn
       }
-    ])
+      ], var.create_deploy_stack_graph_scan ? [{
+        name  = "GRAPH_SCAN"
+        type  = "PLAINTEXT"
+        value = "true"
+      }] : []
+    )
   }
 
   webhook_filter_groups = [
