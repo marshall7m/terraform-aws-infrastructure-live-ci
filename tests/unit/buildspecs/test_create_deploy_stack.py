@@ -121,8 +121,7 @@ def test_create_stack(git_repo, repo_changes, expected_stack, mocker):
     test_branch.index.add(list(repo_changes.keys()))
     commit = test_branch.index.commit('Add terraform testing changes')
 
-    #patch master head commit with test commit object so we don't have to push to actual master remote
-    mocker.patch(f'git.Head.commit', commit)
+    os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'] = commit.hexsha
 
     log.debug('Running create_stack()')
     create_stack = CreateStack()
