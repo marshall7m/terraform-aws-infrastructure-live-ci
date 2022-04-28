@@ -38,7 +38,7 @@ def scan_type_idfn(val):
     else:
         return 'plan_scan'
 
-@pytest.fixture(params=[pytest.param(True), pytest.param(False)], ids=scan_type_idfn)
+@pytest.fixture(params=[pytest.param(True), pytest.param(False, marks=pytest.mark.skip())], ids=scan_type_idfn)
 def scan_type(request):
     '''Determiens if Terragrun graph depedencies or run-all plan command is used to detect directories with differences'''
     if request.param:
@@ -103,9 +103,9 @@ def scan_type(request):
         id='multi_deps'
     )
 ], indirect=['repo_changes'])
-@patch.dict(os.environ, {'TG_BACKEND': 'local'})
+@patch.dict(os.environ, {'TG_BACKEND': 'local', 'CODEBUILD_WEBHOOK_BASE_REF': 'master'})
 @pytest.mark.usefixtures('aws_credentials', 'terraform_version', 'terragrunt_version', 'scan_type')
-def test_create_stack(git_repo, repo_changes, expected_stack):
+def test_create_stack(git_repo, repo_changes, expected_stack, mocker):
     '''
     Ensures that create_stack() parses the Terragrunt command output correctly, 
     filters out any directories that don't have changes and detects any new 
@@ -120,7 +120,9 @@ def test_create_stack(git_repo, repo_changes, expected_stack):
     test_branch = git_repo.create_head(f'test-{uuid.uuid4()}').checkout().repo
     test_branch.index.add(list(repo_changes.keys()))
     commit = test_branch.index.commit('Add terraform testing changes')
-    os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'] = f'{commit.hexsha}^'
+
+    #patch master head commit with test commit object so we don't have to push to actual master remote
+    mocker.patch(f'git.Head.commit', commit)
 
     log.debug('Running create_stack()')
     create_stack = CreateStack()

@@ -30,9 +30,6 @@ class ClientException(Exception):
     pass
 
 class CreateStack:
-    def __init__(self):
-        self.git_repo = git.Repo(search_parent_directories=True)
-
     def get_new_providers(self, path: str) -> List[str]:
         '''
         Returns list of Terraform provider sources that are defined within the `path` that are not within the terraform state
@@ -113,7 +110,7 @@ class CreateStack:
         if os.environ.get('GRAPH_SCAN', False):
             diff_paths = []
             # collects directories that contain new, modified and deleted .hcl/.tf files
-            for diff in repo.heads.master.commit.diff('HEAD', paths=[f'{path}/**.hcl', f'{path}/**.tf']):
+            for diff in repo.heads[os.environ['CODEBUILD_WEBHOOK_BASE_REF']].commit.diff('HEAD^', paths=[f'{path}/**.hcl', f'{path}/**.tf']):
                 if diff.change_type in ['A', 'M', 'D']:
                     diff_paths.append(repo.working_dir + '/' + os.path.dirname(diff.a_path))
             target_diff_paths = list(set(diff_paths))
