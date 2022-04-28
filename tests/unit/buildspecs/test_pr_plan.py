@@ -8,7 +8,6 @@ import subprocess
 from unittest.mock import patch
 from tests.helpers.utils import dummy_tf_output
 from buildspecs.pr_plan import plan
-from buildspecs import TerragruntException
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)

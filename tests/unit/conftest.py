@@ -10,7 +10,7 @@ import psycopg2.extras
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def conn():
     '''psycopg2 connection with auto commit set to True'''
     conn = psycopg2.connect(connect_timeout=10)
@@ -19,7 +19,7 @@ def conn():
     yield conn
     conn.close()
 
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session')
 def cur(conn):
     '''psycopg2 cursor that returns dictionary type results {column_name: value}'''
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -27,20 +27,20 @@ def cur(conn):
     cur.close()
 
 @timeout_decorator.timeout(30)
-@pytest.fixture(scope='session', autouse=True)
+@pytest.fixture(scope='session')
 def setup_metadb(cur):
     '''Creates `account_dim` and `executions` table'''
     log.info('Creating metadb tables')
     with open(f'{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql', 'r') as f:
         cur.execute(sql.SQL(f.read().replace('$', '')).format(metadb_schema=sql.Identifier('public'), metadb_name=sql.Identifier(os.environ['PGDATABASE'])))
 
-@pytest.fixture(scope='function', autouse=True)
+@pytest.fixture(scope='function')
 def truncate_executions(cur):
     '''Removes all rows from execution table after every test'''
     log.info('Truncating executions table')
     cur.execute("TRUNCATE executions")
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()
 def mock_conn(mocker, conn):
     '''Patches AWS RDS client with psycopg2 client that connects to the local docker container Postgres database'''
     return mocker.patch('aurora_data_api.connect', return_value=conn, autospec=True)

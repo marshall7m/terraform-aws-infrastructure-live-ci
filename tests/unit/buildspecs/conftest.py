@@ -9,7 +9,7 @@ from tests.helpers.utils import insert_records
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-@pytest.fixture(scope='module', autouse=True)
+@pytest.fixture(scope='module')
 def account_dim(conn, cur):
     '''Creates account records within local db'''
     results = insert_records(conn, 'account_dim', [
