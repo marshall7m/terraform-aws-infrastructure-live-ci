@@ -112,8 +112,7 @@ class CreateStack:
             # collects directories that contain new, modified and deleted .hcl/.tf files
             parent = repo.commit(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'] + '^')
             log.debug(f'Getting git differences between commits: {parent.hexsha} and {os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"]}')
-            for diff in parent.diff(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'], paths=[f'"{path}/**.hcl"', f'"{path}/**.tf"']):
-                log.debug(diff)
+            for diff in parent.diff(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'], paths=[f'{path}/**.hcl', f'{path}/**.tf']):
                 if diff.change_type in ['A', 'M', 'D']:
                     target_diff_paths.append(repo.working_dir + '/' + os.path.dirname(diff.a_path))
             target_diff_paths = list(set(target_diff_paths))
