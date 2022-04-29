@@ -64,7 +64,7 @@ module "codebuild_create_deploy_stack" {
   source_auth_ssm_param_name = var.github_token_ssm_key
   build_source = {
     type                = "GITHUB"
-    git_clone_depth     = 1
+    git_clone_depth     = 0
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
     report_build_status = false
