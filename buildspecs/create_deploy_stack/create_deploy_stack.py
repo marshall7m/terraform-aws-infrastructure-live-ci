@@ -105,9 +105,9 @@ class CreateStack:
         log.debug(f'Graph Dependency mapping: \n{pformat(graph_deps)}')
         
         repo = git.Repo(search_parent_directories=True)
-        log.debug(f'Repo: {repo.remotes.origin.url}')
+        log.debug(f'Repo using search_parent_directories: {repo.remotes.origin.url}')
         repo = git.Repo(os.getcwd())
-        log.debug(f'Repo: {repo.remotes.origin.url}')
+        log.debug(f'Repo using cwd: {repo.remotes.origin.url}')
         # if set, use graph-dependencies map to determine target execution directories
         log.debug(f'$GRAPH_SCAN: {os.environ.get("GRAPH_SCAN", "")}')
         if os.environ.get('GRAPH_SCAN', False):
