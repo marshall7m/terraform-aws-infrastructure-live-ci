@@ -80,10 +80,11 @@ class CreateStack:
     
     def create_stack(self, path: str) -> List[map]:
         '''
-        Creates a list of Terragrunt paths that contain differences in their respective plan with their associated Terragrunt dependencies and new providers
+        Creates a list of dictionaries consisting of a Terragrunt path that contains differences and the path's associated Terragrunt dependencies and new providers
 
         Arguments:
-            path: Directory to run terragrunt run-all plan within. Directory must contain a `terragrunt.hcl` file.
+            path: Parent directory to search for differences within. When $GRAPH_DEPS is not set, terragrunt run-all plan 
+            will be used to search for differences which means the parent directory must contain a `terragrunt.hcl` file.
         '''
 
         graph_deps_cmd = f'terragrunt graph-dependencies --terragrunt-working-dir {path}'
@@ -93,7 +94,7 @@ class CreateStack:
         log.debug(f'Stdout for cmd: {graph_deps_cmd}:')
         log.debug(graph_deps_out.stdout)
 
-        #parses output of command to create a map of directories and a list of their directory dependencies
+        #parses output of command to create a map of directories with a list of their directory dependencies
         graph_deps = defaultdict(list)
         for m in re.finditer(r'\t"(.+?)("\s;|"\s->\s")(.+(?=";)|$)', graph_deps_out.stdout, re.MULTILINE):
             if m.group(3) != '':
@@ -159,7 +160,7 @@ class CreateStack:
             if cfg_path in diff_paths:
                 stack.append({
                     'cfg_path': os.path.relpath(cfg_path, repo.working_dir),
-                    # only selects dependencies that contains differences in their plan
+                    # only selects dependencies that contain differences
                     'cfg_deps': [os.path.relpath(dep, repo.working_dir) for dep in cfg_deps if dep in diff_paths],
                     'new_providers': self.get_new_providers(cfg_path)
                 })
