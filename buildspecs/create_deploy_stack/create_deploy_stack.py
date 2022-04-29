@@ -105,18 +105,18 @@ class CreateStack:
         log.debug(f'Graph Dependency mapping: \n{pformat(graph_deps)}')
         
         repo = git.Repo(search_parent_directories=True)
-        log.debug(f'Repo using search_parent_directories: {repo.remotes.origin.url}')
-        repo = git.Repo(os.getcwd())
-        log.debug(f'Repo using cwd: {repo.remotes.origin.url}')
         # if set, use graph-dependencies map to determine target execution directories
         log.debug(f'$GRAPH_SCAN: {os.environ.get("GRAPH_SCAN", "")}')
         if os.environ.get('GRAPH_SCAN', False):
-            diff_paths = []
+            target_diff_paths = []
             # collects directories that contain new, modified and deleted .hcl/.tf files
-            for diff in repo.commit(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'] + '^').diff(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'], paths=[f'"{path}/**.hcl"', f'"{path}/**.tf"']):
+            parent = repo.commit(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'] + '^')
+            log.debug(f'Getting git differences between commits: {parent.hexsha} and {os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"]}')
+            for diff in parent.diff(os.environ['CODEBUILD_RESOLVED_SOURCE_VERSION'], paths=[f'"{path}/**.hcl"', f'"{path}/**.tf"']):
+                log.debug(diff)
                 if diff.change_type in ['A', 'M', 'D']:
-                    diff_paths.append(repo.working_dir + '/' + os.path.dirname(diff.a_path))
-            target_diff_paths = list(set(diff_paths))
+                    target_diff_paths.append(repo.working_dir + '/' + os.path.dirname(diff.a_path))
+            target_diff_paths = list(set(target_diff_paths))
 
             log.debug(f'Git detected differences:\n{target_diff_paths}')
             diff_paths = []
