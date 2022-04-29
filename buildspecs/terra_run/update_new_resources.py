@@ -19,7 +19,7 @@ def get_new_provider_resources(tg_dir, new_providers):
 
 def main():
 
-    if os.environ.get('NEW_PROVIDERS', False) != '[]' and os.environ['IS_ROLLBACK'] == 'false':
+    if os.environ.get('NEW_PROVIDERS', None) != '[]' and os.environ.get('IS_ROLLBACK', None) == 'false':
 
         log.info('Switching back to CodeBuild base IAM role')
         log.info('Adding new provider resources to associated execution record')
