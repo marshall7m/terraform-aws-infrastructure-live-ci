@@ -33,7 +33,16 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
 }
 
 data "aws_ssm_parameter" "github_token" {
-  name = var.github_token_ssm_key
+  count = var.create_github_token_ssm_param != true ? 1 : 0
+  name  = var.github_token_ssm_key
+}
+
+resource "aws_ssm_parameter" "github_token" {
+  count       = var.create_github_token_ssm_param ? 1 : 0
+  name        = var.github_token_ssm_key
+  description = var.github_token_ssm_description
+  type        = "SecureString"
+  value       = var.github_token_ssm_value
 }
 
 module "ecr_common_image" {
@@ -56,12 +65,11 @@ module "ecr_common_image" {
 module "codebuild_create_deploy_stack" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
-  name = local.create_deploy_stack_build_name
-
-  source_auth_token          = var.github_token_ssm_value
-  source_auth_server_type    = "GITHUB"
-  source_auth_type           = "PERSONAL_ACCESS_TOKEN"
-  source_auth_ssm_param_name = var.github_token_ssm_key
+  name                    = local.create_deploy_stack_build_name
+  create_source_auth      = var.codebuild_source_auth_token != null ? true : false
+  source_auth_token       = var.codebuild_source_auth_token
+  source_auth_server_type = "GITHUB"
+  source_auth_type        = "PERSONAL_ACCESS_TOKEN"
   build_source = {
     type                = "GITHUB"
     git_clone_depth     = 0
@@ -158,7 +166,6 @@ EOT
   role_policy_arns = [
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
-    aws_iam_policy.github_token_ssm_access.arn,
     var.tf_state_read_access_policy
   ]
 
@@ -228,11 +235,7 @@ module "codebuild_pr_plan" {
 
   vpc_config = var.pr_plan_vpc_config
 
-  source_version             = var.base_branch
-  source_auth_token          = var.github_token_ssm_value
-  source_auth_server_type    = "GITHUB"
-  source_auth_type           = "PERSONAL_ACCESS_TOKEN"
-  source_auth_ssm_param_name = var.github_token_ssm_key
+  source_version = var.base_branch
 
   artifacts = {
     type = "NO_ARTIFACTS"

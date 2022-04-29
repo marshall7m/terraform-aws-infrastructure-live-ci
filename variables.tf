@@ -54,6 +54,16 @@ variable "base_branch" {
 
 # CODEBUILD #
 
+variable "codebuild_source_auth_token" {
+  description = <<EOF
+  GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. 
+  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand.
+  EOF
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
 variable "merge_lock_build_name" {
   description = "Codebuild project name used for determine if infrastructure related PR can be merged into base branch"
   type        = string
@@ -96,7 +106,7 @@ variable "build_img" {
 }
 
 variable "tf_state_read_access_policy" {
-  description = "AWS IAM policy ARN that allows create deploy stack Codebuild project to read from Terraform remote state resource"
+  description = "AWS IAM policy ARN that allows create_deploy_stack Codebuild project to read from Terraform remote state resource"
   type        = string
 }
 
@@ -237,7 +247,7 @@ EOF
 variable "github_token_ssm_description" {
   description = "Github token SSM parameter description"
   type        = string
-  default     = "Github token used for setting PR merge locks for live infrastructure repo"
+  default     = "Github token used by github_webhook_validator Lambda Function and merge_lock Lambda function"
 }
 
 variable "github_token_ssm_key" {
@@ -247,7 +257,7 @@ variable "github_token_ssm_key" {
 }
 
 variable "github_token_ssm_value" {
-  description = "Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key`"
+  description = "Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`"
   type        = string
   default     = ""
   sensitive   = true
@@ -323,12 +333,6 @@ variable "metadb_schema" {
   default     = "prod"
 }
 
-variable "metadb_publicly_accessible" {
-  description = "Determines if metadb is publicly accessible outside of it's associated VPC"
-  type        = bool
-  default     = false
-}
-
 variable "metadb_security_group_ids" {
   description = "AWS VPC security group to associate the metadb with"
   type        = list(string)
@@ -345,12 +349,6 @@ variable "metadb_availability_zones" {
   description = "AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones."
   type        = list(string)
   default     = null
-}
-
-variable "enable_metadb_http_endpoint" {
-  description = "Enables AWS SDK connection to the metadb via data API HTTP endpoint. Needed in order to connect to metadb from outside of metadb's associated VPC"
-  type        = bool
-  default     = false
 }
 
 variable "metadb_ci_username" {

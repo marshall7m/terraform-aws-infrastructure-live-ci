@@ -30,14 +30,12 @@ data "aws_iam_policy_document" "github_token_ssm_access" {
     actions = [
       "ssm:GetParameter"
     ]
-    resources = [
-      data.aws_ssm_parameter.github_token.arn
-    ]
+    resources = [try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)]
   }
 }
 
 resource "aws_iam_policy" "github_token_ssm_access" {
-  name        = "${data.aws_ssm_parameter.github_token.name}-ssm-access"
+  name        = "${var.github_token_ssm_key}-read-access"
   description = "Allows read access to github token SSM Parameter Store value"
   policy      = data.aws_iam_policy_document.github_token_ssm_access.json
 }
