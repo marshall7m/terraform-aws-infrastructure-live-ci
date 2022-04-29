@@ -170,13 +170,10 @@ module "mut_infrastructure_live_ci" {
   # for testing purposes, admin is allowed to push to trunk branch for cleaning up testing changes without having to create a PR and triggering the entire CI pipeline
   enfore_admin_branch_protection = false
 
-  metadb_publicly_accessible = true
-  metadb_username            = "mut_user"
-  metadb_password            = random_password.metadb["master"].result
-
-  metadb_ci_username          = "mut_ci_user"
-  metadb_ci_password          = random_password.metadb["ci"].result
-  enable_metadb_http_endpoint = true
+  metadb_username    = "mut_user"
+  metadb_password    = random_password.metadb["master"].result
+  metadb_ci_username = "mut_ci_user"
+  metadb_ci_password = random_password.metadb["ci"].result
 
   #required specific testing repo to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
