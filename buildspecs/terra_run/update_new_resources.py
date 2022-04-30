@@ -10,8 +10,14 @@ log.setLevel(logging.DEBUG)
 def get_new_provider_resources(tg_dir, new_providers):
     cmd = f'terragrunt state pull --terragrunt-working-dir {tg_dir}'
     log.debug(f'Running command: {cmd}')
-    run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=True)
-    log.debug(f'Stdout:\n{run.stdout}')
+    try:
+        run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=True)
+        log.debug(f'Stdout:\n{run.stdout}')
+    except subprocess.CalledProcessError as e:
+        log.error(e.stderr)
+        raise e
+
+    #cases where remote state is empty after deployment
     if not run.stdout:
         return []
     

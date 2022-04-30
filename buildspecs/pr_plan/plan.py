@@ -40,6 +40,7 @@ def main():
                 except subprocess.CalledProcessError as e:
                     log.debug('Command failed -- build will fail')
                     fail_build = True
+                    print(e.stderr)
                     print(e)
         else:
             log.info('No New/Modified Terraform configurations within account -- skipping Terraform plan')
