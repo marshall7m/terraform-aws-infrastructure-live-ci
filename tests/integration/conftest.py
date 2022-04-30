@@ -141,9 +141,13 @@ def merge_pr(repo, git_repo):
     git_repo.git.reset('--hard')
     git_repo.git.pull()
 
-    log.debug('Removing admin enforcement from branch proection to allow revert pushes to trunk branch')
+    log.debug('Removing admin enforcement from branch protection to allow revert pushes to trunk branch')
     branch = repo.get_branch(branch="master")
     branch.remove_admin_enforcement()
+    
+    log.debug('Removing required status checks')
+    status_checks = branch.get_required_status_checks().contexts
+    branch.edit_required_status_checks(contexts=[])
 
     for ref, commit in reversed(merge_commits.items()):
         log.debug(f'Merge Commit ID: {commit.sha}')
@@ -156,6 +160,9 @@ def merge_pr(repo, git_repo):
         finally:
             log.debug('Adding admin enforcement back')
             branch.set_admin_enforcement()
+
+            log.debug('Adding required status checks back')
+            branch.edit_required_status_checks(contexts=status_checks)
 
 @pytest.fixture(scope='module', autouse=True)
 def truncate_executions(request, mut_output):
