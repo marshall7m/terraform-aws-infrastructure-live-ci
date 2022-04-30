@@ -10,6 +10,7 @@ log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
 def test_defaults():
+    '''Ensure that the Terraform module produces a valid Terraform plan with just the module's required variables defined'''
     tf_dir = os.path.dirname(os.path.realpath(__file__))
 
     if 'GITHUB_TOKEN' not in os.environ:

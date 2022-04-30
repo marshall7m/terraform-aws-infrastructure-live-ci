@@ -11,7 +11,6 @@ class TerragruntException(Exception):
     '''Wraps around Terragrunt-related errors'''
     pass
 
-
 def main() -> None:
     '''Runs Terragrunt plan command on every Terragrunt directory that has been modified'''
     fail_build = False
