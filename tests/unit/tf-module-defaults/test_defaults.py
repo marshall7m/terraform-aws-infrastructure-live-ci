@@ -17,8 +17,8 @@ def test_defaults():
 
     tf = tftest.TerraformTest(tf_dir)
 
-    # log.info('Initializing testing module')
-    # tf.init()
+    log.info('Initializing testing module')
+    tf.init()
 
     log.info('Getting testing tf plan')
     out = tf.plan(output=True)
