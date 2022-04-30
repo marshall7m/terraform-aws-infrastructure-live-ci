@@ -588,6 +588,7 @@ class Integration:
 
         sf = boto3.client('stepfunctions')
 
+        log.debug(f'Target Execution Status: {target_execution["status"]}')
         if target_execution['status'] != 'aborted':
             pytest.skip('Execution approval action is not set to `aborted`')
 
@@ -595,7 +596,7 @@ class Integration:
             execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=mut_output['state_machine_arn'])['executions'] if execution['name'] == target_execution['execution_id']][0]
         except IndexError:
             log.info('Execution record status was set to aborted before associated Step Function execution was created')
-            assert case_param['sf_execution_exists'] == False
+            assert case_param['executions'][target_execution['cfg_path']]['sf_execution_exists'] == False
         else:
             assert sf.describe_execution(executionArn=execution_arn)['status'] == 'ABORTED'
 
