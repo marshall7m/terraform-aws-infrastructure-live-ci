@@ -2,12 +2,19 @@ import os
 import subprocess
 import logging
 import json
+from typing import List
 import aurora_data_api
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-def get_new_provider_resources(tg_dir, new_providers):
+def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[str]:
+    '''
+    Parses the directory's Terraform state and returns a list of Terraform resource addresses that are from the list of specified provider addresses
+    Arguments:
+        tg_dir: Terragrunt directory to get new provider resources for
+        new_providers: List of Terraform resource addresses (e.g. registry.terraform.io/hashicorp/aws)
+    '''
     cmd = f'terragrunt state pull --terragrunt-working-dir {tg_dir}'
     log.debug(f'Running command: {cmd}')
     try:
@@ -23,14 +30,16 @@ def get_new_provider_resources(tg_dir, new_providers):
     
     return [resource['type'] + '.' + resource['name'] for resource in json.loads(run.stdout)['resources'] if resource['provider'].split('\"')[1] in new_providers]
 
-def main():
-
+def main() -> None:
+    '''Inserts new Terraform provider resources to the associated execution record'''
     if os.environ.get('NEW_PROVIDERS', None) != '[]' and os.environ.get('IS_ROLLBACK', None) == 'false':
-
-        log.info('Switching back to CodeBuild base IAM role')
-        log.info('Adding new provider resources to associated execution record')
         new_providers = os.environ['NEW_PROVIDERS'].split(', ')
+        log.debug(f'New Providers:\n{new_providers}')
+
         resources = get_new_provider_resources(os.environ['CFG_PATH'], new_providers)
+        log.debug(f'New Provider Resources:\n{resources}')
+
+        log.info('Adding new provider resources to associated execution record')
         if len(resources) > 0:
             with aurora_data_api.connect(
                 aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],

@@ -12,7 +12,8 @@ class TerragruntException(Exception):
     pass
 
 
-def main():
+def main() -> None:
+    '''Runs Terragrunt plan command on every Terragrunt directory that has been modified'''
     fail_build = False
     for account in json.loads(os.environ['ACCOUNT_DIM']):
         log.debug(f'Account Record:\n{account}')
@@ -39,6 +40,7 @@ def main():
                     print(run.stdout)
                 except subprocess.CalledProcessError as e:
                     log.debug('Command failed -- build will fail')
+                    #if terragrunt plan fails, skips raising an error until all terragrunt plans have been displayed
                     fail_build = True
                     print(e.stderr)
                     print(e)
