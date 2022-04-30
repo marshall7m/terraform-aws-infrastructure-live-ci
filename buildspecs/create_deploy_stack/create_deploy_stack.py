@@ -30,6 +30,20 @@ class ClientException(Exception):
     pass
 
 class CreateStack:
+    def _run(self, cmd: str, check=True):
+        '''subprocess.run() wrapper that logs the stdout and raises a subprocess.CalledProcessError exception and logs the stderr if the command fails
+        Arguments:
+            cmd: Command to run
+        '''
+        log.debug(f'Command: {cmd}')
+        try:
+            run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=check)
+            log.debug(f'Stdout:\n{run.stdout}')
+            return run
+        except subprocess.CalledProcessError as e:
+            log.error(e.stderr)
+            raise e
+
     def get_new_providers(self, path: str) -> List[str]:
         '''
         Returns list of Terraform provider sources that are defined within the `path` that are not within the terraform state
@@ -38,16 +52,8 @@ class CreateStack:
             path: Absolute path to a directory that contains atleast one Terragrunt *.hcl file
         '''
         log.debug(f'Path: {path}')
-        cmd = f"terragrunt providers --terragrunt-working-dir {path}"
-        run = subprocess.run(cmd.split(' '), capture_output=True, text=True)
+        run = self._run(f"terragrunt providers --terragrunt-working-dir {path}")
 
-        log.debug(f'Terragrunt providers cmd out:\n{run.stdout}')
-
-        if run.returncode != 0:
-            log.error(f'Running cmd: {cmd} resulted in error')
-            log.error(f'Cmd stderr:\n{run.stderr}')
-            sys.exit(1)
-        
         cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
         state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
     
@@ -87,16 +93,11 @@ class CreateStack:
             will be used to search for differences which means the parent directory must contain a `terragrunt.hcl` file.
         '''
 
-        graph_deps_cmd = f'terragrunt graph-dependencies --terragrunt-working-dir {path}'
-        log.debug(f'Running command: {graph_deps_cmd}')
-
-        graph_deps_out = subprocess.run(graph_deps_cmd.split(' '), capture_output=True, text=True, check=True)
-        log.debug(f'Stdout for cmd: {graph_deps_cmd}:')
-        log.debug(graph_deps_out.stdout)
+        graph_deps_run = self._run(f'terragrunt graph-dependencies --terragrunt-working-dir {path}')
 
         #parses output of command to create a map of directories with a list of their directory dependencies
         graph_deps = defaultdict(list)
-        for m in re.finditer(r'\t"(.+?)("\s;|"\s->\s")(.+(?=";)|$)', graph_deps_out.stdout, re.MULTILINE):
+        for m in re.finditer(r'\t"(.+?)("\s;|"\s->\s")(.+(?=";)|$)', graph_deps_run.stdout, re.MULTILINE):
             if m.group(3) != '':
                 graph_deps[m.group(1)].append(m.group(3))
             else:
@@ -132,20 +133,13 @@ class CreateStack:
                         target_diff_paths.append(cfg_path)
         else:
             # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
-            run_all_cmd = f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode"
-            log.debug(f'Running command: {run_all_cmd}')
+            #set check=False to prevent error raise since the -detailed-exitcode flags causes a return code of 2 if diff in tf plan
+            run = self._run(f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode", check=False)
 
-            run = subprocess.run(run_all_cmd.split(' '), capture_output=True, text=True)
-            return_code = run.returncode
+            if run.returncode not in [0, 2]:
+                log.error(f'Stderr: {run.stderr}')
+                raise TerragruntException('Terragrunt run-all plan command failed -- Aborting CodeBuild run')
 
-            log.debug(f'Stderr for cmd: {run_all_cmd}')
-            log.debug(run.stderr)
-            log.debug(f'Stdout for cmd: {run_all_cmd}')
-            log.debug(run.stdout)
-
-            if return_code not in [0, 2]:
-                log.debug(f'Return code: {return_code}')
-                raise TerragruntException('Terragrunt run-all plan command failed -- Aborting CodeBuild run')  
             # selects directories that contains a exitcode of 2 meaning there is a difference in the terraform plan
             diff_paths = re.findall(r'(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])', run.stderr, re.DOTALL)
 
@@ -248,10 +242,9 @@ class CreateStack:
             lb.invoke(FunctionName=os.environ['TRIGGER_SF_FUNCTION_NAME'], InvocationType='Event', Payload=json.dumps({'pr_id': os.environ['CODEBUILD_WEBHOOK_TRIGGER'].split('/')[1]}))
         
         else:
-            log.error('Codebuild triggered action not handled')
             log.debug(f'CODEBUILD_INITIATOR: {os.environ["CODEBUILD_INITIATOR"]}')
             log.debug(f'CODEBUILD_WEBHOOK_TRIGGER: {os.environ["CODEBUILD_WEBHOOK_TRIGGER"]}')
-            sys.exit(1)
+            raise ClientException('Codebuild triggered action not handled')
 
         return None
     def cleanup(self):
