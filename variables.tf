@@ -89,6 +89,12 @@ EOF
   default = null
 }
 
+variable "pr_plan_status_check_name" {
+  description = "Name of the CodeBuild pr_plan GitHub status"
+  type        = string
+  default     = "Plan"
+}
+
 variable "pr_plan_env_vars" {
   description = "Environment variables that will be provided to open PR's Terraform planning builds"
   type = list(object({
@@ -224,7 +230,7 @@ variable "merge_lock_ssm_key" {
 variable "merge_lock_status_check_name" {
   description = "Name of the merge lock GitHub status"
   type        = string
-  default     = "IAC Merge Lock"
+  default     = "Merge Lock"
 }
 
 variable "pr_approval_count" {

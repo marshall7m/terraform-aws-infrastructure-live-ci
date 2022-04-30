@@ -128,7 +128,7 @@ resource "github_branch_protection" "merge_lock" {
 
   required_status_checks {
     strict   = false
-    contexts = [var.merge_lock_status_check_name]
+    contexts = [var.merge_lock_status_check_name, var.pr_plan_status_check_name]
   }
 
   dynamic "required_pull_request_reviews" {

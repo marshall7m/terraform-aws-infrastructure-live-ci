@@ -31,8 +31,6 @@ resource "aws_sfn_state_machine" "this" {
         Resource   = "arn:aws:states:::codebuild:startBuild.sync"
         Type       = "Task"
         ResultPath = null
-        # TODO: Create terraform specific error catching/retries 
-        # (e.g. tf plan timeout results in task to retry or tf deploy role arn has insufficient permissions results in waiting till user updates deploy role permissions)
         Catch = [
           {
             ErrorEquals = ["States.ALL"]

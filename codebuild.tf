@@ -264,7 +264,10 @@ module "codebuild_pr_plan" {
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
     report_build_status = true
-    buildspec           = <<-EOT
+    build_status_config = {
+      context = var.pr_plan_status_check_name
+    }
+    buildspec = <<-EOT
 version: 0.2
 env:
   shell: bash

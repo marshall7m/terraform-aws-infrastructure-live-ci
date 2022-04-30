@@ -255,7 +255,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | lambda\_trigger\_sf\_vpc\_config | VPC configuration for Lambda trigger\_sf function | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | merge\_lock\_build\_name | Codebuild project name used for determine if infrastructure related PR can be merged into base branch | `string` | `null` | no |
 | merge\_lock\_ssm\_key | SSM Parameter Store key used for locking infrastructure related PR merges | `string` | `null` | no |
-| merge\_lock\_status\_check\_name | Name of the merge lock GitHub status | `string` | `"IAC Merge Lock"` | no |
+| merge\_lock\_status\_check\_name | Name of the merge lock GitHub status | `string` | `"Merge Lock"` | no |
 | metadb\_availability\_zones | AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones. | `list(string)` | `null` | no |
 | metadb\_ci\_password | Password for the metadb user used for the Codebuild projects | `string` | n/a | yes |
 | metadb\_ci\_username | Name of the metadb user used for the Codebuild projects | `string` | `"ci_user"` | no |
@@ -269,6 +269,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | pr\_approval\_count | Number of GitHub approvals required to merge a PR with infrastructure changes | `number` | `null` | no |
 | pr\_plan\_build\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PR | `string` | `null` | no |
 | pr\_plan\_env\_vars | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
+| pr\_plan\_status\_check\_name | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
 | pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | prefix | Prefix to attach to all resources | `string` | `null` | no |
 | repo\_name | Name of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
@@ -366,13 +367,16 @@ The steps below will setup a testing Docker environment for running integration 
  
 # TODO:
  
-Features:
+### Features:
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 - Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
 
+
+- add to description the github token permissions needed by lambda functions
+- add descriptions to integration test cls (see TODOs)
+- make sure all integation/unit tests are passing
+
 - merge into master
 - create first release!
 - pin release for codebuild secondary sources
-
-- add to description the github token permissions needed by lambda functions
