@@ -33,7 +33,6 @@ SELECT
     stack.cfg_path,
     stack.cfg_deps::TEXT[],
     'waiting',
-    -- TODO: add user defined extra tf args from terraform module input
     'terragrunt plan --terragrunt-working-dir ' || stack.cfg_path || ' --terragrunt-iam-role ' || a.plan_role_arn,
     'terragrunt apply --terragrunt-working-dir ' || stack.cfg_path || ' --terragrunt-iam-role ' || a.deploy_role_arn || ' -auto-approve',
     stack.new_providers::TEXT[], 

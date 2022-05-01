@@ -15,7 +15,7 @@ def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[st
         tg_dir: Terragrunt directory to get new provider resources for
         new_providers: List of Terraform resource addresses (e.g. registry.terraform.io/hashicorp/aws)
     '''
-    cmd = f'terragrunt state pull --terragrunt-working-dir {tg_dir}'
+    cmd = f'terragrunt state pull --terragrunt-working-dir {tg_dir} --terragrunt-iam-role {os.environ["ROLE_ARN"]}'
     log.debug(f'Running command: {cmd}')
     try:
         run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=True)
