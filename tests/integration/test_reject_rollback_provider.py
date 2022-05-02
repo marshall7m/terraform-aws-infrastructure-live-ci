@@ -8,8 +8,7 @@ class TestRejectRollbackProvider(test_integration.Integration):
     the second deployment having a dependency on the first one.
     The first deployment will be approved while the second deployment will be rejected.
     The rejection of the second deployment will cause the first deployment to have a
-    rollback new provider resources deployment. See <TODO: Add reference to explaination of rollback new provider resources process>
-    for more information on how the rollback deployment works.
+    rollback new provider resources deployment (see "Rollback New Provider Resources" section of README.md for more details).
     The rollback deployment will be rejected and the trigger Step Function Lambda is then expected to fail.
     '''
     case = {

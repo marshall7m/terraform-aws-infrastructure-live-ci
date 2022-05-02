@@ -25,8 +25,9 @@ class TestDeployPR(test_integration.Integration):
                 },
                 'pr_files_content': [dummy_tf_github_repo(dummy_repo)]
             }
-        }
-    }
+        },
+        'destroy_tf_resources_with_pr': True
+    }   
 
 class TestRevertPRWithoutProviderRollback(test_integration.Integration):
     '''

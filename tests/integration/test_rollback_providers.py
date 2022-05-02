@@ -18,8 +18,7 @@ class TestDeployPR(test_integration.Integration):
     the second deployment having a dependency on the first one.
     The first deployment will be approved while the second deployment will be rejected.
     The rejection of the second deployment will cause the first deployment to have a
-    rollback new provider resources deployment. See <TODO: Add reference to explaination of rollback new provider resources process>
-    for more information on how the rollback deployment works.
+    rollback new provider resources deployment ("Rollback New Provider Resources" section of README.md for more details).
     The rollback deployment will be approved which will allow the downstream revert PR to be able to freely run deployments
     without having to have the GitHub provider block introduced in this PR.
     '''
@@ -44,7 +43,8 @@ class TestDeployPR(test_integration.Integration):
 
 class TestRevertPR(test_integration.Integration):
     '''
-    TODO
+    Case will merge a PR that will revert the changes from the upstream case's PR. The case covers the same 2 node deployment as above
+    but using the base ref version of the above PR.
     '''
     case = {
         'head_ref': f'feature-{uuid.uuid4()}',
@@ -62,10 +62,11 @@ class TestRevertPR(test_integration.Integration):
             }
         }
     }
-    
+
+    @pytest.mark.usefixtures('target_execution')
     @pytest.mark.parametrize('cleanup_dummy_repo', [dummy_repo], indirect=True)
-    def test_gh_resource_exists(self, cleanup_dummy_repo, gh, request, target_execution):
-        '''TODO'''
+    def test_gh_resource_exists(self, cleanup_dummy_repo, gh, request):
+        '''Ensure that the dummy GitHub repo from the previous PR was deleted'''
         depends(request, [f'{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]'])
         log.info(f'Assert GitHub repo was deleted: {dummy_repo}')
         try:
