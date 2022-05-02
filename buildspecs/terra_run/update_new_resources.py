@@ -32,10 +32,10 @@ def main() -> None:
     '''Inserts new Terraform provider resources to the associated execution record'''
     if os.environ.get('NEW_PROVIDERS', None) != '[]' and os.environ.get('IS_ROLLBACK', None) == 'false':
         new_providers = os.environ['NEW_PROVIDERS'].split(', ')
-        log.debug(f'New Providers:\n{new_providers}')
+        log.info(f'New Providers:\n{new_providers}')
 
         resources = get_new_provider_resources(os.environ['CFG_PATH'], new_providers)
-        log.debug(f'New Provider Resources:\n{resources}')
+        log.info(f'New Provider Resources:\n{resources}')
 
         if len(resources) > 0:
             log.info('Adding new provider resources to associated execution record')
