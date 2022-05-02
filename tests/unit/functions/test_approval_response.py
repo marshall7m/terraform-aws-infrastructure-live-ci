@@ -126,7 +126,7 @@ def lambda_handler(event=None, context=None):
 ])
 @patch('functions.approval_response.lambda_function.sf')
 @patch.dict(os.environ, {'METADB_CLUSTER_ARN': 'mock', 'METADB_SECRET_ARN': 'mock', 'METADB_NAME': 'mock'}, clear=True)
-@pytest.mark.usefixtures('mock_conn', 'aws_credentials')
+@pytest.mark.usefixtures('mock_conn', 'aws_credentials', 'truncate_executions')
 def test_lambda_handler(mock_sf, conn, cur, event, record, status, expected_status_code, expected_send_token):
     mock_sf.describe_execution.return_value = {'status': status}
 

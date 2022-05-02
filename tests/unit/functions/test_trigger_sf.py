@@ -18,7 +18,7 @@ log.setLevel(logging.DEBUG)
 
 @patch('functions.trigger_sf.lambda_function.sf')
 @patch.dict(os.environ, {"METADB_CLUSTER_ARN": "mock","METADB_SECRET_ARN": "mock", "METADB_NAME": "mock", "STATE_MACHINE_ARN": "mock", 'GITHUB_MERGE_LOCK_SSM_KEY': 'mock-ssm-key'}, clear=True)
-@pytest.mark.usefixtures('aws_credentials')
+@pytest.mark.usefixtures('aws_credentials', 'truncate_executions')
 @pytest.mark.parametrize('records,execution,expected_aborted_ids,expected_rollback_cfg_paths', [
     pytest.param(
         [
@@ -144,7 +144,7 @@ def test__execution_finished_status_update(mock_client, cur, conn, records, exec
 
 @patch('functions.trigger_sf.lambda_function.sf')
 @patch.dict(os.environ, {"METADB_CLUSTER_ARN": "mock","METADB_SECRET_ARN": "mock", "METADB_NAME": "mock", "STATE_MACHINE_ARN": "mock", 'GITHUB_MERGE_LOCK_SSM_KEY': 'mock-ssm-key'}, clear=True)
-@pytest.mark.usefixtures('mock_conn', 'aws_credentials')
+@pytest.mark.usefixtures('mock_conn', 'aws_credentials', 'truncate_executions')
 @pytest.mark.parametrize('records,expected_running_ids', [
     pytest.param(
         [
@@ -321,7 +321,7 @@ def test__start_executions(mock_client, conn, records, expected_running_ids):
     )
 ])
 @patch('functions.trigger_sf.lambda_function.ssm')
-@pytest.mark.usefixtures('mock_conn', 'aws_credentials')
+@pytest.mark.usefixtures('mock_conn', 'aws_credentials', 'truncate_executions')
 @patch.dict(os.environ, {"METADB_CLUSTER_ARN": "mock","METADB_SECRET_ARN": "mock", "METADB_NAME": "mock", "STATE_MACHINE_ARN": "mock", 'GITHUB_MERGE_LOCK_SSM_KEY': 'mock-ssm-key'}, clear=True)
 def test_merge_lock(mock_client, conn, records, expect_unlocked_merge_lock):
     '''Test to ensure that the AWS System Manager Parameter Store merge lock value was reset to none if all executions within the metadb are finished'''
