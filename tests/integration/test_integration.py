@@ -20,15 +20,6 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 class Integration:
-
-    #TODO: create test cls level dependencies that will skip entire classes if dependency cls fails
-    # @pytest.fixture(scope='class', autouse=True)
-    # def dependencies(self, request):
-    #     if request.cls.get('depends_on', False):
-    #         for cls in request.cls['depends_on']:
-    #             if 'failed' in session[cls]:
-    #                 pytest.skip(f'Dependency test class failed: {cls}')
-
     @pytest.fixture(scope='class', autouse=True)
     def class_start_time(self) -> datetime:
         '''Datetime of when the class testing started'''
@@ -103,8 +94,18 @@ class Integration:
 
         ids = []
 
+    @pytest.fixture(scope='module')
+    def tf_destroy_commit_ids(self, mut_output):
+        '''Creates a list of commit Ids to be used for the source version of the teardown Terragrunt destroy builds'''
+        commit_ids = [mut_output['base_branch']]
+        def _add(id=None):
+            if id:
+                commit_ids.append_id
+            return commit_ids
+        yield _add
+
     @pytest.fixture(scope='class', autouse=True)
-    def pr(self, request, repo, case_param, git_repo, merge_pr, mut_output, tmp_path_factory):
+    def pr(self, request, repo, case_param, git_repo, merge_pr, mut_output, tmp_path_factory, tf_destroy_commit_ids):
         '''Creates the PR used testing the CI flow. Current implementation creates all PR changes within one commit.'''
         if 'revert_ref' not in case_param:
             base_commit = repo.get_branch(mut_output['base_branch'])
@@ -130,6 +131,11 @@ class Integration:
             log.debug(f'PR #{pr.number}')
             log.debug(f'Head ref commit: {commit_id}')
             log.debug(f'PR commits: {pr.commits}')
+
+            if case_param.get('destroy_tf_resources_with_pr', False):
+                # set attribute if PR contains new Terraform provider blocks that require credentials so teardown
+                # Terragrunt destroy builds will have the provider blocks needed to destroy the provider resources
+                tf_destroy_commit_ids(commit_id)
 
             yield {
                 'number': pr.number,
@@ -184,15 +190,20 @@ class Integration:
             task_id: Task ID associated with the Step Function
         '''
         sf = boto3.client('stepfunctions')
-        execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=arn)['executions'] if execution['name'] == execution_id][0]
+        try:
+            execution_arn = [execution['executionArn'] for execution in sf.list_executions(stateMachineArn=arn)['executions'] if execution['name'] == execution_id][0]
+        except IndexError as e:
+            log.error(f'No Step Function execution exists with name: {execution_id}')
+            raise e
         events = sf.get_execution_history(executionArn=execution_arn, includeExecutionData=True)['events']
         
         try:
             task_status_id = [event['previousEventId'] for event in events if event.get('stateExitedEventDetails', {}).get('name', None) == task_id][0]
         except IndexError:
+            log.debug('Task status ID could not be found')
             return None
     
-        log.debug(f'Task status id: {task_status_id}')
+        log.debug(f'Task status ID: {task_status_id}')
 
         for event in events:
             if event['id'] == task_status_id:
@@ -242,7 +253,7 @@ class Integration:
         return statuses
 
     @pytest.fixture(scope='module')
-    def destroy_scenario_tf_resources(self, conn, mut_output):
+    def destroy_scenario_tf_resources(self, conn, mut_output, tf_destroy_commit_ids):
         yield None
 
         cb = boto3.client('codebuild')
@@ -253,8 +264,7 @@ class Integration:
             cur.execute(f"""
             SELECT account_name, account_path, deploy_role_arn
             FROM account_dim 
-            """
-            )
+            """)
 
             accounts = []
             for result in cur.fetchall():
@@ -265,34 +275,31 @@ class Integration:
         conn.commit()
             
         log.debug(f'Accounts:\n{pformat(accounts)}')
+        log.info(f'Starting account-level terraform destroy builds')
+        # reversed so newer commits are destroyed first
+        for source_version in reversed(tf_destroy_commit_ids()):
+            ids = []
+            log.debug(f'Source version: {source_version}')
+            for account in accounts:
+                log.debug(f'Account Name: {account["account_name"]}')
+                response = cb.start_build(
+                    projectName=mut_output['codebuild_terra_run_name'],
+                    environmentVariablesOverride=[
+                        {
+                            'name': 'TG_COMMAND',
+                            'type': 'PLAINTEXT',
+                            'value': f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve'
+                        }
+                    ],
+                    sourceVersion = source_version
+                )
 
-        ids = []
-        log.info("Starting account-level terraform destroy builds")
-        for account in accounts:
-            log.debug(f'Account Name: {account["account_name"]}')
+                ids.append(response['build']['id'])
+            
+            log.info('Waiting on destroy builds to finish')
+            statuses = Integration().get_build_finished_status(mut_output['codebuild_terra_run_name'], ids=ids)
 
-            response = cb.start_build(
-                projectName=mut_output['codebuild_terra_run_name'],
-                environmentVariablesOverride=[
-                    {
-                        'name': 'TG_COMMAND',
-                        'type': 'PLAINTEXT',
-                        'value': f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} -auto-approve'
-                    },
-                    {
-                        'name': 'ROLE_ARN',
-                        'type': 'PLAINTEXT',
-                        'value': account['deploy_role_arn']
-                    }
-                ]
-            )
-
-            ids.append(response['build']['id'])
-        
-        log.info('Waiting on destroy builds to finish')
-        statuses = Integration().get_build_finished_status(mut_output['codebuild_terra_run_name'], ids=ids)
-
-        log.info(f'Finished Statuses:\n{statuses}')
+            log.info(f'Finished Statuses:\n{statuses}')
 
     def get_latest_log_stream_errs(self, log_group: str, start_time=None, end_time=None) -> list:
         '''
@@ -316,6 +323,8 @@ class Integration:
         
         log.info('Searching latest log stream for any errors')
         if start_time and end_time:
+            log.debug(f'Start Time: {start_time}')
+            log.debug(f'End Time: {end_time}')
             return logs.filter_log_events(
                 logGroupName=log_group,
                 logStreamNames=[stream],
@@ -332,20 +341,21 @@ class Integration:
 
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
-    def test_merge_lock_pr_status(self, request, repo, mut_output, pr):
+    def test_merge_lock_pr_status(self, repo, mut_output, pr):
         '''Assert PR's head commit ID has a successful merge lock status'''
         wait = 3
-
-        statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
-        while statuses.totalCount == 0:
+        merge_lock_status = None
+        while merge_lock_status in [None, 'pending']:
             log.debug(f'Waiting {wait} seconds')
             time.sleep(wait)
-            statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
-        
-        log.info('Assert PR head commit status is successful')        
-        assert statuses.totalCount == 1
-        assert statuses[0].state == 'success'
-    
+            try:
+                merge_lock_status = [status for status in repo.get_commit(pr["head_commit_id"]).get_statuses() if status.context == mut_output['merge_lock_status_check_name']][0]
+            except IndexError:
+                merge_lock_status = None
+
+        log.info('Assert PR head commit status is successful')
+        assert merge_lock_status.state == 'success'
+
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
     def test_pr_plan_codebuild(self, mut_output, pr, case_param):
@@ -363,19 +373,30 @@ class Integration:
             log.info('Assert build succeeded')
             assert status == 'SUCCEEDED'
 
+    @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
-    def test_pr_merge(self, request, case_param, merge_pr, pr):
+    def test_pr_merge(self, request, mut_output, case_param, merge_pr, pr, repo):
         depends(request, [f'{request.cls.__name__}::test_merge_lock_pr_status'])
         depends(request, [f'{request.cls.__name__}::test_pr_plan_codebuild'])
 
+        log.info('Ensure all status checks are completed')
+        branch = repo.get_branch(branch=mut_output['base_branch'])
+        status_checks = branch.get_required_status_checks().contexts
+        log.debug(f'Status Checks Required: {status_checks}')
+        log.debug(f'Branch protection enforced for admins: {branch.get_protection().enforce_admins}')
+
+        statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
+        while statuses.totalCount != 3:
+            time.sleep(3)
+            statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
+            log.debug(f'Count: {statuses.totalCount}')
+
+        log.info('Merging PR')
         try:
-            log.info('Merging PR')
             merge_pr(pr['base_ref'], pr['head_ref'])
         except Exception as e:
             if case_param.get('expect_failed_pr_plan', False):
-                log.debug(f'zozo: {e}')
                 pytest.skip('Skipping downstream tests since `expect_failed_pr_plan` is set to True')
-                #TODO: assert merge exception is raised
             else:
                 raise e
 
@@ -637,7 +658,6 @@ class Integration:
         
         log_group = mut_output['approval_request_log_group_name']
         log.debug(f'Log Group: {log_group}')
-        # TODO: use wait for invocation count to increase fixt and target execution start time to ensure that logs are for target execution
         results = self.get_latest_log_stream_errs(log_group)
 
         assert len(results) == 0
@@ -742,8 +762,9 @@ class Integration:
         
         log_group = mut_output['trigger_sf_log_group_name']
         log.debug(f'Log Group: {log_group}')
+        time.sleep(10)
         results = self.get_latest_log_stream_errs(log_group, start_time=execution_testing_start_time(), end_time=int(datetime.now().timestamp() * 1000))
-
+        log.debug(f'Stream Errors:\n{pformat(results)}')
         if target_execution['is_rollback'] and case_param['executions'][target_execution['cfg_path']].get('expect_failed_rollback_providers_cw_trigger_sf', False):
             assert len(results) > 0
         else:
