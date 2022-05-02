@@ -1,3 +1,4 @@
+from time import sleep
 import pytest
 import os
 import tftest
@@ -37,7 +38,6 @@ def pytest_generate_tests(metafunc):
     if metafunc.config.getoption('skip_truncate'):
         metafunc.parametrize('truncate_executions', [True], scope='session', ids=['skip_truncate'], indirect=True)
 
-    #TODO: Since only one case per cls, see if it's possible to get class case within request objected via request.cls.case to remove need to use parametrization
     if hasattr(metafunc.cls, 'case'):
         if 'target_execution' in metafunc.fixturenames:
             rollback_execution_count = len([1 for scenario in metafunc.cls.case['executions'].values() if scenario.get('actions', {}).get('rollback_providers', None) != None])
@@ -148,21 +148,27 @@ def merge_pr(repo, git_repo):
     log.debug('Removing required status checks')
     status_checks = branch.get_required_status_checks().contexts
     branch.edit_required_status_checks(contexts=[])
-
-    for ref, commit in reversed(merge_commits.items()):
-        log.debug(f'Merge Commit ID: {commit.sha}')
-        try:
+    current_status_checks = status_checks
+    while len(current_status_checks) > 0:
+        sleep(3)
+        current_status_checks = branch.get_required_status_checks().contexts
+    
+    log.debug('Reverting all changes from testing PRs')
+    try:
+        for ref, commit in reversed(merge_commits.items()):
+            log.debug(f'Merge Commit ID: {commit.sha}')
+            
             git_repo.git.revert('-m', '1', '--no-commit', str(commit.sha))
             git_repo.git.commit('-m', f'Revert changes from PR: {ref} within fixture teardown')
             git_repo.git.push('origin', '--force')
-        except Exception as e:
-            raise e
-        finally:
-            log.debug('Adding admin enforcement back')
-            branch.set_admin_enforcement()
+    except Exception as e:
+        raise e
+    finally:
+        log.debug('Adding admin enforcement back')
+        branch.set_admin_enforcement()
 
-            log.debug('Adding required status checks back')
-            branch.edit_required_status_checks(contexts=status_checks)
+        log.debug('Adding required status checks back')
+        branch.edit_required_status_checks(contexts=status_checks)
 
 @pytest.fixture(scope='module', autouse=True)
 def truncate_executions(request, mut_output):
@@ -213,5 +219,5 @@ def cleanup_dummy_repo(gh, request):
     try:
         log.info(f'Deleting dummy GitHub repo: {request.param}')
         gh.get_user().get_repo(request.param).delete()
-    except github.GithubException.UnknownObjectException:
+    except github.UnknownObjectException:
         log.info('GitHub repo does not exist')

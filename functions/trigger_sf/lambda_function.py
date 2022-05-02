@@ -165,7 +165,7 @@ def lambda_handler(event, context):
         log.error(e, exc_info=True)
         return {
             'statusCode': 500,
-            'message': e
+            'message': 'Invocation was unsuccessful'
         }
     
 class ClientException(Exception):
