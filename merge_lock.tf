@@ -3,6 +3,19 @@ locals {
   merge_lock_dep_dir = "${path.module}/functions/merge_lock/deps"
 }
 
+data "aws_ssm_parameter" "github_token" {
+  count = var.create_github_token_ssm_param != true ? 1 : 0
+  name  = var.github_token_ssm_key
+}
+
+resource "aws_ssm_parameter" "github_token" {
+  count       = var.create_github_token_ssm_param ? 1 : 0
+  name        = var.github_token_ssm_key
+  description = var.github_token_ssm_description
+  type        = "SecureString"
+  value       = var.github_token_ssm_value
+}
+
 module "github_webhook_validator" {
   source = "github.com/marshall7m/terraform-aws-github-webhook"
 

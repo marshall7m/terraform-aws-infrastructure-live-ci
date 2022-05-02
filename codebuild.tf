@@ -32,19 +32,6 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
   value       = var.metadb_ci_password
 }
 
-data "aws_ssm_parameter" "github_token" {
-  count = var.create_github_token_ssm_param != true ? 1 : 0
-  name  = var.github_token_ssm_key
-}
-
-resource "aws_ssm_parameter" "github_token" {
-  count       = var.create_github_token_ssm_param ? 1 : 0
-  name        = var.github_token_ssm_key
-  description = var.github_token_ssm_description
-  type        = "SecureString"
-  value       = var.github_token_ssm_value
-}
-
 module "ecr_common_image" {
   count  = var.build_img == null ? 1 : 0
   source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
@@ -75,8 +62,11 @@ module "codebuild_create_deploy_stack" {
     git_clone_depth     = 0
     insecure_ssl        = false
     location            = data.github_repository.this.http_clone_url
-    report_build_status = false
-    buildspec           = <<-EOT
+    report_build_status = true
+    build_status_config = {
+      context = var.create_deploy_stack_status_check_name
+    }
+    buildspec = <<-EOT
 version: 0.2
 env:
   shell: bash
