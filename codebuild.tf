@@ -81,6 +81,9 @@ version: 0.2
 env:
   shell: bash
 phases:
+  install:
+    commands:
+      - pip install -e "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}"
   build:
     commands:
       - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/create_deploy_stack/create_deploy_stack.py"
@@ -352,6 +355,9 @@ version: 0.2
 env:
   shell: bash
 phases:
+  install:
+    commands:
+      - pip install -e "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}"
   build:
     commands:
       - "$${TG_COMMAND}"
