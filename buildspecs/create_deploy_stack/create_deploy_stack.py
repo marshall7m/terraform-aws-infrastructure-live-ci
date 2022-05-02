@@ -44,15 +44,16 @@ class CreateStack:
             log.error(e.stderr)
             raise e
 
-    def get_new_providers(self, path: str) -> List[str]:
+    def get_new_providers(self, path: str, role_arn) -> List[str]:
         '''
         Returns list of Terraform provider sources that are defined within the `path` that are not within the terraform state
         
         Arguments:
             path: Absolute path to a directory that contains atleast one Terragrunt *.hcl file
+            role_arn: Role used for running terragrunt command
         '''
         log.debug(f'Path: {path}')
-        run = self._run(f"terragrunt providers --terragrunt-working-dir {path}")
+        run = self._run(f"terragrunt providers --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}")
 
         cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
         state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
@@ -61,39 +62,18 @@ class CreateStack:
         log.debug(f'State providers:\n{state_providers}')
 
         return list(set(cfg_providers).difference(state_providers))
-
-    @contextlib.contextmanager
-    def set_aws_env_vars(self, role_arn: str, session_name: str) -> None:
-        '''
-        Sets environment variables for AWS credentials associated with AWS IAM role ARN
-        
-        Arguments:
-            role_arn: AWS IAM role ARN
-            session_name: Name of the session to be used while the role is assumed
-        '''
-        sts = boto3.client('sts')
-        creds = sts.assume_role(RoleArn=role_arn, RoleSessionName=session_name)['Credentials']
-
-        os.environ['AWS_ACCESS_KEY_ID'] = creds['AccessKeyId']
-        os.environ['AWS_SECRET_ACCESS_KEY'] = creds['SecretAccessKey']
-        os.environ['AWS_SESSION_TOKEN'] = creds['SessionToken']
-
-        yield None
-
-        del os.environ['AWS_ACCESS_KEY_ID']
-        del os.environ['AWS_SECRET_ACCESS_KEY']
-        del os.environ['AWS_SESSION_TOKEN']
     
-    def create_stack(self, path: str) -> List[map]:
+    def create_stack(self, path: str, role_arn: str) -> List[map]:
         '''
         Creates a list of dictionaries consisting of a Terragrunt path that contains differences and the path's associated Terragrunt dependencies and new providers
 
         Arguments:
             path: Parent directory to search for differences within. When $GRAPH_DEPS is not set, terragrunt run-all plan 
             will be used to search for differences which means the parent directory must contain a `terragrunt.hcl` file.
+            role_arn: Role used for running terragrunt commands
         '''
 
-        graph_deps_run = self._run(f'terragrunt graph-dependencies --terragrunt-working-dir {path}')
+        graph_deps_run = self._run(f'terragrunt graph-dependencies --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}')
 
         #parses output of command to create a map of directories with a list of their directory dependencies
         graph_deps = defaultdict(list)
@@ -131,10 +111,12 @@ class CreateStack:
                         diff_paths.append(path)
                     if path in cfg_deps:
                         target_diff_paths.append(cfg_path)
+
+            diff_paths = list(set(diff_paths))
         else:
             # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
             #set check=False to prevent error raise since the -detailed-exitcode flags causes a return code of 2 if diff in tf plan
-            run = self._run(f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-non-interactive -detailed-exitcode", check=False)
+            run = self._run(f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn} --terragrunt-non-interactive -detailed-exitcode", check=False)
 
             if run.returncode not in [0, 2]:
                 log.error(f'Stderr: {run.stderr}')
@@ -156,7 +138,7 @@ class CreateStack:
                     'cfg_path': os.path.relpath(cfg_path, repo.working_dir),
                     # only selects dependencies that contain differences
                     'cfg_deps': [os.path.relpath(dep, repo.working_dir) for dep in cfg_deps if dep in diff_paths],
-                    'new_providers': self.get_new_providers(cfg_path)
+                    'new_providers': self.get_new_providers(cfg_path, role_arn)
                 })
         return stack
 
@@ -188,8 +170,7 @@ class CreateStack:
                         if not os.path.isdir(account['path']):
                             raise ClientException(f'Account path does not exist within repo: {account["path"]}')
                         
-                        with self.set_aws_env_vars(account['role'], 'trigger-sf-terragrunt-plan-all'):
-                            stack = self.create_stack(account['path'])
+                        stack = self.create_stack(account['path'], account['role'])
 
                         log.debug(f'Stack:\n{stack}')
 
