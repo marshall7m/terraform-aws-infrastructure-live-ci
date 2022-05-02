@@ -1,167 +1,96 @@
-variable "account_id" {
-  description = "AWS account id"
-  type        = number
-}
-
 variable "common_tags" {
   description = "Tags to add to all resources"
   type        = map(string)
   default     = {}
 }
-
-# CODEPIPELINE #
-
-variable "stage_parent_paths" {
-  description = "Parent directory path for each CodePipeline stage. Any modified child filepath of the parent path will be processed within the parent path associated stage"
-  type        = list(string)
-}
-
-variable "branch" {
-  description = "Repo branch the pipeline is associated with"
-  type        = string
-  default     = "master"
-}
-
-variable "role_arn" {
-  description = "Pre-existing IAM role ARN to use for the CodePipeline"
+variable "prefix" {
+  description = "Prefix to attach to all resources"
   type        = string
   default     = null
 }
 
-variable "pipeline_name" {
-  description = "Pipeline name"
+variable "account_parent_cfg" {
+  description = <<EOF
+AWS account-level configurations.
+  - name: AWS account name (e.g. dev, staging, prod, etc.)
+  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)
+  - voters: List of email addresses that will be sent approval request to
+  - min_approval_count: Minimum approval count needed for CI pipeline to run deployment
+  - min_rejection_count: Minimum rejection count needed for CI pipeline to decline deployment
+  - dependencies: List of AWS account names that this account depends on before running any of it's deployments 
+    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),
+      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a
+      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.
+  - plan_role_arn: IAM role ARN within the account that the plan build will assume
+    - **CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised**
+  - deploy_role_arn: IAM role ARN within the account that the deploy build will assume
+    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before_hook block that
+      conditionally defines that assume_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,
+      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then
+      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles.
+EOF
+  type = list(object({
+    name                = string
+    path                = string
+    voters              = list(string)
+    min_approval_count  = number
+    min_rejection_count = number
+    dependencies        = list(string)
+    plan_role_arn       = string
+    deploy_role_arn     = string
+  }))
+}
+
+variable "approval_request_sender_email" {
+  description = "Email address to use for sending approval requests"
   type        = string
-  default     = "infrastructure-live-ci-pipeline"
-}
-
-variable "cmk_arn" {
-  description = "ARN of a pre-existing CMK to use for encrypting CodePipeline artifacts at rest"
-  type        = string
-  default     = null
-}
-
-variable "artifact_bucket_name" {
-  description = "Name of the artifact S3 bucket to be created or the name of a pre-existing bucket name to be used for storing the pipeline's artifacts"
-  type        = string
-  default     = null
-}
-
-variable "artifact_bucket_force_destroy" {
-  description = "Determines if all bucket content will be deleted if the bucket is deleted (error-free bucket deletion)"
-  type        = bool
-  default     = false
-}
-
-variable "artifact_bucket_tags" {
-  description = "Tags to attach to provisioned S3 bucket"
-  type        = map(string)
-  default     = {}
-}
-
-# variable "stages" {
-#   description = "List of pipeline stages (see: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codepipeline)"
-#   type = list(object({
-#     name              = string
-#     order             = number
-#     paths             = list(string)
-#     tf_plan_role_arn  = optional(string)
-#     tf_apply_role_arn = optional(string)
-#   }))
-# }
-
-variable "pipeline_tags" {
-  description = "Tags to attach to the pipeline"
-  type        = map(string)
-  default     = {}
-}
-
-variable "role_path" {
-  description = "Path to create policy"
-  default     = "/"
-}
-
-variable "role_max_session_duration" {
-  description = "Max session duration (seconds) the role can be assumed for"
-  default     = 3600
-  type        = number
-}
-
-variable "role_description" {
-  default = "Allows Amazon Codepipeline to call AWS services on your behalf"
-}
-
-variable "role_force_detach_policies" {
-  description = "Determines attached policies to the CodePipeline service roles should be forcefully detached if the role is destroyed"
-  type        = bool
-  default     = false
-}
-
-variable "role_permissions_boundary" {
-  description = "Permission boundary policy ARN used for CodePipeline service role"
-  type        = string
-  default     = ""
-}
-
-variable "role_tags" {
-  description = "Tags to add to CodePipeline service role"
-  type        = map(string)
-  default     = {}
-}
-
-# CODESTAR #
-
-variable "codestar_name" {
-  description = "AWS CodeStar connection name used to define the source stage of the pipeline"
-  type        = string
-  default     = null
 }
 
 # CODEBUILD #
 
-variable "build_name" {
-  description = "CodeBuild project name"
+variable "codebuild_source_auth_token" {
+  description = <<EOF
+  GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. 
+  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand.
+  EOF
   type        = string
-  default     = "infrastructure-live-ci"
+  default     = null
+  sensitive   = true
 }
 
-variable "plan_role_name" {
-  description = "Name of the IAM role used for running terr* plan commands"
+variable "merge_lock_build_name" {
+  description = "Codebuild project name used for determine if infrastructure related PR can be merged into base branch"
   type        = string
   default     = null
 }
 
-variable "plan_role_assumable_role_arns" {
-  description = "List of IAM role ARNs the plan CodeBuild action can assume"
-  type        = list(string)
-  default     = []
-}
-
-variable "plan_role_policy_arns" {
-  description = "List of IAM policy ARNs that will be attach to the plan Codebuild action"
-  type        = list(string)
-  default     = []
-}
-
-variable "apply_role_name" {
-  description = "Name of the IAM role used for running terr* apply commands"
+variable "pr_plan_build_name" {
+  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PR"
   type        = string
   default     = null
 }
 
-variable "apply_role_assumable_role_arns" {
-  description = "List of IAM role ARNs the apply CodeBuild action can assume"
-  type        = list(string)
-  default     = []
+variable "pr_plan_vpc_config" {
+  description = <<EOF
+AWS VPC configurations associated with PR planning CodeBuild project. 
+Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+EOF
+  type = object({
+    vpc_id             = string
+    subnets            = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
 }
 
-variable "apply_role_policy_arns" {
-  description = "List of IAM policy ARNs that will be attach to the apply Codebuild action"
-  type        = list(string)
-  default     = []
+variable "pr_plan_status_check_name" {
+  description = "Name of the CodeBuild pr_plan GitHub status"
+  type        = string
+  default     = "Plan"
 }
 
-variable "build_env_vars" {
-  description = "Base environment variables that will be provided for each CodePipeline action build"
+variable "pr_plan_env_vars" {
+  description = "Environment variables that will be provided to open PR's Terraform planning builds"
   type = list(object({
     name  = string
     value = string
@@ -170,22 +99,37 @@ variable "build_env_vars" {
   default = []
 }
 
-variable "buildspec" {
-  description = "CodeBuild buildspec path relative to the source repo root directory"
+variable "build_img" {
+  description = "Docker, ECR or AWS CodeBuild managed image to use for the CodeBuild projects. If not specified, Terraform module will create an ECR image for them."
   type        = string
   default     = null
 }
 
-variable "plan_cmd" {
-  description = "Terragrunt/Terraform plan command to run on target paths"
+variable "tf_state_read_access_policy" {
+  description = "AWS IAM policy ARN that allows create_deploy_stack Codebuild project to read from Terraform remote state resource"
   type        = string
-  default     = "terragrunt run-all plan"
 }
 
-variable "apply_cmd" {
-  description = "Terragrunt/Terraform apply command to run on target paths"
+variable "terraform_version" {
+  description = "Terraform version used for create_deploy_stack and terra_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended"
   type        = string
-  default     = "terragrunt run-all apply -auto-approve"
+  default     = "1.0.2"
+}
+
+variable "terragrunt_version" {
+  description = "Terragrunt version used for create_deploy_stack and terra_run builds"
+  type        = string
+  default     = "0.31.0"
+}
+
+variable "terra_run_env_vars" {
+  description = "Environment variables that will be provided for tf plan/apply builds"
+  type = list(object({
+    name  = string
+    value = string
+    type  = optional(string)
+  }))
+  default = []
 }
 
 variable "build_tags" {
@@ -194,55 +138,122 @@ variable "build_tags" {
   default     = {}
 }
 
-# GITHUB-WEBHOOK #
+variable "terra_run_vpc_config" {
+  description = <<EOF
+AWS VPC configurations associated with terra_run CodeBuild project. 
+Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+EOF
+  type = object({
+    vpc_id             = string
+    subnets            = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "create_deploy_stack_vpc_config" {
+  description = <<EOF
+AWS VPC configurations associated with terra_run CodeBuild project. 
+Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+EOF
+  type = object({
+    vpc_id             = string
+    subnets            = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "create_deploy_stack_graph_scan" {
+  description = <<EOF
+If true, the create_deploy_stack build will use the git detected differences to determine what directories to run Step Function executions for.
+If false, the build will use terragrunt run-all plan detected differences to determine the executions.
+Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)
+which results in need to refresh the terraform remote state to accurately detect changes.
+Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan.
+EOF
+  type        = bool
+  default     = true
+}
+
+variable "codebuild_common_env_vars" {
+  description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
+  type = list(object({
+    name  = string
+    value = string
+    type  = optional(string)
+  }))
+  default = []
+}
+
+variable "merge_lock_status_check_name" {
+  description = "Name of the merge lock GitHub status"
+  type        = string
+  default     = "Merge Lock"
+}
+variable "create_deploy_stack_status_check_name" {
+  description = "Name of the create deploy stack GitHub status"
+  type        = string
+  default     = "Create Deploy Stack"
+}
+
+# GITHUB WEBHOOK #
 
 variable "repo_name" {
-  description = "Name of the GitHub repository"
+  description = "Name of the GitHub repository that is owned by the Github provider"
   type        = string
 }
 
-variable "repo_filter_groups" {
-  description = "List of filter groups for the Github repository. The GitHub webhook request has to pass atleast one filter group in order to proceed to downstream actions"
-  type = list(object({
-    events                 = list(string)
-    pr_actions             = optional(list(string))
-    base_refs              = optional(list(string))
-    head_refs              = optional(list(string))
-    actor_account_ids      = optional(list(string))
-    commit_messages        = optional(list(string))
-    file_paths             = optional(list(string))
-    exclude_matched_filter = optional(bool)
-  }))
+variable "file_path_pattern" {
+  description = "Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension."
+  type        = string
+  default     = ".+\\.(hcl|tf)$"
 }
 
 variable "api_name" {
   description = "Name of AWS Rest API"
   type        = string
-  default     = "terraform-infrastructure-live"
+  default     = null
 }
 
-## SSM ##
+variable "api_stage_name" {
+  description = "API deployment stage name"
+  type        = string
+  default     = "prod"
+}
+
+# GITHUB REPO #
+
+variable "base_branch" {
+  description = "Base branch for repository that all PRs will compare to"
+  type        = string
+  default     = "master"
+}
+
+variable "pr_approval_count" {
+  description = "Number of GitHub approvals required to merge a PR with infrastructure changes"
+  type        = number
+  default     = null
+}
+
+variable "enfore_admin_branch_protection" {
+  description = <<EOF
+  Determines if the branch protection rule is enforced for the GitHub repository's admins. 
+  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline.
+EOF
+  type        = bool
+  default     = false
+}
+
+# SSM #
+
+variable "merge_lock_ssm_key" {
+  description = "SSM Parameter Store key used for locking infrastructure related PR merges"
+  type        = string
+  default     = null
+}
 
 ### GITHUB-TOKEN ###
-
-variable "github_token_ssm_description" {
-  description = "Github token SSM parameter description"
-  type        = string
-  default     = "Github token used to give read access to the payload validator function to get file that differ between commits" #tfsec:ignore:GEN001
-}
-
-variable "github_token_ssm_key" {
-  description = "AWS SSM Parameter Store key for sensitive Github personal token"
-  type        = string
-  default     = "github-webhook-validator-token" #tfsec:ignore:GEN001
-}
-
-variable "github_token_ssm_value" {
-  description = "Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `github_token_ssm_key`"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
 
 variable "create_github_token_ssm_param" {
   description = "Determines if an AWS System Manager Parameter Store value should be created for the Github token"
@@ -250,28 +261,30 @@ variable "create_github_token_ssm_param" {
   default     = true
 }
 
+variable "github_token_ssm_description" {
+  description = "Github token SSM parameter description"
+  type        = string
+  default     = "Github token used by github_webhook_validator Lambda Function and merge_lock Lambda function"
+}
+
+variable "github_token_ssm_key" {
+  description = "AWS SSM Parameter Store key for sensitive Github personal token. GitHub token only needs the repo:status permission."
+  type        = string
+  default     = "github-webhook-validator-token" #tfsec:ignore:GEN001
+}
+
+variable "github_token_ssm_value" {
+  description = <<EOF
+Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
+GitHub token only needs the repo:status permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+  EOF
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "github_token_ssm_tags" {
   description = "Tags for Github token SSM parameter"
-  type        = map(string)
-  default     = {}
-}
-
-### GITHUB-SECRET ###
-
-variable "github_secret_ssm_key" {
-  description = "Key for github secret within AWS SSM Parameter Store"
-  type        = string
-  default     = "github-webhook-github-secret" #tfsec:ignore:GEN001
-}
-
-variable "github_secret_ssm_description" {
-  description = "Github secret SSM parameter description"
-  type        = string
-  default     = "Secret value for Github Webhooks" #tfsec:ignore:GEN001
-}
-
-variable "github_secret_ssm_tags" {
-  description = "Tags for Github webhook secret SSM parameter"
   type        = map(string)
   default     = {}
 }
@@ -281,23 +294,120 @@ variable "github_secret_ssm_tags" {
 variable "step_function_name" {
   description = "Name of AWS Step Function machine"
   type        = string
-  default     = "infrastructure-live-step-function"
+  default     = "infrastructure-live-ci"
 }
 
-variable "trigger_sf_lambda_function_name" {
-  description = "Name of the AWS Lambda function that will trigger a Step Function execution"
+variable "cloudwatch_event_rule_name" {
+  description = "Name of the CloudWatch event rule that detects when the Step Function completes an execution"
   type        = string
-  default     = "infrastructure-live-step-function-trigger"
+  default     = null
 }
 
-variable "update_cp_lambda_function_name" {
-  description = "Name of the AWS Lambda function that will dynamically update AWS CodePipeline stages based on commit changes to the repository"
+variable "create_deploy_stack_build_name" {
+  description = "Name of AWS CodeBuild project that will create the PR deployment stack into the metadb"
   type        = string
-  default     = "infrastructure-live-update-cp-stages"
+  default     = null
 }
 
-variable "cloudwatch_event_name" {
-  description = "Name of the CloudWatch event that will monitor the CodePipeline"
+variable "terra_run_build_name" {
+  description = "Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions"
   type        = string
-  default     = "infrastructure-live-cp-execution-event"
+  default     = null
+}
+
+# RDS #
+
+variable "metadb_name" {
+  description = "Name of the AWS RDS db"
+  type        = string
+  default     = null
+}
+
+variable "metadb_username" {
+  description = "Master username of the metadb"
+  type        = string
+  default     = "root"
+}
+
+variable "metadb_password" {
+  description = "Master password for the metadb"
+  type        = string
+  sensitive   = true
+}
+
+variable "metadb_port" {
+  description = "Port for AWS RDS Postgres db"
+  type        = number
+  default     = 5432
+}
+
+variable "metadb_schema" {
+  description = "Schema for AWS RDS Postgres db"
+  type        = string
+  default     = "prod"
+}
+
+variable "metadb_security_group_ids" {
+  description = "AWS VPC security group to associate the metadb with"
+  type        = list(string)
+  default     = []
+}
+
+variable "metadb_subnets_group_name" {
+  description = "AWS VPC subnet group name to associate the metadb with"
+  type        = string
+  default     = null
+}
+
+variable "metadb_availability_zones" {
+  description = "AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones."
+  type        = list(string)
+  default     = null
+}
+
+variable "metadb_ci_username" {
+  description = "Name of the metadb user used for the Codebuild projects"
+  type        = string
+  default     = "ci_user"
+}
+
+variable "metadb_ci_password" {
+  description = "Password for the metadb user used for the Codebuild projects"
+  type        = string
+  sensitive   = true
+}
+
+# LAMBDA #
+
+variable "lambda_approval_request_vpc_config" {
+  description = "VPC configuration for Lambda approval request function"
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "lambda_approval_response_vpc_config" {
+  description = "VPC configuration for Lambda approval response function"
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "lambda_trigger_sf_vpc_config" {
+  description = "VPC configuration for Lambda trigger_sf function"
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "trigger_sf_function_name" {
+  description = "Name of the AWS Lambda function used to trigger Step Function deployments"
+  type        = string
+  default     = null
 }

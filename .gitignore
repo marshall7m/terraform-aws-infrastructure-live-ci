@@ -8,3 +8,12 @@ __pycache__
 .wget-hsts
 .bash_history
 *.zip*
+*deps/
+*tmp*
+*docker-pgsql-volume*
+/node_modules
+/package-lock.json
+/yarn.lock
+/yarn-error.log
+
+/*.egg-info
