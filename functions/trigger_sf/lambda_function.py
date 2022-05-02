@@ -148,8 +148,7 @@ def lambda_handler(event, context):
                     _execution_finished(cur, record)
 
                 log.info('Checking if commit executions are in progress')
-                # TODO: use a select 1 query to only scan table until condition is met - or select distinct statuses from table and then see if waiting/running is found
-                cur.execute("SELECT * FROM executions WHERE status IN ('waiting', 'running')")
+                cur.execute("SELECT 1 FROM executions WHERE status IN ('waiting', 'running')")
 
                 if cur.rowcount > 0:
                     log.info('Starting Step Function Deployment Flow')
