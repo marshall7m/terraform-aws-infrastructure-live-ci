@@ -12,12 +12,13 @@ import contextlib
 import json
 from typing import List
 from collections import defaultdict
-
+from buildspecs import subprocess_run
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
+
 ssm = boto3.client('ssm')
 lb = boto3.client('lambda')
 
@@ -30,20 +31,6 @@ class ClientException(Exception):
     pass
 
 class CreateStack:
-    def _run(self, cmd: str, check=True):
-        '''subprocess.run() wrapper that logs the stdout and raises a subprocess.CalledProcessError exception and logs the stderr if the command fails
-        Arguments:
-            cmd: Command to run
-        '''
-        log.debug(f'Command: {cmd}')
-        try:
-            run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=check)
-            log.debug(f'Stdout:\n{run.stdout}')
-            return run
-        except subprocess.CalledProcessError as e:
-            log.error(e.stderr)
-            raise e
-
     def get_new_providers(self, path: str, role_arn) -> List[str]:
         '''
         Returns list of Terraform provider sources that are defined within the `path` that are not within the terraform state
@@ -53,7 +40,7 @@ class CreateStack:
             role_arn: Role used for running terragrunt command
         '''
         log.debug(f'Path: {path}')
-        run = self._run(f"terragrunt providers --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}")
+        run = subprocess_run(f"terragrunt providers --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}")
 
         cfg_providers = re.findall(r'(?<=─\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
         state_providers = re.findall(r'(?<=\s\sprovider\[).+(?=\])', run.stdout, re.MULTILINE)
@@ -73,7 +60,7 @@ class CreateStack:
             role_arn: Role used for running terragrunt commands
         '''
 
-        graph_deps_run = self._run(f'terragrunt graph-dependencies --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}')
+        graph_deps_run = subprocess_run(f'terragrunt graph-dependencies --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}')
 
         #parses output of command to create a map of directories with a list of their directory dependencies
         graph_deps = defaultdict(list)
@@ -116,7 +103,7 @@ class CreateStack:
         else:
             # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
             #set check=False to prevent error raise since the -detailed-exitcode flags causes a return code of 2 if diff in tf plan
-            run = self._run(f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn} --terragrunt-non-interactive -detailed-exitcode", check=False)
+            run = subprocess_run(f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn} --terragrunt-non-interactive -detailed-exitcode", check=False)
 
             if run.returncode not in [0, 2]:
                 log.error(f'Stderr: {run.stderr}')

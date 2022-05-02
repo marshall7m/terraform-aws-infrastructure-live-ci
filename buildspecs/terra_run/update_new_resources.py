@@ -3,9 +3,13 @@ import subprocess
 import logging
 import json
 from typing import List
+import sys
 import aurora_data_api
+from buildspecs import subprocess_run
 
 log = logging.getLogger(__name__)
+stream = logging.StreamHandler(sys.stdout)
+log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
 def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[str]:
@@ -16,13 +20,7 @@ def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[st
         new_providers: List of Terraform resource addresses (e.g. registry.terraform.io/hashicorp/aws)
     '''
     cmd = f'terragrunt state pull --terragrunt-working-dir {tg_dir} --terragrunt-iam-role {os.environ["ROLE_ARN"]}'
-    log.debug(f'Running command: {cmd}')
-    try:
-        run = subprocess.run(cmd.split(' '), capture_output=True, text=True, check=True)
-        log.debug(f'Stdout:\n{run.stdout}')
-    except subprocess.CalledProcessError as e:
-        log.error(e.stderr)
-        raise e
+    run = subprocess_run(cmd)
 
     #cases where remote state is empty after deployment
     if not run.stdout:
@@ -39,8 +37,8 @@ def main() -> None:
         resources = get_new_provider_resources(os.environ['CFG_PATH'], new_providers)
         log.debug(f'New Provider Resources:\n{resources}')
 
-        log.info('Adding new provider resources to associated execution record')
         if len(resources) > 0:
+            log.info('Adding new provider resources to associated execution record')
             with aurora_data_api.connect(
                 aurora_cluster_arn=os.environ['METADB_CLUSTER_ARN'],
                 secret_arn=os.environ['METADB_SECRET_ARN'],

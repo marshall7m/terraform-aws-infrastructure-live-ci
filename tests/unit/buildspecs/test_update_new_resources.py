@@ -2,10 +2,11 @@ from unittest import mock
 import pytest
 import os
 import logging
-import subprocess
 from unittest.mock import patch
 from tests.helpers.utils import dummy_tf_provider_resource, insert_records, terra_version
 from buildspecs.terra_run import update_new_resources
+from tests.unit.buildspecs.conftest import mock_subprocess_run
+from buildspecs import subprocess_run
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -41,12 +42,8 @@ def git_repo_cwd(git_repo):
     os.chdir(git_root)
     return git_root
 
-def tg_apply(dirs):
-    for dir in dirs:
-        cmd = f'terragrunt apply --terragrunt-working-dir {dir} -auto-approve'
-        _ = subprocess.run(cmd.split(' '), check=True)
-
-@patch.dict(os.environ, {'TG_BACKEND': 'local', 'NEW_PROVIDERS': '[test-provider]', 'IS_ROLLBACK': 'false'})
+@patch.dict(os.environ, {'TG_BACKEND': 'local', 'NEW_PROVIDERS': '[test-provider]', 'IS_ROLLBACK': 'false', 'ROLE_ARN': 'tf-role-arn'})
+@patch('buildspecs.terra_run.update_new_resources.subprocess_run', side_effect=mock_subprocess_run)
 @pytest.mark.usefixtures('terraform_version', 'terragrunt_version')
 @pytest.mark.parametrize('repo_changes,new_providers,expected', [
     pytest.param(
@@ -62,9 +59,11 @@ def tg_apply(dirs):
         id='new_resource_not_exists'
     )
 ], indirect=['repo_changes'])
-def test_get_new_provider_resources(repo_changes, new_providers, expected):
+def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expected):
     target_path = os.path.dirname(list(repo_changes.keys())[0])
-    tg_apply([target_path])
+    log.info('Terraform applying repo changes to update Terraform state file')
+    subprocess_run(f'terragrunt apply --terragrunt-working-dir {target_path} -auto-approve')
+    
     actual = update_new_resources.get_new_provider_resources(target_path, new_providers)
     
     assert actual == expected
@@ -76,10 +75,11 @@ def test_get_new_provider_resources(repo_changes, new_providers, expected):
     'TG_BACKEND': 'local',
     'CFG_PATH': 'test/dir',
     'NEW_PROVIDERS': '[test-provider]',
-    'IS_ROLLBACK': 'false'
+    'IS_ROLLBACK': 'false',
+    'ROLE_ARN': 'tf-role-arn'
 })
 @patch('buildspecs.terra_run.update_new_resources.get_new_provider_resources')
-@pytest.mark.usefixtures('mock_conn', 'aws_credentials')
+@pytest.mark.usefixtures('mock_conn', 'aws_credentials', 'truncate_executions')
 @pytest.mark.parametrize('resources', [
     pytest.param(['test.this'], id='one_resource'),
     pytest.param(['test.this', 'test.that'], id='multiple_resources'),

@@ -4,10 +4,20 @@ import random
 import string
 import logging
 import git
+import re
+from buildspecs import subprocess_run
 from tests.helpers.utils import insert_records
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+def mock_subprocess_run(cmd: str, check=True):
+    '''
+    Mock wrapper that removes --terragrunt-iam-role flag from all Terragrunt related commands passed to subprocess_run().
+    Given tests are provisioning terraform resources locally, assuming IAM roles are not needed.
+    '''
+    cmd = re.sub(r'\s--terragrunt-iam-role\s+.+?(?=\s|$)', '', cmd)
+    return subprocess_run(cmd, check)
 
 @pytest.fixture(scope='module')
 def account_dim(conn, cur):
