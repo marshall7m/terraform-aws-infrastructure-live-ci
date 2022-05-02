@@ -7,6 +7,7 @@ from tests.helpers.utils import dummy_tf_provider_resource, insert_records, terr
 from buildspecs.terra_run import update_new_resources
 from tests.unit.buildspecs.conftest import mock_subprocess_run
 from buildspecs import subprocess_run
+from psycopg2 import sql
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -42,7 +43,7 @@ def git_repo_cwd(git_repo):
     os.chdir(git_root)
     return git_root
 
-@patch.dict(os.environ, {'TG_BACKEND': 'local', 'NEW_PROVIDERS': '[test-provider]', 'IS_ROLLBACK': 'false', 'ROLE_ARN': 'tf-role-arn'})
+@patch.dict(os.environ, {'TG_BACKEND': 'local', 'NEW_PROVIDERS': '["test-provider"]', 'IS_ROLLBACK': 'false', 'ROLE_ARN': 'tf-role-arn'})
 @patch('buildspecs.terra_run.update_new_resources.subprocess_run', side_effect=mock_subprocess_run)
 @pytest.mark.usefixtures('terraform_version', 'terragrunt_version')
 @pytest.mark.parametrize('repo_changes,new_providers,expected', [
@@ -74,7 +75,7 @@ def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expec
     'METADB_NAME': 'mock',
     'TG_BACKEND': 'local',
     'CFG_PATH': 'test/dir',
-    'NEW_PROVIDERS': '[test-provider]',
+    'NEW_PROVIDERS': '["test-provider"]',
     'IS_ROLLBACK': 'false',
     'ROLE_ARN': 'tf-role-arn'
 })
@@ -86,12 +87,26 @@ def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expec
     pytest.param([], id='no_resources')
 ])
 def test_main(mock_get_new_provider_resources, conn, resources):
+    '''Assert that the expected new_resources value is within the associated record'''
     os.environ['EXECUTION_ID'] = 'test-id'
     insert_records(conn, 'executions', [{'execution_id': os.environ['EXECUTION_ID']}], enable_defaults=True)
 
     mock_get_new_provider_resources.return_value = resources
 
     update_new_resources.main()
+
+    with conn.cursor() as cur:
+        cur.execute(sql.SQL("""
+        SELECT new_resources 
+        FROM executions 
+        WHERE execution_id = {}
+        """).format(sql.Literal(os.environ['EXECUTION_ID'])))
+        
+        res = cur.fetchall()[0][0]
+        log.debug(f'Results:\n{res}')
+
+    log.info('Assert that the expected new_resources value is within the associated record')
+    assert res == resources
 
 
 

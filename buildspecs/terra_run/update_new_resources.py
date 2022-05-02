@@ -5,6 +5,7 @@ import json
 from typing import List
 import sys
 import aurora_data_api
+import ast
 from buildspecs import subprocess_run
 
 log = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[st
 def main() -> None:
     '''Inserts new Terraform provider resources to the associated execution record'''
     if os.environ.get('NEW_PROVIDERS', None) != '[]' and os.environ.get('IS_ROLLBACK', None) == 'false':
-        new_providers = os.environ['NEW_PROVIDERS'].split(', ')
+        new_providers = ast.literal_eval(os.environ['NEW_PROVIDERS'])
         log.info(f'New Providers:\n{new_providers}')
 
         resources = get_new_provider_resources(os.environ['CFG_PATH'], new_providers)
