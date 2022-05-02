@@ -115,6 +115,11 @@ output "merge_lock_github_webhook_id" {
   value       = module.github_webhook_validator.webhook_ids[var.repo_name]
 }
 
+output "merge_lock_status_check_name" {
+  description = "Context name of the merge lock GitHub status check"
+  value       = var.merge_lock_status_check_name
+}
+
 output "merge_lock_ssm_key" {
   description = "SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow"
   value       = aws_ssm_parameter.merge_lock.name

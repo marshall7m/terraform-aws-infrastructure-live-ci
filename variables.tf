@@ -46,12 +46,6 @@ variable "approval_request_sender_email" {
   type        = string
 }
 
-variable "base_branch" {
-  description = "Base branch for repository that all PRs will compare to"
-  type        = string
-  default     = "master"
-}
-
 # CODEBUILD #
 
 variable "codebuild_source_auth_token" {
@@ -192,7 +186,18 @@ variable "codebuild_common_env_vars" {
   default = []
 }
 
-# GITHUB-WEBHOOK #
+variable "merge_lock_status_check_name" {
+  description = "Name of the merge lock GitHub status"
+  type        = string
+  default     = "Merge Lock"
+}
+variable "create_deploy_stack_status_check_name" {
+  description = "Name of the create deploy stack GitHub status"
+  type        = string
+  default     = "Create Deploy Stack"
+}
+
+# GITHUB WEBHOOK #
 
 variable "repo_name" {
   description = "Name of the GitHub repository that is owned by the Github provider"
@@ -217,20 +222,12 @@ variable "api_stage_name" {
   default     = "prod"
 }
 
-## SSM ##
+# GITHUB REPO #
 
-### MERGE-LOCK ##
-
-variable "merge_lock_ssm_key" {
-  description = "SSM Parameter Store key used for locking infrastructure related PR merges"
+variable "base_branch" {
+  description = "Base branch for repository that all PRs will compare to"
   type        = string
-  default     = null
-}
-
-variable "merge_lock_status_check_name" {
-  description = "Name of the merge lock GitHub status"
-  type        = string
-  default     = "Merge Lock"
+  default     = "master"
 }
 
 variable "pr_approval_count" {
@@ -248,7 +245,21 @@ EOF
   default     = false
 }
 
+# SSM #
+
+variable "merge_lock_ssm_key" {
+  description = "SSM Parameter Store key used for locking infrastructure related PR merges"
+  type        = string
+  default     = null
+}
+
 ### GITHUB-TOKEN ###
+
+variable "create_github_token_ssm_param" {
+  description = "Determines if an AWS System Manager Parameter Store value should be created for the Github token"
+  type        = bool
+  default     = true
+}
 
 variable "github_token_ssm_description" {
   description = "Github token SSM parameter description"
@@ -257,22 +268,19 @@ variable "github_token_ssm_description" {
 }
 
 variable "github_token_ssm_key" {
-  description = "AWS SSM Parameter Store key for sensitive Github personal token"
+  description = "AWS SSM Parameter Store key for sensitive Github personal token. GitHub token only needs the repo:status permission."
   type        = string
   default     = "github-webhook-validator-token" #tfsec:ignore:GEN001
 }
 
 variable "github_token_ssm_value" {
-  description = "Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`"
+  description = <<EOF
+Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
+GitHub token only needs the repo:status permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+  EOF
   type        = string
   default     = ""
   sensitive   = true
-}
-
-variable "create_github_token_ssm_param" {
-  description = "Determines if an AWS System Manager Parameter Store value should be created for the Github token"
-  type        = bool
-  default     = true
 }
 
 variable "github_token_ssm_tags" {
@@ -307,7 +315,7 @@ variable "terra_run_build_name" {
   default     = null
 }
 
-# metadb
+# RDS #
 
 variable "metadb_name" {
   description = "Name of the AWS RDS db"
@@ -368,6 +376,8 @@ variable "metadb_ci_password" {
   type        = string
   sensitive   = true
 }
+
+# LAMBDA #
 
 variable "lambda_approval_request_vpc_config" {
   description = "VPC configuration for Lambda approval request function"

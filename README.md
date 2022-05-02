@@ -242,14 +242,15 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_deploy\_stack\_build\_name | Name of AWS CodeBuild project that will create the PR deployment stack into the metadb | `string` | `null` | no |
 | create\_deploy\_stack\_graph\_scan | If true, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If false, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `bool` | `true` | no |
+| create\_deploy\_stack\_status\_check\_name | Name of the create deploy stack GitHub status | `string` | `"Create Deploy Stack"` | no |
 | create\_deploy\_stack\_vpc\_config | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | create\_github\_token\_ssm\_param | Determines if an AWS System Manager Parameter Store value should be created for the Github token | `bool` | `true` | no |
 | enfore\_admin\_branch\_protection | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
 | file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
 | github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used by github_webhook_validator Lambda Function and merge_lock Lambda function"` | no |
-| github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token | `string` | `"github-webhook-validator-token"` | no |
+| github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token. GitHub token only needs the repo:status permission. | `string` | `"github-webhook-validator-token"` | no |
 | github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
-| github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key` | `string` | `""` | no |
+| github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".<br>GitHub token only needs the repo:status permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) | `string` | `""` | no |
 | lambda\_approval\_request\_vpc\_config | VPC configuration for Lambda approval request function | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | lambda\_approval\_response\_vpc\_config | VPC configuration for Lambda approval response function | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | lambda\_trigger\_sf\_vpc\_config | VPC configuration for Lambda trigger\_sf function | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
@@ -300,6 +301,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | lambda\_trigger\_sf\_arn | ARN of the Lambda function used for triggering Step Function execution(s) |
 | merge\_lock\_github\_webhook\_id | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda function |
 | merge\_lock\_ssm\_key | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
+| merge\_lock\_status\_check\_name | Context name of the merge lock GitHub status check |
 | metadb\_arn | ARN for the metadb |
 | metadb\_ci\_password | Password used by CI services to connect to the metadb |
 | metadb\_ci\_username | Username used by CI services to connect to the metadb |
@@ -373,9 +375,9 @@ The steps below will setup a testing Docker environment for running integration 
 - Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
 
 
-- add to description the github token permissions needed by lambda functions
-- add descriptions to integration test cls (see TODOs)
 - make sure all integation/unit tests are passing
+   - test_revert.py
+   - tf apply then run test_deployments.py
 
 - merge into master
 - create first release!

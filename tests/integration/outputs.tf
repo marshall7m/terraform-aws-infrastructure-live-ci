@@ -15,6 +15,10 @@ output "merge_lock_github_webhook_id" {
   sensitive = true
 }
 
+output "merge_lock_status_check_name" {
+  value = module.mut_infrastructure_live_ci.merge_lock_status_check_name
+}
+
 output "merge_lock_ssm_key" {
   value = module.mut_infrastructure_live_ci.merge_lock_ssm_key
 }
