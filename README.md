@@ -373,5 +373,3 @@ The steps below will setup a testing Docker environment for running integration 
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 - Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
-
-- pin release for codebuild secondary sources (refs/tags/v1.0.0)
