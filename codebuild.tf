@@ -1,5 +1,6 @@
 locals {
-  merge_lock_name = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
+  terraform_module_version = file("${path.module}/source_version.txt")
+  merge_lock_name          = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
 
   pr_plan_build_name                  = coalesce(var.pr_plan_build_name, "${var.step_function_name}-pr-plan")
   create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.step_function_name}-create-deploy-stack")
@@ -87,8 +88,7 @@ EOT
     report_build_status = false
     insecure_ssl        = false
     location            = data.github_repository.build_scripts.http_clone_url
-    #TODO: use github tag after development
-    source_version = "lambda-trigger-sf"
+    source_version      = local.terraform_module_version
   }
 
   artifacts = {
@@ -278,8 +278,7 @@ EOT
     report_build_status = false
     insecure_ssl        = false
     location            = data.github_repository.build_scripts.http_clone_url
-    #TODO: use github tag after development
-    source_version = "lambda-trigger-sf"
+    source_version      = local.terraform_module_version
   }
   role_policy_statements = [
     {
@@ -362,8 +361,7 @@ EOT
     report_build_status = false
     insecure_ssl        = false
     location            = data.github_repository.build_scripts.http_clone_url
-    #TODO: use github tag after development
-    source_version = "lambda-trigger-sf"
+    source_version      = local.terraform_module_version
   }
   role_policy_statements = [
     {
