@@ -1,0 +1,145 @@
+name: "Tests"
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+
+    branches:
+      - master
+    tags:
+      - ci
+      - tests  
+    paths-ignore:
+    - .gitignore
+    - LICENSE.md
+    - README.md
+
+  push:
+    branches:
+    - master
+    paths-ignore:
+    - .gitignore
+    - LICENSE.md
+    - README.md
+
+env:
+  PYTEST_ADDOPTS: --color=yes
+  PYTHON_VERSION: pypy-3.9
+  AWS_REGION: us-west-2
+  TF_VAR_testing_github_token: ${{ secrets.TESTING_GITHUB_TOKEN }}
+
+jobs:
+  precommit:
+    runs-on: ubuntu-latest
+    container: ghcr.io/marshall7m/terrace:v0.1.2
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - name: Hooks
+        shell: bash
+        run: |
+          pre-commit install
+          pre-commit run --all-files
+
+  unit:
+    needs: precommit
+    runs-on: ubuntu-latest
+    container: ghcr.io/marshall7m/terrace:v0.1.2
+    services:
+      postgres:
+        image: postgres:10.14-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - name: mask sensitive
+        run: echo "::add-mask::$TF_VAR_testing_github_token"
+
+      - name: Configure AWS Credentials for remote workflow
+        uses: aws-actions/configure-aws-credentials@v1
+        if: ${{ !env.ACT }}
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS Credentials for local workflow
+        uses: aws-actions/configure-aws-credentials@v1
+        if: ${{ env.ACT }}
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+
+      - name: Tests
+        id: pytest
+        shell: bash
+        env:
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+          PGHOST: postgres
+          PGPORT: 5432
+        run: |
+          source $VIRTUAL_ENV/bin/activate
+          pip install -r requirements.txt
+          python3 -m pip install -e .
+
+          pytest -vv tests/unit
+
+  integration:
+    needs: [precommit, unit]
+    runs-on: ubuntu-latest
+    container: ghcr.io/marshall7m/terrace:v0.1.2
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - name: mask sensitive
+        run: echo "::add-mask::$TF_VAR_testing_github_token"
+
+      - name: Configure AWS Credentials for remote workflow
+        uses: aws-actions/configure-aws-credentials@v1
+        if: ${{ !env.ACT }}
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS Credentials for local workflow
+        uses: aws-actions/configure-aws-credentials@v1
+        if: ${{ env.ACT }}
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+
+      - name: Tests
+        id: pytest
+        shell: bash
+        run: |
+          source $VIRTUAL_ENV/bin/activate
+          python3 -m pip install -e .
+
+          pytest -vv tests/integration
