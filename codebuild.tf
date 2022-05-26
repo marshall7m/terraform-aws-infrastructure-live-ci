@@ -35,13 +35,13 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
 
 module "ecr_common_image" {
   count  = var.build_img == null ? 1 : 0
-  source = "github.com/marshall7m/terraform-aws-ecr/modules//ecr-docker-img"
+  source = "github.com/marshall7m/terraform-aws-ecr"
 
   create_repo         = true
   codebuild_access    = true
   cache               = false
   source_path         = "${path.module}/buildspecs/img"
-  repo_name           = "${var.step_function_name}-codebuild"
+  name                = "${var.step_function_name}-codebuild"
   tag                 = "latest"
   trigger_build_paths = ["${path.module}/buildspecs/img"]
   build_args = {
