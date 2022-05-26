@@ -2,25 +2,25 @@ import boto3
 import logging
 import json
 import os
-from botocore.exceptions import ClientError
 
-ses = boto3.client('ses')
+ses = boto3.client("ses")
 log = logging.getLogger(__name__)
 
+
 def lambda_handler(event, context):
-    '''Sends approval request email to email addresses asssociated with Terragrunt path.'''
-    
+    """Sends approval request email to email addresses asssociated with Terragrunt path."""
+
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
 
-    log.debug(f'Lambda Event: {event}')
+    log.debug(f"Lambda Event: {event}")
 
-    full_approval_api = event['ApprovalAPI']
-    voters = event['Voters']
-    path = event['Path']
+    full_approval_api = event["ApprovalAPI"]
+    voters = event["Voters"]
+    path = event["Path"]
 
-    log.debug(f'Path: {path}')
-    log.debug(f'API Full URL: {full_approval_api}')
+    log.debug(f"Path: {path}")
+    log.debug(f"API Full URL: {full_approval_api}")
 
     destinations = []
 
@@ -28,45 +28,35 @@ def lambda_handler(event, context):
     for address in voters:
         destinations.append(
             {
-                'Destination': {
-                    'ToAddresses': [
-                        address
-                    ]
-                },
-                'ReplacementTemplateData': json.dumps({
-                    'email_address': address
-                })
+                "Destination": {"ToAddresses": [address]},
+                "ReplacementTemplateData": json.dumps({"email_address": address}),
             }
         )
-    log.debug(f'Destinations\n {destinations}')
+    log.debug(f"Destinations\n {destinations}")
 
-    log.info('Sending bulk email')
+    log.info("Sending bulk email")
     response = ses.send_bulk_templated_email(
-        Template=os.environ['SES_TEMPLATE'],
-        Source=os.environ['SENDER_EMAIL_ADDRESS'],
-        DefaultTemplateData=json.dumps({
-            'full_approval_api': full_approval_api,
-            'path': path
-        }),
-        Destinations=destinations
+        Template=os.environ["SES_TEMPLATE"],
+        Source=os.environ["SENDER_EMAIL_ADDRESS"],
+        DefaultTemplateData=json.dumps(
+            {"full_approval_api": full_approval_api, "path": path}
+        ),
+        Destinations=destinations,
     )
-    log.debug(f'Response:\n{response}')
+    log.debug(f"Response:\n{response}")
     failed_count = 0
-    for msg in response['Status']:
-        if msg['Status'] == 'Success':
+    for msg in response["Status"]:
+        if msg["Status"] == "Success":
             log.info("Email was succesfully sent")
         else:
             failed_count += 1
-            log.error('Email was not successfully sent')
+            log.error("Email was not successfully sent")
             log.debug(f"Email Status:\n{msg}")
 
     if failed_count > 0:
         return {
-            'statusCode': 500,
-            'message': f'{failed_count}/{len(response["Status"])} emails failed to send'
+            "statusCode": 500,
+            "message": f'{failed_count}/{len(response["Status"])} emails failed to send',
         }
-    
-    return {
-        'statusCode': 302,
-        'message': f'All emails were successfully sent'
-    }
+
+    return {"statusCode": 302, "message": "All emails were successfully sent"}
