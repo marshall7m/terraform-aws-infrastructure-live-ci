@@ -191,8 +191,7 @@ module "mut_infrastructure_live_ci" {
 
   tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
 
-  create_github_token_ssm_param = false
-  github_token_ssm_key          = "mut-terraform-aws-infrastructure-live-token"
+  github_token_ssm_key = "mut-terraform-aws-infrastructure-live-token"
 
   approval_request_sender_email = data.aws_ssm_parameter.testing_sender_email.value
   account_parent_cfg = [
