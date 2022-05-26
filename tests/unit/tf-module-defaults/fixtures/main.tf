@@ -1,5 +1,5 @@
 module "mut_infrastructure_live_ci" {
-  source = "../../.."
+  source = "../../../..//"
 
   approval_request_sender_email = "success@simulator.amazonses.com"
   repo_name                     = "test/foo"

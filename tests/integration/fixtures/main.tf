@@ -163,7 +163,7 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
 }
 
 module "mut_infrastructure_live_ci" {
-  source = "../.."
+  source = "../../..//"
 
   repo_name   = local.mut_id
   base_branch = "master"
