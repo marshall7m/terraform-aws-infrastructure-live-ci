@@ -214,7 +214,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 |------|---------|
 | terraform | >= 0.14.0 |
 | aws | >= 3.44 |
-| github | ~> 4.0 |
+| github | >= 4.0 |
 
 ## Providers
 
@@ -222,7 +222,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 |------|---------|
 | archive | n/a |
 | aws | >= 3.44 |
-| github | ~> 4.0 |
+| github | >= 4.0 |
 | null | n/a |
 
 ## Inputs
@@ -342,6 +342,7 @@ For a demo of the module that will cleanup any resources created, see the `Integ
 ### Requirements
  
 The following tools are required:
+- [AWS CLI](https://github.com/aws/aws-cli)
 - [Docker](https://docs.docker.com/get-docker/)
  
 The following environment variables are required to be set:
@@ -355,7 +356,7 @@ The following environment variables are required to be set:
    - `GITHUB_TOKEN`
  
 The steps below will setup a testing Docker environment for running integration tests.
- 
+
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/mut-terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
 3. Ensure that the environment variables for the AWS credentials are set for the AWS account that will provision the Terraform module resources
@@ -373,3 +374,9 @@ The steps below will setup a testing Docker environment for running integration 
 - Create a feature for handling deleted terragrunt folder using git diff commands
 - Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 - Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
+
+
+## Workflow:
+create workaround for gh workflow not able to run docker cmds within container
+    - create tf module conditional for creating the common_codebuild_image and skip building image within module
+    - create a former gh job that creates the docker image and outputs an artifact for inputting into tf module

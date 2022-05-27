@@ -2,7 +2,7 @@ module "mut_infrastructure_live_ci" {
   source = "../../../..//"
 
   approval_request_sender_email = "success@simulator.amazonses.com"
-  repo_name                     = "test/foo"
+  repo_name                     = var.repo_name
   account_parent_cfg = [
     {
       name                = "test"
