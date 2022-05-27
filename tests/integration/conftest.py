@@ -93,7 +93,7 @@ def cur(conn):
 
 @pytest.fixture(scope="module")
 def gh():
-    return github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+    return github.Github(os.environ["TF_VAR_testing_github_token"], retry=3)
 
 
 @pytest.fixture(scope="module")
@@ -111,7 +111,7 @@ def git_repo(tmp_path_factory):
     log.debug(f"Scenario repo dir: {dir}")
 
     yield git.Repo.clone_from(
-        f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
+        f'https://oauth2:{os.environ["TF_VAR_testing_github_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
         dir,
     )
 
