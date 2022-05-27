@@ -3,9 +3,18 @@ import logging
 from psycopg2 import sql
 import psycopg2
 import os
+import json
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+
+def tf_vars_to_json(tf_vars: dict) -> dict:
+    for k, v in tf_vars.items():
+        if type(v) not in [str, bool, int, float]:
+            tf_vars[k] = json.dumps(v)
+
+    return tf_vars
 
 
 def dummy_tf_output(name=None, value=None):
