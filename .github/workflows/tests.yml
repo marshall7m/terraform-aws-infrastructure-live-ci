@@ -174,4 +174,4 @@ jobs:
         run: |
           
           chmod -R 775 $PWD
-          docker compose run --rm --entrypoint="" integration pwd && ls -la /src
+          docker compose run --rm --entrypoint="" integration pwd && ls -la && docker --version
