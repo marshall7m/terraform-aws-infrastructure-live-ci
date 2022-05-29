@@ -6,7 +6,7 @@ if [ -n "$ADDITIONAL_PATH" ]; then
 fi
 
 source $VIRTUAL_ENV/bin/activate
-
-pip install -e /src
+python3 -m pip install -r requirements.txt
+python3 -m pip install -e /src
 
 /bin/bash
