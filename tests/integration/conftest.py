@@ -35,8 +35,21 @@ def pytest_generate_tests(metafunc):
             indirect=True,
         )
 
+    tf_versions = [pytest.param("latest")]
+    if "terraform_version" in metafunc.fixturenames:
+        tf_versions = [pytest.param("latest")]
+        metafunc.parametrize(
+            "terraform_version",
+            tf_versions,
+            indirect=True,
+            scope="session",
+            ids=[f"tf_{v.values[0]}" for v in tf_versions],
+        )
+
     if hasattr(metafunc.cls, "case"):
         if "target_execution" in metafunc.fixturenames:
+            # gets expected count of tf directories that will have their
+            # new provider resources rolled back
             rollback_execution_count = len(
                 [
                     1
@@ -45,6 +58,8 @@ def pytest_generate_tests(metafunc):
                     is not None
                 ]
             )
+            # parameterizes tests/fixtures with the range of expected tf directories
+            # that should be setup and tested
             metafunc.parametrize(
                 "target_execution",
                 list(
@@ -100,7 +115,6 @@ def gh():
 def repo(gh, mut_output):
     repo = gh.get_user().get_repo(mut_output["repo_name"])
     os.environ["REPO_FULL_NAME"] = repo.full_name
-    # repo.edit(default_branch='master')
 
     return repo
 
