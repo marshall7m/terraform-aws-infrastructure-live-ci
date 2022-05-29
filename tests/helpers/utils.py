@@ -54,18 +54,13 @@ def dummy_tf_github_repo(repo_name=None):
     }}
     provider "aws" {{}}
 
-    data "aws_ssm_parameter" "github_token" {{
-        name = "admin-github-token"
-    }}
-
     provider "github" {{
-        owner = "marshall7m"
-        token = data.aws_ssm_parameter.github_token.value
+        token = var.testing_github_token
     }}
 
     resource "github_repository" "dummy" {{
-    name        = "{repo_name}"
-    visibility  = "public"
+        name        = "{repo_name}"
+        visibility  = "public"
     }}
     """
 
