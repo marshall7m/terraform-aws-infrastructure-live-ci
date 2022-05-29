@@ -129,7 +129,6 @@ jobs:
   integration:
     # needs: [precommit, unit]
     runs-on: ubuntu-latest
-    container: docker:20.10.16-git
     permissions:
       id-token: write
       contents: read
@@ -137,18 +136,18 @@ jobs:
       TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
       TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
     steps:
-      - name: Install Deps
-        id: act_integration_install_deps
-        shell: sh
-        run: |
-          apk update
-          apk add --update nodejs npm
       - uses: actions/checkout@v3
       - name: mask sensitive
         run: |
           echo "::add-mask::$TF_VAR_testing_github_token"
           echo "::add-mask::$TF_VAR_testing_secondary_aws_account_id"
           echo "::add-mask::$TF_VAR_testing_sender_email"
+
+      - name: Install Docker
+        id: integration_install_docker
+        shell: bash
+        run: |
+          bash ./runner_install_docker.sh
 
       - name: Configure AWS Credentials for remote workflow
         uses: aws-actions/configure-aws-credentials@v1
@@ -168,13 +167,6 @@ jobs:
 
       - name: Tests
         id: pytest_integration
-        shell: sh
+        shell: bash
         run: |
-          # running entrypoint.sh before pytest cmd as workaround to container not finding entrypoint
-          # from docker-compose.yml reference. 
-          # See workflow Job #s showing issue: #20-22
-          docker compose run --rm --entrypoint="" integration \
-            source $VIRTUAL_ENV/bin/activate \
-            && python3 -m pip install -r requirements.txt \
-            && python3 -m pip install -e /src \
-            && pytest -vv tests/integration
+          docker compose run --rm integration pytest -vv tests/integration
