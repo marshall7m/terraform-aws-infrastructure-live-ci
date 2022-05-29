@@ -102,13 +102,21 @@ jobs:
           python3 -m pip install -e .
           pytest -vv tests/unit
 
-      - name: Install Docker for local workflow
+      - name: Install Deps for local workflow
         id: install
         shell: bash
         if: ${{ env.ACT }}
         run: |
           bash ./runner_install_docker.sh
-      
+
+          apt-get -y update
+          apt-get -y make g++ automake subversion cmake yarn musl-dev linux-headers \
+          libffi-dev libxml2 libxml2-dev gcc libxslt-dev postgresql-dev postgresql-client
+
+          apt-get clean
+          rm -rf /var/lib/apt/lists/*
+          rm -rf /tmp/*
+
       # using docker compose workaround until nektos/act handles services properly. See issue: https://github.com/nektos/act/issues/173
       - name: Tests
         id: act_pytest_unit
@@ -116,16 +124,25 @@ jobs:
         if: ${{ env.ACT }} 
         run: |
           docker compose run -d postgres
-          docker compose run --rm --entrypoint="" unit /bin/bash run_unit_tests.sh
+          docker compose run --rm unit pytest -vv tests/unit
 
   integration:
-    needs: [precommit, unit]
+    # needs: [precommit, unit]
     runs-on: ubuntu-latest
     container: docker:20.10.16
     permissions:
       id-token: write
       contents: read
     steps:
+      - name: Install Deps
+        id: act_integration_install_deps
+        shell: sh
+        if: ${{ env.ACT }}
+        run: |
+          apk update
+          # use git version > 2.20 for actions/checkout@v3 step see issue: https://github.com/actions/checkout/issues/335#issuecomment-689531448
+          # and git version < 2.35.2 to skip adding repo to git conifg safe directory
+          apk add --update nodejs npm git=2.35.1
       - uses: actions/checkout@v3
       - name: mask sensitive
         run: |
@@ -149,17 +166,12 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - uses: actions/setup-python@v3
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
-
       - name: Tests
         id: pytest_integration
         shell: sh
         env:
-          TF_VAR_testing_secondary_aws_account_id: ${{ secrets.testing_secondary_aws_account_id }}
-          TF_VAR_testing_sender_email: ${{ secrets.testing_sender_email }}
+          TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
+          TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
 
         run: |
-          docker compose run --rm --entrypoint="" integration pytest -vv tests/integration
+          docker compose run --rm integration pytest -vv tests/integration
