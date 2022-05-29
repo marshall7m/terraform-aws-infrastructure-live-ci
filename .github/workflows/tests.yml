@@ -171,5 +171,5 @@ jobs:
         shell: sh
         run: |
           chmod -R 775 $PWD
-          ls
+          /bin/sh entrypoint.sh
           docker compose run --rm integration pytest -vv tests/integration
