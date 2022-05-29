@@ -133,6 +133,9 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
+      TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
     steps:
       - name: Install Deps
         id: act_integration_install_deps
@@ -168,9 +171,7 @@ jobs:
       - name: Tests
         id: pytest_integration
         shell: sh
-        env:
-          TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
-          TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
-
         run: |
-          docker compose run --rm --entrypoint="" integration ls /src
+          
+          chmod -R 775 $PWD
+          docker compose run --rm --entrypoint="" integration pwd && ls -la /src
