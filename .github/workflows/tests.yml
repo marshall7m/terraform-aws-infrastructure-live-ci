@@ -173,4 +173,8 @@ jobs:
           # running entrypoint.sh before pytest cmd as workaround to container not finding entrypoint
           # from docker-compose.yml reference. 
           # See workflow Job #s showing issue: #20-22
-          docker compose run --rm --entrypoint="" integration /bin/bash entrypoint.sh && pytest -vv tests/integration
+          docker compose run --rm --entrypoint="" integration \
+            source $VIRTUAL_ENV/bin/activate \
+            && python3 -m pip install -r requirements.txt \
+            && python3 -m pip install -e /src \
+            && pytest -vv tests/integration
