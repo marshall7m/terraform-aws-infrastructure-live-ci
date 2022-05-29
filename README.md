@@ -273,7 +273,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | pr\_plan\_status\_check\_name | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
 | pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | prefix | Prefix to attach to all resources | `string` | `null` | no |
-| repo\_name | Name of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
+| repo\_http\_clone\_url | HTTP clone URL of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions | `string` | `null` | no |
 | terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
@@ -376,7 +376,6 @@ The steps below will setup a testing Docker environment for running integration 
 - Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
 
 
-## Workflow:
-create workaround for gh workflow not able to run docker cmds within container
-    - create tf module conditional for creating the common_codebuild_image and skip building image within module
-    - create a former gh job that creates the docker image and outputs an artifact for inputting into tf module
+- remove gh repo data source and create var.repo_clone_url
+   - remove depedency of repo existing before destroying/applying/planning
+

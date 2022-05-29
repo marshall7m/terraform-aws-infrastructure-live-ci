@@ -6,10 +6,8 @@ locals {
   create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.step_function_name}-create-deploy-stack")
   terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.step_function_name}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
-}
 
-data "github_repository" "this" {
-  name = var.repo_name
+  repo_name = split(".git", basename(var.repo_http_clone_url))[0]
 }
 
 data "github_repository" "build_scripts" {
@@ -62,7 +60,7 @@ module "codebuild_create_deploy_stack" {
     type                = "GITHUB"
     git_clone_depth     = 0
     insecure_ssl        = false
-    location            = data.github_repository.this.http_clone_url
+    location            = var.repo_http_clone_url
     report_build_status = true
     build_status_config = {
       context = var.create_deploy_stack_status_check_name
@@ -255,7 +253,7 @@ module "codebuild_pr_plan" {
     type                = "GITHUB"
     git_clone_depth     = 0
     insecure_ssl        = false
-    location            = data.github_repository.this.http_clone_url
+    location            = var.repo_http_clone_url
     report_build_status = true
     build_status_config = {
       context = var.pr_plan_status_check_name
@@ -337,7 +335,7 @@ module "codebuild_terra_run" {
     type                = "GITHUB"
     git_clone_depth     = 1
     insecure_ssl        = false
-    location            = data.github_repository.this.http_clone_url
+    location            = var.repo_http_clone_url
     report_build_status = false
     buildspec           = <<-EOT
 version: 0.2

@@ -199,8 +199,8 @@ variable "create_deploy_stack_status_check_name" {
 
 # GITHUB WEBHOOK #
 
-variable "repo_name" {
-  description = "Name of the GitHub repository that is owned by the Github provider"
+variable "repo_http_clone_url" {
+  description = "HTTP clone URL of the GitHub repository that is owned by the Github provider"
   type        = string
 }
 
