@@ -3,13 +3,13 @@ services:
   postgres:
     image: postgres:10.14-alpine
     container_name: postgres
+    volumes:
+      - "$PWD/docker-pgsql-entrypoint:/docker-entrypoint-initdb.d"
+      - "$PWD/docker-pgsql-volume:/var/lib/postgresql/data" 
     ports:
       - 5432:5432
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=testing_password
-      - TESTING_POSTGRES_USER=testing_user
-      - TESTING_POSTGRES_DB=testing_metadb
+      - POSTGRES_PASSWORD=postgres
     deploy:
       restart_policy:
         condition: on-failure
@@ -19,17 +19,48 @@ services:
       interval: 15s
       timeout: 5000s
       retries: 50
-  testing:
+    profiles: ["unit"]
+
+  unit:
     stdin_open: true
     tty: true
     image: ghcr.io/marshall7m/terrace:v0.1.2
     volumes:
       - "$PWD:/src"
     environment:
-      - PGUSER
-      - PGPASSWORD
-      - PGDATABASE
-      - PGHOST
-      - PGPORT
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_REGION
+      - AWS_DEFAULT_REGION
+      - AWS_SESSION_TOKEN
+      - TF_VAR_testing_github_token
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=postgres
+      - PGHOST=postgres
+      - PGPORT=5432
       - ADDITIONAL_PATH
-    command: ["/bin/bash"]
+    entrypoint: ["/bin/bash", "entrypoint.sh"]
+    profiles: ["unit"]
+    depends_on:
+      - postgres
+
+  integration:
+    stdin_open: true
+    tty: true
+    image: ghcr.io/marshall7m/terrace:v0.1.2
+    volumes:
+      - "$PWD:/src"
+      - "/usr/bin/docker:/usr/bin/docker"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_REGION
+      - AWS_DEFAULT_REGION
+      - AWS_SESSION_TOKEN
+      - TF_VAR_testing_github_token
+      - TF_VAR_testing_secondary_aws_account_id
+      - TF_VAR_testing_sender_email
+      - ADDITIONAL_PATH
+    entrypoint: ["/bin/bash", "entrypoint.sh"]
