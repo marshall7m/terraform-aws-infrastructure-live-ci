@@ -15,7 +15,6 @@ log.setLevel(logging.DEBUG)
 @pytest.mark.parametrize("terraform_version", ["1.0.0"], indirect=True)
 def test_plan(tf):
     """Ensure that the Terraform module produces a valid Terraform plan with just the module's required variables defined"""
-    log.debug(f"environ:\n{os.environ}")
     log.info("Getting testing tf plan")
     out = tf.plan(output=True)
     log.debug(out)
