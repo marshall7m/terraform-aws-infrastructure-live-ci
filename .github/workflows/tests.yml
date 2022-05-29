@@ -43,11 +43,12 @@ jobs:
           pre-commit run --all-files
 
   unit:
-    needs: precommit
+    # needs: precommit
     runs-on: ubuntu-latest
     container: ghcr.io/marshall7m/terrace:v0.1.2
     services:
       postgres:
+        if: ${{ !env.ACT }}
         image: postgres:10.14-alpine
         env:
           POSTGRES_PASSWORD: postgres
@@ -81,22 +82,6 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # - name: Install local dependencies
-      #   if: ${{ env.ACT }}
-      #   run: |
-      #     apt-get -y update
-      #     apt-get -y make g++ automake subversion cmake yarn musl-dev linux-headers \
-      #       libffi-dev libxml2 libxml2-dev gcc libxslt-dev postgresql-dev postgresql-client
-      #     apt-get clean
-      #     rm -rf /var/lib/apt/lists/*
-      #     rm -rf /tmp/*
-
-      # - name: Boot local dependencies
-      #   if: ${{ env.ACT }}
-      #   run: |
-      #     service --status-all
-      #     service postgresql start
-
       - uses: actions/setup-python@v3
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -105,6 +90,7 @@ jobs:
       - name: Tests
         id: pytest
         shell: bash
+        if: ${{ !env.ACT }}
         env:
           PGUSER: postgres
           PGPASSWORD: postgres
@@ -113,14 +99,30 @@ jobs:
           PGPORT: 5432
         run: |
           source $VIRTUAL_ENV/bin/activate
-          pip install -r requirements.txt
+          python3 -m pip install -r requirements.txt
           python3 -m pip install -e .
           pytest -vv tests/unit
+
+      - name: Install Docker for local workflow
+        id: install
+        shell: bash
+        if: ${{ env.ACT }}
+        run: |
+          bash ./runner_install_docker.sh
+      
+      # using docker compose workaround until nektos/act handles services properly. See issue: https://github.com/nektos/act/issues/173
+      - name: Tests
+        id: pytest
+        shell: bash
+        if: ${{ env.ACT }} 
+        run: |
+          docker compose run -d postgres
+          docker compose run --rm --entrypoint="" unit /bin/bash run_unit_tests.sh
 
   integration:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.2
+    container: docker:20.10.16
     permissions:
       id-token: write
       contents: read
@@ -153,15 +155,9 @@ jobs:
       - name: Tests
         id: pytest
         shell: bash
+        env:
+          TF_VAR_testing_secondary_aws_account_id: ${{ secrets.testing_secondary_aws_account_id }}
+          TF_VAR_testing_sender_email: ${{ secrets.testing_sender_email }}
+
         run: |
-          docker run --rm \
-            -v /usr/bin/docker:/usr/bin/docker \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v $PWD:/src \
-            -e AWS_ACCESS_KEY_ID \
-            -e AWS_SECRET_ACCESS_KEY \
-            -e AWS_REGION \
-            -e AWS_DEFAULT_REGION \
-            -e AWS_SESSION_TOKEN \
-            ghcr.io/marshall7m/terrace:v0.1.2 \
-            /bin/bash run_integration_tests.sh
+          docker compose run --rm --entrypoint="" integration pytest -vv tests/integration
