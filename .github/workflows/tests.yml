@@ -127,7 +127,7 @@ jobs:
           docker compose run --rm unit pytest -vv tests/unit
 
   integration:
-    # needs: [precommit, unit]
+    needs: [precommit, unit]
     runs-on: ubuntu-latest
     container: docker:20.10.16
     permissions:
@@ -137,7 +137,6 @@ jobs:
       - name: Install Deps
         id: act_integration_install_deps
         shell: sh
-        if: ${{ env.ACT }}
         run: |
           apk update
           # use git version > 2.20 for actions/checkout@v3 step see issue: https://github.com/actions/checkout/issues/335#issuecomment-689531448
