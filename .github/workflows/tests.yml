@@ -173,6 +173,4 @@ jobs:
           TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
 
         run: |
-          pwd
-          ls
-          docker compose run --rm integration pytest -vv tests/integration
+          docker compose run --rm --entrypoint="" integration ls && pwd
