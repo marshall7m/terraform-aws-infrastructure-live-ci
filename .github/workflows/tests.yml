@@ -129,7 +129,7 @@ jobs:
   integration:
     # needs: [precommit, unit]
     runs-on: ubuntu-latest
-    container: docker:20.10.16
+    container: docker:20.10.16-git
     permissions:
       id-token: write
       contents: read
@@ -142,9 +142,7 @@ jobs:
         shell: sh
         run: |
           apk update
-          # use git version > 2.20 for actions/checkout@v3 step see issue: https://github.com/actions/checkout/issues/335#issuecomment-689531448
-          # and git version < 2.35.2 to skip adding repo to git conifg safe directory
-          apk add --update nodejs npm git
+          apk add --update nodejs npm
       - uses: actions/checkout@v3
       - name: mask sensitive
         run: |
@@ -172,6 +170,5 @@ jobs:
         id: pytest_integration
         shell: sh
         run: |
-          
           chmod -R 775 $PWD
-          docker compose run --rm --entrypoint="" integration pwd && ls -la && docker --version
+          docker compose run --rm integration pytest -vv tests/integration
