@@ -171,4 +171,5 @@ jobs:
         shell: sh
         run: |
           chmod -R 775 $PWD
+          ls
           docker compose run --rm integration pytest -vv tests/integration
