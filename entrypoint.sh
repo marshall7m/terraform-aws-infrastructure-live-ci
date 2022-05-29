@@ -9,4 +9,4 @@ source $VIRTUAL_ENV/bin/activate
 python3 -m pip install -r requirements.txt
 python3 -m pip install -e /src
 
-/bin/bash
+exec "$@"
