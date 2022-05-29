@@ -63,4 +63,4 @@ services:
       - TF_VAR_testing_secondary_aws_account_id
       - TF_VAR_testing_sender_email
       - ADDITIONAL_PATH
-    entrypoint: ["/bin/bash", "./entrypoint.sh"]
+    entrypoint: ["/bin/bash", "/src/entrypoint.sh"]
