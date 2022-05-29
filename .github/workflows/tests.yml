@@ -127,7 +127,7 @@ jobs:
           docker compose run --rm unit pytest -vv tests/unit
 
   integration:
-    needs: [precommit, unit]
+    # needs: [precommit, unit]
     runs-on: ubuntu-latest
     container: docker:20.10.16
     permissions:
@@ -141,7 +141,7 @@ jobs:
           apk update
           # use git version > 2.20 for actions/checkout@v3 step see issue: https://github.com/actions/checkout/issues/335#issuecomment-689531448
           # and git version < 2.35.2 to skip adding repo to git conifg safe directory
-          apk add --update nodejs npm git=2.35.1
+          apk add --update nodejs npm git
       - uses: actions/checkout@v3
       - name: mask sensitive
         run: |
