@@ -48,7 +48,6 @@ jobs:
     container: ghcr.io/marshall7m/terrace:v0.1.2
     services:
       postgres:
-        if: ${{ !env.ACT }}
         image: postgres:10.14-alpine
         env:
           POSTGRES_PASSWORD: postgres
