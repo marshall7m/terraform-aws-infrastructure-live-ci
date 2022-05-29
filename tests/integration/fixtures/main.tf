@@ -4,13 +4,13 @@ locals {
   deploy_role_name      = "${local.mut_id}-deploy"
   approval_key          = "approval"
   test_approval_content = false
-  voters                = local.test_approval_content ? [data.aws_ssm_parameter.testing_sender_email.value] : ["success@simulator.amazonses.com"]
+  voters                = local.test_approval_content ? [var.testing_sender_email] : ["success@simulator.amazonses.com"]
 }
 
 provider "aws" {
   alias = "secondary"
   assume_role {
-    role_arn     = "arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:role/cross-account-admin-access"
+    role_arn     = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/cross-account-admin-access"
     session_name = "${local.mut_id}-testing"
   }
 }
@@ -19,14 +19,6 @@ data "aws_caller_identity" "current" {}
 
 data "github_user" "current" {
   username = ""
-}
-
-data "aws_ssm_parameter" "testing_sender_email" {
-  name = "testing-ses-email-address"
-}
-
-data "aws_ssm_parameter" "secondary_testing_account" {
-  name = "secondary-testing-account-id"
 }
 
 resource "github_repository" "testing" {
@@ -70,7 +62,7 @@ data "aws_iam_policy_document" "testing_tf_state" {
     resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:root"]
+      identifiers = ["arn:aws:iam::${var.testing_secondary_aws_account_id}:root"]
     }
   }
   statement {
@@ -83,7 +75,7 @@ data "aws_iam_policy_document" "testing_tf_state" {
     resources = [aws_s3_bucket.testing_tf_state.arn]
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:root"]
+      identifiers = ["arn:aws:iam::${var.testing_secondary_aws_account_id}:root"]
     }
   }
 }
@@ -175,7 +167,7 @@ module "mut_infrastructure_live_ci" {
   metadb_ci_username = "mut_ci_user"
   metadb_ci_password = random_password.metadb["ci"].result
 
-  #required specific testing repo to conditionally set the terraform backend configurations
+  # repo specific env vars required to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
     {
       name  = "TG_BACKEND"
@@ -193,7 +185,7 @@ module "mut_infrastructure_live_ci" {
 
   github_token_ssm_key = "mut-terraform-aws-infrastructure-live-token"
 
-  approval_request_sender_email = data.aws_ssm_parameter.testing_sender_email.value
+  approval_request_sender_email = var.testing_sender_email.value
   account_parent_cfg = [
     {
       name                = "dev"
@@ -212,8 +204,8 @@ module "mut_infrastructure_live_ci" {
       voters              = local.voters
       min_approval_count  = 1
       min_rejection_count = 1
-      plan_role_arn       = "arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:role/${local.plan_role_name}"
-      deploy_role_arn     = "arn:aws:iam::${data.aws_ssm_parameter.secondary_testing_account.value}:role/${local.deploy_role_name}"
+      plan_role_arn       = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/${local.plan_role_name}"
+      deploy_role_arn     = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/${local.deploy_role_name}"
     }
   ]
 
