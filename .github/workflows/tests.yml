@@ -43,7 +43,7 @@ jobs:
           pre-commit run --all-files
 
   unit:
-    # needs: precommit
+    needs: precommit
     runs-on: ubuntu-latest
     container: ghcr.io/marshall7m/terrace:v0.1.2
     services:
