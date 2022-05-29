@@ -2,7 +2,7 @@ module "mut_infrastructure_live_ci" {
   source = "../../../..//"
 
   approval_request_sender_email = "success@simulator.amazonses.com"
-  repo_name                     = var.repo_name
+  repo_http_clone_url           = "https://github.com/fake-user/fake-repo.git"
   account_parent_cfg = [
     {
       name                = "test"
