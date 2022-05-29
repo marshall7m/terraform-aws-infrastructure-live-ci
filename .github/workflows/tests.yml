@@ -87,7 +87,7 @@ jobs:
           architecture: x64
 
       - name: Tests
-        id: pytest
+        id: pytest_unit
         shell: bash
         if: ${{ !env.ACT }}
         env:
@@ -111,7 +111,7 @@ jobs:
       
       # using docker compose workaround until nektos/act handles services properly. See issue: https://github.com/nektos/act/issues/173
       - name: Tests
-        id: pytest
+        id: act_pytest_unit
         shell: bash
         if: ${{ env.ACT }} 
         run: |
@@ -155,7 +155,7 @@ jobs:
           architecture: x64
 
       - name: Tests
-        id: pytest
+        id: pytest_integration
         shell: bash
         env:
           TF_VAR_testing_secondary_aws_account_id: ${{ secrets.testing_secondary_aws_account_id }}
