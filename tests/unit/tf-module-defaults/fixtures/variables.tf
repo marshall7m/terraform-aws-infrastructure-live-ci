@@ -4,9 +4,3 @@ variable "testing_github_token" {
   sensitive   = true
   default     = null
 }
-
-variable "repo_name" {
-  description = "Name of the GitHub repository that is owned by the Github provider"
-  type        = string
-  default     = ""
-}

@@ -157,8 +157,8 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
 module "mut_infrastructure_live_ci" {
   source = "../../..//"
 
-  repo_name   = local.mut_id
-  base_branch = "master"
+  repo_http_clone_url = github_repository.testing.http_clone_url
+  base_branch         = "master"
   # for testing purposes, admin is allowed to push to trunk branch for cleaning up testing changes without having to create a PR and triggering the entire CI pipeline
   enfore_admin_branch_protection = false
 
