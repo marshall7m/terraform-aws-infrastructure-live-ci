@@ -35,7 +35,7 @@ module "github_webhook_validator" {
   lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
   repos = [
     {
-      name = local.repo_name
+      name = var.repo_name
       filter_groups = [
         [
           {
@@ -131,7 +131,7 @@ module "lambda_merge_lock" {
 }
 
 resource "github_branch_protection" "merge_lock" {
-  repository_id = local.repo_name
+  repository_id = var.repo_name
 
   pattern          = var.base_branch
   enforce_admins   = var.enfore_admin_branch_protection

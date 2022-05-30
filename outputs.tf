@@ -112,7 +112,7 @@ output "approval_request_log_group_name" {
 
 output "merge_lock_github_webhook_id" {
   description = "GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda function"
-  value       = module.github_webhook_validator.webhook_ids[local.repo_name]
+  value       = module.github_webhook_validator.webhook_ids[var.repo_name]
 }
 
 output "merge_lock_status_check_name" {

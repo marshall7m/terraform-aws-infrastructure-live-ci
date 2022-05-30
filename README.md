@@ -273,7 +273,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | pr\_plan\_status\_check\_name | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
 | pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | prefix | Prefix to attach to all resources | `string` | `null` | no |
-| repo\_http\_clone\_url | HTTP clone URL of the GitHub repository that is owned by the Github provider | `string` | n/a | yes |
+| repo\_name | Name of the pre-existing GitHub repository that is owned by the Github provider | `string` | n/a | yes |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions | `string` | `null` | no |
 | terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |

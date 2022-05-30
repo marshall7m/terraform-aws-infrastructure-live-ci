@@ -1,8 +1,14 @@
+resource "github_repository" "testing" {
+  name        = "mut_infrastructure_live_ci_testing_plan"
+  description = "Test repo for mut: terraform-aws-infrastructure-live-ci"
+  visibility  = "public"
+}
+
 module "mut_infrastructure_live_ci" {
   source = "../../../..//"
 
   approval_request_sender_email = "success@simulator.amazonses.com"
-  repo_http_clone_url           = "https://github.com/fake-user/fake-repo.git"
+  repo_name                     = github_repository.testing.name
   account_parent_cfg = [
     {
       name                = "test"

@@ -157,8 +157,8 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
 module "mut_infrastructure_live_ci" {
   source = "../../..//"
 
-  repo_http_clone_url = github_repository.testing.http_clone_url
-  base_branch         = "master"
+  repo_name   = github_repository.testing.name
+  base_branch = "master"
   # for testing purposes, admin is allowed to push to trunk branch for cleaning up testing changes without having to create a PR and triggering the entire CI pipeline
   enfore_admin_branch_protection = false
 
@@ -185,7 +185,7 @@ module "mut_infrastructure_live_ci" {
 
   github_token_ssm_key = "mut-terraform-aws-infrastructure-live-token"
 
-  approval_request_sender_email = var.testing_sender_email.value
+  approval_request_sender_email = var.testing_sender_email
   account_parent_cfg = [
     {
       name                = "dev"
