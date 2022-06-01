@@ -4,6 +4,6 @@
 -s AWS_REGION
 -s AWS_DEFAULT_REGION
 -s GITHUB_TOKEN
--s TESTING_GITHUB_TOKEN
--s TESTING_SECONDARY_AWS_ACCOUNT_ID
--s TESTING_SENDER_EMAIL
+-s TF_VAR_testing_github_token
+-s TF_VAR_testing_secondary_aws_account_id
+-s TF_VAR_testing_sender_email
