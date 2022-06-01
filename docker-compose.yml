@@ -33,6 +33,7 @@ services:
       - AWS_REGION
       - AWS_DEFAULT_REGION
       - AWS_SESSION_TOKEN
+      - AWS_SESSION_EXPIRATION
       - TF_VAR_testing_github_token
       - TF_VAR_approval_request_sender_email
       - PGUSER=postgres
@@ -60,10 +61,12 @@ services:
       - AWS_REGION
       - AWS_DEFAULT_REGION
       - AWS_SESSION_TOKEN
+      - AWS_SESSION_EXPIRATION
       - TF_VAR_testing_integration_github_token
       - TF_VAR_merge_lock_github_token_ssm_value
       - TF_VAR_github_webhook_validator_github_token_ssm_value
       - TF_VAR_testing_secondary_aws_account_id
       - TF_VAR_approval_request_sender_email
+      - UNTIL_AWS_EXP=1h
       - ADDITIONAL_PATH
     entrypoint: ["/bin/bash", "entrypoint.sh"]
