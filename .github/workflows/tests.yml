@@ -56,8 +56,7 @@ jobs:
           --health-retries 5
     env:
       TF_VAR_testing_github_token: ${{ secrets.TESTING_GITHUB_TOKEN }}
-      TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
-      TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
+      TF_VAR_approval_request_sender_email: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
     permissions:
       id-token: write
       contents: read
@@ -66,8 +65,7 @@ jobs:
       - name: mask sensitive
         run: |
           echo "::add-mask::$TF_VAR_testing_github_token"
-          echo "::add-mask::$TF_VAR_testing_secondary_aws_account_id"
-          echo "::add-mask::$TF_VAR_testing_sender_email"
+          echo "::add-mask::$TF_VAR_approval_request_sender_email"
 
       - name: Configure AWS Credentials for remote workflow
         uses: aws-actions/configure-aws-credentials@v1
@@ -119,25 +117,29 @@ jobs:
         shell: bash
         if: ${{ env.ACT }} 
         run: |
-          docker compose run unit pytest -o log_cli=true -vv tests/unit
+          docker compose run unit pytest -vv tests/unit
 
   integration:
-    # needs: [precommit, unit]
+    needs: [precommit, unit]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     env:
-      TF_VAR_testing_github_token: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      TF_VAR_testing_integration_github_token: ${{ secrets.TESTING_INTEGRATION_GITHUB_TOKEN }}
+      TF_VAR_merge_lock_github_token_ssm_value: ${{ secrets.TF_VAR_MERGE_LOCK_GITHUB_TOKEN_SSM_VALUE }}
+      TF_VAR_github_webhook_validator_github_token_ssm_value: ${{ secrets.TF_VAR_GITHUB_WEBHOOK_VALIDATOR_GITHUB_TOKEN_SSM_VALUE }}
       TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
-      TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
+      TF_VAR_approval_request_sender_email: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
     steps:
       - uses: actions/checkout@v3
       - name: mask sensitive
         run: |
-          echo "::add-mask::$TF_VAR_testing_github_token"
+          echo "::add-mask::$TF_VAR_testing_integration_github_token"
+          echo "::add-mask::$TF_VAR_merge_lock_github_token_ssm_value"
+          echo "::add-mask::$TF_VAR_github_webhook_validator_github_token_ssm_value"
           echo "::add-mask::$TF_VAR_testing_secondary_aws_account_id"
-          echo "::add-mask::$TF_VAR_testing_sender_email"
+          echo "::add-mask::$TF_VAR_approval_request_sender_email"
 
       - name: Install Docker
         id: integration_install_docker
@@ -165,4 +167,4 @@ jobs:
         id: pytest_integration
         shell: bash
         run: |
-          docker compose run --rm integration pytest -vv -o log_cli=true tests/integration/test_deployments.py::TestSucceededDeployment
+          docker compose run --rm integration pytest -vv tests/integration
