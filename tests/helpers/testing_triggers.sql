@@ -40,7 +40,7 @@ BEGIN
 END
 $func$;
 
-DROP TRIGGER IF EXISTS account_dim_default ON public.account_dim;
+DROP TRIGGER IF EXISTS account_dim_default ON account_dim;
 
 CREATE TRIGGER account_dim_default
 BEFORE INSERT ON account_dim
@@ -176,7 +176,7 @@ CREATE OR REPLACE FUNCTION trig_executions_default()
     END;
 $func$;
 
-DROP TRIGGER IF EXISTS executions_default ON public.executions;
+DROP TRIGGER IF EXISTS executions_default ON executions;
 
 CREATE TRIGGER executions_default
 BEFORE INSERT ON executions
