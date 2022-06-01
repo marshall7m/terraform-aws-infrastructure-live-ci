@@ -1,14 +1,9 @@
-resource "github_repository" "testing" {
-  name        = "mut_infrastructure_live_ci_testing_plan"
-  description = "Test repo for mut: terraform-aws-infrastructure-live-ci"
-  visibility  = "public"
-}
-
 module "mut_infrastructure_live_ci" {
   source = "../../../..//"
 
-  approval_request_sender_email = "success@simulator.amazonses.com"
-  repo_name                     = github_repository.testing.name
+  approval_request_sender_email            = "success@simulator.amazonses.com"
+  create_merge_lock_github_token_ssm_param = true
+  repo_name                                = var.repo_name
   account_parent_cfg = [
     {
       name                = "test"
