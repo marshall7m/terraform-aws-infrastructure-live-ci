@@ -284,19 +284,6 @@ resource "aws_ses_identity_policy" "approval" {
 
 resource "aws_ses_template" "approval" {
   name    = local.approval_request_name
-  subject = "${var.step_function_name} Approval for path: {{path}}"
-  html    = <<EOF
-<form action="{{full_approval_api}}" method="post">
-<label for="action">Choose an action:</label>
-<select name="action" id="action">
-<option value="approve">Approve</option>
-<option value="reject">Reject</option>
-</select>
-<textarea name="comments" id="comments" style="width:96%;height:90px;background-color:lightgrey;color:black;border:none;padding:2%;font:14px/30px sans-serif;">
-Reasoning for action
-</textarea>
-<input type="hidden" id="recipient" name="recipient" value="{{email_address}}">
-<input type="submit" value="Submit" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
-</form>
-  EOF
+  subject = "${var.step_function_name} - Need Approval for Path: {{path}}"
+  html    = file("${path.module}/approval_template.html")
 }
