@@ -6,6 +6,7 @@ from unittest.mock import patch
 import boto3
 import uuid
 from functions.approval_request.lambda_function import lambda_handler
+from tests.helpers.utils import check_ses_sender_email_auth
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -27,18 +28,6 @@ def testing_template():
 
     log.info("Deleting testing SES template")
     ses.delete_template(TemplateName=name)
-
-
-def check_ses_sender_email_auth(email_address, send_verify_email=False):
-    ses = boto3.client("ses")
-    verified = ses.list_verified_email_addresses()["VerifiedEmailAddresses"]
-    if email_address in verified:
-        return True
-    else:
-        if send_verify_email:
-            log.info("Sending SES verification email")
-            ses.verify_email_identity(EmailAddress=email_address)
-        return False
 
 
 @pytest.mark.parametrize(

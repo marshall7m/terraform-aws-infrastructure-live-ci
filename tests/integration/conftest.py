@@ -6,6 +6,9 @@ import github
 import logging
 import aurora_data_api
 import git
+from tests.helpers.utils import check_ses_sender_email_auth
+from datetime import datetime
+import re
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -16,6 +19,66 @@ def pytest_addoption(parser):
         "--skip-truncate", action="store_true", help="skips truncating execution table"
     )
 
+    parser.addoption(
+        "--until-aws-exp",
+        action="store",
+        default=None,
+        help="The least amount of time until the AWS session token expires in minutes (e.g. 10m) or hours (e.g. 2h)",
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def aws_session_expiration_check(request):
+    """
+    Setup fixture that ensures that the AWS session credentials are atleast valid for a defined amount of time so
+    that they do not expire during tests
+    """
+    until_exp = request.config.getoption(
+        "until_aws_exp", default=os.environ.get("UNTIL_AWS_EXP", False)
+    )
+    if until_exp:
+        log.info(
+            "Checking if time until AWS session token expiration meets requirement"
+        )
+        log.debug(f"Least amount of time until expiration: {until_exp}")
+        if os.environ.get("AWS_SESSION_EXPIRATION", False):
+            log.debug(f'AWS_SESSION_EXPIRATION: {os.environ["AWS_SESSION_EXPIRATION"]}')
+            exp = datetime.strptime(
+                os.environ["AWS_SESSION_EXPIRATION"], "%Y-%m-%dT%H:%M:%SZ"
+            )
+            diff = datetime.now() - exp
+            actual_until_exp_seconds = diff.seconds
+
+            until_exp_groups = re.search(r"([1-9]\d+(?=h))|([1-9]\d+(?=m))", until_exp)
+            if until_exp_groups.group(1):
+                until_exp = int(until_exp_groups.group(1))
+                log.debug(
+                    f'Test(s) require atleast: {until_exp} hour{"s"[:until_exp^1]}'
+                )
+                log.debug(
+                    f'Time until expiration: {diff.hours} hour{"s"[:diff.hours^1]}'
+                )
+                until_exp_seconds = until_exp * 60 * 60
+            elif until_exp_groups.group(2):
+                until_exp = int(until_exp_groups.group(2))
+                log.debug(
+                    f'Test(s) require atleast: {until_exp} minute{"s"[:until_exp^1]}'
+                )
+                diff_minutes = diff.seconds // 60
+                log.debug(
+                    f'Time until expiration: {diff_minutes} minute{"s"[:diff_minutes^1]}'
+                )
+                until_exp_seconds = until_exp * 60
+
+            if actual_until_exp_seconds < until_exp_seconds:
+                pytest.raises(
+                    "AWS session token needs to be refreshed before running tests"
+                )
+        else:
+            log.info("$AWS_SESSION_EXPIRATION is not set -- skipping check")
+    else:
+        log.info("Neither --until-aws-exp nor $UNTIL_AWS_EXP was set -- skipping check")
+
 
 def pytest_generate_tests(metafunc):
     if metafunc.config.getoption("skip_truncate"):
@@ -24,14 +87,6 @@ def pytest_generate_tests(metafunc):
             [True],
             scope="session",
             ids=["skip_truncate"],
-            indirect=True,
-        )
-
-    if "tf" in metafunc.fixturenames:
-        metafunc.parametrize(
-            "tf",
-            [f"{os.path.dirname(os.path.realpath(__file__))}/fixtures"],
-            scope="session",
             indirect=True,
         )
 
@@ -71,6 +126,28 @@ def pytest_generate_tests(metafunc):
                 scope="class",
                 indirect=True,
             )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def verify_ses_sender_email():
+    if check_ses_sender_email_auth(
+        os.environ["TF_VAR_approval_request_sender_email"], send_verify_email=True
+    ):
+        log.info(
+            f'Testing sender email address is verified: {os.environ["TF_VAR_approval_request_sender_email"]}'
+        )
+    else:
+        pytest.skip(
+            f'Testing sender email address is not verified: {os.environ["TF_VAR_approval_request_sender_email"]}'
+        )
+
+
+@pytest.fixture(scope="session")
+def tf(tf_factory):
+    # using tf_factory() instead parametrizing terra-fixt's tf() fixture via pytest_generate_tests()
+    # since pytest_generate_tests() parametrization causes the session, module and class scoped fixture teardowns
+    # to be called after every test that uses the tf fixture
+    yield tf_factory(f"{os.path.dirname(os.path.realpath(__file__))}/fixtures")
 
 
 @pytest.fixture(scope="session")

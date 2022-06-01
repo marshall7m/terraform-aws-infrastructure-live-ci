@@ -4,6 +4,7 @@ from psycopg2 import sql
 import psycopg2
 import os
 import json
+import boto3
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -124,3 +125,15 @@ def insert_records(conn, table, records, enable_defaults=None):
             if enable_defaults is not None:
                 toggle_trigger(conn, table, f"{table}_default", enable=False)
     return results
+
+
+def check_ses_sender_email_auth(email_address, send_verify_email=False):
+    ses = boto3.client("ses")
+    verified = ses.list_verified_email_addresses()["VerifiedEmailAddresses"]
+    if email_address in verified:
+        return True
+    else:
+        if send_verify_email:
+            log.info("Sending SES verification email")
+            ses.verify_email_identity(EmailAddress=email_address)
+        return False
