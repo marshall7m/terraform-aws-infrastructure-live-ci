@@ -224,6 +224,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | aws | >= 3.44 |
 | github | >= 4.0 |
 | null | n/a |
+| random | n/a |
 
 ## Inputs
 
@@ -329,45 +330,35 @@ For a demo of the module that will cleanup any resources created, see the `Integ
 5. Run `terraform plan` to see what resources will be created
 6. Run `terraform apply` and enter `yes` to the approval prompt
 7. Refill coffee and wait for resources to be created
-8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in tfstate file
+8. Go to the `var.approval_request_sender_email` email address. Find the AWS SES verification email (subject should be something like "Amazon Web Services – Email Address Verification Request in region US West (Oregon)") and click on the verification link.
+8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in the Terraform configuration's tfstate file
 9. Merge the PR
 10. Wait for the approval email to be sent to the email associated with the changed directory's tfstate
+12. Click on the link 
 11. Click either the approval or deny link
 12. Check to see if the Terraform changes have been deployed
  
 # Testing
- 
-## Integration
- 
+
 ### Requirements
  
 The following tools are required:
-- [AWS CLI](https://github.com/aws/aws-cli)
 - [Docker](https://docs.docker.com/get-docker/)
  
-The following environment variables are required to be set:
-- AWS Credentials:
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
-   - `AWS_REGION`
-   - `AWS_DEFAULT_REGION`
-   - `AWS_SESSION_TOKEN`
-- Github personal access token of the GitHub account that will host dummy GitHub resources
-   - `GITHUB_TOKEN`
- 
-The steps below will setup a testing Docker environment for running integration tests.
+The steps below will setup a testing Docker environment for running tests.
 
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/mut-terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
-3. Ensure that the environment variables for the AWS credentials are set for the AWS account that will provision the Terraform module resources
-4. Exec into the testing docker container by running the command: `bash setup.sh --remote`
-5. Change to the integration testing directory: `cd tests/integration`
-6. To see a simple demo of how the CI pipeline works:
-   - If you want to run simple integration test cases run `pytest test_deployments.py --tf-init --tf-apply`
-   - If you want to cleanup all the resources created after running the tests: `pytest test_deployments.py --tf-destroy`
-7. If you want to run subsequent tests after the initial pytest command, run `pytest test_deployments.py` to skip running `terraform init` and `terraform apply` since the resources will still be alive
-8. As mentioned above, cleanup any resources created by running a test file with the `--tf-destroy` flag like so: `pytest test_deployments.py --tf-destroy`
- 
+3. Ensure that the environment variables from the docker-compose `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `variables.tf` file.
+4. All Terraform resources will automatically be deleted during the PyTest session cleanup. If the provisioned resources are needed after the PyTest execution,
+use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destroy`). BEWARE: If the resources are left alive after the tests, the AWS account may incur additional charges.
+
+## Pitfalls
+
+- Management of two GitHub Personal Access Tokens (PAT). User is required to refresh the GitHub token values when the expiration date is close.
+  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration?
+    - User would specify a pre-existing machine user or the module can create a machine user (would require a TF local-exec script to create the user)
+
 # TODO:
  
 ### Features:

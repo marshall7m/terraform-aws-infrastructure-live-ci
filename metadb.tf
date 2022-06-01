@@ -113,8 +113,12 @@ resource "aws_rds_cluster" "metadb" {
   db_subnet_group_name   = var.metadb_subnets_group_name
 }
 
+resource "random_id" "metadb_users" {
+  byte_length = 8
+}
+
 resource "aws_secretsmanager_secret" "master_metadb_user" {
-  name = "${local.cluster_identifier}-data-api-${var.metadb_username}-credentials"
+  name = "${local.cluster_identifier}-data-api-${var.metadb_username}-credentials-${random_id.metadb_users.id}"
 }
 
 resource "aws_secretsmanager_secret_version" "master_metadb_user" {
@@ -126,7 +130,7 @@ resource "aws_secretsmanager_secret_version" "master_metadb_user" {
 }
 
 resource "aws_secretsmanager_secret" "ci_metadb_user" {
-  name = "${local.cluster_identifier}-data-api-${var.metadb_ci_username}-credentials"
+  name = "${local.cluster_identifier}-data-api-${var.metadb_ci_username}-credentials-${random_id.metadb_users.id}"
 }
 
 resource "aws_secretsmanager_secret_version" "ci_metadb_user" {
