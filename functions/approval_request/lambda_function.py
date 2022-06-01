@@ -35,14 +35,22 @@ def lambda_handler(event, context):
     log.debug(f"Destinations\n {destinations}")
 
     log.info("Sending bulk email")
-    response = ses.send_bulk_templated_email(
-        Template=os.environ["SES_TEMPLATE"],
-        Source=os.environ["SENDER_EMAIL_ADDRESS"],
-        DefaultTemplateData=json.dumps(
-            {"full_approval_api": full_approval_api, "path": path}
-        ),
-        Destinations=destinations,
-    )
+    try:
+        response = ses.send_bulk_templated_email(
+            Template=os.environ["SES_TEMPLATE"],
+            Source=os.environ["SENDER_EMAIL_ADDRESS"],
+            DefaultTemplateData=json.dumps(
+                {"full_approval_api": full_approval_api, "path": path}
+            ),
+            Destinations=destinations,
+        )
+    except Exception as e:
+        log.error(e, exc_info=True)
+        return {
+            "statusCode": 500,
+            "message": "Unable to send emails",
+        }
+
     log.debug(f"Response:\n{response}")
     failed_count = 0
     for msg in response["Status"]:
