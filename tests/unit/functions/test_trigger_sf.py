@@ -125,7 +125,10 @@ def test__execution_finished_status_update(
     expected_aborted_ids,
     expected_rollback_cfg_paths,
 ):
-    """Test to ensure that the finished execution's respective status was updated and handles when the execution is aborted or failed"""
+    """
+    Test to ensure that the finished execution's respective status was updated and
+    the function handles all possible execution statuses.
+    """
     from functions.trigger_sf import lambda_function
 
     cur = conn.cursor()

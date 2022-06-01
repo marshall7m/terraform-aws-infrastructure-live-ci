@@ -39,17 +39,19 @@ def setup_metadb(cur):
     ) as f:
         cur.execute(
             sql.SQL(f.read().replace("$", "")).format(
-                metadb_schema=sql.Identifier("public"),
+                metadb_schema=sql.Identifier("testing"),
                 metadb_name=sql.Identifier(os.environ["PGDATABASE"]),
             )
         )
+    yield None
+
+    log.info("Dropping metadb tables")
+    cur.execute("DROP TABLE IF EXISTS executions, account_dim")
 
 
 @pytest.fixture(scope="function")
 def truncate_executions(setup_metadb, cur):
     """Removes all rows from execution table after every test"""
-    log.info("Setup: Truncating executions table")
-    cur.execute("TRUNCATE executions")
 
     yield None
 
@@ -73,4 +75,5 @@ def aws_credentials():
     os.environ.get("AWS_SECRET_ACCESS_KEY", "testing")
     os.environ.get("AWS_SECURITY_TOKEN", "testing")
     os.environ.get("AWS_SESSION_TOKEN", "testing")
+    os.environ.get("AWS_REGION", "us-west-2")
     os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
