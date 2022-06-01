@@ -55,9 +55,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      TF_VAR_testing_github_token: ${{ secrets.TF_VAR_testing_github_token }}
-      TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TF_VAR_testing_secondary_aws_account_id }}
-      TF_VAR_testing_sender_email: ${{ secrets.TF_VAR_testing_sender_email }}
+      TF_VAR_testing_github_token: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
+      TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
     permissions:
       id-token: write
       contents: read
@@ -128,9 +128,9 @@ jobs:
       id-token: write
       contents: read
     env:
-      TF_VAR_testing_github_token: ${{ secrets.TF_VAR_testing_github_token }}
-      TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TF_VAR_testing_secondary_aws_account_id }}
-      TF_VAR_testing_sender_email: ${{ secrets.TF_VAR_testing_sender_email }}
+      TF_VAR_testing_github_token: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TESTING_SECONDARY_AWS_ACCOUNT_ID }}
+      TF_VAR_testing_sender_email: ${{ secrets.TESTING_SENDER_EMAIL }}
     steps:
       - uses: actions/checkout@v3
       - name: mask sensitive
