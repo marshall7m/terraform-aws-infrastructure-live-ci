@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "github_token_ssm_access" {
 }
 
 resource "aws_iam_policy" "github_token_ssm_access" {
-  name        = "${var.github_token_ssm_key}-read-access"
+  name        = "${local.merge_lock_github_token_ssm_key}-read-access"
   description = "Allows read access to github token SSM Parameter Store value"
   policy      = data.aws_iam_policy_document.github_token_ssm_access.json
 }
