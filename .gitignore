@@ -15,5 +15,5 @@ __pycache__
 /package-lock.json
 /yarn.lock
 /yarn-error.log
-
+*personal_docker_setup.sh*
 /*.egg-info
