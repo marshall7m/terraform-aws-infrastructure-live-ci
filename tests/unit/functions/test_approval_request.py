@@ -3,6 +3,9 @@ import os
 import logging
 import sys
 from unittest.mock import patch
+import boto3
+import uuid
+from functions.approval_request.lambda_function import lambda_handler
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -10,53 +13,83 @@ log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
 
-def run_lambda(event=None, context=None):
-    """Imports Lambda function after boto3 client patch has been created to prevent boto3 region_name not specified error"""
-    from functions.approval_request.lambda_function import lambda_handler
+@pytest.fixture(scope="module")
+def testing_template():
+    ses = boto3.client("ses")
+    name = f"test-approval-request-{uuid.uuid4()}"
 
-    return lambda_handler(event, context)
+    log.info("Creating testing SES template")
+    ses.create_template(
+        Template={"TemplateName": name, "SubjectPart": "foo", "TextPart": "bar"}
+    )
+
+    yield name
+
+    log.info("Deleting testing SES template")
+    ses.delete_template(TemplateName=name)
+
+
+def check_ses_sender_email_auth(email_address, send_verify_email=False):
+    ses = boto3.client("ses")
+    verified = ses.list_verified_email_addresses()["VerifiedEmailAddresses"]
+    if email_address in verified:
+        return True
+    else:
+        if send_verify_email:
+            log.info("Sending SES verification email")
+            ses.verify_email_identity(EmailAddress=email_address)
+        return False
 
 
 @pytest.mark.parametrize(
-    "event,response,expected_status_code",
+    "event,sender,expected_status_code",
     [
         pytest.param(
-            {"ApprovalAPI": "mock-api", "Voters": [], "Path": "test/foo"},
-            {"Status": [{"Status": "Success", "Error": "", "MessageId": "msg-1"}]},
+            {
+                "ApprovalAPI": "mock-api",
+                "Voters": ["success@simulator.amazonses.com"],
+                "Path": "test/foo",
+            },
+            os.environ["TF_VAR_approval_request_sender_email"],
             302,
             id="successful_request",
         ),
         pytest.param(
-            {"ApprovalAPI": "mock-api", "Voters": [], "Path": "test/foo"},
             {
-                "Status": [
-                    {"Status": "Success", "Error": "", "MessageId": "msg-1"},
-                    {"Status": "Failed", "Error": "Failed", "MessageId": "msg-2"},
-                    {
-                        "Status": "MessageRejected",
-                        "Error": "Rejected",
-                        "MessageId": "msg-3",
-                    },
-                ]
+                "ApprovalAPI": "mock-api",
+                "Voters": ["success@simulator.amazonses.com"],
+                "Path": "test/foo",
             },
+            "invalid_sender@non-existent-email.com",
             500,
-            id="failed_request",
+            id="invalid_sender",
         ),
     ],
 )
-@patch("functions.approval_request.lambda_function.ses")
-@patch.dict(
-    os.environ,
-    {"SES_TEMPLATE": "mock-temp", "SENDER_EMAIL_ADDRESS": "mock-sender"},
-    clear=True,
-)
-@pytest.mark.usefixtures("mock_conn", "aws_credentials")
-def test_lambda_handler(mock_client, event, response, expected_status_code):
-    mock_client.send_bulk_templated_email.return_value = response
+@pytest.mark.usefixtures("mock_conn")
+def test_lambda_handler(testing_template, event, sender, expected_status_code):
+    with patch.dict(
+        os.environ,
+        {
+            "SES_TEMPLATE": testing_template,
+            "SENDER_EMAIL_ADDRESS": sender,
+        },
+    ):
+        log.info("Checking if sender email address is authorized to send emails")
+        if (
+            os.environ["SENDER_EMAIL_ADDRESS"]
+            == os.environ["TF_VAR_approval_request_sender_email"]
+        ):
+            if not check_ses_sender_email_auth(
+                os.environ["SENDER_EMAIL_ADDRESS"], send_verify_email=True
+            ):
+                pytest.fail(
+                    f"{os.environ['SENDER_EMAIL_ADDRESS']} is not verified to send emails via SES"
+                )
 
-    log.info("Running Lambda Function")
-    response = run_lambda(event, {})
+        log.info("Running Lambda Function")
+        response = lambda_handler(event, {})
+
+    log.debug(f"Response:\n{response}")
 
     assert response["statusCode"] == expected_status_code
-
-    mock_client.send_bulk_templated_email.assert_called_once()
