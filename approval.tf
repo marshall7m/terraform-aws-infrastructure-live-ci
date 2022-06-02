@@ -260,14 +260,20 @@ module "lambda_approval_response" {
   ]
 }
 
+data "aws_ses_email_identity" "approval" {
+  count = var.send_verification_email == false ? 1 : 0
+  email = var.approval_request_sender_email
+}
+
 resource "aws_ses_email_identity" "approval" {
+  count = var.send_verification_email ? 1 : 0
   email = var.approval_request_sender_email
 }
 
 data "aws_iam_policy_document" "approval" {
   statement {
     actions   = ["ses:SendEmail", "ses:SendBulkTemplatedEmail"]
-    resources = [aws_ses_email_identity.approval.arn]
+    resources = [try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn)]
 
     principals {
       identifiers = ["*"]
@@ -277,7 +283,7 @@ data "aws_iam_policy_document" "approval" {
 }
 
 resource "aws_ses_identity_policy" "approval" {
-  identity = aws_ses_email_identity.approval.arn
+  identity = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn)
   name     = "infrastructure-live-ses-approval"
   policy   = data.aws_iam_policy_document.approval.json
 }
