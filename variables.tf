@@ -46,6 +46,15 @@ variable "approval_request_sender_email" {
   type        = string
 }
 
+variable "send_verification_email" {
+  description = <<EOF
+  Determines if an email verification should be sent to the var.approval_request_sender_email address. Set
+  to true if the email address is not already authorized to send emails via AWS SES.
+  EOF
+  type        = bool
+  default     = true
+}
+
 # CODEBUILD #
 
 variable "codebuild_source_auth_token" {
@@ -236,7 +245,7 @@ variable "pr_approval_count" {
   default     = null
 }
 
-variable "enfore_admin_branch_protection" {
+variable "enforce_admin_branch_protection" {
   description = <<EOF
   Determines if the branch protection rule is enforced for the GitHub repository's admins. 
   This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline.
@@ -245,38 +254,39 @@ EOF
   default     = false
 }
 
-# SSM #
-
-variable "merge_lock_ssm_key" {
-  description = "SSM Parameter Store key used for locking infrastructure related PR merges"
-  type        = string
-  default     = null
-}
-
-### GITHUB-TOKEN ###
-
-variable "create_github_token_ssm_param" {
-  description = "Determines if an AWS System Manager Parameter Store value should be created for the Github token"
+variable "enable_branch_protection" {
+  description = <<EOF
+Determines if the branch protection rule is created. If the repository is private (most likely), the GitHub account associated with
+the GitHub provider must be registered as a GitHub Pro, GitHub Team, GitHub Enterprise Cloud, or GitHub Enterprise Server account. See here for details: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/about-protected-branches
+EOF
   type        = bool
   default     = true
 }
 
-variable "github_token_ssm_description" {
+# SSM #
+
+variable "create_merge_lock_github_token_ssm_param" {
+  description = "Determines if the merge lock AWS SSM Parameter Store value should be created"
+  type        = bool
+}
+
+variable "merge_lock_github_token_ssm_key" {
+  description = "AWS SSM Parameter Store key for sensitive Github personal token used by the Merge Lock Lambda Function"
+  type        = string
+  default     = null
+}
+
+variable "merge_lock_github_token_ssm_description" {
   description = "Github token SSM parameter description"
   type        = string
-  default     = "Github token used by github_webhook_validator Lambda Function and merge_lock Lambda function"
+  default     = "Github token used by Merge Lock Lambda Function"
 }
 
-variable "github_token_ssm_key" {
-  description = "AWS SSM Parameter Store key for sensitive Github personal token. GitHub token only needs the repo:status permission."
-  type        = string
-  default     = "github-webhook-validator-token" #tfsec:ignore:GEN001
-}
-
-variable "github_token_ssm_value" {
+variable "merge_lock_github_token_ssm_value" {
   description = <<EOF
-Registered Github webhook token associated with the Github provider. If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
-GitHub token only needs the repo:status permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.
+If not provided, module looks for pre-existing SSM parameter via `var.merge_lock_github_token_ssm_key`".
+GitHub token only needs the `repo:status` permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
   EOF
   type        = string
   default     = ""
@@ -284,6 +294,37 @@ GitHub token only needs the repo:status permission. (see more about OAuth scopes
 }
 
 variable "github_token_ssm_tags" {
+  description = "Tags for Github token SSM parameter"
+  type        = map(string)
+  default     = {}
+}
+
+## GH-VALIDATOR-TOKEN ##
+
+variable "github_webhook_validator_github_token_ssm_key" {
+  description = "AWS SSM Parameter Store key for sensitive Github personal token used by the Github Webhook Validator Lambda Function"
+  type        = string
+  default     = null
+}
+
+variable "github_webhook_validator_github_token_ssm_description" {
+  description = "Github token SSM parameter description"
+  type        = string
+  default     = "Github token used by Github Webhook Validator Lambda Function"
+}
+
+variable "github_webhook_validator_github_token_ssm_value" {
+  description = <<EOF
+Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.
+If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".
+GitHub token needs the `repo` permission to access the private repo. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+  EOF
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_webhook_validator_github_token_ssm_tags" {
   description = "Tags for Github token SSM parameter"
   type        = map(string)
   default     = {}

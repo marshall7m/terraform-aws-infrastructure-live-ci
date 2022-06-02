@@ -4,17 +4,17 @@ locals {
   merge_lock_github_token_ssm_key = coalesce(var.merge_lock_github_token_ssm_key, "${local.merge_lock_name}-github-token")
 }
 
-data "aws_ssm_parameter" "github_token" {
-  count = var.create_github_token_ssm_param != true ? 1 : 0
+data "aws_ssm_parameter" "merge_lock_github_token" {
+  count = var.create_merge_lock_github_token_ssm_param != true ? 1 : 0
   name  = local.merge_lock_github_token_ssm_key
 }
 
-resource "aws_ssm_parameter" "github_token" {
-  count       = var.create_github_token_ssm_param ? 1 : 0
+resource "aws_ssm_parameter" "merge_lock_github_token" {
+  count       = var.create_merge_lock_github_token_ssm_param ? 1 : 0
   name        = local.merge_lock_github_token_ssm_key
-  description = var.github_token_ssm_description
+  description = var.merge_lock_github_token_ssm_description
   type        = "SecureString"
-  value       = var.github_token_ssm_value
+  value       = var.merge_lock_github_token_ssm_value
 }
 
 module "github_webhook_validator" {
@@ -47,11 +47,11 @@ module "github_webhook_validator" {
             pattern = "pull_request"
           },
           {
-            type    = "pr_actions"
+            type    = "pr_action"
             pattern = "(opened|edited|reopened)"
           },
           {
-            type    = "file_paths"
+            type    = "file_path"
             pattern = var.file_path_pattern
           },
           {
@@ -108,7 +108,7 @@ module "lambda_merge_lock" {
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.github_token_ssm_access.arn
+    aws_iam_policy.merge_lock_github_token_ssm_read_access.arn
   ]
   statements = [
     {
@@ -135,10 +135,11 @@ module "lambda_merge_lock" {
 }
 
 resource "github_branch_protection" "merge_lock" {
+  count         = var.enable_branch_protection ? 1 : 0
   repository_id = var.repo_name
 
   pattern          = var.base_branch
-  enforce_admins   = var.enfore_admin_branch_protection
+  enforce_admins   = var.enforce_admin_branch_protection
   allows_deletions = true
 
   required_status_checks {
