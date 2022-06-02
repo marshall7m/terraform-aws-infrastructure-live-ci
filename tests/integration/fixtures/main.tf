@@ -1,10 +1,8 @@
 locals {
-  mut_id                = "mut-terraform-aws-infrastructure-live-ci"
-  plan_role_name        = "${local.mut_id}-plan"
-  deploy_role_name      = "${local.mut_id}-deploy"
-  approval_key          = "approval"
-  test_approval_content = false
-  voters                = local.test_approval_content ? [var.testing_sender_email] : ["success@simulator.amazonses.com"]
+  mut_id           = "mut-terraform-aws-infrastructure-live-ci"
+  plan_role_name   = "${local.mut_id}-plan"
+  deploy_role_name = "${local.mut_id}-deploy"
+  approval_key     = "approval"
 }
 
 provider "aws" {
@@ -24,7 +22,9 @@ data "github_user" "current" {
 resource "github_repository" "testing" {
   name        = local.mut_id
   description = "Test repo for mut: ${local.mut_id}"
-  visibility  = "public"
+  # TODO: Test with `visibility  = "private"` and `var.enable_branch_protection = true`
+  # In order to enable branch protection for a private repo within the TF module, GitHub Pro account must be used for the provider
+  visibility = "public"
   template {
     owner      = "marshall7m"
     repository = "infrastructure-live-testing-template"
@@ -160,7 +160,7 @@ module "mut_infrastructure_live_ci" {
   repo_name   = github_repository.testing.name
   base_branch = "master"
   # for testing purposes, admin is allowed to push to trunk branch for cleaning up testing changes without having to create a PR and triggering the entire CI pipeline
-  enfore_admin_branch_protection = false
+  enforce_admin_branch_protection = false
 
   metadb_username    = "mut_user"
   metadb_password    = random_password.metadb["master"].result
@@ -183,15 +183,20 @@ module "mut_infrastructure_live_ci" {
 
   tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
 
-  github_token_ssm_key = "mut-terraform-aws-infrastructure-live-token"
+  create_merge_lock_github_token_ssm_param = true
+  merge_lock_github_token_ssm_value        = var.merge_lock_github_token_ssm_value
 
-  approval_request_sender_email = var.testing_sender_email
+  github_webhook_validator_github_token_ssm_value = var.github_webhook_validator_github_token_ssm_value
+
+  approval_request_sender_email = var.approval_request_sender_email
+  send_verification_email       = false
+
   account_parent_cfg = [
     {
       name                = "dev"
       path                = "directory_dependency/dev-account"
       dependencies        = ["shared_services"]
-      voters              = local.voters
+      voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
@@ -201,7 +206,7 @@ module "mut_infrastructure_live_ci" {
       name                = "shared_services"
       path                = "directory_dependency/shared-services-account"
       dependencies        = []
-      voters              = local.voters
+      voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/${local.plan_role_name}"
