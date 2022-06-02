@@ -1,7 +1,9 @@
 module "mut_infrastructure_live_ci" {
   source = "../../../..//"
 
-  approval_request_sender_email            = "success@simulator.amazonses.com"
+  approval_request_sender_email = "success@simulator.amazonses.com"
+  send_verification_email       = false
+
   create_merge_lock_github_token_ssm_param = true
   repo_name                                = var.repo_name
   account_parent_cfg = [
