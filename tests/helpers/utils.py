@@ -32,38 +32,31 @@ def dummy_tf_output(name=None, value=None):
     """
 
 
-def dummy_tf_provider_resource():
-    return """
-    provider "null" {}
+null_provider_resource = """
+provider "null" {}
 
-    resource "null_resource" "this" {}
-    """
+resource "null_resource" "this" {}
+"""
 
 
-def dummy_tf_github_repo(repo_name=None):
-    if not repo_name:
-        repo_name = f"dummy-repo-{uuid.uuid4()}"
+dummy_configured_provider_resource = """
+terraform {
+    required_providers {
+        dummy = {
+        source = "nfx04/dummy"
+        version = "0.0.6"
+        }
+    }
+}
 
-    return f"""
-    terraform {{
-    required_providers {{
-        github = {{
-        source  = "integrations/github"
-        version = "4.9.3"
-        }}
-    }}
-    }}
-    provider "aws" {{}}
+provider "dummy" {
+    name = "foo"
+}
 
-    provider "github" {{
-        token = var.testing_github_token
-    }}
-
-    resource "github_repository" "dummy" {{
-        name        = "{repo_name}"
-        visibility  = "public"
-    }}
-    """
+resource "dummy_thing" "this" {
+    name = "bar"
+}
+"""
 
 
 def toggle_trigger(conn, table, trigger, enable=False):

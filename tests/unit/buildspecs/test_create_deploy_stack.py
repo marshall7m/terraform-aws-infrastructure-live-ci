@@ -3,7 +3,7 @@ import os
 import logging
 from unittest.mock import patch
 import uuid
-from tests.helpers.utils import dummy_tf_output, dummy_tf_provider_resource
+from tests.helpers.utils import dummy_tf_output, null_provider_resource
 from tests.unit.buildspecs.conftest import mock_subprocess_run
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def scan_type(request):
         ),
         pytest.param(
             {
-                "directory_dependency/dev-account/us-west-2/env-one/doo/a.tf": dummy_tf_provider_resource()
+                "directory_dependency/dev-account/us-west-2/env-one/doo/a.tf": null_provider_resource
             },
             [
                 {

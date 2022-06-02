@@ -2,7 +2,7 @@ import pytest
 import os
 import logging
 from unittest.mock import patch
-from tests.helpers.utils import dummy_tf_provider_resource, insert_records
+from tests.helpers.utils import null_provider_resource, insert_records
 from buildspecs.terra_run import update_new_resources
 from tests.unit.buildspecs.conftest import mock_subprocess_run
 from buildspecs import subprocess_run
@@ -39,7 +39,7 @@ def git_repo_cwd(git_repo):
     [
         pytest.param(
             {
-                "directory_dependency/dev-account/us-west-2/env-one/doo/a.tf": dummy_tf_provider_resource()
+                "directory_dependency/dev-account/us-west-2/env-one/doo/a.tf": null_provider_resource
             },
             ["registry.terraform.io/hashicorp/null"],
             ["null_resource.this"],

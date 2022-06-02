@@ -1,6 +1,6 @@
 from tests.integration import test_integration
 import uuid
-from tests.helpers.utils import dummy_tf_provider_resource
+from tests.helpers.utils import null_provider_resource
 
 
 class TestBasePR(test_integration.Integration):
@@ -15,7 +15,7 @@ class TestBasePR(test_integration.Integration):
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
                 "actions": {"deploy": "approve"},
-                "pr_files_content": [dummy_tf_provider_resource()],
+                "pr_files_content": [null_provider_resource],
             },
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
                 "actions": {"deploy": "approve"}
@@ -40,7 +40,7 @@ class TestDeployPR(test_integration.Integration):
         "executions": {
             "directory_dependency/dev-account/global": {
                 "actions": {"deploy": "approve", "rollback_providers": "approve"},
-                "pr_files_content": [dummy_tf_provider_resource()],
+                "pr_files_content": [null_provider_resource],
             },
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
                 "actions": {"deploy": "approve"},
