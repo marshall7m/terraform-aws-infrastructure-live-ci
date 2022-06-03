@@ -3,8 +3,11 @@ import json
 import logging
 import git
 import subprocess
+import sys
 
 log = logging.getLogger(__name__)
+stream = logging.StreamHandler(sys.stdout)
+log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
 
