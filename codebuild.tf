@@ -1,5 +1,5 @@
 locals {
-  terraform_module_version = file("${path.module}/source_version.txt")
+  terraform_module_version = trimspace(file("${path.module}/source_version.txt"))
   merge_lock_name          = coalesce(var.merge_lock_build_name, "${var.prefix}-merge-lock")
 
   pr_plan_build_name                  = coalesce(var.pr_plan_build_name, "${var.prefix}-pr-plan")
@@ -9,6 +9,7 @@ locals {
 }
 
 data "github_repository" "build_scripts" {
+  # for testing this module with your fork of the repo, change `full_name` to your fork's full name
   full_name = "marshall7m/terraform-aws-infrastructure-live-ci"
 }
 
@@ -74,10 +75,10 @@ env:
 phases:
   install:
     commands:
-      - pip install -e "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}"
+      - pip install -e "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}"
   build:
     commands:
-      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/create_deploy_stack/create_deploy_stack.py"
+      - python "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}/buildspecs/create_deploy_stack/create_deploy_stack.py"
 EOT
   }
 
@@ -267,7 +268,7 @@ env:
 phases:
   build:
     commands:
-      - python "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/buildspecs/pr_plan/plan.py"
+      - python "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}/buildspecs/pr_plan/plan.py"
 EOT
   }
 
@@ -346,12 +347,12 @@ env:
 phases:
   install:
     commands:
-      - pip install -e "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}"
+      - pip install -e "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}"
   build:
     commands:
       - "$${TG_COMMAND}"
     finally:
-      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/terra_run/update_new_resources.py"
+      - python "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}/buildspecs/terra_run/update_new_resources.py"
 EOT
   }
   secondary_build_source = {
