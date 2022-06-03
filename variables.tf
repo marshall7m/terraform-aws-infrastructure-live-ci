@@ -77,7 +77,7 @@ variable "pr_plan_build_name" {
 variable "pr_plan_vpc_config" {
   description = <<EOF
 AWS VPC configurations associated with PR planning CodeBuild project. 
-Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+Ensure that the configuration allows for outgoing HTTPS traffic.
 EOF
   type = object({
     vpc_id             = string
@@ -145,7 +145,7 @@ variable "build_tags" {
 variable "terra_run_vpc_config" {
   description = <<EOF
 AWS VPC configurations associated with terra_run CodeBuild project. 
-Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+Ensure that the configuration allows for outgoing HTTPS traffic.
 EOF
   type = object({
     vpc_id             = string
@@ -157,8 +157,8 @@ EOF
 
 variable "create_deploy_stack_vpc_config" {
   description = <<EOF
-AWS VPC configurations associated with terra_run CodeBuild project. 
-Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet.
+AWS VPC configurations associated with terra_run CodeBuild project.
+Ensure that the configuration allows for outgoing HTTPS traffic.
 EOF
   type = object({
     vpc_id             = string
@@ -416,7 +416,10 @@ variable "metadb_ci_password" {
 # LAMBDA #
 
 variable "lambda_approval_request_vpc_config" {
-  description = "VPC configuration for Lambda approval request function"
+  description = <<EOF
+VPC configuration for Lambda approval request function.
+Ensure that the configuration allows for outgoing HTTPS traffic.
+EOF
   type = object({
     subnet_ids         = list(string)
     security_group_ids = list(string)
@@ -425,7 +428,10 @@ variable "lambda_approval_request_vpc_config" {
 }
 
 variable "lambda_approval_response_vpc_config" {
-  description = "VPC configuration for Lambda approval response function"
+  description = <<EOF
+VPC configuration for Lambda approval response function.
+Ensure that the configuration allows for outgoing HTTPS traffic.
+EOF
   type = object({
     subnet_ids         = list(string)
     security_group_ids = list(string)
@@ -434,7 +440,10 @@ variable "lambda_approval_response_vpc_config" {
 }
 
 variable "lambda_trigger_sf_vpc_config" {
-  description = "VPC configuration for Lambda trigger_sf function"
+  description = <<EOF
+VPC configuration for Lambda trigger_sf function.
+Ensure that the configuration allows for outgoing HTTPS traffic.
+EOF
   type = object({
     subnet_ids         = list(string)
     security_group_ids = list(string)
