@@ -1,12 +1,7 @@
-variable "common_tags" {
-  description = "Tags to add to all resources"
-  type        = map(string)
-  default     = {}
-}
 variable "prefix" {
   description = "Prefix to attach to all resources"
   type        = string
-  default     = null
+  default     = "infrastructure-live"
 }
 
 variable "account_parent_cfg" {

@@ -1,10 +1,10 @@
 locals {
   terraform_module_version = file("${path.module}/source_version.txt")
-  merge_lock_name          = coalesce(var.merge_lock_build_name, "${var.step_function_name}-merge-lock")
+  merge_lock_name          = coalesce(var.merge_lock_build_name, "${var.prefix}-merge-lock")
 
-  pr_plan_build_name                  = coalesce(var.pr_plan_build_name, "${var.step_function_name}-pr-plan")
-  create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.step_function_name}-create-deploy-stack")
-  terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.step_function_name}-terra-run")
+  pr_plan_build_name                  = coalesce(var.pr_plan_build_name, "${var.prefix}-pr-plan")
+  create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.prefix}-create-deploy-stack")
+  terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.prefix}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
 }
 
@@ -267,7 +267,7 @@ env:
 phases:
   build:
     commands:
-      - python "$${CODEBUILD_SRC_DIR}/../${split("/", data.github_repository.build_scripts.full_name)[1]}/buildspecs/pr_plan/plan.py"
+      - python "$${CODEBUILD_SRC_DIR}_${local.buildspec_scripts_source_identifier}/buildspecs/pr_plan/plan.py"
 EOT
   }
 

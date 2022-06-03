@@ -1,5 +1,5 @@
 locals {
-  cloudwatch_event_rule_name = coalesce(var.cloudwatch_event_rule_name, "${var.step_function_name}-finished-execution")
+  cloudwatch_event_rule_name = coalesce(var.cloudwatch_event_rule_name, "${var.prefix}-finished-execution")
   state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${var.step_function_name}"
   cw_event_terra_run_rule    = "${local.terra_run_build_name}-rule"
   approval_url               = "${module.github_webhook_validator.deployment_invoke_url}${module.github_webhook_validator.api_stage_name}${aws_api_gateway_resource.approval.path}"
@@ -28,9 +28,12 @@ resource "aws_sfn_state_machine" "this" {
           ]
           ProjectName = module.codebuild_terra_run.name
         }
-        Resource   = "arn:aws:states:::codebuild:startBuild.sync"
-        Type       = "Task"
-        ResultPath = null
+        Resource = "arn:aws:states:::codebuild:startBuild.sync"
+        Type     = "Task"
+        ResultSelector = {
+          "Url.$" = "$.build.id",
+        }
+        ResultPath = "$.PlanOutput"
         Catch = [
           {
             ErrorEquals = ["States.ALL"]
@@ -62,6 +65,9 @@ resource "aws_sfn_state_machine" "this" {
             "Path.$"          = "$.cfg_path"
             "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
             "ExecutionName.$" = "$$.Execution.Name"
+            "AccountName.$"   = "$.account_name"
+            "PullRequestID.$" = "$.pr_id"
+            # "PlanLink.$" = "$."
           }
         }
         Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"

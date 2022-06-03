@@ -241,7 +241,6 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | cloudwatch\_event\_rule\_name | Name of the CloudWatch event rule that detects when the Step Function completes an execution | `string` | `null` | no |
 | codebuild\_common\_env\_vars | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | codebuild\_source\_auth\_token | GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. <br>  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand. | `string` | `null` | no |
-| common\_tags | Tags to add to all resources | `map(string)` | `{}` | no |
 | create\_deploy\_stack\_build\_name | Name of AWS CodeBuild project that will create the PR deployment stack into the metadb | `string` | `null` | no |
 | create\_deploy\_stack\_graph\_scan | If true, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If false, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `bool` | `true` | no |
 | create\_deploy\_stack\_status\_check\_name | Name of the create deploy stack GitHub status | `string` | `"Create Deploy Stack"` | no |
@@ -278,7 +277,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | pr\_plan\_env\_vars | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | pr\_plan\_status\_check\_name | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
 | pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing traffic for downloading associated repository sources from the internet. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| prefix | Prefix to attach to all resources | `string` | `null` | no |
+| prefix | Prefix to attach to all resources | `string` | `"infrastructure-live"` | no |
 | repo\_name | Name of the pre-existing GitHub repository that is owned by the Github provider | `string` | n/a | yes |
 | send\_verification\_email | Determines if an email verification should be sent to the var.approval\_request\_sender\_email address. Set<br>  to true if the email address is not already authorized to send emails via AWS SES. | `bool` | `true` | no |
 | step\_function\_name | Name of AWS Step Function machine | `string` | `"infrastructure-live-ci"` | no |
@@ -326,10 +325,13 @@ Requirements below are needed in order to run `terraform apply` within this modu
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
  
 # Deploy the Terraform Module
+
+## Prerequistes
+- CodeBuild within the AWS account and region that the Terraform module is deployed to must have access to the GitHub account associated with the repo specified under `var.repo_name` via OAuth or personal access token. See here for more details: https://docs.aws.amazon.com/codebuild/latest/userguide/access-tokens.html
+
  
 For a demo of the module that will cleanup any resources created, see the `Integration` section of this README. The steps below are meant for implementing the module into your current AWS ecosystem.
 1. Open a terragrunt `.hcl` or terraform `.tf` file
-2. Ensure that the module will be deployed within an AWS account that will have access to roles within other AWS accounts that
 2. Create a module block using this repo as the source
 3. Fill in the required module variables
 4. Run `terraform init` to download the module

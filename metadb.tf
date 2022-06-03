@@ -1,6 +1,6 @@
 locals {
-  metadb_name        = coalesce(var.metadb_name, replace("${var.step_function_name}", "-", "_"))
-  cluster_identifier = replace("${var.step_function_name}-cluster", "_", "-")
+  metadb_name        = coalesce(var.metadb_name, replace("${var.prefix}", "-", "_"))
+  cluster_identifier = replace("${var.prefix}-cluster", "_", "-")
   metadb_setup_script = <<EOF
   echo "Creating tables"
   aws rds-data execute-statement \
