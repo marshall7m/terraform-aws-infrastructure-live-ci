@@ -7,7 +7,7 @@ import logging
 import aurora_data_api
 import git
 from tests.helpers.utils import check_ses_sender_email_auth
-from datetime import datetime
+import datetime
 import re
 
 log = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--until-aws-exp",
         action="store",
-        default=None,
+        default=os.environ.get("UNTIL_AWS_EXP", False),
         help="The least amount of time until the AWS session token expires in minutes (e.g. 10m) or hours (e.g. 2h)",
     )
 
@@ -33,9 +33,7 @@ def aws_session_expiration_check(request):
     Setup fixture that ensures that the AWS session credentials are atleast valid for a defined amount of time so
     that they do not expire during tests
     """
-    until_exp = request.config.getoption(
-        "until_aws_exp", default=os.environ.get("UNTIL_AWS_EXP", False)
-    )
+    until_exp = request.config.getoption("until_aws_exp")
     if until_exp:
         log.info(
             "Checking if time until AWS session token expiration meets requirement"
@@ -43,20 +41,21 @@ def aws_session_expiration_check(request):
         log.debug(f"Least amount of time until expiration: {until_exp}")
         if os.environ.get("AWS_SESSION_EXPIRATION", False):
             log.debug(f'AWS_SESSION_EXPIRATION: {os.environ["AWS_SESSION_EXPIRATION"]}')
-            exp = datetime.strptime(
+            exp = datetime.datetime.strptime(
                 os.environ["AWS_SESSION_EXPIRATION"], "%Y-%m-%dT%H:%M:%SZ"
             )
-            diff = datetime.now() - exp
+            diff = exp - datetime.datetime.now()
             actual_until_exp_seconds = diff.seconds
 
-            until_exp_groups = re.search(r"([1-9]\d+(?=h))|([1-9]\d+(?=m))", until_exp)
+            until_exp_groups = re.search(r"(\d+(?=h))|(\d+(?=m))", until_exp)
             if until_exp_groups.group(1):
                 until_exp = int(until_exp_groups.group(1))
                 log.debug(
                     f'Test(s) require atleast: {until_exp} hour{"s"[:until_exp^1]}'
                 )
+                diff_hours = int(diff / datetime.timedelta(hours=1))
                 log.debug(
-                    f'Time until expiration: {diff.hours} hour{"s"[:diff.hours^1]}'
+                    f'Time until expiration: {diff_hours} hour{"s"[:diff_hours^1]}'
                 )
                 until_exp_seconds = until_exp * 60 * 60
             elif until_exp_groups.group(2):
@@ -71,7 +70,7 @@ def aws_session_expiration_check(request):
                 until_exp_seconds = until_exp * 60
 
             if actual_until_exp_seconds < until_exp_seconds:
-                pytest.raises(
+                pytest.skip(
                     "AWS session token needs to be refreshed before running tests"
                 )
         else:
@@ -208,7 +207,7 @@ def git_repo(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def merge_pr(repo, git_repo):
+def merge_pr(repo, git_repo, mut_output):
 
     merge_commits = {}
 
@@ -221,9 +220,7 @@ def merge_pr(repo, git_repo):
 
     yield _merge
 
-    log.info(
-        f'Removing PR changes from branch: {git_repo.git.branch("--show-current")}'
-    )
+    log.info(f'Removing PR changes from base branch: {mut_output["base_branch"]}')
 
     log.debug("Pulling remote changes")
     git_repo.git.reset("--hard")
@@ -232,7 +229,7 @@ def merge_pr(repo, git_repo):
     log.debug(
         "Removing admin enforcement from branch protection to allow revert pushes to trunk branch"
     )
-    branch = repo.get_branch(branch="master")
+    branch = repo.get_branch(branch=mut_output["base_branch"])
     branch.remove_admin_enforcement()
 
     log.debug("Removing required status checks")
