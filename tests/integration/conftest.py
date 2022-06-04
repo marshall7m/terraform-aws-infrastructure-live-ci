@@ -38,37 +38,47 @@ def aws_session_expiration_check(request):
         log.info(
             "Checking if time until AWS session token expiration meets requirement"
         )
-        log.debug(f"Least amount of time until expiration: {until_exp}")
+        log.debug(f"Input: {until_exp}")
         if os.environ.get("AWS_SESSION_EXPIRATION", False):
             log.debug(f'AWS_SESSION_EXPIRATION: {os.environ["AWS_SESSION_EXPIRATION"]}')
             exp = datetime.datetime.strptime(
                 os.environ["AWS_SESSION_EXPIRATION"], "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=datetime.timezone.utc)
+
+            actual_until_exp_seconds = int(
+                exp.timestamp()
+                - datetime.datetime.now(datetime.timezone.utc).timestamp()
             )
-            diff = exp - datetime.datetime.now()
-            actual_until_exp_seconds = diff.seconds
 
             until_exp_groups = re.search(r"(\d+(?=h))|(\d+(?=m))", until_exp)
             if until_exp_groups.group(1):
                 until_exp = int(until_exp_groups.group(1))
-                log.debug(
+                log.info(
                     f'Test(s) require atleast: {until_exp} hour{"s"[:until_exp^1]}'
                 )
-                diff_hours = int(diff / datetime.timedelta(hours=1))
-                log.debug(
+                diff_hours = int(
+                    datetime.timedelta(seconds=actual_until_exp_seconds)
+                    / datetime.timedelta(hours=1)
+                )
+                log.info(
                     f'Time until expiration: {diff_hours} hour{"s"[:diff_hours^1]}'
                 )
                 until_exp_seconds = until_exp * 60 * 60
             elif until_exp_groups.group(2):
                 until_exp = int(until_exp_groups.group(2))
-                log.debug(
+                log.info(
                     f'Test(s) require atleast: {until_exp} minute{"s"[:until_exp^1]}'
                 )
-                diff_minutes = diff.seconds // 60
-                log.debug(
+                diff_minutes = datetime.timedelta(
+                    seconds=actual_until_exp_seconds
+                ) // datetime.timedelta(minutes=1)
+                log.info(
                     f'Time until expiration: {diff_minutes} minute{"s"[:diff_minutes^1]}'
                 )
                 until_exp_seconds = until_exp * 60
 
+            log.debug(f"Actual seconds until expiration: {actual_until_exp_seconds}")
+            log.debug(f"Required seconds until expiration: {until_exp_seconds}")
             if actual_until_exp_seconds < until_exp_seconds:
                 pytest.skip(
                     "AWS session token needs to be refreshed before running tests"
@@ -128,7 +138,7 @@ def pytest_generate_tests(metafunc):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def verify_ses_sender_email():
+def verify_ses_sender_email(aws_session_expiration_check):
     if check_ses_sender_email_auth(
         os.environ["TF_VAR_approval_request_sender_email"], send_verify_email=True
     ):
@@ -200,10 +210,22 @@ def git_repo(tmp_path_factory):
     dir = str(tmp_path_factory.mktemp("scenario-repo-"))
     log.debug(f"Scenario repo dir: {dir}")
 
-    yield git.Repo.clone_from(
+    repo = git.Repo.clone_from(
         f'https://oauth2:{os.environ["TF_VAR_testing_integration_github_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
         dir,
     )
+
+    log.info("Configuring git identity for testing")
+    repo.config_writer().set_value(
+        "user", "name", os.environ.get("GIT_CONFIG_USER", "integration-testing-user")
+    ).release()
+    repo.config_writer().set_value(
+        "user",
+        "email",
+        os.environ.get("GIT_CONFIG_EMAIL", "integration-testing-user@testing.com"),
+    ).release()
+
+    yield repo
 
 
 @pytest.fixture(scope="module")
