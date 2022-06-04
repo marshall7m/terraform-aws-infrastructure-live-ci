@@ -1,7 +1,7 @@
 FROM python:3.9-alpine AS build
 
-ARG TERRAFORM_VERSION
-ARG TERRAGRUNT_VERSION
+ARG TFENV_VERSION=2.2.2
+ARG TGENV_VERSION=0.0.3
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
@@ -16,6 +16,9 @@ RUN chmod u+x ./install.sh \
 
 FROM python:3.9-alpine
 
+ARG TERRAFORM_VERSION=latest
+ARG TERRAGRUNT_VERSION=latest
+
 ENV VIRTUAL_ENV=/opt/venv
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -26,11 +29,18 @@ WORKDIR /src/
 COPY --from=build /usr/local /usr/local
 COPY --from=build $VIRTUAL_ENV $VIRTUAL_ENV
 
+ENV PATH="/usr/local/.tfenv/bin:/usr/local/.tgenv/bin:$PATH"
+# uses virtual env instead of system-wide packages
 ENV PATH="$VIRTUAL_ENV/bin:$VIRTUAL_ENV/lib/python3.9/site-packages:$PATH"
 
 RUN apk update \
-    && apk add --virtual .runtime \
-    bash \
-    git \
-    openssl \
-&& ln -sf python3 /usr/local/bin/python
+    && apk add --virtual .runtime bash git openssl curl \
+    && ln -sf python3 /usr/local/bin/python \
+    && tfenv install ${TERRAFORM_VERSION} \
+    && tfenv use ${TERRAFORM_VERSION} \
+    && tgenv install ${TERRAGRUNT_VERSION} \
+    && tgenv use ${TERRAGRUNT_VERSION}
+
+COPY entrypoint.sh /tmp/entrypoint.sh
+
+ENTRYPOINT ["bash", "/tmp/entrypoint.sh"]

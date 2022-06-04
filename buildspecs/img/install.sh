@@ -4,10 +4,13 @@ source $VIRTUAL_ENV/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 
-wget -q -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-unzip -q /tmp/terraform.zip
-mv $(unzip -qql /tmp/terraform.zip | head -n1 | tr -s ' ' | cut -d' ' -f5-) /usr/local/bin/
-wget -q -O /usr/local/bin/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64
+wget -q -O /tmp/tfenv.tar.gz https://github.com/tfutils/tfenv/archive/refs/tags/v${TFENV_VERSION}.tar.gz
+tar -zxf /tmp/tfenv.tar.gz -C /tmp
+mkdir /usr/local/.tfenv && mv /tmp/tfenv-${TFENV_VERSION}/* /usr/local/.tfenv && chmod u+x /usr/local/.tfenv/bin/tfenv
+
+wget -q -O /tmp/tgenv.tar.gz https://github.com/cunymatthieu/tgenv/archive/refs/tags/v${TGENV_VERSION}.tar.gz
+tar -zxf /tmp/tgenv.tar.gz -C /tmp
+mkdir /usr/local/.tgenv && mv /tmp/tgenv-${TGENV_VERSION}/* /usr/local/.tgenv && chmod u+x /usr/local/.tgenv/bin/tgenv
 
 chmod u+x /usr/local/bin/*
 rm -rf /tmp/*
