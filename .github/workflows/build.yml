@@ -35,7 +35,7 @@ jobs:
         uses: docker/build-push-action@v3
         if: ${{ github.event_name == 'release' }}
         with:
-          context: "{{defaultContext}}:buildspecs/img"
+          context: buildspecs/img
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}
@@ -44,7 +44,7 @@ jobs:
         uses: docker/build-push-action@v3
         if: ${{ github.event_name == 'push' }}
         with:
-          context: "{{defaultContext}}:buildspecs/img"
+          context: buildspecs/img
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:latest
