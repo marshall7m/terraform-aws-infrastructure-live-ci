@@ -2,9 +2,10 @@ locals {
   metadb_name        = coalesce(var.metadb_name, replace("${var.prefix}", "-", "_"))
   cluster_identifier = replace("${var.prefix}-cluster", "_", "-")
   metadb_setup_script = templatefile("${path.module}/sql/metadb_setup_script.sh", {
-    cluster_arn = aws_rds_cluster.metadb.arn
-    secret_arn  = aws_secretsmanager_secret_version.master_metadb_user.arn
-    db_name     = aws_rds_cluster.metadb.database_name
+    tf_module_path = path.module
+    cluster_arn    = aws_rds_cluster.metadb.arn
+    secret_arn     = aws_secretsmanager_secret_version.master_metadb_user.arn
+    db_name        = aws_rds_cluster.metadb.database_name
     create_tables_sql = templatefile("${path.module}/sql/create_metadb_tables.sql", {
       metadb_schema = var.metadb_schema,
       metadb_name   = local.metadb_name
