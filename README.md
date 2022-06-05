@@ -284,8 +284,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | terra\_run\_build\_name | Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions | `string` | `null` | no |
 | terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | terra\_run\_vpc\_config | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| terraform\_version | Terraform version used for create\_deploy\_stack and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `"1.0.2"` | no |
-| terragrunt\_version | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `"0.31.0"` | no |
+| terraform\_version | Terraform version used for create\_deploy\_stack and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `""` | no |
+| terragrunt\_version | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `""` | no |
 | tf\_state\_read\_access\_policy | AWS IAM policy ARN that allows create\_deploy\_stack Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
 | trigger\_sf\_function\_name | Name of the AWS Lambda function used to trigger Step Function deployments | `string` | `null` | no |
 

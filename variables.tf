@@ -117,13 +117,13 @@ variable "tf_state_read_access_policy" {
 variable "terraform_version" {
   description = "Terraform version used for create_deploy_stack and terra_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended"
   type        = string
-  default     = "1.0.2"
+  default     = ""
 }
 
 variable "terragrunt_version" {
   description = "Terragrunt version used for create_deploy_stack and terra_run builds"
   type        = string
-  default     = "0.31.0"
+  default     = ""
 }
 
 variable "terra_run_env_vars" {

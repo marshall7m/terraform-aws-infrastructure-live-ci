@@ -26,9 +26,9 @@ def dummy_tf_output(name=None, value=None):
         value = f"_{uuid.uuid4()}"
 
     return f"""
-    output "{name}" {{
-        value = "{value}"
-    }}
+output "{name}" {{
+    value = "{value}"
+}}
     """
 
 

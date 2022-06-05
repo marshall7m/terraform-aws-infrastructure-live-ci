@@ -12,3 +12,5 @@ if [ -n "${TERRAGRUNT_VERSION}" ]; then
     tgenv use "${TERRAGRUNT_VERSION}"
 fi
 echo "Terragrunt Version: $(terragrunt --version)"
+
+/bin/bash
