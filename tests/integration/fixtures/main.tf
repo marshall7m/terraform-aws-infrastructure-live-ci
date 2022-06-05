@@ -32,7 +32,8 @@ resource "github_repository" "testing" {
 }
 
 resource "aws_s3_bucket" "testing_tf_state" {
-  bucket = "${local.mut_id}-tf-state"
+  bucket        = "${local.mut_id}-tf-state"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "testing_tf_state" {
@@ -166,7 +167,8 @@ module "mut_infrastructure_live_ci" {
   metadb_password    = random_password.metadb["master"].result
   metadb_ci_username = "mut_ci_user"
   metadb_ci_password = random_password.metadb["ci"].result
-
+  terraform_version  = "1.0.2"
+  terragrunt_version = "0.31.0"
   # repo specific env vars required to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
     {

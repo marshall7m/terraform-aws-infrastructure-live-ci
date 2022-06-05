@@ -6,6 +6,11 @@ locals {
   create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.prefix}-create-deploy-stack")
   terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.prefix}-terra-run")
   buildspec_scripts_source_identifier = "helpers"
+
+  build_img = coalesce(
+    var.build_img,
+    "ghcr.io/${data.github_repository.build_scripts.full_name}:${local.terraform_module_version == "master" ? "latest" : local.terraform_module_version}"
+  )
 }
 
 data "github_repository" "build_scripts" {
@@ -34,23 +39,6 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
   value       = var.metadb_ci_password
 }
 
-module "ecr_common_image" {
-  count  = var.build_img == null ? 1 : 0
-  source = "github.com/marshall7m/terraform-aws-ecr"
-
-  create_repo         = true
-  codebuild_access    = true
-  cache               = false
-  source_path         = "${path.module}/buildspecs/img"
-  name                = "${var.step_function_name}-codebuild"
-  tag                 = "latest"
-  trigger_build_paths = ["${path.module}/buildspecs/img"]
-  build_args = {
-    TERRAFORM_VERSION  = var.terraform_version
-    TERRAGRUNT_VERSION = var.terragrunt_version
-  }
-}
-
 module "codebuild_create_deploy_stack" {
   source = "github.com/marshall7m/terraform-aws-codebuild"
 
@@ -75,6 +63,7 @@ env:
 phases:
   install:
     commands:
+      - bash "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}/buildspecs/img/entrypoint.sh"
       - pip install -e "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}"
   build:
     commands:
@@ -98,9 +87,25 @@ EOT
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = coalesce(var.build_img, module.ecr_common_image[0].full_image_url)
+    image        = local.build_img
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.codebuild_common_env_vars, [
+      {
+        name  = "TERRAFORM_VERSION"
+        type  = "PLAINTEXT"
+        value = var.terraform_version
+      },
+      {
+        name  = "TERRAGRUNT_VERSION"
+        type  = "PLAINTEXT"
+        value = var.terragrunt_version
+      },
+      {
+        # passes -s to curl to silence out
+        name  = "TFENV_CURL_OUTPUT"
+        type  = "PLAINTEXT"
+        value = "0"
+      },
       {
         name  = "SECONDARY_SOURCE_IDENTIFIER"
         type  = "PLAINTEXT"
@@ -191,9 +196,25 @@ module "codebuild_pr_plan" {
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = coalesce(var.build_img, module.ecr_common_image[0].full_image_url)
+    image        = local.build_img
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
+      {
+        name  = "TERRAFORM_VERSION"
+        type  = "PLAINTEXT"
+        value = var.terraform_version
+      },
+      {
+        name  = "TERRAGRUNT_VERSION"
+        type  = "PLAINTEXT"
+        value = var.terragrunt_version
+      },
+      {
+        # passes -s to curl to silence out
+        name  = "TFENV_CURL_OUTPUT"
+        type  = "PLAINTEXT"
+        value = "0"
+      },
       {
         name  = "TF_IN_AUTOMATION"
         value = "true"
@@ -266,6 +287,9 @@ version: 0.2
 env:
   shell: bash
 phases:
+  install:
+    commands:
+      - bash "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}/buildspecs/img/entrypoint.sh"
   build:
     commands:
       - python "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}/buildspecs/pr_plan/plan.py"
@@ -297,9 +321,25 @@ module "codebuild_terra_run" {
 
   environment = {
     compute_type = "BUILD_GENERAL1_SMALL"
-    image        = coalesce(var.build_img, module.ecr_common_image[0].full_image_url)
+    image        = local.build_img
     type         = "LINUX_CONTAINER"
     environment_variables = concat(var.terra_run_env_vars, var.codebuild_common_env_vars, [
+      {
+        name  = "TERRAFORM_VERSION"
+        type  = "PLAINTEXT"
+        value = var.terraform_version
+      },
+      {
+        name  = "TERRAGRUNT_VERSION"
+        type  = "PLAINTEXT"
+        value = var.terragrunt_version
+      },
+      {
+        # passes -s to curl to silence out
+        name  = "TFENV_CURL_OUTPUT"
+        type  = "PLAINTEXT"
+        value = "0"
+      },
       {
         name  = "TF_IN_AUTOMATION"
         value = "true"
@@ -347,6 +387,7 @@ env:
 phases:
   install:
     commands:
+      - bash "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}/buildspecs/img/entrypoint.sh"
       - pip install -e "$${CODEBUILD_SRC_DIR_${local.buildspec_scripts_source_identifier}}"
   build:
     commands:

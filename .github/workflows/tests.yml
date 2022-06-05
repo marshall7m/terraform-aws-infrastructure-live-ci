@@ -2,7 +2,6 @@ name: "Tests"
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
-
     branches:
       - master
     tags:
@@ -12,14 +11,21 @@ on:
     - .gitignore
     - LICENSE.md
     - README.md
+    - buildspecs/img/**
+    - .github/workflows/build.yml
 
   push:
     branches:
     - master
+    tags:
+      - ci
+      - tests  
     paths-ignore:
-    - .gitignore
-    - LICENSE.md
-    - README.md
+      - .gitignore
+      - LICENSE.md
+      - README.md
+      - buildspecs/img/**
+      - .github/workflows/build.yml
 
 env:
   PYTEST_ADDOPTS: --color=yes
@@ -28,7 +34,7 @@ env:
 jobs:
   precommit:
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.2
+    container: ghcr.io/marshall7m/terrace:v0.1.4
     permissions:
       id-token: write
       contents: read
@@ -43,7 +49,7 @@ jobs:
   unit:
     needs: precommit
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.2
+    container: ghcr.io/marshall7m/terrace:v0.1.4
     services:
       postgres:
         image: postgres:10.14-alpine
@@ -141,12 +147,6 @@ jobs:
           echo "::add-mask::$TF_VAR_testing_secondary_aws_account_id"
           echo "::add-mask::$TF_VAR_approval_request_sender_email"
 
-      - name: Install Docker
-        id: integration_install_docker
-        shell: bash
-        run: |
-          bash ./runner_install_docker.sh
-
       - name: Configure AWS Credentials for remote workflow
         uses: aws-actions/configure-aws-credentials@v1
         if: ${{ !env.ACT }}
@@ -167,4 +167,7 @@ jobs:
         id: pytest_integration
         shell: bash
         run: |
-          docker compose run --rm integration pytest -vv tests/integration
+          source $VIRTUAL_ENV/bin/activate
+          python3 -m pip install -r requirements.txt
+          python3 -m pip install -e .
+          pytest -vv tests/integration
