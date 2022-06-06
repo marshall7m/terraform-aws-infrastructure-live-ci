@@ -18,7 +18,7 @@ if [ -n "$NEW_PROVIDERS" ] && [ "$NEW_PROVIDERS" != "[]" ] && [ "$IS_ROLLBACK" =
     echo "$new_resources"
 
     #converting new_resources to string and converting back to array within query since arrayValues is not supported with rds-data execute-statement
-    if $(echo "$new_resources" | jq 'length > 0'); then
+    if "$(echo "$new_resources" | jq 'length > 0')"; then
         params="$(echo "$new_resources" | jq \
         --arg execution_id "$EXECUTION_ID" '
             [
