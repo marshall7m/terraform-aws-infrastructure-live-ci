@@ -215,17 +215,17 @@ def git_repo(tmp_path_factory):
         dir,
     )
 
-    log.info("Configuring git identity for testing")
-    repo.config_writer().set_value(
+    log.info("Configuring user-level git identity")
+    repo.config_writer(config_level="global").set_value(
         "user", "name", os.environ.get("GIT_CONFIG_USER", "integration-testing-user")
     ).release()
-    repo.config_writer().set_value(
+    repo.config_writer(config_level="global").set_value(
         "user",
         "email",
         os.environ.get("GIT_CONFIG_EMAIL", "integration-testing-user@testing.com"),
     ).release()
 
-    yield repo
+    return repo
 
 
 @pytest.fixture(scope="module")
