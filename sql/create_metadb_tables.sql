@@ -1,6 +1,9 @@
 CREATE SCHEMA IF NOT EXISTS ${metadb_schema};
+ALTER DATABASE ${metadb_name} SET search_path TO ${metadb_schema};
 
-CREATE TABLE IF NOT EXISTS ${metadb_schema}.executions (
+SET search_path = ${metadb_schema};
+
+CREATE TABLE IF NOT EXISTS executions (
     execution_id VARCHAR PRIMARY KEY,
     is_rollback BOOL,
     pr_id INT,
@@ -26,7 +29,7 @@ CREATE TABLE IF NOT EXISTS ${metadb_schema}.executions (
     deploy_role_arn VARCHAR
 );
 
-CREATE TABLE IF NOT EXISTS ${metadb_schema}.account_dim (
+CREATE TABLE IF NOT EXISTS account_dim (
     account_name VARCHAR PRIMARY KEY,
     account_path VARCHAR,
     account_deps TEXT[],
@@ -36,5 +39,3 @@ CREATE TABLE IF NOT EXISTS ${metadb_schema}.account_dim (
     plan_role_arn VARCHAR,
     deploy_role_arn VARCHAR
 );
-
-ALTER DATABASE ${metadb_name} SET search_path TO ${metadb_schema};

@@ -5,6 +5,7 @@ BEGIN
       FROM pg_user 
       WHERE usename = '${metadb_ci_username}'
     ) THEN
+        SET search_path = ${metadb_schema};
         CREATE USER ${metadb_ci_username} WITH PASSWORD '${metadb_ci_password}';
         GRANT ${metadb_username} TO ${metadb_ci_username};
         GRANT CONNECT, TEMPORARY ON DATABASE ${metadb_name} TO ${metadb_ci_username};
