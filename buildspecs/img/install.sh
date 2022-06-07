@@ -11,7 +11,7 @@ wget -q -O /tmp/tfenv.tar.gz https://github.com/tfutils/tfenv/archive/refs/tags/
 tar -zxf /tmp/tfenv.tar.gz -C /tmp
 mkdir /usr/local/.tfenv && mv /tmp/tfenv-"${TFENV_VERSION}"/* /usr/local/.tfenv && chmod u+x /usr/local/.tfenv/bin/tfenv
 
-curl -L https://raw.githubusercontent.com/warrensbox/tgswitch/release/install.sh | bash -s -- -b /usr/local/bin -d "${TGSWITCH_VERSION}"
+wget -q -O - https://raw.githubusercontent.com/warrensbox/tgswitch/release/install.sh | bash -s -- -b /usr/local/bin -d "${TGSWITCH_VERSION}"
 
 chmod u+x /usr/local/bin/*
 rm -rf /tmp/*

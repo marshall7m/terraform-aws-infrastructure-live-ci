@@ -39,7 +39,9 @@ RUN apk update \
     && ln -sf python3 /usr/local/bin/python \
     && tfenv install ${TERRAFORM_VERSION} \
     && tfenv use ${TERRAFORM_VERSION} \
-    && tgswitch ${TERRAGRUNT_VERSION}
+    && if [[ "$TERRAGRUNT_VERSION" == "latest" ]]; then \
+        curl -s https://warrensbox.github.io/terragunt-versions-list/ | jq -r '.Versions[0]' | xargs -I {} tgswitch {}; \
+        else tgswitch "$TERRAGRUNT_VERSION"; fi
 
 COPY entrypoint.sh /tmp/entrypoint.sh
 
