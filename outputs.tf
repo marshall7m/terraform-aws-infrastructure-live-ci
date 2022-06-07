@@ -110,6 +110,11 @@ output "approval_request_log_group_name" {
   value       = module.lambda_approval_request.cw_log_group_name
 }
 
+output "approval_request_function_name" {
+  description = "Name of the Lambda function used for sending approval requests"
+  value       = module.lambda_approval_request.function_name
+}
+
 output "merge_lock_github_webhook_id" {
   description = "GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda function"
   value       = module.github_webhook_validator.webhook_ids[var.repo_name]

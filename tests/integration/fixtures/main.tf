@@ -168,7 +168,7 @@ module "mut_infrastructure_live_ci" {
   metadb_ci_username = "mut_ci_user"
   metadb_ci_password = random_password.metadb["ci"].result
   terraform_version  = "1.0.2"
-  terragrunt_version = "0.31.0"
+  terragrunt_version = "0.34.0"
   # repo specific env vars required to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
     {
