@@ -7,9 +7,8 @@ fi
 echo "Terraform Version: $(terraform --version)"
 
 if [ -n "${TERRAGRUNT_VERSION}" ]; then
-    echo "Installing Terragrunt version via tgenv: ${TERRAGRUNT_VERSION}"
-    tgenv install "${TERRAGRUNT_VERSION}"
-    tgenv use "${TERRAGRUNT_VERSION}"
+    echo "Installing Terragrunt version via tgswitch: ${TERRAGRUNT_VERSION}"
+    tgswitch "${TERRAGRUNT_VERSION}"
 fi
 echo "Terragrunt Version: $(terragrunt --version)"
 

@@ -1,7 +1,8 @@
 FROM python:3.9-alpine AS build
 
 ARG TFENV_VERSION=2.2.2
-ARG TGENV_VERSION=0.0.3
+# defaults to installing latest
+ARG TGSWITCH_VERSION=""
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
@@ -29,7 +30,7 @@ WORKDIR /src/
 COPY --from=build /usr/local /usr/local
 COPY --from=build $VIRTUAL_ENV $VIRTUAL_ENV
 
-ENV PATH="/usr/local/.tfenv/bin:/usr/local/.tgenv/bin:$PATH"
+ENV PATH="/usr/local/.tfenv/bin:$PATH"
 # uses virtual env instead of system-wide packages
 ENV PATH="$VIRTUAL_ENV/bin:$VIRTUAL_ENV/lib/python3.9/site-packages:$PATH"
 
@@ -38,8 +39,7 @@ RUN apk update \
     && ln -sf python3 /usr/local/bin/python \
     && tfenv install ${TERRAFORM_VERSION} \
     && tfenv use ${TERRAFORM_VERSION} \
-    && tgenv install ${TERRAGRUNT_VERSION} \
-    && tgenv use ${TERRAGRUNT_VERSION}
+    && tgswitch ${TERRAGRUNT_VERSION}
 
 COPY entrypoint.sh /tmp/entrypoint.sh
 
