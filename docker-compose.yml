@@ -24,7 +24,7 @@ services:
   unit:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.4
+    image: ghcr.io/marshall7m/terrace:v0.1.5
     volumes:
       - "$PWD:/src"
     environment:
