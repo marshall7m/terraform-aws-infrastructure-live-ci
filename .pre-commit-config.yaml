@@ -22,3 +22,4 @@ repos:
     rev: 0.13.2
     hooks:
       - id: sqlfluff-lint
+        args: [--nocolor, -vv]
