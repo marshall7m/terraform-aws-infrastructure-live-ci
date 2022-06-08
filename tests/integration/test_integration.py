@@ -10,82 +10,24 @@ import git
 import timeout_decorator
 import random
 import string
+import re
 from pytest_dependency import depends
 import boto3
 from pprint import pformat
 import requests
+from tests.integration import utils
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
 class Integration:
-    @pytest.fixture(scope="class", autouse=True)
-    def class_start_time(self) -> datetime:
-        """Datetime of when the class testing started"""
-        time = datetime.today()
-        return time
-
-    @pytest.fixture(scope="class")
-    def cls_lambda_invocation_count(self, class_start_time):
-        """Factory fixture that returns the number of times a Lambda function has runned since the class testing started"""
-        invocations = []
-
-        def _get_count(function_name: str, refresh=False) -> int:
-            """
-            Argruments:
-                function_name: Name of the AWS Lambda function
-                refresh: Determines if a refreshed invocation count should be returned. If False, returns the locally stored invocation count.
-            """
-            if refresh:
-                log.info("Refreshing the invocation count")
-                end_time = datetime.today()
-                log.debug(f"Start Time: {class_start_time} -- End Time: {end_time}")
-
-                cw = boto3.client("cloudwatch")
-
-                response = cw.get_metric_statistics(
-                    Namespace="AWS/Lambda",
-                    MetricName="Invocations",
-                    Dimensions=[{"Name": "FunctionName", "Value": function_name}],
-                    StartTime=class_start_time,
-                    EndTime=end_time,
-                    Period=60,
-                    Statistics=["SampleCount"],
-                    Unit="Count",
-                )
-                for data in response["Datapoints"]:
-                    invocations.append(data["SampleCount"])
-
-            return len(invocations)
-
-        yield _get_count
-
-        invocations = []
+    executions = []
 
     @pytest.fixture(scope="class")
     def case_param(self, request):
         """Class case fixture used to determine the actions within the CI flow and the expected test assertions"""
         return request.cls.case
-
-    @pytest.fixture(scope="class")
-    def tested_executions(self):
-        """Factory fixture that returns a list of execution IDs that have already been tested. Used to determine what execution ID to test next within downstream fixture."""
-        ids = []
-
-        def _add_id(id=None) -> list:
-            """
-            Arguments:
-                id: Execution ID to add the list of already tested executions
-            """
-            if id is not None:
-                ids.append(id)
-
-            return ids
-
-        yield _add_id
-
-        ids = []
 
     @pytest.fixture(scope="module")
     def tf_destroy_commit_ids(self, mut_output):
@@ -94,7 +36,7 @@ class Integration:
 
         def _add(id=None):
             if id:
-                commit_ids.append_id
+                commit_ids.append(id)
             return commit_ids
 
         yield _add
@@ -214,55 +156,31 @@ class Integration:
                 "head_ref": case_param["head_ref"],
             }
 
-        log.info("Removing PR head ref branch")
+        log.info(f"Removing PR head ref branch: {case_param['head_ref']}")
         head_ref.delete()
 
+        log.info(f"Closing PR: #{pr.number}")
         try:
-            log.info("Closing PR")
             pr.edit(state="closed")
         except Exception:
-            pass
+            log.info("PR is merged or already closed")
 
-    def get_execution_task_status(
-        self, arn: str, execution_id: str, task_id: str
-    ) -> str:
+    def get_execution_arn(self, arn: str, execution_id: str) -> int:
         """
-        Gets the task status for a given Step Function execution
+        Gets the task ID for a given Step Function execution type and name.
+        If the execution type and name is not found, None is returned
 
         Arguments:
             arn: ARN of the Step Function execution
             execution_id: Name of the Step Function execution
-            task_id: Task ID associated with the Step Function
+            task_name: Task name within the Step Function definition
         """
         sf = boto3.client("stepfunctions")
-        try:
-            execution_arn = [
-                execution["executionArn"]
-                for execution in sf.list_executions(stateMachineArn=arn)["executions"]
-                if execution["name"] == execution_id
-            ][0]
-        except IndexError as e:
-            log.error(f"No Step Function execution exists with name: {execution_id}")
-            raise e
-        events = sf.get_execution_history(
-            executionArn=execution_arn, includeExecutionData=True
-        )["events"]
+        for execution in sf.list_executions(stateMachineArn=arn)["executions"]:
+            if execution["name"] == execution_id:
+                return execution["executionArn"]
 
-        try:
-            task_status_id = [
-                event["previousEventId"]
-                for event in events
-                if event.get("stateExitedEventDetails", {}).get("name", None) == task_id
-            ][0]
-        except IndexError:
-            log.debug("Task status ID could not be found")
-            return None
-
-        log.debug(f"Task status ID: {task_status_id}")
-
-        for event in events:
-            if event["id"] == task_status_id:
-                return event["type"]
+        pytest.fail(f"No Step Function execution exists with name: {execution_id}")
 
     def get_build_finished_status(self, name: str, ids=[], filters={}) -> str:
         """
@@ -474,6 +392,13 @@ class Integration:
         """Assert create deploy stack codebuild status matches it's expected status"""
         depends(request, [f"{request.cls.__name__}::test_pr_merge"])
 
+        # needed for the wait_for_lambda_invocation() start_time arg within the first test_trigger_sf iteration so
+        # the log group filter will have a wide enough time range
+        log.info("Setting first target execution start time")
+        request.cls.executions[0]["testing_start_time"] = int(
+            datetime.now().timestamp() * 1000
+        )
+
         log.info("Giving build time to start")
         time.sleep(5)
 
@@ -510,42 +435,32 @@ class Integration:
             log.info("Assert build succeeded")
             assert status == "SUCCEEDED"
 
-    @pytest.mark.dependency()
-    def test_deploy_execution_records_exist(self, request, conn, case_param, pr):
-        """
-        Assert that all expected execution records are within executions table
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                SELECT array_agg(execution_id::TEXT)
+                FROM executions
+                WHERE commit_id = '{pr["head_commit_id"]}'
+                """
+                )
+                ids = cur.fetchone()[0]
+            conn.commit()
 
-        Depends on create deploy stack codebuild status check because if the build fails or is still in progress, the below query
-        will return premature or invalid results.
-        """
-        depends(
-            request, [f"{request.cls.__name__}::test_create_deploy_stack_codebuild"]
-        )
+            if ids is None:
+                target_execution_ids = []
+            else:
+                target_execution_ids = [id for id in ids]
 
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-            SELECT array_agg(execution_id::TEXT)
-            FROM executions
-            WHERE commit_id = '{pr["head_commit_id"]}'
-            """
+            log.debug(f"Commit execution IDs:\n{target_execution_ids}")
+
+            log.info(
+                "Assert that all expected execution records are within executions table"
             )
-            ids = cur.fetchone()[0]
-        conn.commit()
+            assert len(case_param["executions"]) == len(target_execution_ids)
 
-        if ids is None:
-            target_execution_ids = []
-        else:
-            target_execution_ids = [id for id in ids]
-
-        log.debug(f"Commit execution IDs:\n{target_execution_ids}")
-
-        assert len(case_param["executions"]) == len(target_execution_ids)
-
+    @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_trigger_sf(
-        self, request, mut_output, class_start_time, wait_for_lambda_invocation
-    ):
+    def test_trigger_sf(self, request, mut_output, pr):
         """
         Assert that there are no errors within the latest invocation of the trigger Step Function Lambda
 
@@ -556,483 +471,60 @@ class Integration:
             request, [f"{request.cls.__name__}::test_create_deploy_stack_codebuild"]
         )
 
-        log.debug("Waiting on trigger SF Lambda invocation to complete")
-        wait_for_lambda_invocation(mut_output["trigger_sf_function_name"])
-
-        log_group = mut_output["trigger_sf_log_group_name"]
-        log.debug(f"Log Group: {log_group}")
-
-        start_time = int(class_start_time.timestamp() * 1000)
-        end_time = int(class_start_time.timestamp() * 1000)
-        log.debug(f"Start Time: {start_time} -- End Time: {end_time}")
-        results = self.get_latest_log_stream_errs(
-            log_group, start_time=start_time, end_time=end_time
-        )
-
-        assert len(results) == 0
-
-    @pytest.fixture(scope="class")
-    def wait_for_lambda_invocation(self, cls_lambda_invocation_count):
-        """Factory fixture that waits for a Lambda's completed invocation count to be more than the current invocation count stored"""
-
-        def _wait(function_name):
-            """
-            Arguments:
-                function_name: Name of the Lambda function
-            """
-            current_count = cls_lambda_invocation_count(function_name)
-            timeout = time.time() + 60
-            refresh_count = current_count
-            while current_count == refresh_count:
-                if time.time() > timeout:
-                    pytest.fail("Trigger SF Lambda Function was not invoked")
-                time.sleep(5)
-                refresh_count = cls_lambda_invocation_count(function_name, refresh=True)
-                log.debug(f"Refresh Count: {refresh_count}")
-            return None
-
-        yield _wait
-
-    @pytest.fixture(scope="class")
-    def execution_testing_start_time(self):
-        """
-        Returns the start time for testing the current Step Function execution in UTC milliseconds.
-        The start time is used for getting Cloudwatch logs for the trigger Step Function Lambda that runs after the Step Function execution
-        to ensure that error logs are only assoicated with the target Step Function execution.
-        """
-        start_time = []
-
-        def _get_start_time(new=False):
-            """
-            Arguments:
-                new: Determines if a new start time should be created. Used when a new execution is ready to be tested.
-            """
-            if new:
-                start_time.clear()
-                start_time.append(int(datetime.now().timestamp() * 1000))
-            return start_time[0]
-
-        yield _get_start_time
-
-        start_time.clear()
-
-    @pytest.fixture(scope="class")
-    def target_execution(
-        self,
-        request,
-        conn,
-        pr,
-        mut_output,
-        wait_for_lambda_invocation,
-        tested_executions,
-        case_param,
-        execution_testing_start_time,
-    ):
-        """
-        Returns the execution record associated with the Step Function to be tested. Only running or finished executions are selected to be tested
-        given that waiting execution records won't have an associated Step Function execution.
-        """
-        if case_param.get("expect_failed_create_deploy_stack", False):
-            pytest.skip(
-                "Skipping downstream tests since `expect_failed_create_deploy_stack` is set to True"
-            )
-
-        log.debug(f"Already tested execution IDs:\n{tested_executions()}")
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                SELECT *
-                FROM executions
-                WHERE commit_id = '{pr["head_commit_id"]}'
-                AND "status" IN ('running', 'aborted', 'failed')
-                AND NOT (execution_id = ANY (ARRAY{tested_executions()}::TEXT[]))
-                LIMIT 1
-            """
-            )
-            results = cur.fetchone()
-        conn.commit()
-
-        record = {}
-        if results is not None:
-            row = [value for value in results]
-            for i, description in enumerate(cur.description):
-                record[description.name] = row[i]
-
-            log.debug(f"Target Execution Record:\n{pformat(record)}")
-
-            # needed for filtering out any trigger sf cloudwatch logs from previous executions for test_cw_event_trigger_sf assertions
-            log.debug("Pinning target execution testing start time")
-            execution_testing_start_time(new=True)
-
-            yield record
-        else:
-            yield {}
-
-        log.debug("Adding execution ID to tested executions list")
-        if record != {}:
-            tested_executions(record["execution_id"])
-
-    @pytest.fixture(scope="class")
-    def action(self, target_execution, case_param):
-        """Returns the approval execution action associated with the target execution record"""
-        if target_execution == {}:
-            return None
-        elif target_execution["is_rollback"]:
-            return case_param["executions"][target_execution["cfg_path"]]["actions"][
-                "rollback_providers"
-            ]
-        else:
-            return (
-                case_param["executions"][target_execution["cfg_path"]]
-                .get("actions", {})
-                .get("deploy", None)
-            )
-
-    @pytest.mark.dependency()
-    def test_target_execution_record_exists(self, request, conn, pr, target_execution):
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_deploy_execution_records_exist",
-                f"{request.cls.__name__}::test_trigger_sf",
-            ],
-        )
-
-        if target_execution == {}:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    SELECT execution_id
-                    FROM executions
-                    WHERE commit_id = '{pr["head_commit_id"]}'
-                    AND "status" = 'waiting'
-                """
-                )
-                results = cur.fetchall()
-            conn.commit()
-
-            log.debug(f"Waiting execution IDs: {results}")
-            pytest.fail(
-                "Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')"
-            )
-
-    @pytest.mark.dependency()
-    def test_sf_execution_aborted(
-        self, request, target_execution, mut_output, case_param
-    ):
-        """
-        Assert that the execution record has an assoicated Step Function execution that is aborted or doesn't exist if
-        the upstream execution was rejected before the target Step Function execution was created
-        """
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        sf = boto3.client("stepfunctions")
-
-        log.debug(f'Target Execution Status: {target_execution["status"]}')
-        if target_execution["status"] != "aborted":
-            pytest.skip("Execution approval action is not set to `aborted`")
-
-        try:
-            execution_arn = [
-                execution["executionArn"]
-                for execution in sf.list_executions(
-                    stateMachineArn=mut_output["state_machine_arn"]
-                )["executions"]
-                if execution["name"] == target_execution["execution_id"]
-            ][0]
-        except IndexError:
-            log.info(
-                "Execution record status was set to aborted before associated Step Function execution was created"
-            )
-            assert (
-                case_param["executions"][target_execution["cfg_path"]][
-                    "sf_execution_exists"
+        utils.wait_for_lambda_invocation(
+            mut_output["trigger_sf_function_name"],
+            datetime.utcfromtimestamp(
+                request.cls.executions[int(request.node.callspec.id)][
+                    "testing_start_time"
                 ]
-                is False
-            )
-        else:
-            assert (
-                sf.describe_execution(executionArn=execution_arn)["status"] == "ABORTED"
-            )
-
-    @pytest.mark.dependency()
-    def test_sf_execution_exists(self, request, mut_output, target_execution):
-        """Assert execution record has an associated Step Function execution that hasn't been aborted"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
+                / 1000
+            ),
+            expected_count=1,
+            timeout=60,
         )
 
-        sf = boto3.client("stepfunctions")
-
-        if target_execution["status"] == "aborted":
-            pytest.skip("Execution approval action is set to `aborted`")
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == target_execution["execution_id"]
-        ][0]
-
-        assert sf.describe_execution(executionArn=execution_arn)["status"] in [
-            "RUNNING",
-            "SUCCEEDED",
-            "FAILED",
-            "TIMED_OUT",
-        ]
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.dependency()
-    def test_terra_run_plan_codebuild(self, request, mut_output, target_execution):
-        """Assert terra run plan task within Step Function execution succeeded"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_sf_execution_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        log.info("Testing Plan Task")
-        status = None
-        while status is None:
-            time.sleep(10)
-            status = self.get_execution_task_status(
-                mut_output["state_machine_arn"],
-                target_execution["execution_id"],
-                "Plan",
-            )
-
-        assert status == "TaskSucceeded"
-
-    @timeout_decorator.timeout(30, exception_message="Task was not submitted")
-    @pytest.mark.dependency()
-    @pytest.mark.usefixtures("target_execution")
-    def test_approval_request(self, request, mut_output):
-        """Assert that there are no errors within the latest invocation of the approval request Lambda function"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]"
-            ],
-        )
-
-        log_group = mut_output["approval_request_log_group_name"]
-        log.debug(f"Log Group: {log_group}")
-        results = self.get_latest_log_stream_errs(log_group)
-
-        assert len(results) == 0
-
-    @pytest.mark.dependency()
-    def test_approval_response(self, request, action, mut_output, target_execution):
-        """Assert that the approval response returns a success status code"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]"
-            ],
-        )
-        sf = boto3.client("stepfunctions")
-
-        log.info("Testing Approval Task")
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == target_execution["execution_id"]
-        ][0]
-        events = sf.get_execution_history(
-            executionArn=execution_arn, includeExecutionData=True
-        )["events"]
-
-        for event in events:
-            if (
-                event["type"] == "TaskScheduled"
-                and event["taskScheduledEventDetails"]["resource"]
-                == "invoke.waitForTaskToken"
-            ):
-                payload = json.loads(event["taskScheduledEventDetails"]["parameters"])[
-                    "Payload"
-                ]
-                approval_url = payload["ApprovalAPI"]
-                voter = payload["Voters"][0]
-
-        log.debug(f"Approval URL: {approval_url}")
-        log.debug(f"Voter: {voter}")
-
-        body = {"action": action, "recipient": voter}
-
-        log.debug(f"Request Body:\n{body}")
-
-        response = requests.post(approval_url, data=body).json()
-        log.debug(f"Response:\n{response}")
-
-        assert response["statusCode"] == 302
-
-    @pytest.mark.dependency()
-    def test_approval_denied(self, request, target_execution, mut_output, action):
-        """Assert that the Reject task state is executed and that the Step Function output includes a failed status attribute"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
-            ],
-        )
-        sf = boto3.client("stepfunctions")
-
-        if action == "approve":
-            pytest.skip("Approval action is set to `approve`")
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == target_execution["execution_id"]
-        ][0]
-        events = sf.get_execution_history(
-            executionArn=execution_arn, includeExecutionData=True
-        )["events"]
-
-        for event in events:
-            if (
-                event["type"] == "PassStateExited"
-                and event["stateExitedEventDetails"]["name"] == "Reject"
-            ):
-                out = json.loads(event["stateExitedEventDetails"]["output"])
-
-        log.debug(f"Rejection State Output:\n{pformat(out)}")
-        assert out["status"] == "failed"
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.dependency()
-    def test_terra_run_deploy_codebuild(
-        self, request, mut_output, target_execution, action
-    ):
-        """Assert terra run deploy task within Step Function execution succeeded"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
-            ],
-        )
-
-        if action == "reject":
-            pytest.skip("Approval action is set to `reject`")
-
-        log.info("Testing Deploy Task")
-
-        status = None
-        while status is None:
-            time.sleep(10)
-            status = self.get_execution_task_status(
-                mut_output["state_machine_arn"],
-                target_execution["execution_id"],
-                "Deploy",
-            )
-
-        assert status == "TaskSucceeded"
-
-    @pytest.mark.dependency()
-    # runs cleanup builds only if step function deploy task was executed
-    @pytest.mark.usefixtures("destroy_scenario_tf_resources")
-    def test_sf_execution_status(self, request, mut_output, target_execution, action):
-        """Assert Step Function execution succeeded"""
-        sf = boto3.client("stepfunctions")
-
-        if action == "approve":
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]"
-                ],
-            )
-        else:
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]"
-                ],
-            )
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == target_execution["execution_id"]
-        ][0]
-        response = sf.describe_execution(executionArn=execution_arn)
-        assert response["status"] == "SUCCEEDED"
-
-    @pytest.mark.dependency()
-    def test_cw_event_trigger_sf(
-        self,
-        request,
-        mut_output,
-        target_execution,
-        case_param,
-        wait_for_lambda_invocation,
-        execution_testing_start_time,
-    ):
-        """
-        Assert trigger Step Function Lambda that runs after the Step Function is finished contains no error logs.
-        If `expect_failed_rollback_providers_cw_trigger_sf` is `True` within the target execution's associated case,
-        then assert that there are error logs.
-        The trigger Step Function Lambda is expected to contain error logs if the execution was a rollback for new provider resources
-        and the execution was rejected/failed.
-        """
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_sf_execution_status[{request.node.callspec.id}]"
-            ],
-        )
-
-        wait_for_lambda_invocation(mut_output["trigger_sf_function_name"])
-
-        log_group = mut_output["trigger_sf_log_group_name"]
-        log.debug(f"Log Group: {log_group}")
-        time.sleep(10)
         results = self.get_latest_log_stream_errs(
-            log_group,
-            start_time=execution_testing_start_time(),
+            mut_output["trigger_sf_log_group_name"],
+            start_time=request.cls.executions[int(request.node.callspec.id)][
+                "testing_start_time"
+            ],
             end_time=int(datetime.now().timestamp() * 1000),
         )
-        log.debug(f"Stream Errors:\n{pformat(results)}")
-        if target_execution["is_rollback"] and case_param["executions"][
-            target_execution["cfg_path"]
-        ].get("expect_failed_rollback_providers_cw_trigger_sf", False):
+
+        if request.cls.executions[int(request.node.callspec.id)].get(
+            "expect_failed_trigger_sf", False
+        ):
             assert len(results) > 0
         else:
             assert len(results) == 0
 
+        if int(request.node.callspec.id) + 1 != len(request.cls.executions):
+            # needed for the wait_for_lambda_invocation() start_time arg within the next test_trigger_sf iteration to
+            # ensure that the logs are only associated with the current target_execution parameter
+            log.info("Setting next target execution start time")
+            current_test_param = int(
+                re.search(
+                    r"(?<=\[).+(?=\])", os.environ.get("PYTEST_CURRENT_TEST")
+                ).group(0)
+            )
+            request.cls.executions[current_test_param + 1]["testing_start_time"] = int(
+                datetime.now().timestamp() * 1000
+            )
+
+    @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_rollback_providers_executions_exists(
-        self, request, conn, case_param, pr, action, target_execution
-    ):
+    def test_rollback_providers_executions_exists(self, request, conn, case_param, pr):
         """Assert that trigger Step Function Lambda created the correct amount of rollback new provider resource executions"""
         depends(
             request,
-            [
-                f"{request.cls.__name__}::test_cw_event_trigger_sf[{request.node.callspec.id}]"
-            ],
+            [f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id}]"],
         )
 
-        if target_execution["is_rollback"] != "true" and action != "reject":
-            pytest.skip(
-                "Expected approval action is not set to `reject` so rollback provider executions will not be created"
-            )
+        if not request.cls.executions[int(request.node.callspec.id)].get(
+            "test_rollback_providers_executions_exists", False
+        ):
+            pytest.skip("Previous execution succeeded")
+
         with conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -1062,3 +554,424 @@ class Integration:
         )
 
         assert expected_execution_count == len(target_execution_ids)
+
+    @pytest.mark.usefixtures("target_execution")
+    @pytest.mark.dependency()
+    def test_target_execution_record_exists(self, request, conn, pr, case_param):
+        depends(
+            request,
+            [f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id}]"],
+        )
+        tested_executions = [
+            e["record"]["execution_id"]
+            for e in request.cls.executions
+            if e.get("record", False)
+        ]
+        log.debug(f"Already tested execution IDs:\n{tested_executions}")
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT *
+                FROM executions
+                WHERE commit_id = '{pr["head_commit_id"]}'
+                AND "status" IN ('running', 'aborted', 'failed')
+                AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
+                LIMIT 1
+            """
+            )
+            results = cur.fetchone()
+        conn.commit()
+
+        record = {}
+        if results is not None:
+            row = [value for value in results]
+            for i, description in enumerate(cur.description):
+                record[description.name] = row[i]
+
+            log.debug(f"Target Execution Record:\n{pformat(record)}")
+
+            if record["is_rollback"]:
+                request.cls.executions[int(request.node.callspec.id)][
+                    "action"
+                ] = case_param["executions"][record["cfg_path"]]["actions"][
+                    "rollback_providers"
+                ]
+            else:
+                request.cls.executions[int(request.node.callspec.id)]["action"] = (
+                    case_param["executions"][record["cfg_path"]]
+                    .get("actions", {})
+                    .get("deploy", None)
+                )
+
+        log.info("Putting record into request execution dict")
+        request.cls.executions[int(request.node.callspec.id)]["record"] = record
+
+        if record == {}:
+            request.cls.executions[int(request.node.callspec.id)]["action"] = None
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT execution_id
+                    FROM executions
+                    WHERE commit_id = '{pr["head_commit_id"]}'
+                    AND "status" = 'waiting'
+                """
+                )
+                results = cur.fetchall()
+            conn.commit()
+
+            log.debug(f"Waiting execution IDs: {results}")
+            pytest.fail(
+                "Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')"
+            )
+
+    @pytest.mark.usefixtures("target_execution")
+    @pytest.mark.dependency()
+    def test_sf_execution_aborted(self, request, mut_output, case_param):
+        """
+        Assert that the execution record has an assoicated Step Function execution that is aborted or doesn't exist if
+        the upstream execution was rejected before the target Step Function execution was created
+        """
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
+            ],
+        )
+
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+
+        sf = boto3.client("stepfunctions")
+
+        log.debug(f'Target Execution Status: {["status"]}')
+        if record["status"] != "aborted":
+            pytest.skip("Execution approval action is not set to `aborted`")
+
+        try:
+            execution_arn = [
+                execution["executionArn"]
+                for execution in sf.list_executions(
+                    stateMachineArn=mut_output["state_machine_arn"]
+                )["executions"]
+                if execution["name"] == record["execution_id"]
+            ][0]
+        except IndexError:
+            log.info(
+                "Execution record status was set to aborted before associated Step Function execution was created"
+            )
+            assert (
+                case_param["executions"][record["cfg_path"]]["sf_execution_exists"]
+                is False
+            )
+        else:
+            assert (
+                sf.describe_execution(executionArn=execution_arn)["status"] == "ABORTED"
+            )
+
+    @pytest.mark.usefixtures("target_execution")
+    @pytest.mark.dependency()
+    def test_sf_execution_exists(self, request, mut_output):
+        """Assert execution record has an associated Step Function execution that hasn't been aborted"""
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
+            ],
+        )
+
+        sf = boto3.client("stepfunctions")
+
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+
+        if record["status"] == "aborted":
+            pytest.skip("Execution approval action is set to `aborted`")
+
+        execution_arn = [
+            execution["executionArn"]
+            for execution in sf.list_executions(
+                stateMachineArn=mut_output["state_machine_arn"]
+            )["executions"]
+            if execution["name"] == record["execution_id"]
+        ][0]
+
+        assert sf.describe_execution(executionArn=execution_arn)["status"] in [
+            "RUNNING",
+            "SUCCEEDED",
+            "FAILED",
+            "TIMED_OUT",
+        ]
+
+    def get_terra_run_status_event(self, execution_arn, task_name):
+        sf = boto3.client("stepfunctions")
+
+        log.info(f"Waiting for Step Function task to finish: {task_name}")
+        finished_task = False
+        while not finished_task:
+            time.sleep(10)
+
+            events = sf.get_execution_history(
+                executionArn=execution_arn, includeExecutionData=True
+            )["events"]
+
+            for event in events:
+                if (
+                    event.get("stateExitedEventDetails", {}).get("name", None)
+                    == task_name
+                ):
+                    log.debug("Task finished")
+                    return [e for e in events if e["id"] == event["id"] - 1][0]
+
+    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
+    @pytest.mark.usefixtures("target_execution")
+    @pytest.mark.dependency()
+    def test_terra_run_plan_codebuild(self, request, mut_output):
+        """Assert terra run plan task within Step Function execution succeeded"""
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_sf_execution_exists[{request.node.callspec.id}]"
+            ],
+        )
+
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+
+        execution_arn = self.get_execution_arn(
+            mut_output["state_machine_arn"], record["execution_id"]
+        )
+        status_event = self.get_terra_run_status_event(execution_arn, "Plan")
+        log.debug(f"Plan status event:\n{pformat(status_event)}")
+
+        assert status_event["type"] == "TaskSucceeded"
+
+    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
+    @pytest.mark.dependency()
+    @pytest.mark.usefixtures("target_execution")
+    def test_approval_request(self, request, mut_output):
+        """Assert that there are no errors within the latest invocation of the approval request Lambda function"""
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]"
+            ],
+        )
+
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+
+        execution_arn = self.get_execution_arn(
+            mut_output["state_machine_arn"], record["execution_id"]
+        )
+
+        sf = boto3.client("stepfunctions")
+
+        submitted = False
+        while not submitted:
+            time.sleep(10)
+
+            events = sf.get_execution_history(
+                executionArn=execution_arn, includeExecutionData=True
+            )["events"]
+
+            for event in events:
+                if event["type"] == "TaskSubmitted":
+                    out = json.loads(event["taskSubmittedEventDetails"]["output"])
+                    if "Payload" in out:
+                        submitted = True
+
+        log.debug(f"Submitted task output:\n{pformat(out)}")
+        assert out["Payload"]["statusCode"] == 302
+
+    @pytest.mark.dependency()
+    @pytest.mark.usefixtures("target_execution")
+    def test_approval_response(self, request, mut_output):
+        """Assert that the approval response returns a success status code"""
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]"
+            ],
+        )
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+        sf = boto3.client("stepfunctions")
+
+        log.info("Testing Approval Task")
+
+        execution_arn = [
+            execution["executionArn"]
+            for execution in sf.list_executions(
+                stateMachineArn=mut_output["state_machine_arn"]
+            )["executions"]
+            if execution["name"] == record["execution_id"]
+        ][0]
+        events = sf.get_execution_history(
+            executionArn=execution_arn, includeExecutionData=True
+        )["events"]
+
+        for event in events:
+            if (
+                event["type"] == "TaskScheduled"
+                and event["taskScheduledEventDetails"]["resource"]
+                == "invoke.waitForTaskToken"
+            ):
+                payload = json.loads(event["taskScheduledEventDetails"]["parameters"])[
+                    "Payload"
+                ]
+                approval_url = payload["ApprovalAPI"]
+                voter = payload["Voters"][0]
+
+        log.debug(f"Approval URL: {approval_url}")
+        log.debug(f"Voter: {voter}")
+
+        body = {
+            "action": request.cls.executions[int(request.node.callspec.id)]["action"],
+            "recipient": voter,
+        }
+
+        log.debug(f"Request Body:\n{body}")
+
+        response = requests.post(approval_url, data=body).json()
+        log.debug(f"Response:\n{response}")
+
+        assert response["statusCode"] == 302
+
+    @pytest.mark.dependency()
+    @pytest.mark.usefixtures("target_execution")
+    def test_approval_denied(self, request, mut_output):
+        """Assert that the Reject task state is executed and that the Step Function output includes a failed status attribute"""
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
+            ],
+        )
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+        sf = boto3.client("stepfunctions")
+
+        if request.cls.executions[int(request.node.callspec.id)]["action"] == "approve":
+            pytest.skip("Approval action is set to `approve`")
+
+        if record["is_rollback"]:
+            request.cls.executions[int(request.node.callspec.id) + 1][
+                "expect_failed_trigger_sf"
+            ] = True
+        else:
+            request.cls.executions[int(request.node.callspec.id) + 1][
+                "test_rollback_providers_executions_exists"
+            ] = True
+
+        execution_arn = [
+            execution["executionArn"]
+            for execution in sf.list_executions(
+                stateMachineArn=mut_output["state_machine_arn"]
+            )["executions"]
+            if execution["name"] == record["execution_id"]
+        ][0]
+        events = sf.get_execution_history(
+            executionArn=execution_arn, includeExecutionData=True
+        )["events"]
+
+        for event in events:
+            if (
+                event["type"] == "PassStateExited"
+                and event["stateExitedEventDetails"]["name"] == "Reject"
+            ):
+                out = json.loads(event["stateExitedEventDetails"]["output"])
+
+        log.debug(f"Rejection State Output:\n{pformat(out)}")
+        assert out["status"] == "failed"
+
+    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
+    @pytest.mark.usefixtures("target_execution")
+    @pytest.mark.dependency()
+    def test_terra_run_deploy_codebuild(self, request, mut_output):
+        """Assert terra run deploy task within Step Function execution succeeded"""
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
+            ],
+        )
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+
+        if request.cls.executions[int(request.node.callspec.id)]["action"] == "reject":
+            pytest.skip("Approval action is set to `reject`")
+
+        execution_arn = self.get_execution_arn(
+            mut_output["state_machine_arn"], record["execution_id"]
+        )
+        status_event = self.get_terra_run_status_event(execution_arn, "Deploy")
+        log.debug(f"Deploy status event:\n{pformat(status_event)}")
+
+        assert status_event["type"] == "TaskSucceeded"
+
+    @pytest.mark.usefixtures("target_execution")
+    @pytest.mark.dependency()
+    # runs cleanup builds only if step function deploy task was executed
+    @pytest.mark.usefixtures("destroy_scenario_tf_resources")
+    def test_sf_execution_status(self, request, mut_output):
+        """Assert Step Function execution succeeded"""
+        sf = boto3.client("stepfunctions")
+
+        # ensure that if test_target_execution_record_exists fails/skips and doesn't
+        # create the request.executions 'action' key, this test won't raise a key error
+        # finding the 'action' key within the second dependency logic below and results in skipping the test entirely
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
+            ],
+        )
+
+        if request.cls.executions[int(request.node.callspec.id)]["action"] == "approve":
+            depends(
+                request,
+                [
+                    f"{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]"
+                ],
+            )
+        else:
+            depends(
+                request,
+                [
+                    f"{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]"
+                ],
+            )
+        record = request.cls.executions[int(request.node.callspec.id)]["record"]
+
+        execution_arn = [
+            execution["executionArn"]
+            for execution in sf.list_executions(
+                stateMachineArn=mut_output["state_machine_arn"]
+            )["executions"]
+            if execution["name"] == record["execution_id"]
+        ][0]
+        response = sf.describe_execution(executionArn=execution_arn)
+        assert response["status"] == "SUCCEEDED"
+
+    @pytest.mark.dependency()
+    def test_merge_lock_unlocked(self, request, mut_output):
+
+        last_execution = request.cls.executions[len(request.cls.executions) - 1]
+
+        depends(
+            request,
+            [
+                f"{request.cls.__name__}::test_sf_execution_status[{len(request.cls.executions) - 1}]"
+            ],
+        )
+
+        utils.wait_for_lambda_invocation(
+            mut_output["trigger_sf_function_name"],
+            datetime.utcfromtimestamp(last_execution["testing_start_time"] / 1000),
+            expected_count=1,
+            timeout=60,
+        )
+
+        ssm = boto3.client("ssm")
+
+        log.info("Assert merge lock is unlocked")
+        assert (
+            ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
+                "Value"
+            ]
+            == "none"
+        )
