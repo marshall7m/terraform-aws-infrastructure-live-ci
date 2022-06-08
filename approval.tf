@@ -85,19 +85,19 @@ resource "aws_api_gateway_integration_response" "approval" {
   resource_id = aws_api_gateway_resource.approval.id
   http_method = aws_api_gateway_method.approval.http_method
 
-  status_code = aws_api_gateway_method_response.response_302.status_code
+  status_code = aws_api_gateway_method_response.response_200.status_code
 
   depends_on = [
     aws_api_gateway_integration.approval
   ]
 }
 
-resource "aws_api_gateway_method_response" "response_302" {
+resource "aws_api_gateway_method_response" "response_200" {
   rest_api_id = aws_api_gateway_rest_api.this.id
   resource_id = aws_api_gateway_resource.approval.id
   http_method = aws_api_gateway_method.approval.http_method
 
-  status_code = "302"
+  status_code = "200"
 }
 
 resource "aws_api_gateway_account" "approval" {

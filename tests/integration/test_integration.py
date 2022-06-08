@@ -395,7 +395,7 @@ class Integration:
         # needed for the wait_for_lambda_invocation() start_time arg within the first test_trigger_sf iteration so
         # the log group filter will have a wide enough time range
         log.info("Setting first target execution start time")
-        request.cls.executions[0]["testing_start_time"] = int(
+        request.cls.execution_testing_start_time = int(
             datetime.now().timestamp() * 1000
         )
 
@@ -460,7 +460,7 @@ class Integration:
 
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_trigger_sf(self, request, mut_output, pr):
+    def test_trigger_sf(self, request, mut_output):
         """
         Assert that there are no errors within the latest invocation of the trigger Step Function Lambda
 
@@ -470,33 +470,6 @@ class Integration:
         depends(
             request, [f"{request.cls.__name__}::test_create_deploy_stack_codebuild"]
         )
-
-        utils.wait_for_lambda_invocation(
-            mut_output["trigger_sf_function_name"],
-            datetime.utcfromtimestamp(
-                request.cls.executions[int(request.node.callspec.id)][
-                    "testing_start_time"
-                ]
-                / 1000
-            ),
-            expected_count=1,
-            timeout=60,
-        )
-
-        results = self.get_latest_log_stream_errs(
-            mut_output["trigger_sf_log_group_name"],
-            start_time=request.cls.executions[int(request.node.callspec.id)][
-                "testing_start_time"
-            ],
-            end_time=int(datetime.now().timestamp() * 1000),
-        )
-
-        if request.cls.executions[int(request.node.callspec.id)].get(
-            "expect_failed_trigger_sf", False
-        ):
-            assert len(results) > 0
-        else:
-            assert len(results) == 0
 
         if int(request.node.callspec.id) + 1 != len(request.cls.executions):
             # needed for the wait_for_lambda_invocation() start_time arg within the next test_trigger_sf iteration to
@@ -511,6 +484,35 @@ class Integration:
                 datetime.now().timestamp() * 1000
             )
 
+        if getattr(request.cls, "expect_failed_trigger_sf", False):
+            utils.wait_for_lambda_invocation(
+                mut_output["trigger_sf_function_name"],
+                datetime.utcfromtimestamp(
+                    request.cls.executions[int(request.node.callspec.id)]["testing_start_time"] / 1000
+                ),
+                expected_count=1,
+                timeout=60,
+            )
+
+            results = self.get_latest_log_stream_errs(
+                mut_output["trigger_sf_log_group_name"],
+                start_time=request.cls.testing_start_time,
+                end_time=int(datetime.now().timestamp() * 1000),
+            )
+
+            assert len(results) > 0
+
+        else:
+            results = self.get_latest_log_stream_errs(
+                mut_output["trigger_sf_log_group_name"],
+                start_time=request.cls.execution_testing_start_time,
+                end_time=int(datetime.now().timestamp() * 1000),
+            )
+
+            assert len(results) == 0
+
+
+    @timeout_decorator.timeout(300, exception_message="Trigger SF Lambda did not create rollback provider executions")
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
     def test_rollback_providers_executions_exists(self, request, conn, case_param, pr):
@@ -520,31 +522,10 @@ class Integration:
             [f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id}]"],
         )
 
-        if not request.cls.executions[int(request.node.callspec.id)].get(
-            "test_rollback_providers_executions_exists", False
-        ):
-            pytest.skip("Previous execution succeeded")
+        if getattr(request.cls, "expect_failed_trigger_sf", False):
+            pytest.skip('Previous trigger SF Lambda invocation failed')
 
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-            SELECT array_agg(execution_id::TEXT)
-            FROM executions
-            WHERE commit_id = '{pr["head_commit_id"]}'
-            AND is_rollback = true
-            AND cardinality(new_providers) > 0
-            """
-            )
-            ids = cur.fetchone()[0]
-        conn.commit()
-
-        if ids is None:
-            target_execution_ids = []
-        else:
-            target_execution_ids = [id for id in ids]
-
-        log.debug(f"Commit execution IDs:\n{target_execution_ids}")
-
+        # get count of rollback provider executions expected
         expected_execution_count = len(
             [
                 1
@@ -553,14 +534,43 @@ class Integration:
             ]
         )
 
+        if not request.cls.executions[int(request.node.callspec.id)].get(
+            "test_rollback_providers_executions_exists", False
+        ) or expected_execution_count == 0:
+            return
+
+        target_execution_ids = []
+        while len(target_execution_ids) == 0:
+            time.sleep(10)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                SELECT array_agg(execution_id::TEXT)
+                FROM executions
+                WHERE commit_id = '{pr["head_commit_id"]}'
+                AND is_rollback = true
+                AND cardinality(new_providers) > 0
+                """
+                )
+                ids = cur.fetchone()[0]
+            conn.commit()
+
+            if ids is None:
+                target_execution_ids = []
+            else:
+                target_execution_ids = [id for id in ids]
+
+        log.debug(f"Commit execution IDs:\n{target_execution_ids}")
+
         assert expected_execution_count == len(target_execution_ids)
 
+    @timeout_decorator.timeout(300, exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')")
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
     def test_target_execution_record_exists(self, request, conn, pr, case_param):
         depends(
             request,
-            [f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id}]"],
+            [f"{request.cls.__name__}::test_rollback_providers_executions_exists[{request.node.callspec.id}]"],
         )
         tested_executions = [
             e["record"]["execution_id"]
@@ -568,62 +578,46 @@ class Integration:
             if e.get("record", False)
         ]
         log.debug(f"Already tested execution IDs:\n{tested_executions}")
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                SELECT *
-                FROM executions
-                WHERE commit_id = '{pr["head_commit_id"]}'
-                AND "status" IN ('running', 'aborted', 'failed')
-                AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
-                LIMIT 1
-            """
-            )
-            results = cur.fetchone()
-        conn.commit()
 
-        record = {}
-        if results is not None:
-            row = [value for value in results]
-            for i, description in enumerate(cur.description):
-                record[description.name] = row[i]
-
-            log.debug(f"Target Execution Record:\n{pformat(record)}")
-
-            if record["is_rollback"]:
-                request.cls.executions[int(request.node.callspec.id)][
-                    "action"
-                ] = case_param["executions"][record["cfg_path"]]["actions"][
-                    "rollback_providers"
-                ]
-            else:
-                request.cls.executions[int(request.node.callspec.id)]["action"] = (
-                    case_param["executions"][record["cfg_path"]]
-                    .get("actions", {})
-                    .get("deploy", None)
-                )
-
-        log.info("Putting record into request execution dict")
-        request.cls.executions[int(request.node.callspec.id)]["record"] = record
-
-        if record == {}:
-            request.cls.executions[int(request.node.callspec.id)]["action"] = None
+        results = None
+        while not results:
+            time.sleep(10)
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                    SELECT execution_id
+                    SELECT *
                     FROM executions
                     WHERE commit_id = '{pr["head_commit_id"]}'
-                    AND "status" = 'waiting'
+                    AND "status" IN ('running', 'aborted', 'failed')
+                    AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
+                    LIMIT 1
                 """
                 )
-                results = cur.fetchall()
+                results = cur.fetchone()
             conn.commit()
 
-            log.debug(f"Waiting execution IDs: {results}")
-            pytest.fail(
-                "Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')"
+        record = {}
+        row = [value for value in results]
+        for i, description in enumerate(cur.description):
+            record[description.name] = row[i]
+
+        log.debug(f"Target Execution Record:\n{pformat(record)}")
+
+        if record["is_rollback"]:
+            request.cls.executions[int(request.node.callspec.id)][
+                "action"
+            ] = case_param["executions"][record["cfg_path"]]["actions"][
+                "rollback_providers"
+            ]
+        else:
+            request.cls.executions[int(request.node.callspec.id)]["action"] = (
+                case_param["executions"][record["cfg_path"]]
+                .get("actions", {})
+                .get("deploy", None)
             )
+
+        log.info("Putting record into request execution dict")
+        request.cls.executions[int(request.node.callspec.id)]["record"] = record
 
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
@@ -719,6 +713,7 @@ class Integration:
                     == task_name
                 ):
                     log.debug("Task finished")
+                    # the task before the stateExitedEventDetails event contains the task status
                     return [e for e in events if e["id"] == event["id"] - 1][0]
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
@@ -778,7 +773,9 @@ class Integration:
                         submitted = True
 
         log.debug(f"Submitted task output:\n{pformat(out)}")
-        assert out["Payload"]["statusCode"] == 302
+
+        log.info('Assert Lambda Function response status code is valid')
+        assert out["Payload"]["statusCode"] == 200
 
     @pytest.mark.dependency()
     @pytest.mark.usefixtures("target_execution")
@@ -831,7 +828,7 @@ class Integration:
         response = requests.post(approval_url, data=body).json()
         log.debug(f"Response:\n{response}")
 
-        assert response["statusCode"] == 302
+        assert response["statusCode"] == 200
 
     @pytest.mark.dependency()
     @pytest.mark.usefixtures("target_execution")
@@ -850,9 +847,7 @@ class Integration:
             pytest.skip("Approval action is set to `approve`")
 
         if record["is_rollback"]:
-            request.cls.executions[int(request.node.callspec.id) + 1][
-                "expect_failed_trigger_sf"
-            ] = True
+            request.cls.expect_failed_trigger_sf = True
         else:
             request.cls.executions[int(request.node.callspec.id) + 1][
                 "test_rollback_providers_executions_exists"
@@ -949,6 +944,10 @@ class Integration:
 
     @pytest.mark.dependency()
     def test_merge_lock_unlocked(self, request, mut_output):
+
+        # if trigger SF fails, the merge lock will not be unlocked
+        if getattr(request.cls, "expect_failed_trigger_sf", False):
+            pytest.skip('One of the trigger sf Lambda invocations was expected to fail')
 
         last_execution = request.cls.executions[len(request.cls.executions) - 1]
 

@@ -207,7 +207,7 @@ def lambda_handler(event, context):
                         Overwrite=True,
                     )
 
-                return {"statusCode": 302, "message": "Invocation was successful"}
+                return {"statusCode": 200, "message": "Invocation was successful"}
     except Exception as e:
         log.error(e, exc_info=True)
         return {"statusCode": 500, "message": "Invocation was unsuccessful"}

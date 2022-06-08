@@ -79,7 +79,7 @@ def lambda_handler(event, context):
                     output=json.dumps(action),  # noqa: E501
                 )
 
-            return {"statusCode": 302, "message": "Your choice has been submitted"}
+            return {"statusCode": 200, "message": "Your choice has been submitted"}
         else:
             return {
                 "statusCode": 410,

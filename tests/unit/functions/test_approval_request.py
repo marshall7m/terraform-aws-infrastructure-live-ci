@@ -40,7 +40,7 @@ def testing_template():
                 "Path": "test/foo",
             },
             os.environ["TF_VAR_approval_request_sender_email"],
-            302,
+            200,
             id="successful_request",
         ),
         pytest.param(

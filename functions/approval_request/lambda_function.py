@@ -67,4 +67,4 @@ def lambda_handler(event, context):
             "message": f'{failed_count}/{len(response["Status"])} emails failed to send',
         }
 
-    return {"statusCode": 302, "message": "All emails were successfully sent"}
+    return {"statusCode": 200, "message": "All emails were successfully sent"}
