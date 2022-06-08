@@ -124,17 +124,16 @@ def pytest_generate_tests(metafunc):
             )
             # parameterizes tests/fixtures with the range of expected tf directories
             # that should be setup and tested
+            target_execution_count = (
+                len(metafunc.cls.case["executions"]) + rollback_execution_count
+            )
             metafunc.parametrize(
                 "target_execution",
-                list(
-                    range(
-                        0,
-                        len(metafunc.cls.case["executions"]) + rollback_execution_count,
-                    )
-                ),
+                list(range(0, target_execution_count)),
                 scope="class",
-                indirect=True,
             )
+
+            metafunc.cls.executions = [{} for _ in range(0, target_execution_count)]
 
 
 @pytest.fixture(scope="session", autouse=True)
