@@ -1,4 +1,5 @@
-CREATE OR REPLACE FUNCTION status_all_update(statuses text[]) 
+-- noqa: disable=PRS
+CREATE OR REPLACE FUNCTION status_all_update(statuses text[])
     RETURNS VARCHAR AS $$
     DECLARE
         fail_count INT := 0;

@@ -1,3 +1,4 @@
+-- noqa: disable=PRS,LXR
 CREATE SCHEMA IF NOT EXISTS ${metadb_schema};
 ALTER DATABASE ${metadb_name} SET search_path TO ${metadb_schema};
 

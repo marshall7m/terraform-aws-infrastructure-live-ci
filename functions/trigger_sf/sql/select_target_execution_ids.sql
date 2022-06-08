@@ -1,3 +1,4 @@
+-- noqa: disable=PRS
 CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
     BEGIN
         RETURN (

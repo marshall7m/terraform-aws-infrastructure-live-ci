@@ -1,3 +1,4 @@
+-- noqa: disable=PRS,LXS
 DO \$\$
 BEGIN
    IF NOT EXISTS (

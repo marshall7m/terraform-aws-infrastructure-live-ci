@@ -1,5 +1,6 @@
-CREATE OR REPLACE FUNCTION table_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR) 
-    RETURNS BOOLEAN 
+-- noqa: disable=PRS
+CREATE OR REPLACE FUNCTION table_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR)
+    RETURNS BOOLEAN
     LANGUAGE plpgsql AS
 $$
     BEGIN
@@ -19,8 +20,8 @@ $$
 $$;
 
 
-CREATE OR REPLACE FUNCTION truncate_if_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR) 
-    RETURNS text 
+CREATE OR REPLACE FUNCTION truncate_if_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR)
+    RETURNS text
     LANGUAGE plpgsql AS
 $$
     DECLARE 
@@ -36,7 +37,7 @@ $$
 $$;
 
 CREATE OR REPLACE FUNCTION reset_identity_col(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR, _identity_col VARCHAR)
-RETURNS TEXT 
+RETURNS TEXT
 LANGUAGE plpgsql AS $$
     DECLARE 
         _full_table TEXT := concat_ws('.', quote_ident(_schema), quote_ident(_table));

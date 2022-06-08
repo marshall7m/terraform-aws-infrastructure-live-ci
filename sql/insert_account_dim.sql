@@ -1,7 +1,8 @@
+-- noqa: disable=PRS,LXR
 INSERT INTO ${metadb_schema}.account_dim
 VALUES (
-    :account_name, 
-    :account_path, 
+    :account_name,
+    :account_path,
     CAST(:account_deps AS VARCHAR[]),
     :min_approval_count,
     :min_rejection_count,

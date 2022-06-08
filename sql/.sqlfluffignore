@@ -1,0 +1,2 @@
+# ignore given unusual err: `L:   0 | P:   0 |  LXR | Fatal. Unable to lex characters: 0` that doesn't ref an actual line
+create_metadb_user.sql

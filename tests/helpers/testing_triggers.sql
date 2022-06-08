@@ -1,5 +1,6 @@
-CREATE OR REPLACE FUNCTION random_between(low INT, high INT) 
-    RETURNS INT 
+-- noqa: disable=PRS,LXS
+CREATE OR REPLACE FUNCTION random_between(low INT, high INT)
+    RETURNS INT
     LANGUAGE plpgsql AS
 $$
 BEGIN
@@ -54,7 +55,7 @@ WHEN (
     OR NEW.voters IS NULL
 )
 EXECUTE PROCEDURE trig_account_dim_default();
-ALTER TABLE account_dim DISABLE TRIGGER account_dim_default;
+ALTER TABLE account_dim DISABLE trigger account_dim_default;
 
 CREATE OR REPLACE FUNCTION trig_executions_default()
     RETURNS trigger
@@ -204,4 +205,4 @@ WHEN (
 )
 
 EXECUTE PROCEDURE trig_executions_default();
-ALTER TABLE executions DISABLE TRIGGER executions_default;
+ALTER TABLE executions DISABLE trigger executions_default;
