@@ -167,8 +167,6 @@ module "mut_infrastructure_live_ci" {
   metadb_password    = random_password.metadb["master"].result
   metadb_ci_username = "mut_ci_user"
   metadb_ci_password = random_password.metadb["ci"].result
-  terraform_version  = "1.0.2"
-  terragrunt_version = "0.34.0"
   # repo specific env vars required to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
     {
@@ -208,7 +206,7 @@ module "mut_infrastructure_live_ci" {
       name                = "shared_services"
       path                = "directory_dependency/shared-services-account"
       dependencies        = []
-      voters              = ["success@simulator.amazonses.com"]
+      voters              = ["success@simulator.amazonses.com", "marshallmamiya@gmail.com"]
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/${local.plan_role_name}"
