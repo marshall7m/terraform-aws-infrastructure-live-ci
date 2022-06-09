@@ -1,6 +1,8 @@
 <h3>AWS Account Name: {{account_name}}</h3>
 <h3>Pull Request: #{{pr_id}}</h3>
-<h3>Terraform Plan Link: {{plan_link}}</h3>
+<h3>Execution ID: {{execution_name}}</h3>
+<h3>Terraform Plan Logs: {{logs_url}}</h3>
+
 <form action="{{full_approval_api}}" method="post">
    <label for="action">Choose an action:</label>
    <select name="action" id="action">

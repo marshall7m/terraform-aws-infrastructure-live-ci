@@ -31,7 +31,7 @@ resource "aws_sfn_state_machine" "this" {
         Resource = "arn:aws:states:::codebuild:startBuild.sync"
         Type     = "Task"
         ResultSelector = {
-          "Url.$" = "$.build.id",
+          "LogsUrl.$" = "$.Build.Logs.DeepLink"
         }
         ResultPath = "$.PlanOutput"
         Catch = [
@@ -67,7 +67,7 @@ resource "aws_sfn_state_machine" "this" {
             "ExecutionName.$" = "$$.Execution.Name"
             "AccountName.$"   = "$.account_name"
             "PullRequestID.$" = "$.pr_id"
-            # "PlanLink.$" = "$."
+            "LogsUrl.$" = "$.PlanOutput.LogsUrl"
           }
         }
         Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
