@@ -1,7 +1,6 @@
 import pytest
 import os
 import logging
-import sys
 import json
 import time
 from datetime import datetime
@@ -165,65 +164,6 @@ class Integration:
         except Exception:
             log.info("PR is merged or already closed")
 
-    def get_execution_arn(self, arn: str, execution_id: str) -> int:
-        """
-        Gets the task ID for a given Step Function execution type and name.
-        If the execution type and name is not found, None is returned
-
-        Arguments:
-            arn: ARN of the Step Function execution
-            execution_id: Name of the Step Function execution
-            task_name: Task name within the Step Function definition
-        """
-        sf = boto3.client("stepfunctions")
-        for execution in sf.list_executions(stateMachineArn=arn)["executions"]:
-            if execution["name"] == execution_id:
-                return execution["executionArn"]
-
-        pytest.fail(f"No Step Function execution exists with name: {execution_id}")
-
-    def get_build_finished_status(self, name: str, ids=[], filters={}) -> str:
-        """
-        Waits for a CodeBuild project build to finish and returns the status
-
-        Arguments:
-            name: Name of the CodeBuild project
-            ids: Pre-existing CodeBuild project build IDs to get the statuses for
-            filters: Attributes builds need to have in order to return their associated statuses.
-                All filter attributes need to be matched for the build ID to be chosen. These
-                attribute are in regards to the response return by client.batch_get_builds().
-        """
-        cb = boto3.client("codebuild")
-        statuses = ["IN_PROGRESS"]
-
-        if len(ids) == 0:
-            ids = cb.list_builds_for_project(projectName=name, sortOrder="DESCENDING")[
-                "ids"
-            ]
-
-            if len(ids) == 0:
-                log.error(f"No builds have runned for project: {name}")
-                sys.exit(1)
-
-            log.debug(f"Build Filters:\n{filters}")
-            for build in cb.batch_get_builds(ids=ids)["builds"]:
-                for key, value in filters.items():
-                    if build.get(key, None) != value:
-                        ids.remove(build["id"])
-                        break
-            if len(ids) == 0:
-                log.error("No builds have met provided filters")
-                sys.exit(1)
-
-        log.debug(f"Getting build statuses for the following IDs:\n{ids}")
-        while "IN_PROGRESS" in statuses:
-            time.sleep(15)
-            statuses = []
-            for build in cb.batch_get_builds(ids=ids)["builds"]:
-                statuses.append(build["buildStatus"])
-
-        return statuses
-
     @pytest.fixture(scope="module")
     def destroy_scenario_tf_resources(self, conn, mut_output, tf_destroy_commit_ids):
         yield None
@@ -271,46 +211,11 @@ class Integration:
                 ids.append(response["build"]["id"])
 
             log.info("Waiting on destroy builds to finish")
-            statuses = Integration().get_build_finished_status(
+            statuses = utils.get_build_finished_status(
                 mut_output["codebuild_terra_run_name"], ids=ids
             )
 
             log.info(f"Finished Statuses:\n{statuses}")
-
-    def get_latest_log_stream_errs(
-        self, log_group: str, start_time=None, end_time=None
-    ) -> list:
-        """
-        Gets a list of log events that contain the word `ERROR` within the latest stream of the CloudWatch log group
-
-        Arguments:
-            log_group: CloudWatch log group name
-            start_time:  Start of the time range in milliseconds UTC
-            end_time:  End of the time range in milliseconds UTC
-        """
-        logs = boto3.client("logs")
-
-        stream = logs.describe_log_streams(
-            logGroupName=log_group, orderBy="LastEventTime", descending=True, limit=1
-        )["logStreams"][0]["logStreamName"]
-
-        log.debug(f"Latest Stream: {stream}")
-
-        log.info("Searching latest log stream for any errors")
-        if start_time and end_time:
-            log.debug(f"Start Time: {start_time}")
-            log.debug(f"End Time: {end_time}")
-            return logs.filter_log_events(
-                logGroupName=log_group,
-                logStreamNames=[stream],
-                filterPattern="ERROR",
-                startTime=start_time,
-                endTime=end_time,
-            )["events"]
-        else:
-            return logs.filter_log_events(
-                logGroupName=log_group, logStreamNames=[stream], filterPattern="ERROR"
-            )["events"]
 
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
@@ -341,7 +246,7 @@ class Integration:
         log.info("Giving build time to start")
         time.sleep(5)
 
-        status = self.get_build_finished_status(
+        status = utils.get_build_finished_status(
             mut_output["codebuild_pr_plan_name"],
             filters={"sourceVersion": f'pr/{pr["number"]}'},
         )[0]
@@ -402,7 +307,7 @@ class Integration:
         log.info("Giving build time to start")
         time.sleep(5)
 
-        status = self.get_build_finished_status(
+        status = utils.get_build_finished_status(
             mut_output["codebuild_create_deploy_stack_name"],
             filters={"sourceVersion": f'pr/{pr["number"]}'},
         )[0]
@@ -488,13 +393,16 @@ class Integration:
             utils.wait_for_lambda_invocation(
                 mut_output["trigger_sf_function_name"],
                 datetime.utcfromtimestamp(
-                    request.cls.executions[int(request.node.callspec.id)]["testing_start_time"] / 1000
+                    request.cls.executions[int(request.node.callspec.id)][
+                        "testing_start_time"
+                    ]
+                    / 1000
                 ),
                 expected_count=1,
                 timeout=60,
             )
 
-            results = self.get_latest_log_stream_errs(
+            results = utils.get_latest_log_stream_errs(
                 mut_output["trigger_sf_log_group_name"],
                 start_time=request.cls.testing_start_time,
                 end_time=int(datetime.now().timestamp() * 1000),
@@ -503,7 +411,7 @@ class Integration:
             assert len(results) > 0
 
         else:
-            results = self.get_latest_log_stream_errs(
+            results = utils.get_latest_log_stream_errs(
                 mut_output["trigger_sf_log_group_name"],
                 start_time=request.cls.execution_testing_start_time,
                 end_time=int(datetime.now().timestamp() * 1000),
@@ -511,8 +419,10 @@ class Integration:
 
             assert len(results) == 0
 
-
-    @timeout_decorator.timeout(300, exception_message="Trigger SF Lambda did not create rollback provider executions")
+    @timeout_decorator.timeout(
+        300,
+        exception_message="Trigger SF Lambda did not create rollback provider executions",
+    )
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
     def test_rollback_providers_executions_exists(self, request, conn, case_param, pr):
@@ -523,7 +433,7 @@ class Integration:
         )
 
         if getattr(request.cls, "expect_failed_trigger_sf", False):
-            pytest.skip('Previous trigger SF Lambda invocation failed')
+            pytest.skip("Previous trigger SF Lambda invocation failed")
 
         # get count of rollback provider executions expected
         expected_execution_count = len(
@@ -534,9 +444,12 @@ class Integration:
             ]
         )
 
-        if not request.cls.executions[int(request.node.callspec.id)].get(
-            "test_rollback_providers_executions_exists", False
-        ) or expected_execution_count == 0:
+        if (
+            not request.cls.executions[int(request.node.callspec.id)].get(
+                "test_rollback_providers_executions_exists", False
+            )
+            or expected_execution_count == 0
+        ):
             return
 
         target_execution_ids = []
@@ -564,13 +477,18 @@ class Integration:
 
         assert expected_execution_count == len(target_execution_ids)
 
-    @timeout_decorator.timeout(300, exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')")
+    @timeout_decorator.timeout(
+        300,
+        exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')",
+    )
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
     def test_target_execution_record_exists(self, request, conn, pr, case_param):
         depends(
             request,
-            [f"{request.cls.__name__}::test_rollback_providers_executions_exists[{request.node.callspec.id}]"],
+            [
+                f"{request.cls.__name__}::test_rollback_providers_executions_exists[{request.node.callspec.id}]"
+            ],
         )
         tested_executions = [
             e["record"]["execution_id"]
@@ -695,27 +613,6 @@ class Integration:
             "TIMED_OUT",
         ]
 
-    def get_terra_run_status_event(self, execution_arn, task_name):
-        sf = boto3.client("stepfunctions")
-
-        log.info(f"Waiting for Step Function task to finish: {task_name}")
-        finished_task = False
-        while not finished_task:
-            time.sleep(10)
-
-            events = sf.get_execution_history(
-                executionArn=execution_arn, includeExecutionData=True
-            )["events"]
-
-            for event in events:
-                if (
-                    event.get("stateExitedEventDetails", {}).get("name", None)
-                    == task_name
-                ):
-                    log.debug("Task finished")
-                    # the task before the stateExitedEventDetails event contains the task status
-                    return [e for e in events if e["id"] == event["id"] - 1][0]
-
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
@@ -730,10 +627,10 @@ class Integration:
 
         record = request.cls.executions[int(request.node.callspec.id)]["record"]
 
-        execution_arn = self.get_execution_arn(
+        execution_arn = utils.get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
-        status_event = self.get_terra_run_status_event(execution_arn, "Plan")
+        status_event = utils.get_terra_run_status_event(execution_arn, "Plan")
         log.debug(f"Plan status event:\n{pformat(status_event)}")
 
         assert status_event["type"] == "TaskSucceeded"
@@ -752,7 +649,7 @@ class Integration:
 
         record = request.cls.executions[int(request.node.callspec.id)]["record"]
 
-        execution_arn = self.get_execution_arn(
+        execution_arn = utils.get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
 
@@ -774,7 +671,7 @@ class Integration:
 
         log.debug(f"Submitted task output:\n{pformat(out)}")
 
-        log.info('Assert Lambda Function response status code is valid')
+        log.info("Assert Lambda Function response status code is valid")
         assert out["Payload"]["statusCode"] == 200
 
     @pytest.mark.dependency()
@@ -890,10 +787,10 @@ class Integration:
         if request.cls.executions[int(request.node.callspec.id)]["action"] == "reject":
             pytest.skip("Approval action is set to `reject`")
 
-        execution_arn = self.get_execution_arn(
+        execution_arn = utils.get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
-        status_event = self.get_terra_run_status_event(execution_arn, "Deploy")
+        status_event = utils.get_terra_run_status_event(execution_arn, "Deploy")
         log.debug(f"Deploy status event:\n{pformat(status_event)}")
 
         assert status_event["type"] == "TaskSucceeded"
@@ -947,7 +844,7 @@ class Integration:
 
         # if trigger SF fails, the merge lock will not be unlocked
         if getattr(request.cls, "expect_failed_trigger_sf", False):
-            pytest.skip('One of the trigger sf Lambda invocations was expected to fail')
+            pytest.skip("One of the trigger sf Lambda invocations was expected to fail")
 
         last_execution = request.cls.executions[len(request.cls.executions) - 1]
 
