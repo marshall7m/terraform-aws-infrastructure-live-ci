@@ -15,17 +15,21 @@ def lambda_handler(event, context):
 
     log.debug(f"Lambda Event: {event}")
 
-    full_approval_api = event["ApprovalAPI"]
-    voters = event["Voters"]
-    path = event["Path"]
+    template_data = {
+        "full_approval_api": event["ApprovalAPI"],
+        "path": event["Path"],
+        "logs_url": event["LogsUrl"],
+        "execution_name": event["ExecutionName"],
+        "account_name": event["AccountName"],
+        "pr_id": event["PullRequestID"],
+    }
 
-    log.debug(f"Path: {path}")
-    log.debug(f"API Full URL: {full_approval_api}")
+    log.debug(f"Default Template Data:\n{template_data}")
 
     destinations = []
 
     # need to create a separate destination object for each address since only the target address is interpolated into message template
-    for address in voters:
+    for address in event["Voters"]:
         destinations.append(
             {
                 "Destination": {"ToAddresses": [address]},
@@ -39,9 +43,7 @@ def lambda_handler(event, context):
         response = ses.send_bulk_templated_email(
             Template=os.environ["SES_TEMPLATE"],
             Source=os.environ["SENDER_EMAIL_ADDRESS"],
-            DefaultTemplateData=json.dumps(
-                {"full_approval_api": full_approval_api, "path": path}
-            ),
+            DefaultTemplateData=json.dumps(template_data),
             Destinations=destinations,
         )
     except Exception as e:
