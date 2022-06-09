@@ -452,7 +452,7 @@ EOF
 }
 
 variable "trigger_sf_function_name" {
-  description = "Name of the AWS Lambda function used to trigger Step Function deployments"
+  description = "Name of the AWS Lambda Function used to trigger Step Function deployments"
   type        = string
   default     = null
 }
