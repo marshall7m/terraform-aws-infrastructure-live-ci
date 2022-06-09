@@ -11,8 +11,8 @@ scversion="stable"
 echo "Installing shellcheck - ${scversion}"
 
 apt-get install -y xz-utils
-curl -L -o /tmp/shellcheck-${scversion?}.linux.x86_64.tar.xz https://github.com/koalaman/shellcheck/releases/download/${scversion?}/shellcheck-${scversion?}.linux.x86_64.tar.xz
-tar -xf /tmp/shellcheck-${scversion?}.linux.x86_64.tar.xz
+curl -L -s -o /tmp/shellcheck-${scversion?}.linux.x86_64.tar.xz https://github.com/koalaman/shellcheck/releases/download/${scversion?}/shellcheck-${scversion?}.linux.x86_64.tar.xz
+tar -xf /tmp/shellcheck-${scversion?}.linux.x86_64.tar.xz -C /tmp
 cp "/tmp/shellcheck-${scversion}/shellcheck" /usr/local/bin/
 shellcheck --version
 
