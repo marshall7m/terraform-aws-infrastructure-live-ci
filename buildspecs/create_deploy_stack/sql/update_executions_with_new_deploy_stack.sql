@@ -7,7 +7,7 @@ INSERT INTO executions (
     head_ref,
     cfg_path,
     cfg_deps,
-    "status",
+    "status",  -- noqa: L059
     new_providers,
     new_resources,
     account_name,
@@ -24,7 +24,7 @@ INSERT INTO executions (
     plan_command,
     deploy_command
 )
-SELECT  -- noqa: L034
+SELECT  -- noqa: L034, L036
     'run-' || {pr_id} || '-' || substring('{commit_id}', 1, 4) || '-' || a.account_name || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-' || substr(md5(random()::text), 0, 4) AS execution_id,
     FALSE,
     '{commit_id}',

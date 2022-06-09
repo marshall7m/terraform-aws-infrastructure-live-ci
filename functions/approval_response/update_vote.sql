@@ -5,7 +5,7 @@ SET
         WHEN '{action}' = 'approve' THEN
             (
                 SELECT array_agg(DISTINCT e)
-                FROM unnest(approval_voters || ARRAY['{recipient}']) e
+                FROM unnest(approval_voters || ARRAY['{recipient}']) AS e
             )
         WHEN '{action}' = 'reject' THEN
             array_remove(approval_voters, '{recipient}')
@@ -16,8 +16,13 @@ SET
         WHEN '{action}' = 'reject' THEN
             (
                 SELECT array_agg(DISTINCT e)
-                FROM unnest(rejection_voters || ARRAY['{recipient}']) e
+                FROM unnest(rejection_voters || ARRAY['{recipient}']) AS e
             )
     END
 WHERE execution_id = '{execution_id}'
-RETURNING "status", approval_voters, min_approval_count, rejection_voters, min_rejection_count;
+RETURNING
+    "status",  -- noqa: L059
+    approval_voters,
+    min_approval_count,
+    rejection_voters,
+    min_rejection_count;

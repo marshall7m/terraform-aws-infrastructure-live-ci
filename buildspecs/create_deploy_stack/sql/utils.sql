@@ -1,6 +1,6 @@
 -- noqa: disable=PRS
 CREATE OR REPLACE FUNCTION status_all_update(statuses text[])
-    RETURNS VARCHAR AS $$
+RETURNS varchar AS $$
     DECLARE
         fail_count INT := 0;
         succcess_count INT := 0;

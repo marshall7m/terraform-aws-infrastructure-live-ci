@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS executions (
     head_ref VARCHAR,
     cfg_path VARCHAR,
     cfg_deps TEXT[],
-    "status" VARCHAR,
+    "status" VARCHAR,  -- noqa: L059
     plan_command TEXT,
     deploy_command TEXT,
     new_providers TEXT[],

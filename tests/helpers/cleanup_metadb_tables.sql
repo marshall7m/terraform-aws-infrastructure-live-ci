@@ -1,7 +1,9 @@
 -- noqa: disable=PRS
-CREATE OR REPLACE FUNCTION table_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR)
-    RETURNS BOOLEAN
-    LANGUAGE plpgsql AS
+CREATE OR REPLACE FUNCTION table_exists(
+    _schema VARCHAR, _catalog VARCHAR, _table VARCHAR
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql AS
 $$
     BEGIN
         IF EXISTS (
@@ -20,9 +22,11 @@ $$
 $$;
 
 
-CREATE OR REPLACE FUNCTION truncate_if_exists(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR)
-    RETURNS text
-    LANGUAGE plpgsql AS
+CREATE OR REPLACE FUNCTION truncate_if_exists(
+    _schema VARCHAR, _catalog VARCHAR, _table VARCHAR
+)
+RETURNS text
+LANGUAGE plpgsql AS
 $$
     DECLARE 
         _full_table TEXT := concat_ws('.', quote_ident(_schema), quote_ident(_table));
