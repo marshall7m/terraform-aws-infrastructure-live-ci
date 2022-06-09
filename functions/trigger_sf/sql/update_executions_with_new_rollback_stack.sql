@@ -70,7 +70,7 @@ SELECT
             AND CARDINALITY(new_resources) > 0
     ) AS cfg_deps
 FROM (
-    SELECT
+    SELECT  --noqa: L034
         TRUE AS is_rollback,
         pr_id,
         commit_id,
@@ -85,9 +85,9 @@ FROM (
         account_path,
         account_deps,
         voters,
-        array[]::TEXT[] AS approval_voters, --noqa: L013
+        array[]::TEXT[] AS approval_voters, --noqa: L013, L019
         min_approval_count,
-        array[]::TEXT[] AS rejection_voters,  --noqa: L013
+        array[]::TEXT[] AS rejection_voters,  --noqa: L013, L019
         min_rejection_count,
         plan_role_arn,
         deploy_role_arn,

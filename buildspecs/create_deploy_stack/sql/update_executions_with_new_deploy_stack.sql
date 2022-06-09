@@ -24,7 +24,7 @@ INSERT INTO executions (
     plan_command,
     deploy_command
 )
-SELECT
+SELECT  -- noqa: L034
     'run-' || {pr_id} || '-' || substring('{commit_id}', 1, 4) || '-' || a.account_name || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-' || substr(md5(random()::text), 0, 4) AS execution_id,
     FALSE,
     '{commit_id}',
@@ -34,14 +34,14 @@ SELECT
     stack.cfg_deps::TEXT[],
     'waiting',
     stack.new_providers::TEXT[],
-    array[]::TEXT[], -- noqa: L027
+    array[]::TEXT[], -- noqa: L027, L019
     a.account_name,
     a.account_path,
     a.account_deps,
     a.voters,
-    array[]::TEXT[],  -- noqa: L027
+    array[]::TEXT[],  -- noqa: L027, L019
     a.min_approval_count,
-    array[]::TEXT[],  -- noqa: L027
+    array[]::TEXT[],  -- noqa: L027, L019
     a.min_rejection_count,
     a.plan_role_arn,
     a.deploy_role_arn,

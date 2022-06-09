@@ -67,7 +67,7 @@ resource "aws_sfn_state_machine" "this" {
             "ExecutionName.$" = "$$.Execution.Name"
             "AccountName.$"   = "$.account_name"
             "PullRequestID.$" = "$.pr_id"
-            "LogsUrl.$" = "$.PlanOutput.LogsUrl"
+            "LogsUrl.$"       = "$.PlanOutput.LogsUrl"
           }
         }
         Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
