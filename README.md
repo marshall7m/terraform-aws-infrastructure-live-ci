@@ -513,10 +513,3 @@ use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destr
 
 - [ ] add integration testing class level dependencies to skip downstream classes on error
 - [ ] create aesthetically pleasing approval request HTML template
-
-
-# TODAY
-
-- add heredoc for tests funcs/helpers
-
-- add integration testing class level dependencies to skip downstream classes on error
