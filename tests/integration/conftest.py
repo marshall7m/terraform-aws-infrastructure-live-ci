@@ -9,6 +9,7 @@ import git
 from tests.helpers.utils import check_ses_sender_email_auth
 import datetime
 import re
+from pprint import pformat
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -25,6 +26,141 @@ def pytest_addoption(parser):
         default=os.environ.get("UNTIL_AWS_EXP", False),
         help="The least amount of time until the AWS session token expires in minutes (e.g. 10m) or hours (e.g. 2h)",
     )
+
+
+def pytest_sessionstart(session):
+    session.cls_results = dict()
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    result = outcome.get_result()
+
+    if result.when == "call":
+        # splits on <ClassName>.<test_name>
+        # only tracks tests within class
+        if len(result.nodeid.split("::")) == 3:
+            idx = result.nodeid.rfind("::")
+            class_address = result.nodeid[:idx]
+            # creates map of {class name: bool}
+            try:
+                # if any tests fails, the class value will always be False
+                item.session.cls_results[class_address] = all(
+                    [item.session.cls_results[class_address]] + [result.passed]
+                )
+            except KeyError:
+                log.debug(f"Initialize test tracking for class: {class_address}")
+                item.session.cls_results[class_address] = result.passed
+
+
+@pytest.fixture(scope="class")
+def check_cls_deps(request):
+    """
+    Skips class test(s) if any dependency class tests fail.
+
+    Requires a class list attribute named `cls_depends_on` to specify which classes to depend on.
+    Values within the `cls_depends_on` list must follow the following format: <relative path to class file>.py::<ClassName>
+    (e.g. `../foo/test_bar.py::TestBar`, `./test_doo.py::TestDoo`)
+
+    Can be used to skip a single class test:
+    ```
+    class TestBaz:
+        def test_zoo(self):
+            pass
+
+    class TestFoo:
+        cls_depends_on = ["./test_baz.py::TestBaz"]
+        def test_bar(self, check_cls_deps):
+            pass
+    ```
+
+    Can be used to skip all tests within a class via a pytest decorator:
+    ```
+    class TestBaz:
+        def test_zoo(self):
+            pass
+
+    @pytest.mark.usefixtures('check_cls_deps')
+    class TestFoo:
+        cls_depends_on = ["./test_baz.py::TestBaz"]
+        def test_bar(self):
+            pass
+    ```
+    """
+    log.debug(f"Base tracking map:\n{pformat(request.session.cls_results)}")
+    # converts cls_results map keys to be relative to the calling test class
+    # (e.g. test_file.py::TestClass -> ./test_file.py::TestClass )
+    results = {
+        f'{os.path.relpath(os.path.dirname(k.split("::")[0]), os.path.dirname(request.module.__file__))}/{os.path.basename(k.split("::")[0])}::{k.split("::")[1]}': v
+        for k, v in request.session.cls_results.items()
+    }
+    log.debug(f"Relative path tracking map\n{pformat(results)}")
+    log.debug(f"Class dependencies:\n{pformat(request.cls.cls_depends_on)}")
+    log.debug(f"Calling test node ID: {request.node.nodeid}")
+
+    for cls in getattr(request.cls, "cls_depends_on", []):
+        log.debug(f"Class dependency: {cls}")
+
+        try:
+            if not results[cls]:
+                pytest.skip(f"Test class failed: {cls}")
+            else:
+                log.info("Class dependency succeeded")
+        except KeyError as e:
+            log.error(e, exc_info=True)
+            log.error(f"Class could not be found: {cls}")
+            log.debug(
+                f"Available classes to depend on:\n{pformat(list(results.keys()))}"
+            )
+            raise e
+
+
+def pytest_generate_tests(metafunc):
+    if metafunc.config.getoption("skip_truncate"):
+        metafunc.parametrize(
+            "truncate_executions",
+            [True],
+            scope="session",
+            ids=["skip_truncate"],
+            indirect=True,
+        )
+
+    tf_versions = [pytest.param("latest")]
+    if "terraform_version" in metafunc.fixturenames:
+        tf_versions = [pytest.param("latest")]
+        metafunc.parametrize(
+            "terraform_version",
+            tf_versions,
+            indirect=True,
+            scope="session",
+            ids=[f"tf_{v.values[0]}" for v in tf_versions],
+        )
+
+    if hasattr(metafunc.cls, "case"):
+        if "target_execution" in metafunc.fixturenames:
+            # gets expected count of tf directories that will have their
+            # new provider resources rolled back
+            rollback_execution_count = len(
+                [
+                    1
+                    for scenario in metafunc.cls.case["executions"].values()
+                    if scenario.get("actions", {}).get("rollback_providers", None)
+                    is not None
+                ]
+            )
+            # parameterizes tests/fixtures with the range of expected tf directories
+            # that should be setup and tested
+            target_execution_count = (
+                len(metafunc.cls.case["executions"]) + rollback_execution_count
+            )
+            metafunc.parametrize(
+                "target_execution",
+                list(range(0, target_execution_count)),
+                scope="class",
+            )
+
+            metafunc.cls.executions = [{} for _ in range(0, target_execution_count)]
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -87,53 +223,6 @@ def aws_session_expiration_check(request):
             log.info("$AWS_SESSION_EXPIRATION is not set -- skipping check")
     else:
         log.info("Neither --until-aws-exp nor $UNTIL_AWS_EXP was set -- skipping check")
-
-
-def pytest_generate_tests(metafunc):
-    if metafunc.config.getoption("skip_truncate"):
-        metafunc.parametrize(
-            "truncate_executions",
-            [True],
-            scope="session",
-            ids=["skip_truncate"],
-            indirect=True,
-        )
-
-    tf_versions = [pytest.param("latest")]
-    if "terraform_version" in metafunc.fixturenames:
-        tf_versions = [pytest.param("latest")]
-        metafunc.parametrize(
-            "terraform_version",
-            tf_versions,
-            indirect=True,
-            scope="session",
-            ids=[f"tf_{v.values[0]}" for v in tf_versions],
-        )
-
-    if hasattr(metafunc.cls, "case"):
-        if "target_execution" in metafunc.fixturenames:
-            # gets expected count of tf directories that will have their
-            # new provider resources rolled back
-            rollback_execution_count = len(
-                [
-                    1
-                    for scenario in metafunc.cls.case["executions"].values()
-                    if scenario.get("actions", {}).get("rollback_providers", None)
-                    is not None
-                ]
-            )
-            # parameterizes tests/fixtures with the range of expected tf directories
-            # that should be setup and tested
-            target_execution_count = (
-                len(metafunc.cls.case["executions"]) + rollback_execution_count
-            )
-            metafunc.parametrize(
-                "target_execution",
-                list(range(0, target_execution_count)),
-                scope="class",
-            )
-
-            metafunc.cls.executions = [{} for _ in range(0, target_execution_count)]
 
 
 @pytest.fixture(scope="session", autouse=True)
