@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
+@pytest.mark.usefixtures("check_cls_deps")
 class Integration:
     executions = []
 
@@ -166,6 +167,10 @@ class Integration:
 
     @pytest.fixture(scope="module")
     def destroy_scenario_tf_resources(self, conn, mut_output, tf_destroy_commit_ids):
+        """
+        Starts a terra_run build for each AWS account and runs terragrunt run-all destroy
+        within each account-level root directory
+        """
         yield None
 
         cb = boto3.client("codebuild")
@@ -261,6 +266,10 @@ class Integration:
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_pr_merge(self, request, mut_output, case_param, merge_pr, pr, repo):
+        """
+        Ensures that the PR status checks before merging are complete and then
+        merges the PR
+        """
         depends(request, [f"{request.cls.__name__}::test_merge_lock_pr_status"])
         depends(request, [f"{request.cls.__name__}::test_pr_plan_codebuild"])
 
@@ -484,6 +493,7 @@ class Integration:
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
     def test_target_execution_record_exists(self, request, conn, pr, case_param):
+        """Queries metadb until the target execution record exists and adds record to request fixture"""
         depends(
             request,
             [
@@ -841,7 +851,7 @@ class Integration:
 
     @pytest.mark.dependency()
     def test_merge_lock_unlocked(self, request, mut_output):
-
+        """Assert that the merge lock is unlocked after the deploy stack is finished"""
         # if trigger SF fails, the merge lock will not be unlocked
         if getattr(request.cls, "expect_failed_trigger_sf", False):
             pytest.skip("One of the trigger sf Lambda invocations was expected to fail")
