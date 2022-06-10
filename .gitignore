@@ -1,4 +1,3 @@
-account.hcl
 terraform.tfstate*
 *.terraform*
 *.terragrunt-cache*
@@ -17,4 +16,4 @@ __pycache__
 /yarn-error.log
 *personal_docker_setup.sh*
 /*.egg-info
-/build*
+/build/
