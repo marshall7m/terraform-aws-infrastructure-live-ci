@@ -19,23 +19,23 @@ After all directories and their associated dependencies are gathered, they are p
  
 ![Cloudcraft](cloudcraft.png)
  
-1. A GitHub user commits to a feature branch and creates a PR to merge into the source branch. The source branch represents the live Terraform configurations and should be reflected within the Terraform state files. As the user continues to push Terraform related commit changes to the PR, a Lambda function will update the commit status notifying if merging the PR is available or not. Merging will be locked if a merged PR is in the process of the CI pipeline. Once the CI pipeline is finished, the downstream Lambda function (see #4) will update the merge lock status value.
+1. A GitHub user commits to a feature branch and creates a PR to merge into the source branch. The source branch represents the live Terraform configurations and should be reflected within the Terraform state files. As the user continues to push Terraform related commit changes to the PR, a Lambda Function will update the commit status notifying if merging the PR is available or not. Merging will be locked if a merged PR is in the process of the CI pipeline. Once the CI pipeline is finished, the downstream Lambda Function (see #4) will update the merge lock status value.
  
    `**NOTE The PR committer will have to create another commit once the merge lock status is unlocked to get an updated merge lock commit status. **`
  
 2. If the merge lock commit status is unlocked, a user with merge permissions can then merge the PR.
  
-3. Once the PR is merged, a Codebuild project will update the merge lock status and then scan the source branch for changes made from the PR. The build will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the build will invoke another Lambda function.
+3. Once the PR is merged, a Codebuild project will update the merge lock status and then scan the source branch for changes made from the PR. The build will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the build will invoke another Lambda Function.
  
-4. A Lambda function will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into json objects and pass each json into separate Step Function executions. An in-depth description of the Step Function flow can be found under the `Step Execution Flow` section.
+4. A Lambda Function will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into json objects and pass each json into separate Step Function executions. An in-depth description of the Step Function flow can be found under the `Step Execution Flow` section.
  
-5. After every Step Function execution, a Cloudwatch event rule will invoke the Lambda Function mentioned in step #4 above. The Lambda function will update the Step Function execution's associated metadb record status with the Step Function execution status. The Lambda function will then repeat the same process as mentioned in step #4 until there are no records that are waiting to be runned with a Step Function execution. As stated above, the Lambda function will update the merge lock status value to allow other Terraform related PRs to be merged.
+5. After every Step Function execution, a Cloudwatch event rule will invoke the Lambda Function mentioned in step #4 above. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. The Lambda Function will then repeat the same process as mentioned in step #4 until there are no records that are waiting to be runned with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform related PRs to be merged.
  
 ## Step Function Execution Flow
  
 ### Input
  
-Each execution is passed a json input that contains record attributes that will help configure the tasks within the Step Function. A sample json input will contain the following:
+Each execution is passed a json input that contains record attributes that will help configure the tasks within the Step Function. A sample json input will look like the following:
  
 ```
 {
@@ -185,6 +185,7 @@ The AWS Lambda free tier includes one million free requests per month and 400,00
 The build.general1.small instance type is used for both builds within this module. Given that Terraform is revolved around API requests to the Terraform providers, a large CPU instance is not that much of a neccessity. The price per build will vary since the amount of resources within Terraform configurations will also vary. The more Terraform resources the configuration manages, the longer the build will be and hence the larger the cost will be.
  
 ### Step Function
+
 The cost for the Step Function machine is based on state transitions. Luckily 4,000 state transitions per month are covered under the free tier. The Step Function definition contains only a minimal amount of state transitions. Unless the infrastructure repo contains frequent and deeply rooted dependency changes, the free tier limit will likely never be exceeded.
  
 ### RDS
@@ -418,14 +419,14 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | terraform\_version | Terraform version used for create\_deploy\_stack and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `""` | no |
 | terragrunt\_version | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `""` | no |
 | tf\_state\_read\_access\_policy | AWS IAM policy ARN that allows create\_deploy\_stack Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
-| trigger\_sf\_function\_name | Name of the AWS Lambda function used to trigger Step Function deployments | `string` | `null` | no |
+| trigger\_sf\_function\_name | Name of the AWS Lambda Function used to trigger Step Function deployments | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| approval\_request\_function\_name | Name of the Lambda function used for sending approval requests |
-| approval\_request\_log\_group\_name | Cloudwatch log group associated with the Lambda function used for processing deployment approval responses |
+| approval\_request\_function\_name | Name of the Lambda Function used for sending approval requests |
+| approval\_request\_log\_group\_name | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
 | approval\_url | API URL used for requesting deployment approvals |
 | base\_branch | Base branch for repository that all PRs will compare to |
 | codebuild\_create\_deploy\_stack\_arn | ARN of the CodeBuild project that creates the deployment records within the metadb |
@@ -436,8 +437,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | codebuild\_terra\_run\_arn | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | codebuild\_terra\_run\_name | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | codebuild\_terra\_run\_role\_arn | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
-| lambda\_trigger\_sf\_arn | ARN of the Lambda function used for triggering Step Function execution(s) |
-| merge\_lock\_github\_webhook\_id | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda function |
+| lambda\_trigger\_sf\_arn | ARN of the Lambda Function used for triggering Step Function execution(s) |
+| merge\_lock\_github\_webhook\_id | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda Function |
 | merge\_lock\_ssm\_key | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
 | merge\_lock\_status\_check\_name | Context name of the merge lock GitHub status check |
 | metadb\_arn | ARN for the metadb |
@@ -451,8 +452,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | metadb\_username | Master username for the metadb |
 | step\_function\_arn | ARN of the Step Function |
 | step\_function\_name | Name of the Step Function |
-| trigger\_sf\_function\_name | Name of the Lambda function used for triggering Step Function execution(s) |
-| trigger\_sf\_log\_group\_name | Cloudwatch log group associated with the Lambda function used for triggering Step Function execution(s) |
+| trigger\_sf\_function\_name | Name of the Lambda Function used for triggering Step Function execution(s) |
+| trigger\_sf\_log\_group\_name | Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s) |
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
  
@@ -473,11 +474,12 @@ For a demo of the module that will cleanup any resources created, see the `Integ
 8. Go to the `var.approval_request_sender_email` email address. Find the AWS SES verification email (subject should be something like "Amazon Web Services – Email Address Verification Request in region US West (Oregon)") and click on the verification link.
 8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in the Terraform configuration's tfstate file
 9. Merge the PR
-10. Wait for the approval email to be sent to the email associated with the changed directory's tfstate
-12. Click on the link 
-11. Click either the approval or deny link
-12. Check to see if the Terraform changes have been deployed
- 
+10. Wait for the approval email to be sent to the voter's email address
+11. Login into the voter's email address and open the approval request email (subject should be something like "${var.step_function_name} - Need Approval for Path: {{path}}")
+12. Choose either to approval or reject the deployment and click on the submit button
+13. Wait for the deployment build to finish
+14. Verify that the Terraform changes have been deployed
+
 # Testing
 
 ### Requirements
@@ -513,8 +515,8 @@ use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destr
 - [ ] create aesthetically pleasing approval request HTML template
 
 
+# TODAY
 
+- add heredoc for tests funcs/helpers
 
-
-
-
+- add integration testing class level dependencies to skip downstream classes on error
