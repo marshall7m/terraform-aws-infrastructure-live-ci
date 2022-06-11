@@ -2,6 +2,7 @@ from tests.integration import test_integration
 from tests.helpers.utils import dummy_configured_provider_resource, dummy_tf_output
 import uuid
 import logging
+import os
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -42,6 +43,7 @@ class TestRevertPR(test_integration.Integration):
     but using the base ref version of the above PR.
     """
 
+    cls_depends_on = [f"./{os.path.basename(__file__)}::TestDeployPR"]
     case = {
         "head_ref": f"feature-{uuid.uuid4()}",
         "revert_ref": TestDeployPR.case["head_ref"],

@@ -1,6 +1,7 @@
 from tests.integration import test_integration
 import uuid
 from tests.helpers.utils import null_provider_resource
+import os
 
 
 class TestBasePR(test_integration.Integration):
@@ -35,6 +36,8 @@ class TestDeployPR(test_integration.Integration):
     while the new provider resources introduced in this PR are rolled back.
     """
 
+    cls_depends_on = [f"./{os.path.basename(__file__)}::TestBasePR"]
+
     case = {
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
@@ -65,6 +68,7 @@ class TestRevertPR(test_integration.Integration):
     This case will create a revert PR that will contain the base ref version of the repo that was compared to the previous PR defined above.
     """
 
+    cls_depends_on = [f"./{os.path.basename(__file__)}::TestDeployPR"]
     case = {
         "head_ref": f'revert-{TestDeployPR.case["head_ref"]}',
         "revert_ref": TestDeployPR.case["head_ref"],

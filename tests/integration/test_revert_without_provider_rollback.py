@@ -1,6 +1,7 @@
 from tests.integration import test_integration
 import uuid
 import logging
+import os
 from tests.helpers.utils import dummy_configured_provider_resource
 
 log = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class TestRevertPRWithoutProviderRollback(test_integration.Integration):
     but also it's respective dummy provider block that Terraform needs in order to destroy
     the dummy resource.
     """
+
+    cls_depends_on = [f"./{os.path.basename(__file__)}::TestDeployPR"]
 
     case = {
         "head_ref": f"feature-{uuid.uuid4()}",
