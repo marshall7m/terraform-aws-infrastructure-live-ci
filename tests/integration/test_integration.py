@@ -287,7 +287,7 @@ class Integration:
             statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
             log.debug(f"Count: {statuses.totalCount}")
 
-        log.info("Merging PR")
+        log.info(f"Merging PR: #{pr['number']}")
         try:
             merge_pr(pr["base_ref"], pr["head_ref"])
         except Exception as e:

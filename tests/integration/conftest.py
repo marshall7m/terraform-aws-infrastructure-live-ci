@@ -43,8 +43,10 @@ def pytest_runtest_makereport(item, call):
         if len(result.nodeid.split("::")) == 3:
             idx = result.nodeid.rfind("::")
             class_address = result.nodeid[:idx]
-            log.debug(f"Class Name: {class_address}")
             # creates map of {class name: bool}
+            log.info("Adding test result to class results tracking map")
+            log.debug(f"Test: {result.nodeid}")
+            log.debug(f"Results: {result.passed}")
             try:
                 # if any tests fails, the class value will always be False
                 item.session.cls_results[class_address] = all(
@@ -53,6 +55,10 @@ def pytest_runtest_makereport(item, call):
             except KeyError:
                 log.debug(f"Initialize test tracking for class: {class_address}")
                 item.session.cls_results[class_address] = result.passed
+
+            log.debug(
+                f"Class: {class_address} -- Value: {item.session.cls_results[class_address]}"
+            )
 
 
 @pytest.fixture(scope="class")
@@ -264,7 +270,7 @@ def mut_plan(tf):
 @pytest.fixture(scope="session")
 def mut_output(tf):
     log.info("Applying testing tf module")
-    # tf.apply(auto_approve=True)
+    tf.apply(auto_approve=True)
 
     yield {k: v["value"] for k, v in tf.output().items()}
 
