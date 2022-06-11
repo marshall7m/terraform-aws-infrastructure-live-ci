@@ -504,12 +504,15 @@ use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destr
 # TODO:
  
 ### Features:
-- Create a feature for handling deleted terragrunt folder using git diff commands
-- Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
-- Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
-- Approval voter can choose to be notified when deployment stack and/or deployment execution is finished or errors
+
+- [ ] Create a feature for handling deleted terragrunt folder using git diff commands
+- [ ] Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
+- [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
 
 ### Improvements:
 
-- [ ] add integration testing class level dependencies to skip downstream classes on error
 - [ ] create aesthetically pleasing approval request HTML template
+- [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
+
+
+- [ ] implement pytest-regex-dependency
