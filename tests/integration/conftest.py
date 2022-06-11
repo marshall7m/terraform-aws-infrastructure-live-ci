@@ -43,6 +43,7 @@ def pytest_runtest_makereport(item, call):
         if len(result.nodeid.split("::")) == 3:
             idx = result.nodeid.rfind("::")
             class_address = result.nodeid[:idx]
+            log.debug(f"Class Name: {class_address}")
             # creates map of {class name: bool}
             try:
                 # if any tests fails, the class value will always be False
@@ -88,32 +89,39 @@ def check_cls_deps(request):
             pass
     ```
     """
-    log.debug(f"Base tracking map:\n{pformat(request.session.cls_results)}")
-    # converts cls_results map keys to be relative to the calling test class
-    # (e.g. test_file.py::TestClass -> ./test_file.py::TestClass )
-    results = {
-        f'{os.path.relpath(os.path.dirname(k.split("::")[0]), os.path.dirname(request.module.__file__))}/{os.path.basename(k.split("::")[0])}::{k.split("::")[1]}': v
-        for k, v in request.session.cls_results.items()
-    }
-    log.debug(f"Relative path tracking map\n{pformat(results)}")
-    log.debug(f"Class dependencies:\n{pformat(request.cls.cls_depends_on)}")
-    log.debug(f"Calling test node ID: {request.node.nodeid}")
 
-    for cls in getattr(request.cls, "cls_depends_on", []):
-        log.debug(f"Class dependency: {cls}")
+    if hasattr(request.cls, "cls_depends_on"):
+        log.debug(f"Base tracking map:\n{pformat(request.session.cls_results)}")
+        # converts cls_results map keys to be relative to the calling test class
+        # (e.g. test_file.py::TestClass -> ./test_file.py::TestClass )
+        results = {
+            f'{os.path.relpath(os.path.dirname(k.split("::")[0]), os.path.dirname(request.node.nodeid.split("::")[0]))}/{os.path.basename(k.split("::")[0])}::{k.split("::")[1]}': v
+            for k, v in request.session.cls_results.items()
+        }
 
-        try:
-            if not results[cls]:
-                pytest.skip(f"Test class failed: {cls}")
-            else:
-                log.info("Class dependency succeeded")
-        except KeyError as e:
-            log.error(e, exc_info=True)
-            log.error(f"Class could not be found: {cls}")
-            log.debug(
-                f"Available classes to depend on:\n{pformat(list(results.keys()))}"
-            )
-            raise e
+        log.debug(f"Relative path tracking map\n{pformat(results)}")
+        log.debug(f"Class dependencies:\n{pformat(request.cls.cls_depends_on)}")
+        log.debug(f"Calling test node ID: {request.node.nodeid}")
+
+        for cls in request.cls.cls_depends_on:
+            log.debug(f"Class dependency: {cls}")
+
+            try:
+                if not results[cls]:
+                    pytest.skip(f"Test class failed: {cls}")
+                else:
+                    log.info("Class dependency succeeded")
+            except KeyError as e:
+                log.error(e, exc_info=True)
+                log.error(f"Class could not be found: {cls}")
+                log.debug(
+                    f"Available classes to depend on:\n{pformat(list(results.keys()))}"
+                )
+                raise e
+    else:
+        log.info(
+            "Class has no `cls_depends_on` attribute -- skipping class dependency check"
+        )
 
 
 def pytest_generate_tests(metafunc):
@@ -256,7 +264,7 @@ def mut_plan(tf):
 @pytest.fixture(scope="session")
 def mut_output(tf):
     log.info("Applying testing tf module")
-    tf.apply(auto_approve=True)
+    # tf.apply(auto_approve=True)
 
     yield {k: v["value"] for k, v in tf.output().items()}
 
