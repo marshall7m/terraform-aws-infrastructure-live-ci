@@ -113,5 +113,6 @@ FROM (
             FROM executions
             WHERE is_rollback = TRUE
                   AND commit_id = '{commit_id}'
-        )
-) *;
+        ) AS
+) AS d  -- noqa: L025
+RETURNING *;
