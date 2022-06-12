@@ -1,8 +1,9 @@
-from tests.integration import test_integration
-from tests.helpers.utils import dummy_configured_provider_resource, dummy_tf_output
 import uuid
 import logging
 import os
+import pytest
+from tests.integration import test_integration
+from tests.helpers.utils import dummy_configured_provider_resource, dummy_tf_output
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -37,13 +38,16 @@ class TestDeployPR(test_integration.Integration):
     }
 
 
+@pytest.mark.regex_dependency(
+    f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestDeployPR::.+",
+    allowed_outcomes=["passed", "skipped"],
+)
 class TestRevertPR(test_integration.Integration):
     """
     Case will merge a PR that will revert the changes from the upstream case's PR. The case covers the same 2 node deployment as above
     but using the base ref version of the above PR.
     """
 
-    cls_depends_on = [f"./{os.path.basename(__file__)}::TestDeployPR"]
     case = {
         "head_ref": f"feature-{uuid.uuid4()}",
         "revert_ref": TestDeployPR.case["head_ref"],

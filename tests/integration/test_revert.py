@@ -2,6 +2,7 @@ from tests.integration import test_integration
 import uuid
 from tests.helpers.utils import null_provider_resource
 import os
+import pytest
 
 
 class TestBasePR(test_integration.Integration):
@@ -28,6 +29,10 @@ class TestBasePR(test_integration.Integration):
     }
 
 
+@pytest.mark.regex_dependency(
+    f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestBasePR::.+",
+    allowed_outcomes=["passed", "skipped"],
+)
 class TestDeployPR(test_integration.Integration):
     """
     Case covers a 5 node deployment with 2 modified directories. One of the deployments will be rejected causing
@@ -35,8 +40,6 @@ class TestDeployPR(test_integration.Integration):
     to ensure that the new provider resources introduced from the previous PR are not rolled back
     while the new provider resources introduced in this PR are rolled back.
     """
-
-    cls_depends_on = [f"./{os.path.basename(__file__)}::TestBasePR"]
 
     case = {
         "head_ref": f"feature-{uuid.uuid4()}",
@@ -62,13 +65,16 @@ class TestDeployPR(test_integration.Integration):
     }
 
 
+@pytest.mark.regex_dependency(
+    f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestDeployPR::.+",
+    allowed_outcomes=["passed", "skipped"],
+)
 class TestRevertPR(test_integration.Integration):
     """
     Case covers a 5 node deployment containing no new modified directories other than the revert changes for the previous PR.
     This case will create a revert PR that will contain the base ref version of the repo that was compared to the previous PR defined above.
     """
 
-    cls_depends_on = [f"./{os.path.basename(__file__)}::TestDeployPR"]
     case = {
         "head_ref": f'revert-{TestDeployPR.case["head_ref"]}',
         "revert_ref": TestDeployPR.case["head_ref"],

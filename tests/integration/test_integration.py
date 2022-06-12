@@ -20,7 +20,6 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-@pytest.mark.usefixtures("check_cls_deps")
 class Integration:
     executions = []
 
