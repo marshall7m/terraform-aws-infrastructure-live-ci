@@ -167,7 +167,7 @@ def mut_plan(tf):
 @pytest.fixture(scope="session")
 def mut_output(tf):
     log.info("Applying testing tf module")
-    # tf.apply(auto_approve=True)
+    tf.apply(auto_approve=True)
 
     yield {k: v["value"] for k, v in tf.output().items()}
 
