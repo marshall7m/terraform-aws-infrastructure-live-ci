@@ -68,4 +68,5 @@ FROM (
         :cfg_path,  -- noqa: L019
         string_to_array(:cfg_deps, ','),
         string_to_array(:new_providers, ',')
-) AS stack(cfg_path, cfg_deps, new_providers) RETURNING *;  -- noqa: L025
+) stack(cfg_path, cfg_deps, new_providers)  -- noqa: L011, L025
+RETURNING *;
