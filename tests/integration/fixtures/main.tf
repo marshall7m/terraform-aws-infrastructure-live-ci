@@ -1,8 +1,7 @@
 locals {
-  mut_id           = "mut-terraform-aws-infrastructure-live-ci"
+  mut_id           = "mut-${random_string.mut.id}"
   plan_role_name   = "${local.mut_id}-plan"
   deploy_role_name = "${local.mut_id}-deploy"
-  approval_key     = "approval"
 }
 
 provider "aws" {
@@ -23,7 +22,8 @@ resource "github_repository" "testing" {
   name        = local.mut_id
   description = "Test repo for mut: ${local.mut_id}"
   # TODO: Test with `visibility  = "private"` and `var.enable_branch_protection = true`
-  # In order to enable branch protection for a private repo within the TF module, GitHub Pro account must be used for the provider
+  # In order to enable branch protection for a private repo within the TF module, 
+  # GitHub Pro account must be used for the provider
   visibility = "public"
   template {
     owner      = "marshall7m"
@@ -84,6 +84,13 @@ data "aws_iam_policy_document" "testing_tf_state" {
 resource "aws_s3_bucket_policy" "testing_tf_state" {
   bucket = aws_s3_bucket.testing_tf_state.id
   policy = data.aws_iam_policy_document.testing_tf_state.json
+}
+
+resource "random_string" "mut" {
+  length  = 8
+  lower   = true
+  upper   = false
+  special = false
 }
 
 resource "random_password" "metadb" {
@@ -158,9 +165,12 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
 module "mut_infrastructure_live_ci" {
   source = "../../..//"
 
+  prefix = local.mut_id
+
   repo_name   = github_repository.testing.name
   base_branch = "master"
-  # for testing purposes, admin is allowed to push to trunk branch for cleaning up testing changes without having to create a PR and triggering the entire CI pipeline
+  # for testing purposes, admin is allowed to push to trunk branch for cleaning up 
+  # testing changes without having to create a PR and triggering the entire CI pipeline
   enforce_admin_branch_protection = false
 
   metadb_username    = "mut_user"
