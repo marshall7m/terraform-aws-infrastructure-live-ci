@@ -129,6 +129,7 @@ jobs:
   integration:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
+    container: ghcr.io/marshall7m/terrace:v0.1.5
     permissions:
       id-token: write
       contents: read
