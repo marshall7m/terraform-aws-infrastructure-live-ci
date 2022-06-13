@@ -1,12 +1,13 @@
 locals {
-  cloudwatch_event_rule_name = "${var.prefix}-finished-execution"
-  state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${var.step_function_name}"
+  step_function_name         = "${var.prefix}-${var.step_function_name}"
+  cloudwatch_event_rule_name = "${local.step_function_name}-finished-execution"
+  state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${local.step_function_name}"
   cw_event_terra_run_rule    = "${local.terra_run_build_name}-rule"
   approval_url               = "${module.github_webhook_validator.deployment_invoke_url}${module.github_webhook_validator.api_stage_name}${aws_api_gateway_resource.approval.path}"
 }
 
 resource "aws_sfn_state_machine" "this" {
-  name     = var.step_function_name
+  name     = local.step_function_name
   role_arn = module.sf_role.role_arn
   definition = jsonencode({
     StartAt = "Plan"
@@ -176,7 +177,7 @@ resource "aws_sfn_state_machine" "this" {
 
 module "sf_role" {
   source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
-  role_name        = var.step_function_name
+  role_name        = local.step_function_name
   trusted_services = ["states.amazonaws.com"]
   statements = [
     {

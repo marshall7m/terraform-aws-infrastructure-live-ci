@@ -65,7 +65,7 @@ module "lambda_trigger_sf" {
       sid       = "StateMachineExecutionAccess"
       effect    = "Allow"
       actions   = ["states:StopExecution"]
-      resources = ["arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:execution:${var.step_function_name}:*"]
+      resources = ["arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:execution:${local.step_function_name}:*"]
     }
   ]
   allowed_to_invoke = [

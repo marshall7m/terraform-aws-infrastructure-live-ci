@@ -290,6 +290,6 @@ resource "aws_ses_identity_policy" "approval" {
 
 resource "aws_ses_template" "approval" {
   name    = local.approval_request_name
-  subject = "${var.step_function_name} - Need Approval for Path: {{path}}"
+  subject = "${local.step_function_name} - Need Approval for Path: {{path}}"
   html    = file("${path.module}/approval_template.html")
 }

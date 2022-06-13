@@ -216,7 +216,7 @@ module "mut_infrastructure_live_ci" {
       name                = "shared_services"
       path                = "directory_dependency/shared-services-account"
       dependencies        = []
-      voters              = ["success@simulator.amazonses.com", "marshallmamiya@gmail.com"]
+      voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/${local.plan_role_name}"
