@@ -1,7 +1,8 @@
 locals {
-  merge_lock_dep_zip              = "${path.module}/merge_lock_deps.zip"
-  merge_lock_dep_dir              = "${path.module}/functions/merge_lock/deps"
-  merge_lock_github_token_ssm_key = coalesce(var.merge_lock_github_token_ssm_key, "${local.merge_lock_name}-github-token")
+  merge_lock_dep_zip                     = "${path.module}/merge_lock_deps.zip"
+  merge_lock_dep_dir                     = "${path.module}/functions/merge_lock/deps"
+  merge_lock_github_token_ssm_key        = coalesce(var.merge_lock_github_token_ssm_key, "${local.merge_lock_name}-github-token")
+  github_webhook_validator_function_name = "${var.prefix}-webhook-validator"
 }
 
 data "aws_ssm_parameter" "merge_lock_github_token" {
@@ -31,10 +32,13 @@ module "github_webhook_validator" {
   execution_arn    = aws_api_gateway_rest_api.this.execution_arn
 
   stage_name    = var.api_stage_name
-  function_name = "${var.prefix}-webhook-validator"
+  function_name = local.github_webhook_validator_function_name
 
   includes_private_repo  = true
+  github_token_ssm_key   = coalesce(var.github_webhook_validator_github_token_ssm_key, "${local.github_webhook_validator_function_name}-gh-token")
   github_token_ssm_value = var.github_webhook_validator_github_token_ssm_value
+
+  github_secret_ssm_key = "${local.github_webhook_validator_function_name}-secret"
 
   lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
   repos = [
