@@ -29,10 +29,10 @@ INSERT INTO executions (
     account_path,
     account_deps,
     voters,
-    approval_voters,
     min_approval_count,
-    rejection_voters,
     min_rejection_count,
+    approval_voters,
+    rejection_voters,
     plan_role_arn,
     deploy_role_arn,
     cfg_deps
@@ -56,10 +56,10 @@ SELECT
     voters,
     min_approval_count,
     min_rejection_count,
-    plan_role_arn,
-    deploy_role_arn,
     approval_voters,
     rejection_voters,
+    plan_role_arn,
+    deploy_role_arn,
     -- gets cfg dependencies that depend on cfg_path 
     -- by reversing the dependency tree
     ARRAY(
