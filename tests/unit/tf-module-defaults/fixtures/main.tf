@@ -1,6 +1,13 @@
-module "mut_infrastructure_live_ci" {
-  source = "../../../..//"
+resource "random_string" "mut" {
+  length  = 8
+  lower   = true
+  upper   = false
+  special = false
+}
 
+module "mut_infrastructure_live_ci" {
+  source                        = "../../../..//"
+  prefix                        = "mut-${random_string.mut.id}"
   approval_request_sender_email = "success@simulator.amazonses.com"
   send_verification_email       = false
 
