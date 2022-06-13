@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 extras_require = {
     "precommit": ["sqlfluff", "shellcheck-py"],
-    "unit": ["GitPython", "psycopg2-binary", "awscli", "boto3"],
+    "unit": ["GitPython", "psycopg2-binary", "awscli", "boto3", "aurora-data-api"],
     "integration": [
         "aurora-data-api",
         "GitPython",
