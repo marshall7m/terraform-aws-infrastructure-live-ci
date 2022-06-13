@@ -31,7 +31,7 @@ module "github_webhook_validator" {
   execution_arn    = aws_api_gateway_rest_api.this.execution_arn
 
   stage_name    = var.api_stage_name
-  function_name = "${var.step_function_name}-github-webhook-request-validator"
+  function_name = "${var.prefix}-${var.step_function_name}-github-webhook-request-validator"
 
   includes_private_repo  = true
   github_token_ssm_value = var.github_webhook_validator_github_token_ssm_value

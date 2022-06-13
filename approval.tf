@@ -1,7 +1,7 @@
 locals {
-  approval_request_name  = "${var.step_function_name}-request"
-  approval_response_name = "${var.step_function_name}-response"
-  approval_logs          = "${var.step_function_name}-approval"
+  approval_request_name  = "${var.prefix}-${var.step_function_name}-request"
+  approval_response_name = "${var.prefix}-${var.step_function_name}-response"
+  approval_logs          = "${var.prefix}-${var.step_function_name}-approval"
 
   approval_response_deps_zip_path = replace("${path.module}/${local.approval_response_name}_deps.zip", "-", "_")
   approval_deps_dir               = "${path.module}/deps"
