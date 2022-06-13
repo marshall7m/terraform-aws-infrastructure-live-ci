@@ -20,9 +20,8 @@ SET
             )
     END
 WHERE execution_id = '{execution_id}'
-RETURNING
-    "status",  -- noqa: L059
-    approval_voters,
-    min_approval_count,
-    rejection_voters,
-    min_rejection_count;
+RETURNING "status",  -- noqa: L059
+approval_voters,
+min_approval_count,
+rejection_voters,
+min_rejection_count;

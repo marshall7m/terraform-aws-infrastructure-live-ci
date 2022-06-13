@@ -40,4 +40,4 @@ CREATE OR REPLACE FUNCTION get_target_execution_ids() RETURNS TEXT[] AS $$
                 WHERE "status" = 'waiting'
             ) ids );
     END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;  -- noqa: L016

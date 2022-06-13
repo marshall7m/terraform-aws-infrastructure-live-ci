@@ -10,7 +10,7 @@ CREATE OR REPLACE FUNCTION target_resources(TEXT[]) RETURNS TEXT AS $$
         END LOOP;
         RETURN flags;
     END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;  -- noqa: L016
 
 INSERT INTO executions (
     execution_id,
@@ -63,11 +63,11 @@ SELECT
     -- gets cfg dependencies that depend on cfg_path 
     -- by reversing the dependency tree
     ARRAY(
-        SELECT cfg_path
+        SELECT cfg_path  -- noqa: L028
         FROM executions
-        WHERE d.cfg_path = ANY(cfg_deps)  -- noqa: L028, L026
-            AND commit_id = '{commit_id}'
-            AND CARDINALITY(new_resources) > 0
+        WHERE d.cfg_path = any(cfg_deps)  -- noqa: L028, L026
+            AND commit_id = '{commit_id}'  -- noqa: L028
+            AND cardinality(new_resources) > 0  -- noqa: L028
     ) AS cfg_deps
 FROM (
     SELECT  --noqa: L034
@@ -91,22 +91,22 @@ FROM (
         deploy_role_arn,
         ARRAY[]::TEXT[] AS approval_voters,  --noqa: L013, L019
         ARRAY[]::TEXT[] AS rejection_voters,  --noqa: L013, L019
-        'run-rollback-' || pr_id || '-' || SUBSTRING(
+        'run-rollback-' || pr_id || '-' || substring(
             commit_id, 1, 4
-        ) || '-' || account_name || '-' || REGEXP_REPLACE(
+        ) || '-' || account_name || '-' || regexp_replace(
             cfg_path, '.*/', ''
-        ) || '-' || SUBSTR(MD5(RANDOM()::TEXT), 0, 4) AS execution_id,
+        ) || '-' || substr(md5(random()::TEXT), 0, 4) AS execution_id,
         'terragrunt plan --terragrunt-working-dir ' || cfg_path
-        || ' --terragrunt-iam-role ' || plan_role_arn || TARGET_RESOURCES(
+        || ' --terragrunt-iam-role ' || plan_role_arn || target_resources(
             new_resources
         ) || ' -destroy' AS plan_command,
         'terragrunt destroy --terragrunt-working-dir ' || cfg_path
-        || ' --terragrunt-iam-role ' || deploy_role_arn || TARGET_RESOURCES(
+        || ' --terragrunt-iam-role ' || deploy_role_arn || target_resources(
             new_resources
         ) || ' -auto-approve' AS deploy_command
     FROM executions
     WHERE commit_id = '{commit_id}'
-          AND CARDINALITY(new_resources) > 0
+          AND cardinality(new_resources) > 0
         -- ensures that duplicate rollback executions are not created
         AND NOT EXISTS (
             SELECT 1

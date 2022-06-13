@@ -9,7 +9,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION trig_account_dim_default()
-RETURNS trigger
+RETURNS TRIGGER
 LANGUAGE plpgsql AS
 $func$
 BEGIN
@@ -47,18 +47,18 @@ CREATE TRIGGER account_dim_default
 BEFORE INSERT ON account_dim
 FOR EACH ROW
 WHEN (
-    NEW.account_name IS NULL
-    OR NEW.account_path IS NULL
-    OR NEW.account_deps IS NULL
-    OR NEW.min_approval_count IS NULL
-    OR NEW.min_rejection_count IS NULL
-    OR NEW.voters IS NULL
+    new.account_name IS NULL
+    OR new.account_path IS NULL
+    OR new.account_deps IS NULL
+    OR new.min_approval_count IS NULL
+    OR new.min_rejection_count IS NULL
+    OR new.voters IS NULL
 )
 EXECUTE PROCEDURE trig_account_dim_default();
 ALTER TABLE account_dim DISABLE TRIGGER account_dim_default;
 
 CREATE OR REPLACE FUNCTION trig_executions_default()
-RETURNS trigger
+RETURNS TRIGGER
 LANGUAGE plpgsql AS $func$
     DECLARE
         account_dim_ref RECORD;
@@ -183,25 +183,25 @@ CREATE TRIGGER executions_default
 BEFORE INSERT ON executions
 FOR EACH ROW
 WHEN (
-    NEW.execution_id IS NULL
-    OR NEW.cfg_path IS NULL
-    OR NEW.cfg_deps IS NULL
-    OR NEW.plan_command IS NULL
-    OR NEW.deploy_command IS NULL
-    OR NEW.new_providers IS NULL
-    OR NEW.new_resources IS NULL
-    OR NEW.pr_id IS NULL
-    OR NEW.status IS NULL
-    OR NEW.base_ref IS NULL
-    OR NEW.head_ref IS NULL
-    OR NEW.is_rollback IS NULL
-    OR NEW.commit_id IS NULL
-    OR NEW.account_name IS NULL
-    OR NEW.account_path IS NULL
-    OR NEW.account_deps IS NULL
-    OR NEW.min_approval_count IS NULL
-    OR NEW.min_rejection_count IS NULL
-    OR NEW.voters IS NULL
+    new.execution_id IS NULL
+    OR new.cfg_path IS NULL
+    OR new.cfg_deps IS NULL
+    OR new.plan_command IS NULL
+    OR new.deploy_command IS NULL
+    OR new.new_providers IS NULL
+    OR new.new_resources IS NULL
+    OR new.pr_id IS NULL
+    OR new.status IS NULL
+    OR new.base_ref IS NULL
+    OR new.head_ref IS NULL
+    OR new.is_rollback IS NULL
+    OR new.commit_id IS NULL
+    OR new.account_name IS NULL
+    OR new.account_path IS NULL
+    OR new.account_deps IS NULL
+    OR new.min_approval_count IS NULL
+    OR new.min_rejection_count IS NULL
+    OR new.voters IS NULL
 )
 
 EXECUTE PROCEDURE trig_executions_default();

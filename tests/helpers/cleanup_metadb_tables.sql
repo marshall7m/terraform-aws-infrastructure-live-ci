@@ -25,7 +25,7 @@ $$;
 CREATE OR REPLACE FUNCTION truncate_if_exists(
     _schema VARCHAR, _catalog VARCHAR, _table VARCHAR
 )
-RETURNS text
+RETURNS TEXT
 LANGUAGE plpgsql AS
 $$
     DECLARE 
@@ -40,7 +40,9 @@ $$
     END;
 $$;
 
-CREATE OR REPLACE FUNCTION reset_identity_col(_schema VARCHAR, _catalog VARCHAR, _table VARCHAR, _identity_col VARCHAR)
+CREATE OR REPLACE FUNCTION reset_identity_col(
+    _schema VARCHAR, _catalog VARCHAR, _table VARCHAR, _identity_col VARCHAR
+)
 RETURNS TEXT
 LANGUAGE plpgsql AS $$
     DECLARE 
