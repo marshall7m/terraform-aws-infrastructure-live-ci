@@ -9,7 +9,7 @@ module "mut_infrastructure_live_ci" {
   source                        = "../../../..//"
   prefix                        = "mut-${random_string.mut.id}"
   approval_request_sender_email = "success@simulator.amazonses.com"
-  send_verification_email       = false
+  send_verification_email       = true
 
   create_merge_lock_github_token_ssm_param = true
   repo_name                                = var.repo_name
