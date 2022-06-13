@@ -1,10 +1,10 @@
 locals {
   terraform_module_version = trimspace(file("${path.module}/source_version.txt"))
-  merge_lock_name          = coalesce(var.merge_lock_build_name, "${var.prefix}-merge-lock")
+  merge_lock_name          = "${var.prefix}-merge-lock"
 
-  pr_plan_build_name                  = coalesce(var.pr_plan_build_name, "${var.prefix}-pr-plan")
-  create_deploy_stack_build_name      = coalesce(var.create_deploy_stack_build_name, "${var.prefix}-create-deploy-stack")
-  terra_run_build_name                = coalesce(var.terra_run_build_name, "${var.prefix}-terra-run")
+  pr_plan_build_name                  = "${var.prefix}-pr-plan"
+  create_deploy_stack_build_name      = "${var.prefix}-create-deploy-stack"
+  terra_run_build_name                = "${var.prefix}-terra-run"
   buildspec_scripts_source_identifier = "helpers"
 
   build_img = coalesce(

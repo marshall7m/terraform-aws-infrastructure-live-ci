@@ -1,5 +1,5 @@
 locals {
-  trigger_sf_function_name = coalesce(var.trigger_sf_function_name, "${var.prefix}-trigger-sf")
+  trigger_sf_function_name = "${var.prefix}-trigger-sf"
   trigger_sf_dep_zip       = "${path.module}/trigger_sf_deps.zip"
   trigger_sf_dep_dir       = "${path.module}/functions/trigger_sf/deps"
 }

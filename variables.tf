@@ -1,7 +1,7 @@
 variable "prefix" {
   description = "Prefix to attach to all resources"
   type        = string
-  default     = "infrastructure-live"
+  default     = null
 }
 
 variable "account_parent_cfg" {
@@ -60,18 +60,6 @@ variable "codebuild_source_auth_token" {
   type        = string
   default     = null
   sensitive   = true
-}
-
-variable "merge_lock_build_name" {
-  description = "Codebuild project name used for determine if infrastructure related PR can be merged into base branch"
-  type        = string
-  default     = null
-}
-
-variable "pr_plan_build_name" {
-  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PR"
-  type        = string
-  default     = null
 }
 
 variable "pr_plan_vpc_config" {
@@ -214,11 +202,6 @@ variable "file_path_pattern" {
   default     = ".+\\.(hcl|tf)$"
 }
 
-variable "api_name" {
-  description = "Name of AWS Rest API"
-  type        = string
-  default     = null
-}
 
 variable "api_stage_name" {
   description = "API deployment stage name"
@@ -330,34 +313,10 @@ variable "github_webhook_validator_github_token_ssm_tags" {
 variable "step_function_name" {
   description = "Name of AWS Step Function machine"
   type        = string
-  default     = "infrastructure-live-ci"
-}
-
-variable "cloudwatch_event_rule_name" {
-  description = "Name of the CloudWatch event rule that detects when the Step Function completes an execution"
-  type        = string
-  default     = null
-}
-
-variable "create_deploy_stack_build_name" {
-  description = "Name of AWS CodeBuild project that will create the PR deployment stack into the metadb"
-  type        = string
-  default     = null
-}
-
-variable "terra_run_build_name" {
-  description = "Name of AWS CodeBuild project that will run Terraform commands withing Step Function executions"
-  type        = string
-  default     = null
+  default     = "deployment-flow"
 }
 
 # RDS #
-
-variable "metadb_name" {
-  description = "Name of the AWS RDS db"
-  type        = string
-  default     = null
-}
 
 variable "metadb_username" {
   description = "Master username of the metadb"
@@ -449,10 +408,4 @@ EOF
     security_group_ids = list(string)
   })
   default = null
-}
-
-variable "trigger_sf_function_name" {
-  description = "Name of the AWS Lambda Function used to trigger Step Function deployments"
-  type        = string
-  default     = null
 }

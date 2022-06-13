@@ -1,5 +1,5 @@
 locals {
-  cloudwatch_event_rule_name = coalesce(var.cloudwatch_event_rule_name, "${var.prefix}-finished-execution")
+  cloudwatch_event_rule_name = "${var.prefix}-finished-execution"
   state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${var.step_function_name}"
   cw_event_terra_run_rule    = "${local.terra_run_build_name}-rule"
   approval_url               = "${module.github_webhook_validator.deployment_invoke_url}${module.github_webhook_validator.api_stage_name}${aws_api_gateway_resource.approval.path}"
