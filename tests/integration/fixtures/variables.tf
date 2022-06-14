@@ -11,7 +11,7 @@ variable "approval_request_sender_email" {
 }
 
 variable "testing_secondary_aws_account_id" {
-  description = "AWS account ID used to test module ability to handle multiple AWS accounts"
+  description = "Secondary AWS account ID used to test module ability to handle multiple AWS accounts"
   type        = number
 }
 
@@ -29,7 +29,10 @@ variable "github_webhook_validator_github_token_ssm_value" {
   description = <<EOF
 Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.
 If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".
-GitHub token needs the `repo` permission to access the private repo. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+If `var.repo_name` is a private repository, the GitHub token needs the `repo` permission to access the private repo.
+If `var.repo_name` is a public repository, the GitHub token just needs to be a valid GitHub token registered with the
+GitHub provider.
+See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
   EOF
   type        = string
   sensitive   = true
