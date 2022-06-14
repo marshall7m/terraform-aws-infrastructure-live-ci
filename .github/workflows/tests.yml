@@ -155,6 +155,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 21600 # 6hrs
 
       - name: Configure AWS Credentials for local workflow
         uses: aws-actions/configure-aws-credentials@v1
