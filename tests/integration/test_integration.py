@@ -861,7 +861,7 @@ class Integration:
         assert response["status"] == "SUCCEEDED"
 
     @pytest.mark.dependency()
-    def test_merge_lock_unlocked(self, request, mut_output):
+    def test_merge_lock_unlocked(self, request, mut_output, case_param):
         """Assert that the merge lock is unlocked after the deploy stack is finished"""
         ssm = boto3.client("ssm")
 
@@ -869,7 +869,7 @@ class Integration:
         if getattr(request.cls, "expect_failed_trigger_sf", False):
             pytest.skip("One of the trigger sf Lambda invocations was expected to fail")
 
-        elif getattr(request.cls, "expect_failed_create_deploy_stack", False):
+        elif case_param.get("expect_failed_create_deploy_stack", False):
             # merge lock should be unlocked if error is caught within
             # build's update_executions_with_new_deploy_stack()
             log.info("Assert merge lock is unlocked")
