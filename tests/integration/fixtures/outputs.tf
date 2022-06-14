@@ -47,33 +47,16 @@ output "codebuild_terra_run_arn" {
   value = module.mut_infrastructure_live_ci.codebuild_terra_run_arn
 }
 
-output "pg_user" {
-  value = module.mut_infrastructure_live_ci.metadb_username
-}
-
-output "pg_password" {
-  value     = module.mut_infrastructure_live_ci.metadb_password
-  sensitive = true
-}
-
-output "pg_database" {
-  value = module.mut_infrastructure_live_ci.metadb_name
-}
-
-output "pg_schema" {
+output "metadb_schema" {
   value = var.metadb_schema
-}
-
-output "pg_host" {
-  value = module.mut_infrastructure_live_ci.metadb_endpoint
-}
-
-output "pg_port" {
-  value = module.mut_infrastructure_live_ci.metadb_port
 }
 
 output "metadb_arn" {
   value = module.mut_infrastructure_live_ci.metadb_arn
+}
+
+output "metadb_username" {
+  value = module.mut_infrastructure_live_ci.metadb_username
 }
 
 output "metadb_name" {
