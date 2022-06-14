@@ -60,6 +60,10 @@ output "pg_database" {
   value = module.mut_infrastructure_live_ci.metadb_name
 }
 
+output "pg_schema" {
+  value = var.metadb_schema
+}
+
 output "pg_host" {
   value = module.mut_infrastructure_live_ci.metadb_endpoint
 }

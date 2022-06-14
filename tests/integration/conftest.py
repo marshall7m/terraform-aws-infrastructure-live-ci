@@ -172,25 +172,6 @@ def mut_output(tf):
     yield {k: v["value"] for k, v in tf.output().items()}
 
 
-@pytest.fixture(scope="session")
-def conn(mut_output):
-    conn = aurora_data_api.connect(
-        aurora_cluster_arn=mut_output["metadb_arn"],
-        secret_arn=mut_output["metadb_secret_manager_master_arn"],
-        database=mut_output["metadb_name"],
-    )
-
-    yield conn
-    conn.close()
-
-
-@pytest.fixture(scope="session")
-def cur(conn):
-    cur = conn.cursor()
-    yield cur
-    cur.close()
-
-
 @pytest.fixture(scope="module")
 def gh():
     return github.Github(os.environ["TF_VAR_testing_integration_github_token"], retry=3)
@@ -279,6 +260,22 @@ def merge_pr(repo, git_repo, mut_output):
 
         log.debug("Adding required status checks back")
         branch.edit_required_status_checks(contexts=status_checks)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_metadb_user(mut_output):
+    log.info("Setting up testing metadb user")
+    with aurora_data_api.connect(
+        aurora_cluster_arn=mut_output["metadb_arn"],
+        secret_arn=mut_output["metadb_secret_manager_master_arn"],
+        database=mut_output["metadb_name"],
+        # recommended for DDL statements
+        continue_after_timeout=True,
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"ALTER ROLE {mut_output['pg_user']} SET search_path TO {mut_output['pg_schema']};"
+            )
 
 
 @pytest.fixture(scope="module", autouse=True)

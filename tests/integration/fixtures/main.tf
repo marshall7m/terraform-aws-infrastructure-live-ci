@@ -177,6 +177,7 @@ module "mut_infrastructure_live_ci" {
   metadb_password    = random_password.metadb["master"].result
   metadb_ci_username = "mut_ci_user"
   metadb_ci_password = random_password.metadb["ci"].result
+  metadb_schema      = var.metadb_schema
   # repo specific env vars required to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
     {

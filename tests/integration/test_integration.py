@@ -11,6 +11,7 @@ import random
 import string
 import re
 from pytest_dependency import depends
+import aurora_data_api
 import boto3
 from pprint import pformat
 import requests
@@ -165,7 +166,7 @@ class Integration:
             log.info("PR is merged or already closed")
 
     @pytest.fixture(scope="module")
-    def destroy_scenario_tf_resources(self, conn, mut_output, tf_destroy_commit_ids):
+    def destroy_scenario_tf_resources(self, mut_output, tf_destroy_commit_ids):
         """
         Starts a terra_run build for each AWS account and runs terragrunt run-all destroy
         within each account-level root directory
@@ -176,21 +177,30 @@ class Integration:
 
         log.info("Destroying Terraform provisioned resources from test repository")
 
-        with conn.cursor() as cur:
-            cur.execute(
+        with aurora_data_api.connect(
+            aurora_cluster_arn=mut_output["metadb_arn"],
+            secret_arn=mut_output["metadb_secret_manager_master_arn"],
+            database=mut_output["metadb_name"],
+            # recommended for DDL statements
+            continue_after_timeout=True,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                SELECT account_name, account_path, deploy_role_arn
+                FROM account_dim
                 """
-            SELECT account_name, account_path, deploy_role_arn
-            FROM account_dim
-            """
-            )
+                )
+
+                results = cur.fetchall()
+                columns = cur.description
 
             accounts = []
-            for result in cur.fetchall():
+            for result in results:
                 record = {}
-                for i, description in enumerate(cur.description):
-                    record[description.name] = result[i]
+                for i, col in enumerate(columns):
+                    record[col.name] = result[i]
                 accounts.append(record)
-        conn.commit()
 
         log.debug(f"Accounts:\n{pformat(accounts)}")
         log.info("Starting account-level terraform destroy builds")
@@ -299,9 +309,7 @@ class Integration:
 
     @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
-    def test_create_deploy_stack_codebuild(
-        self, request, conn, case_param, mut_output, pr
-    ):
+    def test_create_deploy_stack_codebuild(self, request, case_param, mut_output, pr):
         """Assert create deploy stack codebuild status matches it's expected status"""
         depends(request, [f"{request.cls.__name__}::test_pr_merge"])
 
@@ -328,16 +336,23 @@ class Integration:
             log.info(
                 f'Assert no execution records exists for commit_id: {pr["head_commit_id"]}'
             )
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    SELECT COUNT(*)
-                    FROM executions
-                    WHERE commit_id = '{pr["head_commit_id"]}'
-                """
-                )
-                results = cur.fetchone()
-            conn.commit()
+            with aurora_data_api.connect(
+                aurora_cluster_arn=mut_output["metadb_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                database=mut_output["metadb_name"],
+                # recommended for DDL statements
+                continue_after_timeout=True,
+            ) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"""
+                        SELECT COUNT(*)
+                        FROM executions
+                        WHERE commit_id = '{pr["head_commit_id"]}'
+                    """
+                    )
+                    results = cur.fetchone()
+
             log.debug(f"Results: {results}")
             assert results[0] == 0
 
@@ -348,16 +363,25 @@ class Integration:
             log.info("Assert build succeeded")
             assert status == "SUCCEEDED"
 
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                SELECT array_agg(execution_id::TEXT)
-                FROM executions
-                WHERE commit_id = '{pr["head_commit_id"]}'
-                """
-                )
-                ids = cur.fetchone()[0]
-            conn.commit()
+            with aurora_data_api.connect(
+                aurora_cluster_arn=mut_output["metadb_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                database=mut_output["metadb_name"],
+                # recommended for DDL statements
+                continue_after_timeout=True,
+            ) as conn:
+                with conn.cursor() as cur:
+
+                    cur.execute(
+                        f"""
+                    SELECT array_agg(execution_id::TEXT)
+                    FROM executions
+                    WHERE commit_id = '{pr["head_commit_id"]}'
+                    """
+                    )
+                    results = cur.fetchone()
+
+            ids = results[0]
 
             if ids is None:
                 target_execution_ids = []
@@ -445,7 +469,9 @@ class Integration:
     )
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_rollback_providers_executions_exists(self, request, conn, case_param, pr):
+    def test_rollback_providers_executions_exists(
+        self, request, mut_output, case_param, pr
+    ):
         """Assert that trigger Step Function Lambda created the correct amount of rollback new provider resource executions"""
         depends(
             request,
@@ -475,19 +501,27 @@ class Integration:
         target_execution_ids = []
         while len(target_execution_ids) == 0:
             time.sleep(10)
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                SELECT array_agg(execution_id::TEXT)
-                FROM executions
-                WHERE commit_id = '{pr["head_commit_id"]}'
-                AND is_rollback = true
-                AND cardinality(new_providers) > 0
-                """
-                )
-                ids = cur.fetchone()[0]
-            conn.commit()
+            with aurora_data_api.connect(
+                aurora_cluster_arn=mut_output["metadb_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                database=mut_output["metadb_name"],
+                # recommended for DDL statements
+                continue_after_timeout=True,
+            ) as conn:
+                with conn.cursor() as cur:
 
+                    cur.execute(
+                        f"""
+                    SELECT array_agg(execution_id::TEXT)
+                    FROM executions
+                    WHERE commit_id = '{pr["head_commit_id"]}'
+                    AND is_rollback = true
+                    AND cardinality(new_providers) > 0
+                    """
+                    )
+                    results = cur.fetchone()
+
+            ids = results[0]
             if ids is None:
                 target_execution_ids = []
             else:
@@ -503,7 +537,7 @@ class Integration:
     )
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_target_execution_record_exists(self, request, conn, pr, case_param):
+    def test_target_execution_record_exists(self, request, mut_output, pr, case_param):
         """Queries metadb until the target execution record exists and adds record to request fixture"""
         depends(
             request,
@@ -521,19 +555,26 @@ class Integration:
         results = None
         while not results:
             time.sleep(10)
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    SELECT *
-                    FROM executions
-                    WHERE commit_id = '{pr["head_commit_id"]}'
-                    AND "status" IN ('running', 'aborted', 'failed')
-                    AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
-                    LIMIT 1
-                """
-                )
-                results = cur.fetchone()
-            conn.commit()
+            with aurora_data_api.connect(
+                aurora_cluster_arn=mut_output["metadb_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                database=mut_output["metadb_name"],
+                # recommended for DDL statements
+                continue_after_timeout=True,
+            ) as conn:
+                with conn.cursor() as cur:
+
+                    cur.execute(
+                        f"""
+                        SELECT *
+                        FROM executions
+                        WHERE commit_id = '{pr["head_commit_id"]}'
+                        AND "status" IN ('running', 'aborted', 'failed')
+                        AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
+                        LIMIT 1
+                    """
+                    )
+                    results = cur.fetchone()
 
         record = {}
         row = [value for value in results]

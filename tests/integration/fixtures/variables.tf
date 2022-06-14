@@ -34,3 +34,9 @@ GitHub token needs the `repo` permission to access the private repo. (see more a
   type        = string
   sensitive   = true
 }
+
+variable "metadb_schema" {
+  description = "Schema for AWS RDS Postgres db"
+  type        = string
+  default     = "prod"
+}
