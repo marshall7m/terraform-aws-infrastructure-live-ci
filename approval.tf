@@ -105,7 +105,7 @@ resource "aws_api_gateway_account" "approval" {
 }
 
 module "agw_role" {
-  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
 
   role_name        = local.approval_logs
   trusted_services = ["apigateway.amazonaws.com"]
@@ -164,7 +164,7 @@ resource "aws_iam_policy" "lambda_approval_request" {
 }
 
 module "lambda_approval_request" {
-  source           = "github.com/marshall7m/terraform-aws-lambda"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.0"
   filename         = data.archive_file.lambda_approval_request.output_path
   source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
   function_name    = local.approval_request_name
@@ -211,7 +211,7 @@ data "archive_file" "lambda_approval_response_deps" {
 }
 
 module "lambda_approval_response" {
-  source           = "github.com/marshall7m/terraform-aws-lambda"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.0"
   filename         = data.archive_file.lambda_approval_response.output_path
   source_code_hash = data.archive_file.lambda_approval_response.output_base64sha256
   function_name    = local.approval_response_name

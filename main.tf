@@ -176,7 +176,7 @@ resource "aws_sfn_state_machine" "this" {
 }
 
 module "sf_role" {
-  source           = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source           = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name        = local.step_function_name
   trusted_services = ["states.amazonaws.com"]
   statements = [
@@ -253,7 +253,7 @@ resource "aws_cloudwatch_event_rule" "sf_execution" {
 }
 
 module "cw_event_rule_role" {
-  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
 
   role_name        = local.cloudwatch_event_rule_name
   trusted_services = ["events.amazonaws.com"]
@@ -301,7 +301,7 @@ resource "aws_cloudwatch_event_rule" "codebuild_terra_run" {
 }
 
 module "cw_event_terra_run" {
-  source = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
 
   role_name        = local.cw_event_terra_run_rule
   trusted_services = ["events.amazonaws.com"]

@@ -40,7 +40,7 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
 }
 
 module "codebuild_create_deploy_stack" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
+  source = "github.com/marshall7m/terraform-aws-codebuild?ref=v0.1.0"
 
   name                    = local.create_deploy_stack_build_name
   create_source_auth      = var.codebuild_source_auth_token != null ? true : false
@@ -191,7 +191,7 @@ EOT
 }
 
 module "codebuild_pr_plan" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
+  source = "github.com/marshall7m/terraform-aws-codebuild?ref=v0.1.0"
   name   = local.pr_plan_build_name
 
   environment = {
@@ -316,7 +316,7 @@ EOT
 }
 
 module "codebuild_terra_run" {
-  source = "github.com/marshall7m/terraform-aws-codebuild"
+  source = "github.com/marshall7m/terraform-aws-codebuild?ref=v0.1.0"
   name   = local.terra_run_build_name
 
   environment = {

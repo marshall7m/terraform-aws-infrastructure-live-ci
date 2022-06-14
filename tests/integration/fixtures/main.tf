@@ -100,7 +100,7 @@ resource "random_password" "metadb" {
 }
 
 module "plan_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name = local.plan_role_name
   trusted_entities = [
     module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
@@ -111,14 +111,14 @@ module "plan_role" {
 }
 
 module "deploy_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name               = local.deploy_role_name
   trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
 
 module "secondary_plan_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name = local.plan_role_name
   trusted_entities = [
     module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
@@ -132,7 +132,7 @@ module "secondary_plan_role" {
 }
 
 module "secondary_deploy_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam/modules//iam-role"
+  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name               = local.deploy_role_name
   trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]

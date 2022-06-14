@@ -19,7 +19,7 @@ resource "aws_ssm_parameter" "merge_lock_github_token" {
 }
 
 module "github_webhook_validator" {
-  source = "github.com/marshall7m/terraform-aws-github-webhook"
+  source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.0"
 
   deployment_triggers = {
     approval = filesha1("${path.module}/approval.tf")
@@ -99,7 +99,7 @@ data "archive_file" "lambda_merge_lock_deps" {
 }
 
 module "lambda_merge_lock" {
-  source           = "github.com/marshall7m/terraform-aws-lambda"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.0"
   filename         = data.archive_file.lambda_merge_lock.output_path
   source_code_hash = data.archive_file.lambda_merge_lock.output_base64sha256
   function_name    = local.merge_lock_name
