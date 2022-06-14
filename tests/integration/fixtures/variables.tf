@@ -1,5 +1,23 @@
 variable "testing_integration_github_token" {
-  description = "GitHub token used for the Terraform GitHub provider and the PyTest PyGithub API connection"
+  description = <<EOF
+GitHub token used for the Terraform GitHub provider and the PyTest PyGithub API connection.
+The permissions for the token is dependent on if the repo has public or private visibility.
+Permissions:
+  private:
+    - admin:repo_hook
+    - repo
+    - read:org (if organization repo)
+    - delete_repo
+    - read:discussion
+  public:
+    - admin:repo_hook
+    - repo:status
+    - public_repo
+    - read:org (if organization repo)
+    - delete_repo
+    - read:discussion
+See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
+EOF
   type        = string
   sensitive   = true
   default     = null
@@ -19,8 +37,14 @@ variable "merge_lock_github_token_ssm_value" {
   description = <<EOF
 Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.
 If not provided, module looks for pre-existing SSM parameter via `var.merge_lock_github_token_ssm_key`".
-GitHub token only needs the `repo:status` permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
-  EOF
+The permissions for the token is dependent on if the repo has public or private visibility.
+Permissions:
+  private:
+    - repo
+  public:
+    - repo:status
+See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
+EOF
   type        = string
   sensitive   = true
 }
@@ -29,9 +53,12 @@ variable "github_webhook_validator_github_token_ssm_value" {
   description = <<EOF
 Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.
 If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".
-If `var.repo_name` is a private repository, the GitHub token needs the `repo` permission to access the private repo.
-If `var.repo_name` is a public repository, the GitHub token just needs to be a valid GitHub token registered with the
-GitHub provider.
+The permissions for the token is dependent on if the repo has public or private visibility.
+Permissions:
+  private:
+    - repo
+  public:
+    - None (Just needs to be a registered token associated with GitHub provider)
 See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
   EOF
   type        = string
