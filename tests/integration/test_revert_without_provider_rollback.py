@@ -2,6 +2,7 @@ import uuid
 import logging
 import os
 import pytest
+import boto3
 from tests.helpers.utils import dummy_configured_provider_resource
 from tests.integration import test_integration
 
@@ -39,6 +40,30 @@ class TestRevertPRWithoutProviderRollback(test_integration.Integration):
     but also it's respective dummy provider block that Terraform needs in order to destroy
     the dummy resource.
     """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def unset_graph_scan(self, mut_output):
+        cb = boto3.client("codebuild")
+
+        current = cb.batch_get_projects(
+            names=[mut_output["codebuild_create_deploy_stack_name"]]
+        )["projects"][0]
+        original = current["environment"]
+        current["environment"]["environmentVariables"] = [
+            env_var
+            for env_var in current["environment"]["environmentVariables"]
+            if env_var["name"] != "GRAPH_SCAN"
+        ]
+        cb.update_project(
+            name=mut_output["codebuild_create_deploy_stack_name"],
+            environment=current["environment"],
+        )
+
+        yield None
+
+        cb.update_project(
+            name=mut_output["codebuild_create_deploy_stack_name"], environment=original
+        )
 
     case = {
         "head_ref": f"feature-{uuid.uuid4()}",
