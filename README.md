@@ -472,26 +472,52 @@ For a demo of the module that will cleanup any resources created, see the `Integ
 13. Wait for the deployment build to finish
 14. Verify that the Terraform changes have been deployed
 
-# Testing
+## Testing
+### Option 1: Docker Environment
 
-### Requirements
+#### Requirements
  
 The following tools are required:
-- [Docker](https://docs.docker.com/get-docker/)
- 
+- [git](https://github.com/git/git)
+- [docker](https://docs.docker.com/get-docker/)
+
 The steps below will setup a testing Docker environment for running tests.
 
-1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/mut-terraform-aws-infrastructure-live-ci.git`
+1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
-3. Ensure that the environment variables from the docker-compose `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `variables.tf` file.
-4. All Terraform resources will automatically be deleted during the PyTest session cleanup. If the provisioned resources are needed after the PyTest execution,
+3. Ensure that the environment variables from the `docker-compose.yml` file's `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/integration/variables.tf` files.
+4. Run `docker-compose run --rm unit /bin/bash` to setup a docker environment for unit testing or run `docker-compose run --rm integration /bin/bash` to setup a docker environment for integration testing. The command will create an interactive shell within the docker container.
+5. Run tests within the `tests` directory
+
+```
+NOTE: All Terraform resources will automatically be deleted during the PyTest session cleanup. If the provisioned resources are needed after the PyTest execution,
 use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destroy`). BEWARE: If the resources are left alive after the tests, the AWS account may incur additional charges.
+```
+
+### Option 2: Local GitHub Actions Workflow via [act](https://github.com/nektos/act)
+
+#### Requirements
+ 
+The following tools are required:
+- [git](https://github.com/git/git)
+- [docker](https://docs.docker.com/get-docker/)
+- [act](https://github.com/nektos/act)
+
+The steps below will run the GitHub Actions workflow within local Docker containers.
+
+1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
+2. Within your CLI, change into the root of the repo
+3. Run the following commmand: `act push`. This will run the GitHub workflow logic for push events
+4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/integration/variables.tf` files.
+
+```
+NOTE: All Terraform resources will automatically be deleted during the PyTest session cleanup
+```
 
 ## Pitfalls
 
 - Management of two GitHub Personal Access Tokens (PAT). User is required to refresh the GitHub token values when the expiration date is close.
-  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration?
-    - User would specify a pre-existing machine user or the module can create a machine user (would require a TF local-exec script to create the user)
+  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration? User would specify a pre-existing machine user or the module can create a machine user (would require a TF local-exec script to create the user)
 
 # TODO:
  
