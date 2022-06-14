@@ -1,4 +1,4 @@
-variable "testing_github_token" {
+variable "testing_unit_github_token" {
   description = "GitHub token used for the Terraform GitHub provider and the PyTest PyGithub API connection"
   type        = string
   sensitive   = true

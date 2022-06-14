@@ -116,5 +116,9 @@ resource "null_resource" "metadb_setup" {
     command     = local.metadb_setup_script
     interpreter = ["bash", "-c"]
   }
-  triggers = { metadb_setup_script = sha256(local.metadb_setup_script) }
+  triggers = {
+    metadb_setup_script = sha256(local.metadb_setup_script)
+    cluster_arn         = aws_rds_cluster.metadb.arn
+    db_name             = aws_rds_cluster.metadb.database_name
+  }
 }

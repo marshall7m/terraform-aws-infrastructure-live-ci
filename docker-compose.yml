@@ -34,7 +34,7 @@ services:
       - AWS_DEFAULT_REGION
       - AWS_SESSION_TOKEN
       - AWS_SESSION_EXPIRATION
-      - TF_VAR_testing_github_token
+      - TF_VAR_testing_unit_github_token
       - TF_VAR_approval_request_sender_email
       - PGUSER=postgres
       - PGPASSWORD=postgres

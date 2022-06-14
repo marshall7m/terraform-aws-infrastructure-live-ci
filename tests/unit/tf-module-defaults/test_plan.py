@@ -14,7 +14,9 @@ log.setLevel(logging.DEBUG)
 @pytest.fixture
 def repo():
     name = f"mut-terraform-aws-infrastructure-live-{uuid.uuid4()}"
-    gh = github.Github(os.environ["TF_VAR_testing_github_token"], retry=3).get_user()
+    gh = github.Github(
+        os.environ["TF_VAR_testing_unit_github_token"], retry=3
+    ).get_user()
 
     log.info(f"Creating testing repo: {name}")
     repo = gh.create_repo(name)
