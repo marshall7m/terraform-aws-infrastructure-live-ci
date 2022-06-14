@@ -396,6 +396,18 @@ class Integration:
             request.cls.executions[current_test_param + 1]["testing_start_time"] = int(
                 datetime.now().timestamp() * 1000
             )
+        elif len(request.cls.executions) == 1:
+            # needed for the wait_for_lambda_invocation() start_time arg within the test_merge_lock_unlocked test
+            # sets the start_time for current execution iteration given there is only one execution
+            log.info("Setting target execution start time")
+            current_test_param = int(
+                re.search(
+                    r"(?<=\[).+(?=\])", os.environ.get("PYTEST_CURRENT_TEST")
+                ).group(0)
+            )
+            request.cls.executions[current_test_param]["testing_start_time"] = int(
+                datetime.now().timestamp() * 1000
+            )
 
         if getattr(request.cls, "expect_failed_trigger_sf", False):
             utils.wait_for_lambda_invocation(
@@ -851,32 +863,46 @@ class Integration:
     @pytest.mark.dependency()
     def test_merge_lock_unlocked(self, request, mut_output):
         """Assert that the merge lock is unlocked after the deploy stack is finished"""
+        ssm = boto3.client("ssm")
+
         # if trigger SF fails, the merge lock will not be unlocked
         if getattr(request.cls, "expect_failed_trigger_sf", False):
             pytest.skip("One of the trigger sf Lambda invocations was expected to fail")
 
-        last_execution = request.cls.executions[len(request.cls.executions) - 1]
+        elif getattr(request.cls, "expect_failed_create_deploy_stack", False):
+            # merge lock should be unlocked if error is caught within
+            # build's update_executions_with_new_deploy_stack()
+            log.info("Assert merge lock is unlocked")
+            assert (
+                ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
+                    "Value"
+                ]
+                == "none"
+            )
 
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_sf_execution_status[{len(request.cls.executions) - 1}]"
-            ],
-        )
+        else:
+            last_execution = request.cls.executions[len(request.cls.executions) - 1]
 
-        utils.wait_for_lambda_invocation(
-            mut_output["trigger_sf_function_name"],
-            datetime.utcfromtimestamp(last_execution["testing_start_time"] / 1000),
-            expected_count=1,
-            timeout=60,
-        )
+            log.debug(f"Last execution request dict:\n{pformat(last_execution)}")
 
-        ssm = boto3.client("ssm")
+            depends(
+                request,
+                [
+                    f"{request.cls.__name__}::test_sf_execution_status[{len(request.cls.executions) - 1}]"
+                ],
+            )
 
-        log.info("Assert merge lock is unlocked")
-        assert (
-            ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
-                "Value"
-            ]
-            == "none"
-        )
+            utils.wait_for_lambda_invocation(
+                mut_output["trigger_sf_function_name"],
+                datetime.utcfromtimestamp(last_execution["testing_start_time"] / 1000),
+                expected_count=1,
+                timeout=60,
+            )
+
+            log.info("Assert merge lock is unlocked")
+            assert (
+                ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
+                    "Value"
+                ]
+                == "none"
+            )
