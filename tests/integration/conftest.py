@@ -274,8 +274,12 @@ def setup_metadb_user(mut_output):
     ) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"ALTER ROLE {mut_output['pg_user']} SET search_path TO {mut_output['pg_schema']};"
+                f"""
+                ALTER ROLE {mut_output['metadb_username']} SET search_path TO {mut_output['metadb_schema']};
+                show search_path;
+                """
             )
+            log.debug(f"Search path: {cur.fetchall()}")
 
 
 @pytest.fixture(scope="module", autouse=True)
