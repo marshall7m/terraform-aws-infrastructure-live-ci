@@ -38,13 +38,20 @@ class TestRevertPRWithoutProviderRollback(test_integration.Integration):
     This case's associated create deploy stack Codebuild is expected to fail given
     that the reversion of the PR will remove not only the new dummy resource block
     but also it's respective dummy provider block that Terraform needs in order to destroy
-    the dummy resource.
+    the dummy resource. The build is specifically expected to fail when GRAPH_SCAN env var
+    is not set and the build uses `terragrunt run-all plan` to collect deployment directories
+    rather than `terragrunt graph-dependencies`.
     """
 
     @pytest.fixture(scope="class", autouse=True)
     def unset_graph_scan(self, mut_output):
+        """
+        Removes GRAPH_SCAN env var from create deploy stack build project before
+        running class case
+        """
         cb = boto3.client("codebuild")
 
+        log.info("Removing GRAPH_SCAN env var from create deploy stack build")
         current = cb.batch_get_projects(
             names=[mut_output["codebuild_create_deploy_stack_name"]]
         )["projects"][0]
@@ -61,6 +68,7 @@ class TestRevertPRWithoutProviderRollback(test_integration.Integration):
 
         yield None
 
+        log.info("Adding GRAPH_SCAN env var back into create deploy stack build")
         cb.update_project(
             name=mut_output["codebuild_create_deploy_stack_name"], environment=original
         )
