@@ -127,7 +127,7 @@ jobs:
           docker compose run unit pytest -vv tests/unit
 
   integration:
-    needs: [precommit, unit]
+    # needs: [precommit, unit]
     runs-on: ubuntu-latest
     container: ghcr.io/marshall7m/terrace:v0.1.5
     permissions:
