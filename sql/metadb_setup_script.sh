@@ -1,6 +1,7 @@
 #!/bin/bash
-# shellcheck disable=SC2154
+# shellcheck disable=SC2154,SC1091
 # SC2154: all variables are interpolated within the Terraform module via the templatefile() function
+# SC1091: all variables are interpolated within the Terraform module via the templatefile() function
 
 set -e
 
@@ -12,6 +13,7 @@ aws rds-data execute-statement \
   --resource-arn "${cluster_arn}" \
   --secret-arn "${secret_arn}" \
   --database "${db_name}" \
+  --continue-after-timeout \
   --sql "${create_tables_sql}"
 
 echo "Ensure tables exists"
@@ -24,6 +26,7 @@ aws rds-data execute-statement \
   --resource-arn "${cluster_arn}" \
   --secret-arn "${secret_arn}" \
   --database "${db_name}" \
+  --continue-after-timeout \
   --sql "${create_ci_user_sql}"
 
 echo "Inserting account records into account_dim"
