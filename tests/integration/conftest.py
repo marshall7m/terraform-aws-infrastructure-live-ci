@@ -9,6 +9,7 @@ import git
 from tests.helpers.utils import check_ses_sender_email_auth
 import datetime
 import re
+import uuid
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -273,7 +274,7 @@ def truncate_executions(request, mut_output):
         log.info("Truncating executions table")
         with aurora_data_api.connect(
             aurora_cluster_arn=mut_output["metadb_arn"],
-            secret_arn=mut_output["metadb_secret_manager_master_arn"],
+            secret_arn=mut_output["metadb_secret_manager_testing_arn"],
             database=mut_output["metadb_name"],
             # recommended for DDL statements
             continue_after_timeout=True,

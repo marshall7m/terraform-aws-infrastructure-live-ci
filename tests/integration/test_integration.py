@@ -179,7 +179,7 @@ class Integration:
 
         with aurora_data_api.connect(
             aurora_cluster_arn=mut_output["metadb_arn"],
-            secret_arn=mut_output["metadb_secret_manager_ci_arn"],
+            secret_arn=mut_output["metadb_secret_manager_testing_arn"],
             database=mut_output["metadb_name"],
             # recommended for DDL statements
             continue_after_timeout=True,
@@ -338,7 +338,7 @@ class Integration:
             )
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
+                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
@@ -365,7 +365,7 @@ class Integration:
 
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
+                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
@@ -503,7 +503,7 @@ class Integration:
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
+                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
@@ -557,7 +557,7 @@ class Integration:
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
+                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
