@@ -71,10 +71,6 @@ output "metadb_secret_manager_ci_arn" {
   value = module.mut_infrastructure_live_ci.metadb_secret_manager_ci_arn
 }
 
-output "metadb_secret_manager_testing_arn" {
-  value = aws_secretsmanager_secret_version.metadb_testing_user.arn
-}
-
 output "approval_url" {
   value = module.mut_infrastructure_live_ci.approval_url
 }

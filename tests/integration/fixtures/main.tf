@@ -1,20 +1,7 @@
 locals {
-  mut_id                  = "mut-${random_string.mut.id}"
-  plan_role_name          = "${local.mut_id}-plan"
-  deploy_role_name        = "${local.mut_id}-deploy"
-  metadb_testing_username = "integration_testing_user"
-  metadb_testing_user_setup_script = templatefile("${path.module}/sql/metadb_testing_user_setup_script.sh", {
-    cluster_arn = module.mut_infrastructure_live_ci.metadb_arn
-    secret_arn  = module.mut_infrastructure_live_ci.metadb_secret_manager_master_arn
-    db_name     = module.mut_infrastructure_live_ci.metadb_name
-    create_testing_user_sql = templatefile("${path.module}/sql/create_metadb_testing_user.sql", {
-      metadb_testing_username = local.metadb_testing_username
-      metadb_testing_password = random_password.metadb["testing"].result
-      metadb_username         = module.mut_infrastructure_live_ci.metadb_username
-      metadb_name             = module.mut_infrastructure_live_ci.metadb_name
-      metadb_schema           = var.metadb_schema
-    })
-  })
+  mut_id           = "mut-${random_string.mut.id}"
+  plan_role_name   = "${local.mut_id}-plan"
+  deploy_role_name = "${local.mut_id}-deploy"
 }
 
 provider "aws" {
@@ -173,30 +160,6 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
   path        = "/"
   description = "Allows trigger_sf Codebuild project to read from terraform state S3 bucket"
   policy      = data.aws_iam_policy_document.trigger_sf_tf_state_access.json
-}
-
-resource "aws_secretsmanager_secret" "metadb_testing_user" {
-  name = "${local.mut_id}-data-api-${local.metadb_testing_username}-credentials"
-}
-
-resource "aws_secretsmanager_secret_version" "metadb_testing_user" {
-  secret_id = aws_secretsmanager_secret.metadb_testing_user.id
-  secret_string = jsonencode({
-    username = local.metadb_testing_username
-    password = random_password.metadb["testing"].result
-  })
-}
-
-resource "null_resource" "metadb_testing_user_setup" {
-  provisioner "local-exec" {
-    command     = local.metadb_testing_user_setup_script
-    interpreter = ["bash", "-c"]
-  }
-  triggers = {
-    metadb_testing_user_setup_script = sha256(local.metadb_testing_user_setup_script)
-    cluster_arn                      = module.mut_infrastructure_live_ci.metadb_arn
-    db_name                          = module.mut_infrastructure_live_ci.metadb_name
-  }
 }
 
 module "mut_infrastructure_live_ci" {
