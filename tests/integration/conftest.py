@@ -273,6 +273,8 @@ def setup_metadb_user(mut_output):
         continue_after_timeout=True,
     ) as conn:
         with conn.cursor() as cur:
+            log.debug(f"Role: {mut_output['metadb_username']}")
+            log.debug(f"Search path: {mut_output['metadb_schema']}")
             cur.execute(
                 f"""
                 ALTER ROLE {mut_output['metadb_username']} SET search_path TO {mut_output['metadb_schema']};
@@ -280,6 +282,15 @@ def setup_metadb_user(mut_output):
                 """
             )
             log.debug(f"Search path: {cur.fetchall()}")
+
+            cur.execute(
+                f"""
+                SELECT tablename FROM pg_tables WHERE schemaname = '{mut_output['metadb_schema']}';
+                """
+            )
+
+            log.debug(f"Tables within schema: {mut_output['metadb_schema']}")
+            log.debug(cur.fetchall())
 
 
 @pytest.fixture(scope="module", autouse=True)
