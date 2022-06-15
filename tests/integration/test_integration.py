@@ -179,16 +179,14 @@ class Integration:
 
         with aurora_data_api.connect(
             aurora_cluster_arn=mut_output["metadb_arn"],
-            secret_arn=mut_output["metadb_secret_manager_testing_arn"],
+            secret_arn=mut_output["metadb_secret_manager_master_arn"],
             database=mut_output["metadb_name"],
-            # recommended for DDL statements
-            continue_after_timeout=True,
         ) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
+                    f"""
                 SELECT account_name, account_path, deploy_role_arn
-                FROM account_dim
+                FROM {mut_output["metadb_schema"]}.account_dim
                 """
                 )
 
@@ -338,16 +336,14 @@ class Integration:
             )
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
                 database=mut_output["metadb_name"],
-                # recommended for DDL statements
-                continue_after_timeout=True,
             ) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         f"""
                         SELECT COUNT(*)
-                        FROM executions
+                        FROM {mut_output["metadb_schema"]}.executions
                         WHERE commit_id = '{pr["head_commit_id"]}'
                     """
                     )
@@ -365,17 +361,15 @@ class Integration:
 
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
                 database=mut_output["metadb_name"],
-                # recommended for DDL statements
-                continue_after_timeout=True,
             ) as conn:
                 with conn.cursor() as cur:
 
                     cur.execute(
                         f"""
                     SELECT array_agg(execution_id::TEXT)
-                    FROM executions
+                    FROM {mut_output["metadb_schema"]}.executions
                     WHERE commit_id = '{pr["head_commit_id"]}'
                     """
                     )
@@ -503,17 +497,15 @@ class Integration:
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
                 database=mut_output["metadb_name"],
-                # recommended for DDL statements
-                continue_after_timeout=True,
             ) as conn:
                 with conn.cursor() as cur:
 
                     cur.execute(
                         f"""
                     SELECT array_agg(execution_id::TEXT)
-                    FROM executions
+                    FROM {mut_output["metadb_schema"]}.executions
                     WHERE commit_id = '{pr["head_commit_id"]}'
                     AND is_rollback = true
                     AND cardinality(new_providers) > 0
@@ -557,17 +549,15 @@ class Integration:
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_testing_arn"],
+                secret_arn=mut_output["metadb_secret_manager_master_arn"],
                 database=mut_output["metadb_name"],
-                # recommended for DDL statements
-                continue_after_timeout=True,
             ) as conn:
                 with conn.cursor() as cur:
 
                     cur.execute(
                         f"""
                         SELECT *
-                        FROM executions
+                        FROM {mut_output["metadb_schema"]}.executions
                         WHERE commit_id = '{pr["head_commit_id"]}'
                         AND "status" IN ('running', 'aborted', 'failed')
                         AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
