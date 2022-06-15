@@ -278,9 +278,10 @@ def setup_metadb_user(mut_output):
             cur.execute(
                 f"""
                 ALTER ROLE {mut_output['metadb_username']} SET search_path TO {mut_output['metadb_schema']};
-                show search_path;
                 """
             )
+
+            cur.execute("show search_path;")
             log.debug(f"Search path: {cur.fetchall()}")
 
             cur.execute(

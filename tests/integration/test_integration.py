@@ -344,6 +344,26 @@ class Integration:
                 continue_after_timeout=True,
             ) as conn:
                 with conn.cursor() as cur:
+                    cur.execute("show search_path;")
+                    log.debug(f"Before setting search path: {cur.fetchall()}")
+                    statement = f"""
+                        ALTER ROLE {mut_output['metadb_username']} SET search_path TO {mut_output['metadb_schema']};
+                        """
+                    log.debug(f"Statement: {statement}")
+                    cur.execute(statement)
+
+                    cur.execute("show search_path;")
+                    log.debug(f"After setting search path: {cur.fetchall()}")
+
+                    cur.execute(
+                        f"""
+                        SELECT tablename FROM pg_tables WHERE schemaname = '{mut_output['metadb_schema']}';
+                        """
+                    )
+
+                    log.debug(f"Tables within schema: {mut_output['metadb_schema']}")
+                    log.debug(cur.fetchall())
+
                     cur.execute(
                         f"""
                         SELECT COUNT(*)
