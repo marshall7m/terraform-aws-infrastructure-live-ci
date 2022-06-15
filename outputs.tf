@@ -24,6 +24,11 @@ output "metadb_secret_manager_master_arn" {
   value       = aws_secretsmanager_secret_version.master_metadb_user.arn
 }
 
+output "metadb_secret_manager_ci_arn" {
+  description = "Secret Manager ARN of the metadb CI user credentials"
+  value       = aws_secretsmanager_secret_version.ci_metadb_user.arn
+}
+
 output "metadb_port" {
   description = "Port used for the metadb"
   value       = aws_rds_cluster.metadb.port

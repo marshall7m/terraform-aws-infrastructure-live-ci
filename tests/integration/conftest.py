@@ -262,41 +262,6 @@ def merge_pr(repo, git_repo, mut_output):
         branch.edit_required_status_checks(contexts=status_checks)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_metadb_user(mut_output):
-    log.info("Setting up testing metadb user")
-    with aurora_data_api.connect(
-        aurora_cluster_arn=mut_output["metadb_arn"],
-        secret_arn=mut_output["metadb_secret_manager_master_arn"],
-        database=mut_output["metadb_name"],
-        # recommended for DDL statements
-        continue_after_timeout=True,
-    ) as conn:
-        with conn.cursor() as cur:
-            log.debug(f"Role: {mut_output['metadb_username']}")
-            log.debug(f"Search path: {mut_output['metadb_schema']}")
-            cur.execute(
-                f"GRANT USAGE ON SCHEMA {mut_output['metadb_schema']} to {mut_output['metadb_username']}"
-            )
-            cur.execute(
-                f"""
-                ALTER ROLE CURRENT_USER SET search_path TO {mut_output['metadb_schema']};
-                """
-            )
-
-            cur.execute("show search_path;")
-            log.debug(f"Search path: {cur.fetchall()}")
-
-            cur.execute(
-                f"""
-                SELECT tablename FROM pg_tables WHERE schemaname = '{mut_output['metadb_schema']}';
-                """
-            )
-
-            log.debug(f"Tables within schema: {mut_output['metadb_schema']}")
-            log.debug(cur.fetchall())
-
-
 @pytest.fixture(scope="module", autouse=True)
 def truncate_executions(request, mut_output):
     # table setup is within tf module

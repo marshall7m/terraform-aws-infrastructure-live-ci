@@ -67,6 +67,10 @@ output "metadb_secret_manager_master_arn" {
   value = module.mut_infrastructure_live_ci.metadb_secret_manager_master_arn
 }
 
+output "metadb_secret_manager_ci_arn" {
+  value = module.mut_infrastructure_live_ci.metadb_secret_manager_ci_arn
+}
+
 output "approval_url" {
   value = module.mut_infrastructure_live_ci.approval_url
 }

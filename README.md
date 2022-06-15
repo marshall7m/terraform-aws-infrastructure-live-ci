@@ -440,6 +440,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | metadb\_name | Name of the metadb |
 | metadb\_password | Master password for the metadb |
 | metadb\_port | Port used for the metadb |
+| metadb\_secret\_manager\_ci\_arn | Secret Manager ARN of the metadb CI user credentials |
 | metadb\_secret\_manager\_master\_arn | Secret Manager ARN of the metadb master user credentials |
 | metadb\_username | Master username for the metadb |
 | step\_function\_arn | ARN of the Step Function |

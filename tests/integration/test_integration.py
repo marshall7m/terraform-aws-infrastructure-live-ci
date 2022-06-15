@@ -179,7 +179,7 @@ class Integration:
 
         with aurora_data_api.connect(
             aurora_cluster_arn=mut_output["metadb_arn"],
-            secret_arn=mut_output["metadb_secret_manager_master_arn"],
+            secret_arn=mut_output["metadb_secret_manager_ci_arn"],
             database=mut_output["metadb_name"],
             # recommended for DDL statements
             continue_after_timeout=True,
@@ -338,32 +338,12 @@ class Integration:
             )
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
             ) as conn:
                 with conn.cursor() as cur:
-                    cur.execute("show search_path;")
-                    log.debug(f"Before setting search path: {cur.fetchall()}")
-                    statement = f"""
-                        ALTER ROLE CURRENT_USER SET search_path TO {mut_output['metadb_schema']};
-                        """
-                    log.debug(f"Statement: {statement}")
-                    cur.execute(statement)
-
-                    cur.execute("show search_path;")
-                    log.debug(f"After setting search path: {cur.fetchall()}")
-
-                    cur.execute(
-                        f"""
-                        SELECT tablename FROM pg_tables WHERE schemaname = '{mut_output['metadb_schema']}';
-                        """
-                    )
-
-                    log.debug(f"Tables within schema: {mut_output['metadb_schema']}")
-                    log.debug(cur.fetchall())
-
                     cur.execute(
                         f"""
                         SELECT COUNT(*)
@@ -385,7 +365,7 @@ class Integration:
 
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
@@ -523,7 +503,7 @@ class Integration:
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
@@ -577,7 +557,7 @@ class Integration:
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_master_arn"],
+                secret_arn=mut_output["metadb_secret_manager_ci_arn"],
                 database=mut_output["metadb_name"],
                 # recommended for DDL statements
                 continue_after_timeout=True,
