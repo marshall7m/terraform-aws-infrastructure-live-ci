@@ -347,7 +347,7 @@ class Integration:
                     cur.execute("show search_path;")
                     log.debug(f"Before setting search path: {cur.fetchall()}")
                     statement = f"""
-                        ALTER ROLE {mut_output['metadb_username']} SET search_path TO {mut_output['metadb_schema']};
+                        ALTER ROLE CURRENT_USER SET search_path TO {mut_output['metadb_schema']};
                         """
                     log.debug(f"Statement: {statement}")
                     cur.execute(statement)

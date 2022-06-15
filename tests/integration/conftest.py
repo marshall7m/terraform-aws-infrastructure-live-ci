@@ -277,7 +277,7 @@ def setup_metadb_user(mut_output):
             log.debug(f"Search path: {mut_output['metadb_schema']}")
             cur.execute(
                 f"""
-                ALTER ROLE {mut_output['metadb_username']} SET search_path TO {mut_output['metadb_schema']};
+                ALTER ROLE CURRENT_USER SET search_path TO {mut_output['metadb_schema']};
                 """
             )
 
