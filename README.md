@@ -8,28 +8,37 @@
  
 ## Solution
  
-Before getting into how the entire module works, we'll dive into the proposed solution to the problem and how it boils down to a specific piece of the CI pipeline. As mentioned above, the `terragrunt run-all` command will produce an inaccurate dependency value for child directories that depend on parent directories that haven't been applied yet. Obviously if all parent dependencies were applied beforehand, the dependency value within the child Terraform plan would then be valid. So what if we created a component of a CI pipeline that detects all dependency paths that include changes, run a separate approval flow for each of those paths, and then run an approval flow for the child configuration? This will ensure that every `terragrunt plan` command contains valid dependency values.
+Before getting into how the entire module works, we'll dive into the proposed solution to the problem and how it boils down to a specific piece of the CI pipeline. As mentioned above, the `terragrunt run-all` command will produce an inaccurate dependency value for child directories that depend on parent directories that haven't been applied yet. Obviously if all parent dependencies were applied beforehand, the dependency value within the child Terraform plan would then be valid. So what if we created a component of a CI pipeline that detects all dependency paths that include changes, run a separate approval flow for each of those paths, and then run an approval flow for the child path? This will ensure that every `terragrunt plan` command contains valid dependency values.
  
-This module includes two different approaches to detecting changes which we will call "graph scan" and "plan scan". The scan type can be toggled via the `create_deploy_stack_graph_scan` Terraform variable. The graph scan will initially use the `git diff` command to collect directories that contain .tf or .hcl file changes. Using a mapping of the terragrunt directories and their associated dependency list, the script will recursively collect directories that contain dependency changes. The plan scan approach will run the command `terragrunt run-all plan -detailed-exitcode` (command is shortened to include only relevant arguments). The `terragrunt run-all plan` portion will traverse from the root terragrunt directory down to every child Terragrunt directory. It will then run `teraform plan -detailed-exitcode` within each directory and output the [exitcode](https://www.terraform.io/cli/commands/plan#detailed-exitcode) that represents whether the plan contains changes or not. If the directory does contain changes, the directory and its associated directory dependencies that also have changes will be collected. For example, if `dev/bar` has changed and has a dependency on unchanged `dev/foo` and changed `dev/baz`, `dev/bar` and `dev/baz` but not `dev/foo` will be collected. 
+This module includes two different approaches to detecting changes which we will call "graph scan" and "plan scan". The scan type can be toggled via the `create_deploy_stack_graph_scan` Terraform variable. The graph scan will initially use the `git diff` command to collect directories that contain .tf or .hcl file changes. Using a mapping of the terragrunt directories and their associated dependency list, the script will recursively collect directories that contain dependency changes. The plan scan approach will run the command `terragrunt run-all plan -detailed-exitcode` (command is shortened to include only relevant arguments). The `terragrunt run-all plan` portion will traverse from the root terragrunt directory down to every child Terragrunt directory. It will then run `teraform plan -detailed-exitcode` within each directory and output the [exitcode](https://www.terraform.io/cli/commands/plan#detailed-exitcode) that represents whether the plan contains changes or not. If the directory does contain changes, the directory and it's associated dependencies that also have changes will be collected. This excludes dependencies that are unchanged but upstream from changed directories. For example, consider the following directory dependency tree:
 
-After all directories and their associated dependencies are gathered, they are put into separate database records that will then be used by an downstream Lambda Function. The Lambda Function will determine the order in which the directories are they are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./buildspecs/create_deploy_stack/create_deploy_stack.py).
+```
+dev/vpc
+    \
+    dev/rds
+        \
+        dev/ec2
+```
+if `dev/rds` and `dev/ec2` have changes, only `dev/rds` and `dev/ec2` will be collected.
+
+After all directories and their associated dependencies are gathered, they are put into separate database records that will then be used by a downstream Lambda Function. The Lambda Function will determine the order in which the directories are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./buildspecs/create_deploy_stack/create_deploy_stack.py).
  
  
 ## Design
  
 ![Cloudcraft](cloudcraft.png)
  
-1. A GitHub user commits to a feature branch and creates a PR to merge into the source branch. The source branch represents the live Terraform configurations and should be reflected within the Terraform state files. As the user continues to push Terraform related commit changes to the PR, a Lambda Function will update the commit status notifying if merging the PR is available or not. Merging will be locked if a merged PR is in the process of the CI pipeline. Once the CI pipeline is finished, the downstream Lambda Function (see #4) will update the merge lock status value.
+1. A GitHub user commits to a feature branch and creates a PR to merge into the trunk branch. The trunk branch represents the live Terraform configurations and should be reflected within the Terraform state files. As the user continues to push Terraform related commit changes to the PR, a Lambda Function referenced as `merge_lock` within the module will update the commit status notifying if merging the PR is available or not. Merging will be locked if a merged PR is in the process of the CI pipeline. Once the CI pipeline is finished, the downstream Lambda Function (see #4) will update the merge lock status value.
  
    `**NOTE The PR committer will have to create another commit once the merge lock status is unlocked to get an updated merge lock commit status. **`
  
 2. If the merge lock commit status is unlocked, a user with merge permissions can then merge the PR.
  
-3. Once the PR is merged, a Codebuild project will update the merge lock status and then scan the source branch for changes made from the PR. The build will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the build will invoke another Lambda Function.
+3. Once the PR is merged, a Codebuild project referenced as `pr_plan` within the module will update the merge lock status and then scan the trunk branch for changes made from the PR. The build will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the build will invoke a different Lambda Function.
  
-4. A Lambda Function will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into json objects and pass each json into separate Step Function executions. An in-depth description of the Step Function flow can be found under the `Step Execution Flow` section.
+4. A Lambda Function referenced within the module as `trigger_sf` will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into json objects and pass each json as input into separate Step Function executions. An in-depth description of the Step Function flow can be found under the `Step Execution Flow` section.
  
-5. After every Step Function execution, a Cloudwatch event rule will invoke the Lambda Function mentioned in step #4 above. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. The Lambda Function will then repeat the same process as mentioned in step #4 until there are no records that are waiting to be runned with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform related PRs to be merged.
+5. After every Step Function execution, a Cloudwatch event rule will invoke the `trigger_sf` Lambda Function mentioned in step #4. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. The Lambda Function will then repeat the same process as mentioned in step #4 until there are no records that are waiting to be runned with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform related PRs to be merged.
  
 ## Step Function Execution Flow
  
@@ -71,7 +80,7 @@ Each execution is passed a json input that contains record attributes that will 
 }
 ```
  
-`execution_id`: An unique identifier that represents the execution name. The ID is formatted to be `run-{pr_id}-{first four digits of commit_id}-{account_name}-{leaf child directory of cfg_path}-{random three digits}`. Only three random digits are used because if the record has a long account_name and/or cfg_path, the execution_id may exceed Step Function's 80 character or less execution name limit.
+`execution_id`: An unique identifier that represents the execution name. The ID is formatted to be `run-{pr_id}-{first four digits of commit_id}-{account_name}-{leaf directory of cfg_path}-{random three digits}`. Only three random digits are used because if the record has a long account_name and/or cfg_path, the execution_id may exceed Step Function's 80 character or less execution name limit.
  
 `is_rollback`: Determines if the execution pertains to a deployment that will rollback changes from a previous execution. (See section `Rollbacks` for more info)
  
@@ -111,22 +120,22 @@ Each execution is passed a json input that contains record attributes that will 
  
 `min_rejection_count`: Minimum number of rejections needed to decline the deployment
  
-`plan_role_arn`: AWS IAM role used to run `plan_command`
+`plan_role_arn`: AWS IAM role ARN used to run `plan_command`
  
-`deploy_role_arn`: AWS IAM role used to run `deploy_command`
+`deploy_role_arn`: AWS IAM role ARN used to run `deploy_command`
  
  
 ### Definition
  
 The Step Function definition comprises of six tasks.
  
-`Plan`: A CodeBuild project will spin up a build that will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created/modified.
+`Plan`: A CodeBuild project referenced as `terra_run` within the module will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created/modified/deleted.
  
-`Request Approval`: A Lambda Function will send an approval request via AWS SES to every email address defined under the record's `voters` attribute. When a voter approves/rejects a deployment, a separate Lambda Function updates the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a task success token back to the associated Step Function execution.
+`Request Approval`: A Lambda Function referenced as `approval_request` within the module will send an approval request via AWS SES to every email address defined under the record's `voters` attribute. When a voter approves/rejects a deployment, a different Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a task success token back to the associated Step Function execution.
  
-`Approval Results`: Based on which minimum approval count is met, this task will conditionally choose which task to run next. If the approval count is met, the `Deploy` task will be runned. If the rejection count is met, the `Reject` task will be runned.
+`Approval Results`: Based on which minimum approval count is met, this task will conditionally choose which downstream task to run next. If the approval count is met, the `Deploy` task will be runned. If the rejection count is met, the `Reject` task will be runned.
  
-`Deploy`: A CodeBuild project will spin up a build that will run the record's associated `deploy_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created/modified. If the deployment created new provider resources, a bash script will update the record's associated `new_resources` attribute with the new provider resource addresses that were created.
+`Deploy`: The `terra_run` CodeBuild project will run the record's associated `deploy_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created/modified/deleted. If the deployment created new provider resources, a bash script will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. The "Rollback New Provider Resources" section below will explain how the `new_resources` attribute will be used. 
  
 `Success`: If all Step Function tasks were successful, this task will output a status of `succeeded` along other output attributes.
  
