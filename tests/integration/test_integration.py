@@ -802,25 +802,24 @@ class Integration:
                 "test_rollback_providers_executions_exists"
             ] = True
 
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == record["execution_id"]
-        ][0]
-        events = sf.get_execution_history(
-            executionArn=execution_arn, includeExecutionData=True
-        )["events"]
+        execution_arn = utils.get_execution_arn(
+            mut_output["state_machine_arn"], record["execution_id"]
+        )
 
-        for event in events:
-            if (
-                event["type"] == "PassStateExited"
-                and event["stateExitedEventDetails"]["name"] == "Reject"
-            ):
-                out = json.loads(event["stateExitedEventDetails"]["output"])
+        log.info("Waiting for execution to finish")
+        execution_status = None
+        while execution_status not in ["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]:
+            time.sleep(5)
+            response = sf.describe_execution(executionArn=execution_arn)
+            execution_status = response["status"]
+            log.debug(f"Execution status: {execution_status}")
 
-        log.debug(f"Rejection State Output:\n{pformat(out)}")
+        out = json.loads(response["output"])
+        log.debug(f"Execution output: {pformat(out)}")
+
+        log.info(
+            "Assert that the Reject task passed a failed status within execution output"
+        )
         assert out["status"] == "failed"
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
