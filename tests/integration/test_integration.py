@@ -682,10 +682,8 @@ class Integration:
         execution_arn = utils.get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
-        status_event = utils.get_terra_run_status_event(execution_arn, "Plan")
-        log.debug(f"Plan status event:\n{pformat(status_event)}")
 
-        assert status_event["type"] == "TaskSucceeded"
+        utils.assert_terra_run_status(execution_arn, "Plan", "TaskSucceeded")
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.mark.dependency()
@@ -841,10 +839,8 @@ class Integration:
         execution_arn = utils.get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
-        status_event = utils.get_terra_run_status_event(execution_arn, "Deploy")
-        log.debug(f"Deploy status event:\n{pformat(status_event)}")
 
-        assert status_event["type"] == "TaskSucceeded"
+        utils.assert_terra_run_status(execution_arn, "Deploy", "TaskSucceeded")
 
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()

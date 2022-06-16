@@ -3,7 +3,8 @@ import logging
 import datetime
 import boto3
 import sys
-
+from pprint import pformat
+import json
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -161,7 +162,7 @@ def get_execution_arn(arn: str, execution_id: str) -> int:
     ClientException(f"No Step Function execution exists with name: {execution_id}")
 
 
-def get_terra_run_status_event(execution_arn, task_name):
+def assert_terra_run_status(execution_arn, task_name, expected_status):
     sf = boto3.client("stepfunctions")
 
     log.info(f"Waiting for Step Function task to finish: {task_name}")
@@ -176,5 +177,31 @@ def get_terra_run_status_event(execution_arn, task_name):
         for event in events:
             if event.get("stateExitedEventDetails", {}).get("name", None) == task_name:
                 log.debug("Task finished")
-                # the task before the stateExitedEventDetails event contains the task status
-                return [e for e in events if e["id"] == event["id"] - 1][0]
+                finished_task = True
+                # the event before the stateExitedEventDetails event contains the task status
+                status_event = [e for e in events if e["id"] == event["id"] - 1][0]
+                break
+
+    log.info(f"Assert task: {task_name} has the expected status: {expected_status}")
+    try:
+        assert status_event["type"] == expected_status
+    except AssertionError as e:
+        log.debug(f"{task_name} status event:\n{pformat(status_event)}")
+
+        cw = boto3.client("logs")
+
+        log_event = json.loads(status_event["taskFailedEventDetails"]["cause"])[
+            "Build"
+        ]["Logs"]
+
+        stream = cw.get_log_events(
+            logGroupName=log_event["GroupName"],
+            logStreamName=log_event["StreamName"],
+            startFromHead=True,
+        )
+
+        log.debug(f"Cloudwatch logs for build")
+        for event in stream:
+            log.debug(pformat(event["message"]))
+
+        raise e
