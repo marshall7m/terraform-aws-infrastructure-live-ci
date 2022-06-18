@@ -24,7 +24,7 @@ services:
   unit:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.5
+    image: ghcr.io/marshall7m/terrace:v0.1.7
     volumes:
       - "$PWD:/src"
     environment:
@@ -50,7 +50,7 @@ services:
   integration:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.4
+    image: ghcr.io/marshall7m/terrace:v0.1.7
     volumes:
       - "$PWD:/src"
       - "/usr/bin/docker:/usr/bin/docker"
