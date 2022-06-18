@@ -34,7 +34,7 @@ env:
 jobs:
   precommit:
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.7
+    container: ghcr.io/marshall7m/terrace:v0.1.8
     permissions:
       id-token: write
       contents: read
@@ -51,7 +51,7 @@ jobs:
   unit:
     needs: precommit
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.7
+    container: ghcr.io/marshall7m/terrace:v0.1.8
     services:
       postgres:
         image: postgres:10.14-alpine
@@ -129,7 +129,7 @@ jobs:
   integration:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.7
+    container: ghcr.io/marshall7m/terrace:v0.1.8
     permissions:
       id-token: write
       contents: read
