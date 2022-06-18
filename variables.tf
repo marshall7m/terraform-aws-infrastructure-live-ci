@@ -298,7 +298,7 @@ If not provided, module looks for pre-existing SSM parameter via `var.github_web
 GitHub token needs the `repo` permission to access the private repo. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
   EOF
   type        = string
-  default     = ""
+  default     = null
   sensitive   = true
 }
 
