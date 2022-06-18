@@ -353,110 +353,183 @@ Requirements below are needed in order to run `terraform apply` within this modu
 
 | Name | Version |
 |------|---------|
-| terraform | >= 0.14.0 |
-| aws | >= 3.44 |
-| github | >= 4.0 |
-| random | >=3.2.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 3.44 |
+| <a name="requirement_github"></a> [github](#requirement\_github) | >= 4.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >=3.2.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| archive | n/a |
-| aws | >= 3.44 |
-| github | >= 4.0 |
-| null | n/a |
-| random | >=3.2.0 |
+| <a name="provider_archive"></a> [archive](#provider\_archive) | n/a |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 3.44 |
+| <a name="provider_github"></a> [github](#provider\_github) | >= 4.0 |
+| <a name="provider_null"></a> [null](#provider\_null) | n/a |
+| <a name="provider_random"></a> [random](#provider\_random) | >=3.2.0 |
+
+## Modules
+
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_agw_role"></a> [agw\_role](#module\_agw\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+| <a name="module_codebuild_create_deploy_stack"></a> [codebuild\_create\_deploy\_stack](#module\_codebuild\_create\_deploy\_stack) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
+| <a name="module_codebuild_pr_plan"></a> [codebuild\_pr\_plan](#module\_codebuild\_pr\_plan) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
+| <a name="module_codebuild_terra_run"></a> [codebuild\_terra\_run](#module\_codebuild\_terra\_run) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
+| <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+| <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+| <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | v0.1.0 |
+| <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
+| <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
+| <a name="module_lambda_merge_lock"></a> [lambda\_merge\_lock](#module\_lambda\_merge\_lock) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
+| <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
+| <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [aws_api_gateway_account.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_account) | resource |
+| [aws_api_gateway_integration.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration) | resource |
+| [aws_api_gateway_integration_response.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response) | resource |
+| [aws_api_gateway_method.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_method) | resource |
+| [aws_api_gateway_method_response.response_200](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_method_response) | resource |
+| [aws_api_gateway_method_settings.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_method_settings) | resource |
+| [aws_api_gateway_resource.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_resource) | resource |
+| [aws_api_gateway_rest_api.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_rest_api) | resource |
+| [aws_cloudwatch_event_rule.codebuild_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
+| [aws_cloudwatch_event_rule.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
+| [aws_cloudwatch_event_target.codebuild_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
+| [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
+| [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.merge_lock_github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_rds_cluster.metadb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/rds_cluster) | resource |
+| [aws_secretsmanager_secret.ci_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
+| [aws_secretsmanager_secret.master_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
+| [aws_secretsmanager_secret_version.ci_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
+| [aws_secretsmanager_secret_version.master_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
+| [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_email_identity) | resource |
+| [aws_ses_identity_policy.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_identity_policy) | resource |
+| [aws_ses_template.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_template) | resource |
+| [aws_sfn_state_machine.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) | resource |
+| [aws_ssm_parameter.merge_lock](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [aws_ssm_parameter.merge_lock_github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
+| [null_resource.lambda_approval_response_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.lambda_merge_lock_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [random_id.metadb_users](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| [archive_file.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_approval_response](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_approval_response_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_merge_lock](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_merge_lock_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_trigger_sf](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
+| [aws_iam_policy_document.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.merge_lock_github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
+| [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ses_email_identity) | data source |
+| [aws_ssm_parameter.merge_lock_github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ssm_parameter) | data source |
+| [github_repository.build_scripts](https://registry.terraform.io/providers/integrations/github/latest/docs/data-sources/repository) | data source |
+| [github_repository.this](https://registry.terraform.io/providers/integrations/github/latest/docs/data-sources/repository) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| account\_parent\_cfg | AWS account-level configurations.<br>  - name: AWS account name (e.g. dev, staging, prod, etc.)<br>  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)<br>  - voters: List of email addresses that will be sent approval request to<br>  - min\_approval\_count: Minimum approval count needed for CI pipeline to run deployment<br>  - min\_rejection\_count: Minimum rejection count needed for CI pipeline to decline deployment<br>  - dependencies: List of AWS account names that this account depends on before running any of it's deployments <br>    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),<br>      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a<br>      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.<br>  - plan\_role\_arn: IAM role ARN within the account that the plan build will assume<br>    - \*\*CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised\*\*<br>  - deploy\_role\_arn: IAM role ARN within the account that the deploy build will assume<br>    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before\_hook block that<br>      conditionally defines that assume\_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,<br>      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then<br>      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles. | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>    plan_role_arn       = string<br>    deploy_role_arn     = string<br>  }))</pre> | n/a | yes |
-| api\_stage\_name | API deployment stage name | `string` | `"prod"` | no |
-| approval\_request\_sender\_email | Email address to use for sending approval requests | `string` | n/a | yes |
-| base\_branch | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
-| build\_img | Docker, ECR or AWS CodeBuild managed image to use for the CodeBuild projects. If not specified, Terraform module will create an ECR image for them. | `string` | `null` | no |
-| build\_tags | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
-| codebuild\_common\_env\_vars | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
-| codebuild\_source\_auth\_token | GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. <br>  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand. | `string` | `null` | no |
-| create\_deploy\_stack\_graph\_scan | If true, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If false, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `bool` | `true` | no |
-| create\_deploy\_stack\_status\_check\_name | Name of the create deploy stack GitHub status | `string` | `"Create Deploy Stack"` | no |
-| create\_deploy\_stack\_vpc\_config | AWS VPC configurations associated with terra\_run CodeBuild project.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| create\_merge\_lock\_github\_token\_ssm\_param | Determines if the merge lock AWS SSM Parameter Store value should be created | `bool` | n/a | yes |
-| enable\_branch\_protection | Determines if the branch protection rule is created. If the repository is private (most likely), the GitHub account associated with<br>the GitHub provider must be registered as a GitHub Pro, GitHub Team, GitHub Enterprise Cloud, or GitHub Enterprise Server account. See here for details: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/about-protected-branches | `bool` | `true` | no |
-| enforce\_admin\_branch\_protection | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
-| file\_path\_pattern | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
-| github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
-| github\_webhook\_validator\_github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used by Github Webhook Validator Lambda Function"` | no |
-| github\_webhook\_validator\_github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token used by the Github Webhook Validator Lambda Function | `string` | `null` | no |
-| github\_webhook\_validator\_github\_token\_ssm\_tags | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
-| github\_webhook\_validator\_github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.<br>If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".<br>GitHub token needs the `repo` permission to access the private repo. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) | `string` | `""` | no |
-| lambda\_approval\_request\_vpc\_config | VPC configuration for Lambda approval request function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| lambda\_approval\_response\_vpc\_config | VPC configuration for Lambda approval response function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| lambda\_trigger\_sf\_vpc\_config | VPC configuration for Lambda trigger\_sf function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| merge\_lock\_github\_token\_ssm\_description | Github token SSM parameter description | `string` | `"Github token used by Merge Lock Lambda Function"` | no |
-| merge\_lock\_github\_token\_ssm\_key | AWS SSM Parameter Store key for sensitive Github personal token used by the Merge Lock Lambda Function | `string` | `null` | no |
-| merge\_lock\_github\_token\_ssm\_value | Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.<br>If not provided, module looks for pre-existing SSM parameter via `var.merge_lock_github_token_ssm_key`".<br>GitHub token only needs the `repo:status` permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) | `string` | `""` | no |
-| merge\_lock\_status\_check\_name | Name of the merge lock GitHub status | `string` | `"Merge Lock"` | no |
-| metadb\_availability\_zones | AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones. | `list(string)` | `null` | no |
-| metadb\_ci\_password | Password for the metadb user used for the Codebuild projects | `string` | n/a | yes |
-| metadb\_ci\_username | Name of the metadb user used for the Codebuild projects | `string` | `"ci_user"` | no |
-| metadb\_password | Master password for the metadb | `string` | n/a | yes |
-| metadb\_port | Port for AWS RDS Postgres db | `number` | `5432` | no |
-| metadb\_schema | Schema for AWS RDS Postgres db | `string` | `"prod"` | no |
-| metadb\_security\_group\_ids | AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
-| metadb\_subnets\_group\_name | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
-| metadb\_username | Master username of the metadb | `string` | `"root"` | no |
-| pr\_approval\_count | Number of GitHub approvals required to merge a PR with infrastructure changes | `number` | `null` | no |
-| pr\_plan\_env\_vars | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
-| pr\_plan\_status\_check\_name | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
-| pr\_plan\_vpc\_config | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| prefix | Prefix to attach to all resources | `string` | `null` | no |
-| repo\_name | Name of the pre-existing GitHub repository that is owned by the Github provider | `string` | n/a | yes |
-| send\_verification\_email | Determines if an email verification should be sent to the var.approval\_request\_sender\_email address. Set<br>  to true if the email address is not already authorized to send emails via AWS SES. | `bool` | `true` | no |
-| step\_function\_name | Name of AWS Step Function machine | `string` | `"deployment-flow"` | no |
-| terra\_run\_env\_vars | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
-| terra\_run\_vpc\_config | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| terraform\_version | Terraform version used for create\_deploy\_stack and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `""` | no |
-| terragrunt\_version | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `""` | no |
-| tf\_state\_read\_access\_policy | AWS IAM policy ARN that allows create\_deploy\_stack Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
+| <a name="input_account_parent_cfg"></a> [account\_parent\_cfg](#input\_account\_parent\_cfg) | AWS account-level configurations.<br>  - name: AWS account name (e.g. dev, staging, prod, etc.)<br>  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)<br>  - voters: List of email addresses that will be sent approval request to<br>  - min\_approval\_count: Minimum approval count needed for CI pipeline to run deployment<br>  - min\_rejection\_count: Minimum rejection count needed for CI pipeline to decline deployment<br>  - dependencies: List of AWS account names that this account depends on before running any of it's deployments <br>    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),<br>      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a<br>      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.<br>  - plan\_role\_arn: IAM role ARN within the account that the plan build will assume<br>    - **CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised**<br>  - deploy\_role\_arn: IAM role ARN within the account that the deploy build will assume<br>    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before\_hook block that<br>      conditionally defines that assume\_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,<br>      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then<br>      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles. | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>    plan_role_arn       = string<br>    deploy_role_arn     = string<br>  }))</pre> | n/a | yes |
+| <a name="input_api_stage_name"></a> [api\_stage\_name](#input\_api\_stage\_name) | API deployment stage name | `string` | `"prod"` | no |
+| <a name="input_approval_request_sender_email"></a> [approval\_request\_sender\_email](#input\_approval\_request\_sender\_email) | Email address to use for sending approval requests | `string` | n/a | yes |
+| <a name="input_base_branch"></a> [base\_branch](#input\_base\_branch) | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
+| <a name="input_build_img"></a> [build\_img](#input\_build\_img) | Docker, ECR or AWS CodeBuild managed image to use for the CodeBuild projects. If not specified, Terraform module will create an ECR image for them. | `string` | `null` | no |
+| <a name="input_build_tags"></a> [build\_tags](#input\_build\_tags) | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
+| <a name="input_codebuild_common_env_vars"></a> [codebuild\_common\_env\_vars](#input\_codebuild\_common\_env\_vars) | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_codebuild_source_auth_token"></a> [codebuild\_source\_auth\_token](#input\_codebuild\_source\_auth\_token) | GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. <br>  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand. | `string` | `null` | no |
+| <a name="input_create_deploy_stack_graph_scan"></a> [create\_deploy\_stack\_graph\_scan](#input\_create\_deploy\_stack\_graph\_scan) | If true, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If false, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `bool` | `true` | no |
+| <a name="input_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#input\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub status | `string` | `"Create Deploy Stack"` | no |
+| <a name="input_create_deploy_stack_vpc_config"></a> [create\_deploy\_stack\_vpc\_config](#input\_create\_deploy\_stack\_vpc\_config) | AWS VPC configurations associated with terra\_run CodeBuild project.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| <a name="input_create_merge_lock_github_token_ssm_param"></a> [create\_merge\_lock\_github\_token\_ssm\_param](#input\_create\_merge\_lock\_github\_token\_ssm\_param) | Determines if the merge lock AWS SSM Parameter Store value should be created | `bool` | n/a | yes |
+| <a name="input_enable_branch_protection"></a> [enable\_branch\_protection](#input\_enable\_branch\_protection) | Determines if the branch protection rule is created. If the repository is private (most likely), the GitHub account associated with<br>the GitHub provider must be registered as a GitHub Pro, GitHub Team, GitHub Enterprise Cloud, or GitHub Enterprise Server account. See here for details: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/about-protected-branches | `bool` | `true` | no |
+| <a name="input_enforce_admin_branch_protection"></a> [enforce\_admin\_branch\_protection](#input\_enforce\_admin\_branch\_protection) | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
+| <a name="input_file_path_pattern"></a> [file\_path\_pattern](#input\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
+| <a name="input_github_token_ssm_tags"></a> [github\_token\_ssm\_tags](#input\_github\_token\_ssm\_tags) | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
+| <a name="input_github_webhook_validator_github_token_ssm_description"></a> [github\_webhook\_validator\_github\_token\_ssm\_description](#input\_github\_webhook\_validator\_github\_token\_ssm\_description) | Github token SSM parameter description | `string` | `"Github token used by Github Webhook Validator Lambda Function"` | no |
+| <a name="input_github_webhook_validator_github_token_ssm_key"></a> [github\_webhook\_validator\_github\_token\_ssm\_key](#input\_github\_webhook\_validator\_github\_token\_ssm\_key) | AWS SSM Parameter Store key for sensitive Github personal token used by the Github Webhook Validator Lambda Function | `string` | `null` | no |
+| <a name="input_github_webhook_validator_github_token_ssm_tags"></a> [github\_webhook\_validator\_github\_token\_ssm\_tags](#input\_github\_webhook\_validator\_github\_token\_ssm\_tags) | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
+| <a name="input_github_webhook_validator_github_token_ssm_value"></a> [github\_webhook\_validator\_github\_token\_ssm\_value](#input\_github\_webhook\_validator\_github\_token\_ssm\_value) | Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.<br>If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".<br>GitHub token needs the `repo` permission to access the private repo. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) | `string` | `null` | no |
+| <a name="input_lambda_approval_request_vpc_config"></a> [lambda\_approval\_request\_vpc\_config](#input\_lambda\_approval\_request\_vpc\_config) | VPC configuration for Lambda approval request function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| <a name="input_lambda_approval_response_vpc_config"></a> [lambda\_approval\_response\_vpc\_config](#input\_lambda\_approval\_response\_vpc\_config) | VPC configuration for Lambda approval response function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| <a name="input_lambda_trigger_sf_vpc_config"></a> [lambda\_trigger\_sf\_vpc\_config](#input\_lambda\_trigger\_sf\_vpc\_config) | VPC configuration for Lambda trigger\_sf function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| <a name="input_merge_lock_github_token_ssm_description"></a> [merge\_lock\_github\_token\_ssm\_description](#input\_merge\_lock\_github\_token\_ssm\_description) | Github token SSM parameter description | `string` | `"Github token used by Merge Lock Lambda Function"` | no |
+| <a name="input_merge_lock_github_token_ssm_key"></a> [merge\_lock\_github\_token\_ssm\_key](#input\_merge\_lock\_github\_token\_ssm\_key) | AWS SSM Parameter Store key for sensitive Github personal token used by the Merge Lock Lambda Function | `string` | `null` | no |
+| <a name="input_merge_lock_github_token_ssm_value"></a> [merge\_lock\_github\_token\_ssm\_value](#input\_merge\_lock\_github\_token\_ssm\_value) | Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.<br>If not provided, module looks for pre-existing SSM parameter via `var.merge_lock_github_token_ssm_key`".<br>GitHub token only needs the `repo:status` permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps) | `string` | `""` | no |
+| <a name="input_merge_lock_status_check_name"></a> [merge\_lock\_status\_check\_name](#input\_merge\_lock\_status\_check\_name) | Name of the merge lock GitHub status | `string` | `"Merge Lock"` | no |
+| <a name="input_metadb_availability_zones"></a> [metadb\_availability\_zones](#input\_metadb\_availability\_zones) | AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones. | `list(string)` | `null` | no |
+| <a name="input_metadb_ci_password"></a> [metadb\_ci\_password](#input\_metadb\_ci\_password) | Password for the metadb user used for the Codebuild projects | `string` | n/a | yes |
+| <a name="input_metadb_ci_username"></a> [metadb\_ci\_username](#input\_metadb\_ci\_username) | Name of the metadb user used for the Codebuild projects | `string` | `"ci_user"` | no |
+| <a name="input_metadb_password"></a> [metadb\_password](#input\_metadb\_password) | Master password for the metadb | `string` | n/a | yes |
+| <a name="input_metadb_port"></a> [metadb\_port](#input\_metadb\_port) | Port for AWS RDS Postgres db | `number` | `5432` | no |
+| <a name="input_metadb_schema"></a> [metadb\_schema](#input\_metadb\_schema) | Schema for AWS RDS Postgres db | `string` | `"prod"` | no |
+| <a name="input_metadb_security_group_ids"></a> [metadb\_security\_group\_ids](#input\_metadb\_security\_group\_ids) | AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
+| <a name="input_metadb_subnets_group_name"></a> [metadb\_subnets\_group\_name](#input\_metadb\_subnets\_group\_name) | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
+| <a name="input_metadb_username"></a> [metadb\_username](#input\_metadb\_username) | Master username of the metadb | `string` | `"root"` | no |
+| <a name="input_pr_approval_count"></a> [pr\_approval\_count](#input\_pr\_approval\_count) | Number of GitHub approvals required to merge a PR with infrastructure changes | `number` | `null` | no |
+| <a name="input_pr_plan_env_vars"></a> [pr\_plan\_env\_vars](#input\_pr\_plan\_env\_vars) | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_pr_plan_status_check_name"></a> [pr\_plan\_status\_check\_name](#input\_pr\_plan\_status\_check\_name) | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
+| <a name="input_pr_plan_vpc_config"></a> [pr\_plan\_vpc\_config](#input\_pr\_plan\_vpc\_config) | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix to attach to all resources | `string` | `null` | no |
+| <a name="input_repo_name"></a> [repo\_name](#input\_repo\_name) | Name of the pre-existing GitHub repository that is owned by the Github provider | `string` | n/a | yes |
+| <a name="input_send_verification_email"></a> [send\_verification\_email](#input\_send\_verification\_email) | Determines if an email verification should be sent to the var.approval\_request\_sender\_email address. Set<br>  to true if the email address is not already authorized to send emails via AWS SES. | `bool` | `true` | no |
+| <a name="input_step_function_name"></a> [step\_function\_name](#input\_step\_function\_name) | Name of AWS Step Function machine | `string` | `"deployment-flow"` | no |
+| <a name="input_terra_run_env_vars"></a> [terra\_run\_env\_vars](#input\_terra\_run\_env\_vars) | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_terra_run_vpc_config"></a> [terra\_run\_vpc\_config](#input\_terra\_run\_vpc\_config) | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| <a name="input_terraform_version"></a> [terraform\_version](#input\_terraform\_version) | Terraform version used for create\_deploy\_stack and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `""` | no |
+| <a name="input_terragrunt_version"></a> [terragrunt\_version](#input\_terragrunt\_version) | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `""` | no |
+| <a name="input_tf_state_read_access_policy"></a> [tf\_state\_read\_access\_policy](#input\_tf\_state\_read\_access\_policy) | AWS IAM policy ARN that allows create\_deploy\_stack Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| approval\_request\_function\_name | Name of the Lambda Function used for sending approval requests |
-| approval\_request\_log\_group\_name | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
-| approval\_url | API URL used for requesting deployment approvals |
-| base\_branch | Base branch for repository that all PRs will compare to |
-| codebuild\_create\_deploy\_stack\_arn | ARN of the CodeBuild project that creates the deployment records within the metadb |
-| codebuild\_create\_deploy\_stack\_name | Name of the CodeBuild project that creates the deployment records within the metadb |
-| codebuild\_create\_deploy\_stack\_role\_arn | IAM role ARN of the CodeBuild project that creates the deployment records within the metadb |
-| codebuild\_pr\_plan\_name | Codebuild project name used for creating Terraform plans for new/modified configurations within PRs |
-| codebuild\_pr\_plan\_role\_arn | IAM role ARN of the CodeBuild project that creates Terraform plans for new/modified configurations within PRs |
-| codebuild\_terra\_run\_arn | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
-| codebuild\_terra\_run\_name | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
-| codebuild\_terra\_run\_role\_arn | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
-| lambda\_trigger\_sf\_arn | ARN of the Lambda Function used for triggering Step Function execution(s) |
-| merge\_lock\_github\_webhook\_id | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda Function |
-| merge\_lock\_ssm\_key | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
-| merge\_lock\_status\_check\_name | Context name of the merge lock GitHub status check |
-| metadb\_arn | ARN for the metadb |
-| metadb\_ci\_password | Password used by CI services to connect to the metadb |
-| metadb\_ci\_username | Username used by CI services to connect to the metadb |
-| metadb\_endpoint | AWS RDS endpoint for the metadb |
-| metadb\_name | Name of the metadb |
-| metadb\_password | Master password for the metadb |
-| metadb\_port | Port used for the metadb |
-| metadb\_secret\_manager\_ci\_arn | Secret Manager ARN of the metadb CI user credentials |
-| metadb\_secret\_manager\_master\_arn | Secret Manager ARN of the metadb master user credentials |
-| metadb\_username | Master username for the metadb |
-| step\_function\_arn | ARN of the Step Function |
-| step\_function\_name | Name of the Step Function |
-| trigger\_sf\_function\_name | Name of the Lambda Function used for triggering Step Function execution(s) |
-| trigger\_sf\_log\_group\_name | Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s) |
-
+| <a name="output_approval_request_function_name"></a> [approval\_request\_function\_name](#output\_approval\_request\_function\_name) | Name of the Lambda Function used for sending approval requests |
+| <a name="output_approval_request_log_group_name"></a> [approval\_request\_log\_group\_name](#output\_approval\_request\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
+| <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | API URL used for requesting deployment approvals |
+| <a name="output_base_branch"></a> [base\_branch](#output\_base\_branch) | Base branch for repository that all PRs will compare to |
+| <a name="output_codebuild_create_deploy_stack_arn"></a> [codebuild\_create\_deploy\_stack\_arn](#output\_codebuild\_create\_deploy\_stack\_arn) | ARN of the CodeBuild project that creates the deployment records within the metadb |
+| <a name="output_codebuild_create_deploy_stack_name"></a> [codebuild\_create\_deploy\_stack\_name](#output\_codebuild\_create\_deploy\_stack\_name) | Name of the CodeBuild project that creates the deployment records within the metadb |
+| <a name="output_codebuild_create_deploy_stack_role_arn"></a> [codebuild\_create\_deploy\_stack\_role\_arn](#output\_codebuild\_create\_deploy\_stack\_role\_arn) | IAM role ARN of the CodeBuild project that creates the deployment records within the metadb |
+| <a name="output_codebuild_pr_plan_name"></a> [codebuild\_pr\_plan\_name](#output\_codebuild\_pr\_plan\_name) | Codebuild project name used for creating Terraform plans for new/modified configurations within PRs |
+| <a name="output_codebuild_pr_plan_role_arn"></a> [codebuild\_pr\_plan\_role\_arn](#output\_codebuild\_pr\_plan\_role\_arn) | IAM role ARN of the CodeBuild project that creates Terraform plans for new/modified configurations within PRs |
+| <a name="output_codebuild_terra_run_arn"></a> [codebuild\_terra\_run\_arn](#output\_codebuild\_terra\_run\_arn) | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| <a name="output_codebuild_terra_run_name"></a> [codebuild\_terra\_run\_name](#output\_codebuild\_terra\_run\_name) | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| <a name="output_codebuild_terra_run_role_arn"></a> [codebuild\_terra\_run\_role\_arn](#output\_codebuild\_terra\_run\_role\_arn) | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| <a name="output_lambda_trigger_sf_arn"></a> [lambda\_trigger\_sf\_arn](#output\_lambda\_trigger\_sf\_arn) | ARN of the Lambda Function used for triggering Step Function execution(s) |
+| <a name="output_merge_lock_github_webhook_id"></a> [merge\_lock\_github\_webhook\_id](#output\_merge\_lock\_github\_webhook\_id) | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda Function |
+| <a name="output_merge_lock_ssm_key"></a> [merge\_lock\_ssm\_key](#output\_merge\_lock\_ssm\_key) | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
+| <a name="output_merge_lock_status_check_name"></a> [merge\_lock\_status\_check\_name](#output\_merge\_lock\_status\_check\_name) | Context name of the merge lock GitHub status check |
+| <a name="output_metadb_arn"></a> [metadb\_arn](#output\_metadb\_arn) | ARN for the metadb |
+| <a name="output_metadb_ci_password"></a> [metadb\_ci\_password](#output\_metadb\_ci\_password) | Password used by CI services to connect to the metadb |
+| <a name="output_metadb_ci_username"></a> [metadb\_ci\_username](#output\_metadb\_ci\_username) | Username used by CI services to connect to the metadb |
+| <a name="output_metadb_endpoint"></a> [metadb\_endpoint](#output\_metadb\_endpoint) | AWS RDS endpoint for the metadb |
+| <a name="output_metadb_name"></a> [metadb\_name](#output\_metadb\_name) | Name of the metadb |
+| <a name="output_metadb_password"></a> [metadb\_password](#output\_metadb\_password) | Master password for the metadb |
+| <a name="output_metadb_port"></a> [metadb\_port](#output\_metadb\_port) | Port used for the metadb |
+| <a name="output_metadb_secret_manager_ci_arn"></a> [metadb\_secret\_manager\_ci\_arn](#output\_metadb\_secret\_manager\_ci\_arn) | Secret Manager ARN of the metadb CI user credentials |
+| <a name="output_metadb_secret_manager_master_arn"></a> [metadb\_secret\_manager\_master\_arn](#output\_metadb\_secret\_manager\_master\_arn) | Secret Manager ARN of the metadb master user credentials |
+| <a name="output_metadb_username"></a> [metadb\_username](#output\_metadb\_username) | Master username for the metadb |
+| <a name="output_step_function_arn"></a> [step\_function\_arn](#output\_step\_function\_arn) | ARN of the Step Function |
+| <a name="output_step_function_name"></a> [step\_function\_name](#output\_step\_function\_name) | Name of the Step Function |
+| <a name="output_trigger_sf_function_name"></a> [trigger\_sf\_function\_name](#output\_trigger\_sf\_function\_name) | Name of the Lambda Function used for triggering Step Function execution(s) |
+| <a name="output_trigger_sf_log_group_name"></a> [trigger\_sf\_log\_group\_name](#output\_trigger\_sf\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
  
 # Deploy the Terraform Module
@@ -541,3 +614,10 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template
 - [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
+
+
+TODO before release:
+
+- make sure all heredocs and documentation is added
+- update gh workflow to use ghcr.io/marshall7m/terrace:v0.1.7
+- implement pre-commit hook changes
