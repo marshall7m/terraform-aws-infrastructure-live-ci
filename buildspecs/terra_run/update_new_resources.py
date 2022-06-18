@@ -35,7 +35,7 @@ def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[st
 
 
 def main() -> None:
-    """Inserts new Terraform provider resources to the associated execution record"""
+    """Inserts new Terraform provider resources into the associated execution record"""
     if (
         os.environ.get("NEW_PROVIDERS", None) != "[]"
         and os.environ.get("IS_ROLLBACK", None) == "false"

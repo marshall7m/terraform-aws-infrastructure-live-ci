@@ -162,7 +162,16 @@ def get_execution_arn(arn: str, execution_id: str) -> int:
     ClientException(f"No Step Function execution exists with name: {execution_id}")
 
 
-def assert_terra_run_status(execution_arn, task_name, expected_status):
+def assert_terra_run_status(execution_arn: str, task_name: str, expected_status: str):
+    """
+    Waits for the Step Function's associated task to finish and assert
+    that the task status matches the expected status
+
+    Arguments:
+        execution_arn: ARN of the Step Function execution
+        task_name: Task name within the Step Function definition
+        expected_status: Expected task status
+    """
     sf = boto3.client("stepfunctions")
 
     log.info(f"Waiting for Step Function task to finish: {task_name}")
