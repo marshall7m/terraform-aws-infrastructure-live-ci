@@ -89,6 +89,7 @@ class CreateStack:
         # if set, use graph-dependencies map to determine target execution directories
         log.debug(f'$GRAPH_SCAN: {os.environ.get("GRAPH_SCAN", "")}')
         if os.environ.get("GRAPH_SCAN", False):
+            log.info("Running Graph Scan")
             target_diff_paths = []
             # collects directories that contain new, modified and deleted .hcl/.tf files
             parent = repo.commit(os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"] + "^")
@@ -120,6 +121,7 @@ class CreateStack:
 
             diff_paths = list(set(diff_paths))
         else:
+            log.info("Running Plan Scan")
             # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
             # set check=False to prevent error raise since the -detailed-exitcode flags causes a return code of 2 if diff in tf plan
             run = subprocess_run(

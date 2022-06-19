@@ -83,16 +83,12 @@ def repo_changes(request, git_repo):
 
 tf_versions = [
     pytest.param("latest"),
-    pytest.param("1.0.0", marks=pytest.mark.skip()),
-    pytest.param("0.15.0", marks=pytest.mark.skip()),
-    pytest.param("0.14.0", marks=pytest.mark.skip()),
+    pytest.param("0.13.0"),
 ]
 
 tg_versions = [
-    pytest.param("0.36.7"),
-    pytest.param("0.36.0", marks=pytest.mark.skip()),
-    pytest.param("0.35.0", marks=pytest.mark.skip()),
-    pytest.param("0.34.0", marks=pytest.mark.skip()),
+    pytest.param("latest"),
+    pytest.param("0.31.0"),
 ]
 
 
@@ -104,6 +100,7 @@ def pytest_generate_tests(metafunc):
             tf_versions,
             scope="function",
             ids=[f"tf_{v.values[0]}" for v in tf_versions],
+            indirect=True,
         )
 
     if "terragrunt_version" in metafunc.fixturenames:
@@ -112,4 +109,5 @@ def pytest_generate_tests(metafunc):
             tg_versions,
             scope="function",
             ids=[f"tg_{v.values[0]}" for v in tg_versions],
+            indirect=True,
         )

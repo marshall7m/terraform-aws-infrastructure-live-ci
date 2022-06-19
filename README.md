@@ -338,6 +338,7 @@ Given EventBridge rules and event deliveries are free, the Step Function executi
   ∙ 1 x aws_ses_identity_policy
   ∙ 1 x aws_ses_template
 ```
+
 ## CLI Requirements
  
 Requirements below are needed in order to run `terraform apply` within this module. This module contains null resources that run bash scripts to install pip packages, zip directories, and query the RDS database.
@@ -492,8 +493,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_step_function_name"></a> [step\_function\_name](#input\_step\_function\_name) | Name of AWS Step Function machine | `string` | `"deployment-flow"` | no |
 | <a name="input_terra_run_env_vars"></a> [terra\_run\_env\_vars](#input\_terra\_run\_env\_vars) | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_terra_run_vpc_config"></a> [terra\_run\_vpc\_config](#input\_terra\_run\_vpc\_config) | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
-| <a name="input_terraform_version"></a> [terraform\_version](#input\_terraform\_version) | Terraform version used for create\_deploy\_stack and terra\_run builds. If repo contains a variety of version constraints, implementing a dynamic version manager (e.g. tfenv) is recommended | `string` | `""` | no |
-| <a name="input_terragrunt_version"></a> [terragrunt\_version](#input\_terragrunt\_version) | Terragrunt version used for create\_deploy\_stack and terra\_run builds | `string` | `""` | no |
+| <a name="input_terraform_version"></a> [terraform\_version](#input\_terraform\_version) | Terraform version used for create\_deploy\_stack and terra\_run builds.<br>Version must be >= `0.13.0`.<br>If repo contains a variety of version constraints, implementing a <br>version manager is recommended (e.g. tfenv). | `string` | `""` | no |
+| <a name="input_terragrunt_version"></a> [terragrunt\_version](#input\_terragrunt\_version) | Terragrunt version used for create\_deploy\_stack and terra\_run builds.<br>Version must be >= `0.31.0`.<br>If repo contains a variety of version constraints, implementing a <br>version manager is recommended (e.g. tgswitch). | `string` | `""` | no |
 | <a name="input_tf_state_read_access_policy"></a> [tf\_state\_read\_access\_policy](#input\_tf\_state\_read\_access\_policy) | AWS IAM policy ARN that allows create\_deploy\_stack Codebuild project to read from Terraform remote state resource | `string` | n/a | yes |
 
 ## Outputs
@@ -614,10 +615,3 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template
 - [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
-
-
-TODO before release:
-
-- make sure all heredocs and documentation is added
-- update gh workflow to use ghcr.io/marshall7m/terrace:v0.1.7
-- implement pre-commit hook changes

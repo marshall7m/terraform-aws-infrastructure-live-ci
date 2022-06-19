@@ -18,13 +18,16 @@ def scan_type_idfn(val):
 
 
 @pytest.fixture(
-    params=[pytest.param(True), pytest.param(False, marks=pytest.mark.skip())],
+    params=[pytest.param(True), pytest.param(False)],
     ids=scan_type_idfn,
 )
 def scan_type(request):
     """Determiens if Terragrun graph depedencies or run-all plan command is used to detect directories with differences"""
     if request.param:
         os.environ["GRAPH_SCAN"] = "true"
+    else:
+        if "GRAPH_SCAN" in os.environ:
+            del os.environ["GRAPH_SCAN"]
     yield None
 
     if "GRAPH_SCAN" in os.environ:
