@@ -615,3 +615,4 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template
 - [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
+- [ ] Experiment with replacing CodeBuild with ECS Fargate for create deploy stack and terra run builds
