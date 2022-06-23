@@ -12,4 +12,11 @@ if [ -n "${TERRAGRUNT_VERSION}" ]; then
 fi
 echo "Terragrunt Version: $(terragrunt --version)"
 
-/bin/bash
+echo "Cloning source repo URL: $SOURCE_CLONE_URL"
+# TODO: cd into source repo
+git clone -b "$SOURCE_VERSION" --single-branch "$SOURCE_CLONE_URL" source-repo
+cd source-repo || exit 1
+
+echo "PWD: $PWD"
+
+exec "$@"
