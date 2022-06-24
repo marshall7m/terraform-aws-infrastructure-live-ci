@@ -40,10 +40,11 @@ def lambda_handler(event, context):
     log.info(f"Repo: {repo_full_name}")
     log.info(f"Merge lock value: {merge_lock}")
 
-    approval_url = f"https://{token}:x-oauth-basic@api.github.com/repos/{repo_full_name}/statuses/{commit_id}"  # noqa: E501
+    commit_url = f"https://{token}:x-oauth-basic@api.github.com/repos/{repo_full_name}/statuses/{commit_id}"  # noqa: E501
     target_url = f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'  # noqa: E501
 
     if merge_lock != "none":
+        log.info("Merge lock status: locked")
         data = {
             "state": "pending",
             "description": f"Locked -- In Progress PR #{merge_lock}",
@@ -51,12 +52,14 @@ def lambda_handler(event, context):
             "target_url": target_url,
         }
     elif merge_lock == "none":
+        log.info("Merge lock status: unlocked")
         data = {
             "state": "success",
             "description": "Unlocked",
             "context": os.environ["STATUS_CHECK_NAME"],
             "target_url": target_url,
         }
+
     else:
         log.error(f"Invalid merge lock value: {merge_lock}")
         sys.exit(1)
@@ -64,5 +67,5 @@ def lambda_handler(event, context):
     log.debug(f"Response Data:\n{data}")
 
     log.info("Sending response")
-    response = requests.post(approval_url, json=data)
+    response = requests.post(commit_url, json=data)
     log.debug(f"Response:\n{response}")
