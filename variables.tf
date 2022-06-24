@@ -81,6 +81,24 @@ variable "pr_plan_status_check_name" {
   default     = "Plan"
 }
 
+variable "plan_cpu" {
+  description = <<EOF
+Number of CPU units the task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = number
+  default     = 256
+}
+
+variable "plan_memory" {
+  description = <<EOF
+Amount of memory (MiB) the task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = string
+  default     = 512
+}
+
 variable "pr_plan_env_vars" {
   description = "Environment variables that will be provided to open PR's Terraform planning builds"
   type = list(object({
@@ -253,28 +271,28 @@ EOF
 
 # SSM #
 
-variable "create_merge_lock_github_token_ssm_param" {
+variable "create_github_token_ssm_param" {
   description = "Determines if the merge lock AWS SSM Parameter Store value should be created"
   type        = bool
 }
 
-variable "merge_lock_github_token_ssm_key" {
+variable "github_token_ssm_key" {
   description = "AWS SSM Parameter Store key for sensitive Github personal token used by the Merge Lock Lambda Function"
   type        = string
   default     = null
 }
 
-variable "merge_lock_github_token_ssm_description" {
+variable "github_token_ssm_description" {
   description = "Github token SSM parameter description"
   type        = string
   default     = "Github token used by Merge Lock Lambda Function"
 }
 
-variable "merge_lock_github_token_ssm_value" {
+variable "github_token_ssm_value" {
   description = <<EOF
 Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.
-If not provided, module looks for pre-existing SSM parameter via `var.merge_lock_github_token_ssm_key`".
-GitHub token only needs the `repo:status` permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
+GitHub token needs the `repo` permission to send commit statuses for private repos. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
   EOF
   type        = string
   default     = ""
@@ -282,37 +300,6 @@ GitHub token only needs the `repo:status` permission. (see more about OAuth scop
 }
 
 variable "github_token_ssm_tags" {
-  description = "Tags for Github token SSM parameter"
-  type        = map(string)
-  default     = {}
-}
-
-## GH-VALIDATOR-TOKEN ##
-
-variable "github_webhook_validator_github_token_ssm_key" {
-  description = "AWS SSM Parameter Store key for sensitive Github personal token used by the Github Webhook Validator Lambda Function"
-  type        = string
-  default     = null
-}
-
-variable "github_webhook_validator_github_token_ssm_description" {
-  description = "Github token SSM parameter description"
-  type        = string
-  default     = "Github token used by Github Webhook Validator Lambda Function"
-}
-
-variable "github_webhook_validator_github_token_ssm_value" {
-  description = <<EOF
-Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.
-If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".
-GitHub token needs the `repo` permission to access the private repo. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
-  EOF
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "github_webhook_validator_github_token_ssm_tags" {
   description = "Tags for Github token SSM parameter"
   type        = map(string)
   default     = {}

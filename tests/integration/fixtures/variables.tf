@@ -33,10 +33,10 @@ variable "testing_secondary_aws_account_id" {
   type        = number
 }
 
-variable "merge_lock_github_token_ssm_value" {
+variable "github_token_ssm_value" {
   description = <<EOF
 Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.
-If not provided, module looks for pre-existing SSM parameter via `var.merge_lock_github_token_ssm_key`".
+If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
 The permissions for the token is dependent on if the repo has public or private visibility.
 Permissions:
   private:
@@ -45,22 +45,6 @@ Permissions:
     - repo:status
 See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
 EOF
-  type        = string
-  sensitive   = true
-}
-
-variable "github_webhook_validator_github_token_ssm_value" {
-  description = <<EOF
-Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.
-If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".
-The permissions for the token is dependent on if the repo has public or private visibility.
-Permissions:
-  private:
-    - repo
-  public:
-    - None (Just needs to be a registered token associated with GitHub provider)
-See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
-  EOF
   type        = string
   sensitive   = true
 }
