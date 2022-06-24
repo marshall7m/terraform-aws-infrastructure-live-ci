@@ -29,7 +29,7 @@ data "archive_file" "lambda_trigger_sf_deps" {
 }
 
 module "lambda_trigger_sf" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.0"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
   filename         = data.archive_file.lambda_trigger_sf.output_path
   source_code_hash = data.archive_file.lambda_trigger_sf.output_base64sha256
   function_name    = local.trigger_sf_function_name
