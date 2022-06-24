@@ -1,8 +1,6 @@
 locals {
   terraform_module_version = trimspace(file("${path.module}/source_version.txt"))
-  merge_lock_name          = "${var.prefix}-merge-lock"
 
-  pr_plan_build_name                  = "${var.prefix}-pr-plan"
   create_deploy_stack_build_name      = "${var.prefix}-create-deploy-stack"
   terra_run_build_name                = "${var.prefix}-terra-run"
   buildspec_scripts_source_identifier = "helpers"
@@ -24,14 +22,6 @@ data "github_repository" "this" {
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
-
-resource "aws_ssm_parameter" "merge_lock" {
-  name        = local.merge_lock_name
-  description = "Locks PRs with infrastructure changes from being merged into base branch"
-  type        = "String"
-  value       = "none"
-}
-
 resource "aws_ssm_parameter" "metadb_ci_password" {
   name        = "${local.metadb_name}_${var.metadb_ci_username}"
   description = "Metadb password used by module's Codebuild projects"

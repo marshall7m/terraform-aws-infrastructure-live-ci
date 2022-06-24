@@ -425,7 +425,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
 | [null_resource.lambda_approval_response_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.lambda_merge_lock_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [null_resource.lambda_trigger_pr_plan](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.lambda_trigger_pr_plan_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.metadb_users](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
@@ -435,6 +435,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [archive_file.lambda_merge_lock](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_merge_lock_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_trigger_pr_plan](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_trigger_pr_plan_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_trigger_sf](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
@@ -621,15 +622,13 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
 - [ ] Experiment with replacing CodeBuild with ECS Fargate for create deploy stack and terra run builds
 
-
-- replace gitpython with requests diff
-- add commit status success logic to pr plan task
-- add gh token ssm key to pr plan task env vars
-- add gh token ssm param to pr plan task permissions
-- create ecs pr plan .py script that runs tg plan and update commit status
-
-
 ## Think About...
 - Decouple Docker runner image and place into a separate repository
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage it's own version of the docker image 
   - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
+
+
+- add commit status success logic to pr plan task
+- add gh token ssm key to pr plan task env vars
+- add gh token ssm param to pr plan task permissions
+- create ecs pr plan .py script that runs tg plan and update commit status

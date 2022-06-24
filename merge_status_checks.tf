@@ -1,8 +1,12 @@
 locals {
-  merge_lock_dep_zip                     = "${path.module}/merge_lock_deps.zip"
-  merge_lock_dep_dir                     = "${path.module}/functions/merge_lock/deps"
-  trigger_pr_plan_zip                    = "${path.module}/trigger_pr_plan.zip"
-  trigger_pr_plan_dir                    = "${path.module}/functions/trigger_pr_plan"
+  merge_lock_name     = "${var.prefix}-merge-lock"
+  merge_lock_deps_zip = "${path.module}/merge_lock_deps.zip"
+  merge_lock_deps_dir = "${path.module}/functions/merge_lock/deps"
+
+  trigger_pr_plan_name     = "${var.prefix}-trigger-pr-plan"
+  trigger_pr_plan_deps_zip = "${path.module}/trigger_pr_plan_deps.zip"
+  trigger_pr_plan_deps_dir = "${path.module}/functions/trigger_pr_plan/deps"
+
   github_webhook_validator_function_name = "${var.prefix}-webhook-validator"
 }
 
@@ -61,6 +65,14 @@ module "github_webhook_validator" {
   ]
 }
 
+resource "aws_ssm_parameter" "merge_lock" {
+  name        = local.merge_lock_name
+  description = "Locks PRs with infrastructure changes from being merged into base branch"
+  type        = "String"
+  value       = "none"
+}
+
+
 data "archive_file" "lambda_merge_lock" {
   type        = "zip"
   source_dir  = "${path.module}/functions/merge_lock"
@@ -69,17 +81,17 @@ data "archive_file" "lambda_merge_lock" {
 
 resource "null_resource" "lambda_merge_lock_deps" {
   triggers = {
-    zip_hash = fileexists(local.merge_lock_dep_zip) ? 0 : timestamp()
+    zip_hash = fileexists(local.merge_lock_deps_zip) ? 0 : timestamp()
   }
   provisioner "local-exec" {
-    command = "pip install --target ${local.merge_lock_dep_dir}/python requests==2.27.1"
+    command = "pip install --target ${local.merge_lock_deps_dir}/python requests==2.27.1"
   }
 }
 
 data "archive_file" "lambda_merge_lock_deps" {
   type        = "zip"
-  source_dir  = local.merge_lock_dep_dir
-  output_path = local.merge_lock_dep_zip
+  source_dir  = local.merge_lock_deps_dir
+  output_path = local.merge_lock_deps_zip
   depends_on = [
     null_resource.lambda_merge_lock_deps
   ]
@@ -95,7 +107,7 @@ module "lambda_merge_lock" {
   runtime          = "python3.8"
   env_vars = {
     MERGE_LOCK_SSM_KEY   = aws_ssm_parameter.merge_lock.name
-    GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
+    GITHUB_TOKEN_SSM_KEY = local.github_token_ssm_key
     STATUS_CHECK_NAME    = var.merge_lock_status_check_name
   }
   custom_role_policy_arns = [
@@ -128,21 +140,27 @@ module "lambda_merge_lock" {
   ]
 }
 
-resource "null_resource" "lambda_trigger_pr_plan" {
+data "archive_file" "lambda_trigger_pr_plan" {
+  type        = "zip"
+  source_dir  = "${path.module}/functions/trigger_pr_plan"
+  output_path = "${path.module}/trigger_pr_plan.zip"
+}
+
+resource "null_resource" "lambda_trigger_pr_plan_deps" {
   triggers = {
-    zip_hash = fileexists(local.trigger_pr_plan_zip) ? 0 : timestamp()
+    zip_hash = fileexists(local.trigger_pr_plan_deps_zip) ? 0 : timestamp()
   }
   provisioner "local-exec" {
-    command = "pip install --target ${local.trigger_pr_plan_dir}/python requests==2.27.1"
+    command = "pip install --target ${local.trigger_pr_plan_deps_dir}/python requests==2.27.1"
   }
 }
 
-data "archive_file" "lambda_trigger_pr_plan" {
+data "archive_file" "lambda_trigger_pr_plan_deps" {
   type        = "zip"
-  source_dir  = local.trigger_pr_plan_dir
-  output_path = local.trigger_pr_plan_zip
+  source_dir  = local.trigger_pr_plan_deps_dir
+  output_path = local.trigger_pr_plan_deps_zip
   depends_on = [
-    null_resource.lambda_trigger_pr_plan
+    null_resource.lambda_trigger_pr_plan_deps
   ]
 }
 
@@ -150,11 +168,11 @@ module "lambda_trigger_pr_plan" {
   source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
   filename         = data.archive_file.lambda_trigger_pr_plan.output_path
   source_code_hash = data.archive_file.lambda_trigger_pr_plan.output_base64sha256
-  function_name    = "${var.prefix}-trigger-pr-plan"
+  function_name    = local.trigger_pr_plan_name
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
   env_vars = {
-    GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
+    GITHUB_TOKEN_SSM_KEY = local.github_token_ssm_key
     ECS_CLUSTER_ARN      = aws_ecs_cluster.this.arn
     ACCOUNT_DIM          = jsonencode(var.account_parent_cfg)
   }
@@ -177,6 +195,15 @@ module "lambda_trigger_pr_plan" {
       resources = [
         aws_ecs_task_definition.plan.arn
       ]
+    }
+  ]
+  lambda_layers = [
+    {
+      filename         = data.archive_file.lambda_trigger_pr_plan_deps.output_path
+      name             = "${local.trigger_pr_plan_name}-deps"
+      runtimes         = ["python3.8"]
+      source_code_hash = data.archive_file.lambda_trigger_pr_plan_deps.output_base64sha256
+      description      = "Dependencies for lambda function: ${local.trigger_pr_plan_name}"
     }
   ]
 }
