@@ -375,15 +375,16 @@ Requirements below are needed in order to run `terraform apply` within this modu
 |------|--------|---------|
 | <a name="module_agw_role"></a> [agw\_role](#module\_agw\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_codebuild_create_deploy_stack"></a> [codebuild\_create\_deploy\_stack](#module\_codebuild\_create\_deploy\_stack) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
-| <a name="module_codebuild_pr_plan"></a> [codebuild\_pr\_plan](#module\_codebuild\_pr\_plan) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
 | <a name="module_codebuild_terra_run"></a> [codebuild\_terra\_run](#module\_codebuild\_terra\_run) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
 | <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+| <a name="module_ecs_role"></a> [ecs\_role](#module\_ecs\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | v0.1.0 |
 | <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
 | <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
 | <a name="module_lambda_merge_lock"></a> [lambda\_merge\_lock](#module\_lambda\_merge\_lock) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
 | <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | github.com/marshall7m/terraform-aws-lambda | v0.1.0 |
+| <a name="module_plan_role"></a> [plan\_role](#module\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 
 ## Resources
@@ -402,6 +403,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_cloudwatch_event_rule.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
 | [aws_cloudwatch_event_target.codebuild_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
+| [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
+| [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.merge_lock_github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -616,3 +619,16 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] create aesthetically pleasing approval request HTML template
 - [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
 - [ ] Experiment with replacing CodeBuild with ECS Fargate for create deploy stack and terra run builds
+
+
+- replace gitpython with requests diff
+- add commit status success logic to pr plan task
+- add gh token ssm key to pr plan task env vars
+- add gh token ssm param to pr plan task permissions
+- create ecs pr plan .py script that runs tg plan and update commit status
+
+
+## Think About...
+- Decouple Docker runner image and place into a separate repository
+  - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage it's own version of the docker image 
+  - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
