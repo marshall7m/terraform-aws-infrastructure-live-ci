@@ -1,3 +1,21 @@
+locals {
+  github_token_ssm_key = "${var.prefix}-github-token"
+}
+
+data "aws_ssm_parameter" "github_token" {
+  count = var.create_github_token_ssm_param != true ? 1 : 0
+  name  = var.github_token_ssm_key
+}
+
+resource "aws_ssm_parameter" "github_token" {
+  count       = var.create_github_token_ssm_param ? 1 : 0
+  name        = local.github_token_ssm_key
+  description = var.github_token_ssm_description
+  type        = "SecureString"
+  value       = var.github_token_ssm_value
+}
+
+
 data "aws_iam_policy_document" "merge_lock_ssm_param_full_access" {
   statement {
     effect    = "Allow"
@@ -18,7 +36,7 @@ resource "aws_iam_policy" "merge_lock_ssm_param_full_access" {
   policy      = data.aws_iam_policy_document.merge_lock_ssm_param_full_access.json
 }
 
-data "aws_iam_policy_document" "merge_lock_github_token_ssm_read_access" {
+data "aws_iam_policy_document" "github_token_ssm_read_access" {
   statement {
     effect    = "Allow"
     actions   = ["ssm:DescribeParameters"]
@@ -30,14 +48,14 @@ data "aws_iam_policy_document" "merge_lock_github_token_ssm_read_access" {
     actions = [
       "ssm:GetParameter"
     ]
-    resources = [try(data.aws_ssm_parameter.merge_lock_github_token[0].arn, aws_ssm_parameter.merge_lock_github_token[0].arn)]
+    resources = [try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)]
   }
 }
 
-resource "aws_iam_policy" "merge_lock_github_token_ssm_read_access" {
-  name        = "${local.merge_lock_github_token_ssm_key}-read-access"
+resource "aws_iam_policy" "github_token_ssm_read_access" {
+  name        = "${local.github_token_ssm_key}-read-access"
   description = "Allows read access to github token SSM Parameter Store value"
-  policy      = data.aws_iam_policy_document.merge_lock_github_token_ssm_read_access.json
+  policy      = data.aws_iam_policy_document.github_token_ssm_read_access.json
 }
 
 data "aws_iam_policy_document" "ci_metadb_access" {
