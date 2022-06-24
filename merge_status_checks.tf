@@ -1,21 +1,9 @@
 locals {
   merge_lock_dep_zip                     = "${path.module}/merge_lock_deps.zip"
   merge_lock_dep_dir                     = "${path.module}/functions/merge_lock/deps"
-  merge_lock_github_token_ssm_key        = coalesce(var.merge_lock_github_token_ssm_key, "${local.merge_lock_name}-github-token")
+  trigger_pr_plan_zip                    = "${path.module}/trigger_pr_plan.zip"
+  trigger_pr_plan_dir                    = "${path.module}/functions/trigger_pr_plan"
   github_webhook_validator_function_name = "${var.prefix}-webhook-validator"
-}
-
-data "aws_ssm_parameter" "merge_lock_github_token" {
-  count = var.create_merge_lock_github_token_ssm_param != true ? 1 : 0
-  name  = local.merge_lock_github_token_ssm_key
-}
-
-resource "aws_ssm_parameter" "merge_lock_github_token" {
-  count       = var.create_merge_lock_github_token_ssm_param ? 1 : 0
-  name        = local.merge_lock_github_token_ssm_key
-  description = var.merge_lock_github_token_ssm_description
-  type        = "SecureString"
-  value       = var.merge_lock_github_token_ssm_value
 }
 
 module "github_webhook_validator" {
@@ -34,9 +22,8 @@ module "github_webhook_validator" {
   stage_name    = var.api_stage_name
   function_name = local.github_webhook_validator_function_name
 
-  includes_private_repo  = true
-  github_token_ssm_key   = coalesce(var.github_webhook_validator_github_token_ssm_key, "${local.github_webhook_validator_function_name}-gh-token")
-  github_token_ssm_value = var.github_webhook_validator_github_token_ssm_value
+  includes_private_repo = true
+  github_token_ssm_key  = local.github_token_ssm_key
 
   github_secret_ssm_key = "${local.github_webhook_validator_function_name}-secret"
 
@@ -98,8 +85,9 @@ data "archive_file" "lambda_merge_lock_deps" {
   ]
 }
 
+
 module "lambda_merge_lock" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.0"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
   filename         = data.archive_file.lambda_merge_lock.output_path
   source_code_hash = data.archive_file.lambda_merge_lock.output_base64sha256
   function_name    = local.merge_lock_name
@@ -107,13 +95,15 @@ module "lambda_merge_lock" {
   runtime          = "python3.8"
   env_vars = {
     MERGE_LOCK_SSM_KEY   = aws_ssm_parameter.merge_lock.name
-    GITHUB_TOKEN_SSM_KEY = local.merge_lock_github_token_ssm_key
+    GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
     STATUS_CHECK_NAME    = var.merge_lock_status_check_name
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.merge_lock_github_token_ssm_read_access.arn
+    aws_iam_policy.github_token_ssm_read_access.arn
   ]
+  enable_destinations     = true
+  success_destination_arn = module.lambda_trigger_pr_plan.function_arn
   statements = [
     {
       effect    = "Allow"
@@ -138,6 +128,59 @@ module "lambda_merge_lock" {
   ]
 }
 
+resource "null_resource" "lambda_trigger_pr_plan" {
+  triggers = {
+    zip_hash = fileexists(local.trigger_pr_plan_zip) ? 0 : timestamp()
+  }
+  provisioner "local-exec" {
+    command = "pip install --target ${local.trigger_pr_plan_dir}/python requests==2.27.1"
+  }
+}
+
+data "archive_file" "lambda_trigger_pr_plan" {
+  type        = "zip"
+  source_dir  = local.trigger_pr_plan_dir
+  output_path = local.trigger_pr_plan_zip
+  depends_on = [
+    null_resource.lambda_trigger_pr_plan
+  ]
+}
+
+module "lambda_trigger_pr_plan" {
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
+  filename         = data.archive_file.lambda_trigger_pr_plan.output_path
+  source_code_hash = data.archive_file.lambda_trigger_pr_plan.output_base64sha256
+  function_name    = "${var.prefix}-trigger-pr-plan"
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.8"
+  env_vars = {
+    GITHUB_TOKEN_SSM_KEY = var.github_token_ssm_key
+    ECS_CLUSTER_ARN      = aws_ecs_cluster.this.arn
+    ACCOUNT_DIM          = jsonencode(var.account_parent_cfg)
+  }
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  ]
+  statements = [
+    {
+      effect = "Allow"
+      actions = [
+        "ecs:RunTask"
+      ]
+      conditions = [
+        {
+          test     = "ArnEquals"
+          variable = "ecs:cluster"
+          values   = [aws_ecs_cluster.this.arn]
+        }
+      ]
+      resources = [
+        aws_ecs_task_definition.plan.arn
+      ]
+    }
+  ]
+}
+
 resource "github_branch_protection" "merge_lock" {
   count         = var.enable_branch_protection ? 1 : 0
   repository_id = var.repo_name
@@ -148,7 +191,7 @@ resource "github_branch_protection" "merge_lock" {
 
   required_status_checks {
     strict   = false
-    contexts = [var.merge_lock_status_check_name, var.pr_plan_status_check_name]
+    contexts = [var.merge_lock_status_check_name]
   }
 
   dynamic "required_pull_request_reviews" {
