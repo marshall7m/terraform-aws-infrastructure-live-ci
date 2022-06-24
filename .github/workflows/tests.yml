@@ -135,8 +135,7 @@ jobs:
       contents: read
     env:
       TF_VAR_testing_integration_github_token: ${{ secrets.TF_VAR_TESTING_INTEGRATION_GITHUB_TOKEN }}
-      TF_VAR_merge_lock_github_token_ssm_value: ${{ secrets.TF_VAR_MERGE_LOCK_GITHUB_TOKEN_SSM_VALUE }}
-      TF_VAR_github_webhook_validator_github_token_ssm_value: ${{ secrets.TF_VAR_GITHUB_WEBHOOK_VALIDATOR_GITHUB_TOKEN_SSM_VALUE }}
+      TF_VAR_github_token_ssm_value: ${{ secrets.TF_VAR_GITHUB_TOKEN_SSM_VALUE }}
       TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TF_VAR_TESTING_SECONDARY_AWS_ACCOUNT_ID }}
       TF_VAR_approval_request_sender_email: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
     steps:
@@ -144,8 +143,7 @@ jobs:
       - name: mask sensitive
         run: |
           echo "::add-mask::$TF_VAR_testing_integration_github_token"
-          echo "::add-mask::$TF_VAR_merge_lock_github_token_ssm_value"
-          echo "::add-mask::$TF_VAR_github_webhook_validator_github_token_ssm_value"
+          echo "::add-mask::$TF_VAR_github_token_ssm_value"
           echo "::add-mask::$TF_VAR_testing_secondary_aws_account_id"
           echo "::add-mask::$TF_VAR_approval_request_sender_email"
 
