@@ -5,6 +5,7 @@ import os
 import timeout_decorator
 import logging
 import psycopg2.extras
+import github
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -77,3 +78,21 @@ def aws_credentials():
     os.environ.get("AWS_SESSION_TOKEN", "testing")
     os.environ.get("AWS_REGION", "us-west-2")
     os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+
+
+@pytest.fixture(scope="session")
+def gh():
+    return github.Github(
+        os.environ["TF_VAR_testing_unit_github_token"], retry=3
+    ).get_user()
+
+
+@pytest.fixture(scope="module")
+def repo(gh, request):
+    log.info(f"Creating testing repo: {request.param}")
+    repo = gh.create_repo(request.param, auto_init=True)
+
+    yield repo
+
+    log.info(f"Deleting testing repo: {request.param}")
+    repo.delete()
