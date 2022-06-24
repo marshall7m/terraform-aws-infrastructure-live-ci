@@ -49,5 +49,5 @@ RUN apt-get -y update \
         else tgswitch "$TERRAGRUNT_VERSION"; fi
 
 COPY entrypoint.sh /tmp/entrypoint.sh
-
+COPY src /src
 ENTRYPOINT ["bash", "/tmp/entrypoint.sh"]
