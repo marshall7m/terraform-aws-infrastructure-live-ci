@@ -379,12 +379,12 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_ecs_role"></a> [ecs\_role](#module\_ecs\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | v0.1.0 |
-| <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | github.com/marshall7m/terraform-aws-lambda | v0.1.4 |
-| <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | github.com/marshall7m/terraform-aws-lambda | v0.1.4 |
-| <a name="module_lambda_merge_lock"></a> [lambda\_merge\_lock](#module\_lambda\_merge\_lock) | github.com/marshall7m/terraform-aws-lambda | v0.1.4 |
-| <a name="module_lambda_trigger_pr_plan"></a> [lambda\_trigger\_pr\_plan](#module\_lambda\_trigger\_pr\_plan) | github.com/marshall7m/terraform-aws-lambda | v0.1.4 |
-| <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | github.com/marshall7m/terraform-aws-lambda | v0.1.4 |
+| <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | v0.1.1 |
+| <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
+| <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
+| <a name="module_lambda_merge_lock"></a> [lambda\_merge\_lock](#module\_lambda\_merge\_lock) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
+| <a name="module_lambda_trigger_pr_plan"></a> [lambda\_trigger\_pr\_plan](#module\_lambda\_trigger\_pr\_plan) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
+| <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
 | <a name="module_plan_role"></a> [plan\_role](#module\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 
@@ -615,13 +615,15 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Create a feature for handling deleted terragrunt folder using git diff commands
 - [ ] Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 - [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
+- [ ] Use AWS SQS with Exactly-Once Processing to create a queue of pr tf plan tasks to run
+  - User can then set a time range (such as after hours) that the PR plans are runned so that the plan tasks are not runned for every PR update event
+  - Probably only cost-effective for the rase case of large teams frequently committing infra PR changes
 
 ### Improvements:
 
 - [ ] create aesthetically pleasing approval request HTML template
 - [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
 - [ ] Experiment with replacing CodeBuild with ECS Fargate for create deploy stack and terra run builds
-
 ## Think About...
 - Decouple Docker runner image and place into a separate repository
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage it's own version of the docker image 
@@ -632,3 +634,19 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - add gh token ssm key to pr plan task env vars
 - add gh token ssm param to pr plan task permissions
 - create ecs pr plan .py script that runs tg plan and update commit status
+
+
+gh validator run both merge lock and trigger pr plan concurrently
+
+pr-plan function
+if depends_on_merge_lock:
+  get merge lock
+  if merge == locked:
+    return
+
+if depends_on_running_deployment:
+  check modified/added directories in running deployments cfg_path within metadb
+  if modified in running:
+    return
+
+run ecs tf plan

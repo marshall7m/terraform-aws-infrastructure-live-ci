@@ -164,7 +164,7 @@ resource "aws_iam_policy" "lambda_approval_request" {
 }
 
 module "lambda_approval_request" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
   filename         = data.archive_file.lambda_approval_request.output_path
   source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
   function_name    = local.approval_request_name
@@ -211,7 +211,7 @@ data "archive_file" "lambda_approval_response_deps" {
 }
 
 module "lambda_approval_response" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
   filename         = data.archive_file.lambda_approval_response.output_path
   source_code_hash = data.archive_file.lambda_approval_response.output_base64sha256
   function_name    = local.approval_response_name

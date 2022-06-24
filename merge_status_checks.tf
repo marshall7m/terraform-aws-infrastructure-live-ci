@@ -11,7 +11,7 @@ locals {
 }
 
 module "github_webhook_validator" {
-  source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.0"
+  source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.1"
 
   deployment_triggers = {
     approval = filesha1("${path.module}/approval.tf")
@@ -31,7 +31,14 @@ module "github_webhook_validator" {
 
   github_secret_ssm_key = "${local.github_webhook_validator_function_name}-secret"
 
-  lambda_success_destination_arns = [module.lambda_merge_lock.function_arn]
+  destination_config = [
+    {
+      success = module.lambda_merge_lock.function_arn
+    },
+    {
+      success = module.lambda_trigger_pr_plan.function_arn
+    }
+  ]
   repos = [
     {
       name = var.repo_name
@@ -99,7 +106,7 @@ data "archive_file" "lambda_merge_lock_deps" {
 
 
 module "lambda_merge_lock" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
   filename         = data.archive_file.lambda_merge_lock.output_path
   source_code_hash = data.archive_file.lambda_merge_lock.output_base64sha256
   function_name    = local.merge_lock_name
@@ -114,8 +121,13 @@ module "lambda_merge_lock" {
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.github_token_ssm_read_access.arn
   ]
-  enable_destinations     = true
-  success_destination_arn = module.lambda_trigger_pr_plan.function_arn
+  allowed_to_invoke = [
+    {
+      principal = "lambda.amazonaws.com"
+      arn       = "arn:aws:lambda:${data.aws_region.name}:${data.aws_caller_identity}:function:${local.github_webhook_validator_function_name}"
+    }
+  ]
+
   statements = [
     {
       effect    = "Allow"
@@ -165,7 +177,7 @@ data "archive_file" "lambda_trigger_pr_plan_deps" {
 }
 
 module "lambda_trigger_pr_plan" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.4"
+  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
   filename         = data.archive_file.lambda_trigger_pr_plan.output_path
   source_code_hash = data.archive_file.lambda_trigger_pr_plan.output_base64sha256
   function_name    = local.trigger_pr_plan_name
@@ -176,6 +188,12 @@ module "lambda_trigger_pr_plan" {
     ECS_CLUSTER_ARN      = aws_ecs_cluster.this.arn
     ACCOUNT_DIM          = jsonencode(var.account_parent_cfg)
   }
+  allowed_to_invoke = [
+    {
+      principal = "lambda.amazonaws.com"
+      arn       = "arn:aws:lambda:${data.aws_region.name}:${data.aws_caller_identity}:function:${local.github_webhook_validator_function_name}"
+    }
+  ]
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
   ]
