@@ -1,7 +1,7 @@
 locals {
-  merge_lock_name     = "${var.prefix}-merge-lock"
-  merge_lock_deps_zip = "${path.module}/merge_lock_deps.zip"
-  merge_lock_deps_dir = "${path.module}/functions/merge_lock/deps"
+  webhook_receiver_name     = "${var.prefix}-webhook-receiver"
+  webhook_receiver_deps_zip = "${path.module}/webhook_receiver_deps.zip"
+  webhook_receiver_deps_dir = "${path.module}/functions/webhook_receiver/deps"
 
   trigger_pr_plan_name     = "${var.prefix}-trigger-pr-plan"
   trigger_pr_plan_deps_zip = "${path.module}/trigger_pr_plan_deps.zip"
@@ -10,8 +10,10 @@ locals {
   github_webhook_validator_function_name = "${var.prefix}-webhook-validator"
 }
 
+
 module "github_webhook_validator" {
-  source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.1"
+  # source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.3"
+  source = "github.com/marshall7m/terraform-aws-github-webhook"
 
   deployment_triggers = {
     approval = filesha1("${path.module}/approval.tf")
@@ -26,22 +28,18 @@ module "github_webhook_validator" {
   stage_name    = var.api_stage_name
   function_name = local.github_webhook_validator_function_name
 
-  includes_private_repo = true
-  github_token_ssm_key  = local.github_token_ssm_key
-
   github_secret_ssm_key = "${local.github_webhook_validator_function_name}-secret"
 
-  destination_config = [
-    {
-      success = module.lambda_merge_lock.function_arn
-    },
-    {
-      success = module.lambda_trigger_pr_plan.function_arn
-    }
-  ]
+  lambda_destination_on_success    = module.lambda_webhook_receiver.function_arn
+  lambda_attach_async_event_policy = true
+  lambda_create_async_event_config = true
+
   repos = [
     {
-      name = var.repo_name
+      name                          = var.repo_name
+      is_private                    = true
+      create_github_token_ssm_param = false
+      github_token_ssm_param_arn    = local.github_token_arn
       filter_groups = [
         [
           {
@@ -51,6 +49,28 @@ module "github_webhook_validator" {
           {
             type    = "pr_action"
             pattern = "(opened|edited|reopened)"
+          },
+          {
+            type    = "file_path"
+            pattern = var.file_path_pattern
+          },
+          {
+            type    = "base_ref"
+            pattern = var.base_branch
+          }
+        ],
+        [
+          {
+            type    = "event"
+            pattern = "pull_request"
+          },
+          {
+            type    = "pr_action"
+            pattern = "(closed)"
+          },
+          {
+            type    = "pull_request.merged"
+            pattern = "True"
           },
           {
             type    = "file_path"
@@ -73,49 +93,56 @@ module "github_webhook_validator" {
 }
 
 resource "aws_ssm_parameter" "merge_lock" {
-  name        = local.merge_lock_name
+  name        = local.webhook_receiver_name
   description = "Locks PRs with infrastructure changes from being merged into base branch"
   type        = "String"
   value       = "none"
 }
 
 
-data "archive_file" "lambda_merge_lock" {
+data "archive_file" "lambda_webhook_receiver" {
   type        = "zip"
-  source_dir  = "${path.module}/functions/merge_lock"
-  output_path = "${path.module}/merge_lock.zip"
+  source_dir  = "${path.module}/functions/webhook_receiver"
+  output_path = "${path.module}/webhook_receiver.zip"
 }
 
-resource "null_resource" "lambda_merge_lock_deps" {
+resource "null_resource" "lambda_webhook_receiver_deps" {
   triggers = {
-    zip_hash = fileexists(local.merge_lock_deps_zip) ? 0 : timestamp()
+    zip_hash = fileexists(local.webhook_receiver_deps_zip) ? 0 : timestamp()
   }
   provisioner "local-exec" {
-    command = "pip install --target ${local.merge_lock_deps_dir}/python requests==2.27.1"
+    command = "pip install --target ${local.webhook_receiver_deps_dir}/python requests==2.27.1"
   }
 }
 
-data "archive_file" "lambda_merge_lock_deps" {
+data "archive_file" "lambda_webhook_receiver_deps" {
   type        = "zip"
-  source_dir  = local.merge_lock_deps_dir
-  output_path = local.merge_lock_deps_zip
+  source_dir  = local.webhook_receiver_deps_dir
+  output_path = local.webhook_receiver_deps_zip
   depends_on = [
-    null_resource.lambda_merge_lock_deps
+    null_resource.lambda_webhook_receiver_deps
   ]
 }
 
 
-module "lambda_merge_lock" {
+module "lambda_webhook_receiver" {
   source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
-  filename         = data.archive_file.lambda_merge_lock.output_path
-  source_code_hash = data.archive_file.lambda_merge_lock.output_base64sha256
-  function_name    = local.merge_lock_name
+  filename         = data.archive_file.lambda_webhook_receiver.output_path
+  source_code_hash = data.archive_file.lambda_webhook_receiver.output_base64sha256
+  function_name    = local.webhook_receiver_name
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
   env_vars = {
-    MERGE_LOCK_SSM_KEY   = aws_ssm_parameter.merge_lock.name
     GITHUB_TOKEN_SSM_KEY = local.github_token_ssm_key
-    STATUS_CHECK_NAME    = var.merge_lock_status_check_name
+
+    ENABLE_MERGE_LOCK            = var.enable_merge_lock
+    MERGE_LOCK_SSM_KEY           = aws_ssm_parameter.merge_lock.name
+    MERGE_LOCK_STATUS_CHECK_NAME = var.merge_lock_status_check_name
+
+    ENABLE_PR_PLAN          = var.enable_pr_plan
+    ECS_CLUSTER_ARN         = aws_ecs_cluster.this.arn
+    ECS_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
+    ACCOUNT_DIM             = jsonencode(var.account_parent_cfg)
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
@@ -124,7 +151,7 @@ module "lambda_merge_lock" {
   allowed_to_invoke = [
     {
       principal = "lambda.amazonaws.com"
-      arn       = "arn:aws:lambda:${data.aws_region.name}:${data.aws_caller_identity}:function:${local.github_webhook_validator_function_name}"
+      arn       = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:function:${local.github_webhook_validator_function_name}"
     }
   ]
 
@@ -139,65 +166,7 @@ module "lambda_merge_lock" {
       effect    = "Allow"
       actions   = ["ssm:GetParameter"]
       resources = [aws_ssm_parameter.merge_lock.arn]
-    }
-  ]
-  lambda_layers = [
-    {
-      filename         = data.archive_file.lambda_merge_lock_deps.output_path
-      name             = "${local.merge_lock_name}-deps"
-      runtimes         = ["python3.8"]
-      source_code_hash = data.archive_file.lambda_merge_lock_deps.output_base64sha256
-      description      = "Dependencies for lambda function: ${local.merge_lock_name}"
-    }
-  ]
-}
-
-data "archive_file" "lambda_trigger_pr_plan" {
-  type        = "zip"
-  source_dir  = "${path.module}/functions/trigger_pr_plan"
-  output_path = "${path.module}/trigger_pr_plan.zip"
-}
-
-resource "null_resource" "lambda_trigger_pr_plan_deps" {
-  triggers = {
-    zip_hash = fileexists(local.trigger_pr_plan_deps_zip) ? 0 : timestamp()
-  }
-  provisioner "local-exec" {
-    command = "pip install --target ${local.trigger_pr_plan_deps_dir}/python requests==2.27.1"
-  }
-}
-
-data "archive_file" "lambda_trigger_pr_plan_deps" {
-  type        = "zip"
-  source_dir  = local.trigger_pr_plan_deps_dir
-  output_path = local.trigger_pr_plan_deps_zip
-  depends_on = [
-    null_resource.lambda_trigger_pr_plan_deps
-  ]
-}
-
-module "lambda_trigger_pr_plan" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
-  filename         = data.archive_file.lambda_trigger_pr_plan.output_path
-  source_code_hash = data.archive_file.lambda_trigger_pr_plan.output_base64sha256
-  function_name    = local.trigger_pr_plan_name
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.8"
-  env_vars = {
-    GITHUB_TOKEN_SSM_KEY = local.github_token_ssm_key
-    ECS_CLUSTER_ARN      = aws_ecs_cluster.this.arn
-    ACCOUNT_DIM          = jsonencode(var.account_parent_cfg)
-  }
-  allowed_to_invoke = [
-    {
-      principal = "lambda.amazonaws.com"
-      arn       = "arn:aws:lambda:${data.aws_region.name}:${data.aws_caller_identity}:function:${local.github_webhook_validator_function_name}"
-    }
-  ]
-  custom_role_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-  ]
-  statements = [
+    },
     {
       effect = "Allow"
       actions = [
@@ -217,11 +186,11 @@ module "lambda_trigger_pr_plan" {
   ]
   lambda_layers = [
     {
-      filename         = data.archive_file.lambda_trigger_pr_plan_deps.output_path
-      name             = "${local.trigger_pr_plan_name}-deps"
+      filename         = data.archive_file.lambda_webhook_receiver_deps.output_path
+      name             = "${local.webhook_receiver_name}-deps"
       runtimes         = ["python3.8"]
-      source_code_hash = data.archive_file.lambda_trigger_pr_plan_deps.output_base64sha256
-      description      = "Dependencies for lambda function: ${local.trigger_pr_plan_name}"
+      source_code_hash = data.archive_file.lambda_webhook_receiver_deps.output_base64sha256
+      description      = "Dependencies for lambda function: ${local.webhook_receiver_name}"
     }
   ]
 }

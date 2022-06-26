@@ -2,20 +2,18 @@ import boto3
 import logging
 import json
 import os
-import sys
 import requests
-from pprint import pformat
+import sys
 import urllib
-import fnmatch
 import re
+import fnmatch
+from pprint import pformat
 
 log = logging.getLogger(__name__)
-stream = logging.StreamHandler(sys.stdout)
-log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-ecs = boto3.client("ecs")
 ssm = boto3.client("ssm")
+ecs = boto3.client("ecs")
 
 
 def aws_encode(value):
@@ -24,33 +22,46 @@ def aws_encode(value):
     return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
 
-def lambda_handler(event, context):
+def merge_lock(headers, commit_url, target_url):
+    """Creates a PR commit status that shows the current merge lock status"""
+    merge_lock = ssm.get_parameter(Name=os.environ["MERGE_LOCK_SSM_KEY"])["Parameter"][
+        "Value"
+    ]
+    log.info(f"Merge lock value: {merge_lock}")
 
-    log.debug(f"Event:\n{pformat(event)}")
+    if merge_lock != "none":
+        log.info("Merge lock status: locked")
+        data = {
+            "state": "pending",
+            "description": f"Locked -- In Progress PR #{merge_lock}",
+            "context": os.environ["MERGE_LOCK_STATUS_CHECK_NAME"],
+            "target_url": target_url,
+        }
+    elif merge_lock == "none":
+        log.info("Merge lock status: unlocked")
+        data = {
+            "state": "success",
+            "description": "Unlocked",
+            "context": os.environ["MERGE_LOCK_STATUS_CHECK_NAME"],
+            "target_url": target_url,
+        }
 
-    payload = json.loads(event["requestPayload"]["body"])
+    else:
+        log.error(f"Invalid merge lock value: {merge_lock}")
+        sys.exit(1)
 
-    token = ssm.get_parameter(
-        Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
-    )["Parameter"]["Value"]
+    log.debug(f"Response Data:\n{data}")
 
-    headers = {
-        "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {token}",
-    }
+    log.info("Sending response")
+    response = requests.post(commit_url, headers=headers, json=data)
+    log.debug(f"Response:\n{response}")
 
-    commit_id = payload["pull_request"]["head"]["sha"]
-    repo_full_name = payload["repository"]["full_name"]
-    log.info(f"Commit ID: {commit_id}")
-    log.info(f"Repo: {repo_full_name}")
 
-    commit_url = f"https://api.github.com/repos/{repo_full_name}/statuses/{commit_id}"  # noqa: E501
-    # TODO: Replace with each direcotories associated ecs task cw log stream
-    target_url = f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context["log_group_name"])}/log-events/{aws_encode(context["log_stream_name"])}'  # noqa: E501
+def trigger_pr_plan(headers, commit_url, compare_url, branch_protection_url):
 
     log.info("Getting diff files")
-    log.debug(f"Compare URL: {payload['compare_url']}")
-    compare_payload = requests.get(payload["compare_url"], headers=headers).json()
+    log.debug(f"Compare URL: {compare_url}")
+    compare_payload = requests.get(compare_url, headers=headers).json()
 
     log.debug(f"Compare URL Payload:\n{pformat(compare_payload)}")
 
@@ -107,11 +118,7 @@ def lambda_handler(event, context):
                                             "name": "GITHUB_TOKEN_SSM_KEY",
                                             "value": os.environ["GITHUB_TOKEN_SSM_KEY"],
                                         },
-                                        {"name": "COMMIT_ID", "value": commit_id},
-                                        {
-                                            "name": "REPO_FULL_NAME",
-                                            "value": repo_full_name,
-                                        },
+                                        {"name": "COMMIT_URL", "value": commit_url},
                                         {
                                             "name": "AWS_REGION",
                                             "value": os.environ["AWS_REGION"],
@@ -139,7 +146,7 @@ def lambda_handler(event, context):
                         "state": state,
                         "description": "Terraform Plan",
                         "context": context,
-                        "target_url": target_url,
+                        # "target_url": target_url,
                     },
                 )
                 log.debug(f"Response:\n{response}")
@@ -149,13 +156,57 @@ def lambda_handler(event, context):
             log.info(
                 "Adding directory plans to branch protection required status checks"
             )
-            protection_url = f"https://api.github.com/repos/{repo_full_name}/branches/{os.environ['BASE_BRANCH']}/protection"
-            protection_data = requests.get(protection_url, headers=headers).json()
+            log.debug(f"Branch protection URL: {branch_protection_url}")
+            protection_data = requests.get(
+                branch_protection_url, headers=headers
+            ).json()
+            log.debug(f"Branch protection payload: {pformat(protection_data)}")
 
             protection_data["required_status_checks"] += plan_contexts
-            requests.put(protection_url, headers=headers, data=protection_data)
+            requests.put(branch_protection_url, headers=headers, data=protection_data)
 
         else:
             log.info(
                 "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
             )
+
+
+def lambda_handler(event, context):
+
+    log.debug(f"Event:\n{pformat(event)}")
+
+    payload = json.loads(event["requestPayload"]["body"])
+
+    token = ssm.get_parameter(
+        Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
+    )["Parameter"]["Value"]
+    commit_id = payload["pull_request"]["head"]["sha"]
+    repo_full_name = payload["repository"]["full_name"]
+
+    log.info(f"Commit ID: {commit_id}")
+    log.info(f"Repo: {repo_full_name}")
+
+    commit_url = f"https://api.github.com/repos/{repo_full_name}/statuses/{commit_id}"  # noqa: E501
+
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": f"token {token}",
+    }
+
+    if os.environ["ENABLE_MERGE_LOCK"]:
+        merge_lock(
+            headers,
+            commit_url,
+            f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}',
+        )
+
+    if os.environ["ENABLE_PR_PLAN"]:
+        trigger_pr_plan(
+            headers,
+            commit_url,
+            payload["repository"]["compare_url"].format(
+                base=payload["pull_request"]["base"]["sha"],
+                head=payload["pull_request"]["head"]["sha"],
+            ),
+            f"{payload['pull_request']['base']['repo']['branches_url'].replace('{/branch}', '/' + payload['pull_request']['base']['ref'])}/protection",
+        )

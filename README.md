@@ -379,12 +379,11 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_ecs_role"></a> [ecs\_role](#module\_ecs\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | v0.1.1 |
+| <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | n/a |
 | <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
 | <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
-| <a name="module_lambda_merge_lock"></a> [lambda\_merge\_lock](#module\_lambda\_merge\_lock) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
-| <a name="module_lambda_trigger_pr_plan"></a> [lambda\_trigger\_pr\_plan](#module\_lambda\_trigger\_pr\_plan) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
 | <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
+| <a name="module_lambda_webhook_receiver"></a> [lambda\_webhook\_receiver](#module\_lambda\_webhook\_receiver) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
 | <a name="module_plan_role"></a> [plan\_role](#module\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 
@@ -424,20 +423,17 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
 | [null_resource.lambda_approval_response_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [null_resource.lambda_merge_lock_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [null_resource.lambda_trigger_pr_plan_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.lambda_webhook_receiver_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.metadb_users](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [archive_file.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_approval_response](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_approval_response_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_merge_lock](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_merge_lock_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_trigger_pr_plan](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_trigger_pr_plan_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_trigger_sf](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [archive_file.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_webhook_receiver](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+| [archive_file.lambda_webhook_receiver_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_iam_policy_document.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
@@ -605,8 +601,8 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 ## Pitfalls
 
-- Management of two GitHub Personal Access Tokens (PAT). User is required to refresh the GitHub token values when the expiration date is close.
-  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration? User would specify a pre-existing machine user or the module can create a machine user (would require a TF local-exec script to create the user)
+- Management of a GitHub Personal Access Token (PAT). User is would need to refresh the GitHub token value when the expiration date is close.
+  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration? User would specify a pre-existing machine user or the module can create a machine user (would require a TF local-exec script to create the user).
 
 # TODO:
  
@@ -617,7 +613,7 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
 - [ ] Use AWS SQS with Exactly-Once Processing to create a queue of pr tf plan tasks to run
   - User can then set a time range (such as after hours) that the PR plans are runned so that the plan tasks are not runned for every PR update event
-  - Probably only cost-effective for the rase case of large teams frequently committing infra PR changes
+  - Probably only cost-effective for the rase case of large teams frequently committing PR IAC changes
 
 ### Improvements:
 
@@ -628,25 +624,9 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - Decouple Docker runner image and place into a separate repository
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage it's own version of the docker image 
   - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
-
+- Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is because if the common directories between the PR and the running deployment stack are changed within the  deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
 
 - add commit status success logic to pr plan task
 - add gh token ssm key to pr plan task env vars
 - add gh token ssm param to pr plan task permissions
 - create ecs pr plan .py script that runs tg plan and update commit status
-
-
-gh validator run both merge lock and trigger pr plan concurrently
-
-pr-plan function
-if depends_on_merge_lock:
-  get merge lock
-  if merge == locked:
-    return
-
-if depends_on_running_deployment:
-  check modified/added directories in running deployments cfg_path within metadb
-  if modified in running:
-    return
-
-run ecs tf plan
