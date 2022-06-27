@@ -1,6 +1,6 @@
 locals {
-  ecs_execution_role_name = "${var.prefix}-ecs-execution"
-  plan_task_name          = "${var.prefix}-pr-plan"
+  ecs_execution_role_name  = "${var.prefix}-ecs-execution"
+  plan_task_container_name = "${var.prefix}-pr-plan"
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -21,26 +21,57 @@ module "ecs_role" {
 
 module "plan_role" {
   source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-  role_name = local.plan_task_name
+  role_name = local.plan_task_container_name
   statements = [
     {
       sid       = "CrossAccountTerraformPlanAccess"
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
+    },
+    {
+      effect = "Allow"
+      actions = [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ]
+      resources = [aws_cloudwatch_log_group.plan.arn]
     }
   ]
   trusted_services = ["ecs-tasks.amazonaws.com"]
+}
+
+resource "aws_cloudwatch_log_group" "plan" {
+  name = "${var.prefix}-pr-plan"
 }
 
 resource "aws_ecs_task_definition" "plan" {
   family = "${var.prefix}-pr-plan"
   container_definitions = jsonencode([
     {
-      name      = local.plan_task_name
+      name      = local.plan_task_container_name
       essential = true
-      image     = local.build_img
+      image     = local.ecs_image_address
       command   = ["python", "/src/pr_plan/plan.py"]
+      portMappings = [
+        {
+          containerPort = 80
+          hostPort      = 80
+        },
+        {
+          containerPort = 443
+          hostPort      = 443
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.plan.name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = "pr"
+        }
+      }
       environment = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
         {
           name  = "SOURCE_VERSION"
