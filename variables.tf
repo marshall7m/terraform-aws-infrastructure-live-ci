@@ -99,6 +99,34 @@ EOF
   default     = 512
 }
 
+variable "ecs_private_subnet_ids" {
+  description = <<EOF
+AWS VPC private subnet IDs to host the ECS container instances within.
+Subnets should deny all inbound access and allow the minimum outbound access needed to pull
+the container image and make API calls to Terraform provider resources.
+The subnets should be associated with the VPC ID specified under `var.ecs_vpc_id`
+EOF
+  type        = list(string)
+}
+
+variable "ecs_security_group_ids" {
+  description = <<EOF
+A maximum list of five AWS VPC security group IDs to attach to all ECS tasks. At a minimum, one of the security groups should have
+an egress rules that allows HTTP/HTTPS access. This gives the task the ability to pull it's associated Docker registry
+image and download Terraform provider resources. If not specified, the ECS task will use the VPC's default security group.
+EOF
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_vpc_id" {
+  description = <<EOF
+AWS VPC ID to host the ECS container instances within.
+The VPC should be associated with the subnet IDs specified under `var.ecs_private_subnet_ids`
+EOF
+  type        = string
+}
+
 variable "pr_plan_env_vars" {
   description = "Environment variables that will be provided to open PR's Terraform planning builds"
   type = list(object({
@@ -109,8 +137,11 @@ variable "pr_plan_env_vars" {
   default = []
 }
 
-variable "build_img" {
-  description = "Docker, ECR or AWS CodeBuild managed image to use for the CodeBuild projects. If not specified, Terraform module will create an ECR image for them."
+variable "ecs_image_address" {
+  description = <<EOF
+Docker registry image to use for the ECS Fargate containers. If not specified, this Terraform module's GitHub registry image
+will be used with the tag associated with the version of this module. 
+EOF
   type        = string
   default     = null
 }
@@ -204,6 +235,18 @@ variable "codebuild_common_env_vars" {
     type  = optional(string)
   }))
   default = []
+}
+
+variable "enable_pr_plan" {
+  description = "Determines if PR plans will be created"
+  type        = bool
+  default     = true
+}
+
+variable "enable_merge_lock" {
+  description = "Determines if merge lock will be enabled"
+  type        = bool
+  default     = true
 }
 
 variable "merge_lock_status_check_name" {

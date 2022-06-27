@@ -57,7 +57,15 @@ def merge_lock(headers, commit_url, target_url):
     log.debug(f"Response:\n{response}")
 
 
-def trigger_pr_plan(headers, commit_url, compare_url, branch_protection_url):
+def trigger_pr_plan(
+    headers,
+    commit_url,
+    compare_url,
+    branch_protection_url,
+    lambda_logs_url,
+    pr_id,
+    commit_id,
+):
 
     log.info("Getting diff files")
     log.debug(f"Compare URL: {compare_url}")
@@ -99,20 +107,33 @@ def trigger_pr_plan(headers, commit_url, compare_url, branch_protection_url):
             log.info(f"Count: {len(account_diff_paths)}")
             log.info(f'Plan Role ARN: {account["plan_role_arn"]}')
 
+            log_options = ecs.describe_task_definition(
+                taskDefinition=os.environ["ECS_TASK_DEFINITION_ARN"]
+            )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"][
+                "options"
+            ]
+
             log.info("Running ECS tasks")
             for path in account_diff_paths:
                 log.info(f"Directory: {path}")
+                context = f"Plan: {path}"
                 try:
-                    ecs.run_task(
+                    task = ecs.run_task(
                         cluster=os.environ["ECS_CLUSTER_ARN"],
                         count=1,
                         launchType="FARGATE",
                         taskDefinition=os.environ["ECS_TASK_DEFINITION_ARN"],
+                        networkConfiguration=json.loads(
+                            os.environ["ECS_NETWORK_CONFIG"]
+                        ),
                         overrides={
                             "containerOverrides": [
                                 {
-                                    "name": path,
-                                    "command": "python ci-repo/ecs/pr_plan/plan.py",
+                                    "name": os.environ["ECS_TASK_CONTAINER_NAME"],
+                                    "command": [
+                                        "python",
+                                        "ci-repo/ecs/pr_plan/plan.py",
+                                    ],
                                     "environment": [
                                         {
                                             "name": "GITHUB_TOKEN_SSM_KEY",
@@ -133,23 +154,35 @@ def trigger_pr_plan(headers, commit_url, compare_url, branch_protection_url):
                             ]
                         },
                     )
-                    state = "pending"
-                except Exception as e:
-                    log.error(e, exc_info=True)
-                    state = "failure"
+                    log.debug(f"Run task response:\n{pformat(task)}")
 
-                log.info("Sending commit status")
-                context = f"Plan: {path}"
-                response = requests.post(
-                    commit_url,
-                    json={
-                        "state": state,
+                    task_id = task["tasks"][0]["containers"][0]["taskArn"].split("/")[
+                        -1
+                    ]
+                    status_data = {
+                        "state": "pending",
                         "description": "Terraform Plan",
                         "context": context,
-                        # "target_url": target_url,
-                    },
+                        "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"])}/{os.environ["ECS_TASK_CONTAINER_NAME"]}/{task_id}',
+                    }
+                except Exception as e:
+                    log.error(e, exc_info=True)
+                    status_data = {
+                        "state": "failure",
+                        "description": "Terraform Plan",
+                        "context": context,
+                        "target_url": lambda_logs_url,
+                    }
+
+                log.info("Sending commit status for Terraform plan")
+                log.debug(f"Status data:\n{pformat(status_data)}")
+
+                response = requests.post(
+                    commit_url,
+                    headers=headers,
+                    json=status_data,
                 )
-                log.debug(f"Response:\n{response}")
+                log.debug(f"Response:\n{response.text}")
 
                 plan_contexts.append(context)
 
@@ -162,9 +195,9 @@ def trigger_pr_plan(headers, commit_url, compare_url, branch_protection_url):
             ).json()
             log.debug(f"Branch protection payload: {pformat(protection_data)}")
 
-            protection_data["required_status_checks"] += plan_contexts
+            log.info("Adding Terraform plan(s) to required status checks")
+            protection_data["required_status_checks"]["contexts"] += plan_contexts
             requests.put(branch_protection_url, headers=headers, data=protection_data)
-
         else:
             log.info(
                 "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
@@ -180,11 +213,14 @@ def lambda_handler(event, context):
     token = ssm.get_parameter(
         Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
     )["Parameter"]["Value"]
-    commit_id = payload["pull_request"]["head"]["sha"]
-    repo_full_name = payload["repository"]["full_name"]
 
-    log.info(f"Commit ID: {commit_id}")
+    repo_full_name = payload["repository"]["full_name"]
+    pr_id = payload["pull_request"]["number"]
+    commit_id = payload["pull_request"]["head"]["sha"]
+
     log.info(f"Repo: {repo_full_name}")
+    log.info(f"Commit ID: {commit_id}")
+    log.info(f"PR ID: {pr_id}")
 
     commit_url = f"https://api.github.com/repos/{repo_full_name}/statuses/{commit_id}"  # noqa: E501
 
@@ -192,13 +228,10 @@ def lambda_handler(event, context):
         "Accept": "application/vnd.github.v3+json",
         "Authorization": f"token {token}",
     }
+    logs_url = f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'
 
     if os.environ["ENABLE_MERGE_LOCK"]:
-        merge_lock(
-            headers,
-            commit_url,
-            f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}',
-        )
+        merge_lock(headers, commit_url, logs_url)
 
     if os.environ["ENABLE_PR_PLAN"]:
         trigger_pr_plan(
@@ -209,4 +242,7 @@ def lambda_handler(event, context):
                 head=payload["pull_request"]["head"]["sha"],
             ),
             f"{payload['pull_request']['base']['repo']['branches_url'].replace('{/branch}', '/' + payload['pull_request']['base']['ref'])}/protection",
+            logs_url,
+            pr_id,
+            commit_id,
         )

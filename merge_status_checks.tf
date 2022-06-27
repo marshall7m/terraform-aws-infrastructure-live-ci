@@ -142,7 +142,14 @@ module "lambda_webhook_receiver" {
     ENABLE_PR_PLAN          = var.enable_pr_plan
     ECS_CLUSTER_ARN         = aws_ecs_cluster.this.arn
     ECS_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
-    ACCOUNT_DIM             = jsonencode(var.account_parent_cfg)
+    ECS_TASK_CONTAINER_NAME = local.plan_task_container_name
+    ECS_NETWORK_CONFIG = jsonencode({
+      awsvpcConfiguration = {
+        subnets        = var.ecs_private_subnet_ids
+        securityGroups = var.ecs_security_group_ids
+      }
+    })
+    ACCOUNT_DIM = jsonencode(var.account_parent_cfg)
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
@@ -181,6 +188,23 @@ module "lambda_webhook_receiver" {
       ]
       resources = [
         aws_ecs_task_definition.plan.arn
+      ]
+    },
+    {
+      effect = "Allow"
+      actions = [
+        "ecs:DescribeTaskDefinition"
+      ]
+      resources = ["*"]
+    },
+    {
+      effect = "Allow"
+      actions = [
+        "iam:PassRole"
+      ]
+      resources = [
+        module.ecs_role.role_arn,
+        module.plan_role.role_arn
       ]
     }
   ]
