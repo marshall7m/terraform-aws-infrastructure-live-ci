@@ -2,6 +2,13 @@ locals {
   mut_id           = "mut-${random_string.mut.id}"
   plan_role_name   = "${local.mut_id}-plan"
   deploy_role_name = "${local.mut_id}-deploy"
+
+  docker_context = "${path.module}/../../../docker"
+  trigger_file_paths = flatten([for p in [local.docker_context] : try(fileexists(p), false) ? [p] :
+    # use formatlist() to join directory and file name list since fileset doesn't give full path
+    formatlist("${p}/%s", fileset(p, "*"))
+  ])
+  full_image_url = "${module.ecr.repository_url}:v1"
 }
 
 provider "aws" {
@@ -13,6 +20,8 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
+
+data "aws_region" "current" {}
 
 data "github_user" "current" {
   username = ""
@@ -105,7 +114,7 @@ module "plan_role" {
   trusted_entities = [
     module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
     module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn,
-    module.mut_infrastructure_live_ci.codebuild_pr_plan_role_arn
+    module.mut_infrastructure_live_ci.ecs_plan_role_arn
   ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
 }
@@ -123,7 +132,7 @@ module "secondary_plan_role" {
   trusted_entities = [
     module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
     module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn,
-    module.mut_infrastructure_live_ci.codebuild_pr_plan_role_arn
+    module.mut_infrastructure_live_ci.ecs_plan_role_arn
   ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
   providers = {
@@ -162,6 +171,118 @@ resource "aws_iam_policy" "trigger_sf_tf_state_access" {
   policy      = data.aws_iam_policy_document.trigger_sf_tf_state_access.json
 }
 
+module "ecr" {
+  source  = "terraform-aws-modules/ecr/aws"
+  version = "1.3.2"
+
+  repository_name = local.mut_id
+  repository_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1,
+        description  = "Keep last 5 images",
+        selection = {
+          tagStatus     = "tagged",
+          tagPrefixList = ["v"],
+          countType     = "imageCountMoreThan",
+          countNumber   = 5
+        },
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "null_resource" "build" {
+  triggers = { for file in local.trigger_file_paths : basename(file) => filesha256(file) }
+
+  provisioner "local-exec" {
+    command     = <<EOF
+
+docker build -t ${local.mut_id} ${local.docker_context}
+
+aws ecr get-login-password --region ${data.aws_region.current.name} | docker login --username AWS --password-stdin $$
+docker tag ${local.mut_id} ${module.ecr.repository_url}
+docker push ${local.full_image_url}
+
+      EOF
+    interpreter = ["bash", "-c"]
+  }
+}
+
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "3.14.2"
+
+  name = local.mut_id
+  cidr = "10.0.0.0/16"
+
+  azs             = ["${data.aws_region.current.name}a", "${data.aws_region.current.name}b"]
+  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
+  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
+
+  enable_nat_gateway     = true
+  single_nat_gateway     = true
+  one_nat_gateway_per_az = false
+
+  default_security_group_ingress = [
+    {
+      cidr_blocks = "10.0.0.0/16"
+      from_port   = 0
+      to_port     = 65535
+      protocol    = "tcp"
+    }
+  ]
+
+  manage_default_security_group = true
+  default_security_group_egress = [
+    {
+      cidr_blocks = "0.0.0.0/0"
+      from_port   = 80
+      to_port     = 80
+      protocol    = "tcp"
+    },
+    {
+      cidr_blocks = "0.0.0.0/0"
+      from_port   = 443
+      to_port     = 443
+      protocol    = "tcp"
+    }
+  ]
+
+  private_dedicated_network_acl = true
+  private_inbound_acl_rules = [
+    {
+      cidr_block  = "10.0.0.0/16"
+      from_port   = 0,
+      protocol    = "tcp",
+      rule_action = "allow",
+      rule_number = 1,
+      to_port     = 0
+    }
+  ]
+  private_outbound_acl_rules = [
+    {
+      cidr_block  = "0.0.0.0/0"
+      from_port   = 443,
+      protocol    = "tcp",
+      rule_action = "allow",
+      rule_number = 1,
+      to_port     = 443
+    },
+    {
+      cidr_block  = "0.0.0.0/0"
+      from_port   = 80,
+      protocol    = "tcp",
+      rule_action = "allow",
+      rule_number = 2,
+      to_port     = 80
+    }
+  ]
+}
+
 module "mut_infrastructure_live_ci" {
   source = "../../..//"
 
@@ -178,6 +299,12 @@ module "mut_infrastructure_live_ci" {
   metadb_ci_username = "mut_ci_user"
   metadb_ci_password = random_password.metadb["ci"].result
   metadb_schema      = var.metadb_schema
+
+  ecs_vpc_id             = module.vpc.vpc_id
+  ecs_private_subnet_ids = module.vpc.private_subnets
+
+  ecs_image_address = local.full_image_url
+
   # repo specific env vars required to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [
     {
@@ -194,10 +321,8 @@ module "mut_infrastructure_live_ci" {
 
   tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
 
-  create_merge_lock_github_token_ssm_param = true
-  merge_lock_github_token_ssm_value        = var.merge_lock_github_token_ssm_value
-
-  github_webhook_validator_github_token_ssm_value = var.github_webhook_validator_github_token_ssm_value
+  create_github_token_ssm_param = true
+  github_token_ssm_value        = var.github_token_ssm_value
 
   approval_request_sender_email = var.approval_request_sender_email
   send_verification_email       = false
@@ -226,6 +351,7 @@ module "mut_infrastructure_live_ci" {
   ]
 
   depends_on = [
-    github_repository.testing
+    github_repository.testing,
+    null_resource.build
   ]
 }
