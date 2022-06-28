@@ -163,7 +163,7 @@ def trigger_pr_plan(
                         "state": "pending",
                         "description": "Terraform Plan",
                         "context": context,
-                        "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"])}/{os.environ["ECS_TASK_CONTAINER_NAME"]}/{task_id}',
+                        "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["ECS_TASK_CONTAINER_NAME"] + "/" + task_id)}',
                     }
                 except Exception as e:
                     log.error(e, exc_info=True)
