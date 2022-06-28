@@ -13,15 +13,19 @@ resource "aws_ecs_cluster" "this" {
 }
 
 module "ecs_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-  role_name               = local.ecs_execution_role_name
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"]
-  trusted_services        = ["ecs-tasks.amazonaws.com"]
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  role_name = local.ecs_execution_role_name
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+  ]
+  trusted_services = ["ecs-tasks.amazonaws.com"]
 }
 
 module "plan_role" {
   source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name = local.plan_task_container_name
+
   statements = [
     {
       sid       = "CrossAccountTerraformPlanAccess"
