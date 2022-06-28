@@ -60,11 +60,11 @@ def merge_lock(headers, commit_url, target_url):
 def trigger_pr_plan(
     headers,
     commit_url,
+    commit_statuses_url,
     compare_url,
     branch_protection_url,
     lambda_logs_url,
-    pr_id,
-    commit_id,
+    head_ref,
 ):
 
     log.info("Getting diff files")
@@ -132,22 +132,20 @@ def trigger_pr_plan(
                                     "name": os.environ["ECS_TASK_CONTAINER_NAME"],
                                     "command": [
                                         "python",
-                                        "ci-repo/ecs/pr_plan/plan.py",
+                                        "/src/pr_plan/plan.py",
                                     ],
                                     "environment": [
-                                        {
-                                            "name": "GITHUB_TOKEN_SSM_KEY",
-                                            "value": os.environ["GITHUB_TOKEN_SSM_KEY"],
-                                        },
+                                        {"name": "SOURCE_VERSION", "value": head_ref},
                                         {"name": "COMMIT_URL", "value": commit_url},
-                                        {
-                                            "name": "AWS_REGION",
-                                            "value": os.environ["AWS_REGION"],
-                                        },
                                         {"name": "CFG_PATH", "value": path},
                                         {
                                             "name": "ROLE_ARN",
                                             "value": account["plan_role_arn"],
+                                        },
+                                        {"name": "CONTEXT", "value": context},
+                                        {
+                                            "name": "COMMIT_STATUSES_URL",
+                                            "value": commit_statuses_url,
                                         },
                                     ],
                                 }
@@ -237,12 +235,12 @@ def lambda_handler(event, context):
         trigger_pr_plan(
             headers,
             commit_url,
+            f"https://api.github.com/repos/{repo_full_name}/commits/{commit_id}/statuses",
             payload["repository"]["compare_url"].format(
                 base=payload["pull_request"]["base"]["sha"],
                 head=payload["pull_request"]["head"]["sha"],
             ),
             f"{payload['pull_request']['base']['repo']['branches_url'].replace('{/branch}', '/' + payload['pull_request']['base']['ref'])}/protection",
             logs_url,
-            pr_id,
-            commit_id,
+            payload["pull_request"]["head"]["ref"],
         )
