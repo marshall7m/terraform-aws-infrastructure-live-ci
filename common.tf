@@ -1,10 +1,11 @@
 locals {
-  github_token_ssm_key = "${var.prefix}-github-token"
+  github_token_ssm_key = coalesce(var.github_token_ssm_key, "${var.prefix}-github-token")
+  github_token_arn     = try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)
 }
 
 data "aws_ssm_parameter" "github_token" {
   count = var.create_github_token_ssm_param != true ? 1 : 0
-  name  = var.github_token_ssm_key
+  name  = local.github_token_ssm_key
 }
 
 resource "aws_ssm_parameter" "github_token" {
@@ -48,7 +49,7 @@ data "aws_iam_policy_document" "github_token_ssm_read_access" {
     actions = [
       "ssm:GetParameter"
     ]
-    resources = [try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)]
+    resources = [local.github_token_arn]
   }
 }
 
