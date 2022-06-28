@@ -413,8 +413,10 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_rds_cluster.metadb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/rds_cluster) | resource |
 | [aws_secretsmanager_secret.ci_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
 | [aws_secretsmanager_secret.master_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
+| [aws_secretsmanager_secret.registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
 | [aws_secretsmanager_secret_version.ci_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
 | [aws_secretsmanager_secret_version.master_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
+| [aws_secretsmanager_secret_version.registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
 | [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_email_identity) | resource |
 | [aws_ses_identity_policy.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_identity_policy) | resource |
 | [aws_ses_template.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_template) | resource |
@@ -462,6 +464,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#input\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub status | `string` | `"Create Deploy Stack"` | no |
 | <a name="input_create_deploy_stack_vpc_config"></a> [create\_deploy\_stack\_vpc\_config](#input\_create\_deploy\_stack\_vpc\_config) | AWS VPC configurations associated with terra\_run CodeBuild project.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | <a name="input_create_github_token_ssm_param"></a> [create\_github\_token\_ssm\_param](#input\_create\_github\_token\_ssm\_param) | Determines if the merge lock AWS SSM Parameter Store value should be created | `bool` | n/a | yes |
+| <a name="input_create_private_registry_secret"></a> [create\_private\_registry\_secret](#input\_create\_private\_registry\_secret) | Determines if the module should create the AWS Secret Manager resource used for private registry authentification | `bool` | `true` | no |
 | <a name="input_ecs_image_address"></a> [ecs\_image\_address](#input\_ecs\_image\_address) | Docker registry image to use for the ECS Fargate containers. If not specified, this Terraform module's GitHub registry image<br>will be used with the tag associated with the version of this module. | `string` | `null` | no |
 | <a name="input_ecs_private_subnet_ids"></a> [ecs\_private\_subnet\_ids](#input\_ecs\_private\_subnet\_ids) | AWS VPC private subnet IDs to host the ECS container instances within.<br>Subnets should deny all inbound access and allow the minimum outbound access needed to pull<br>the container image and make API calls to Terraform provider resources.<br>The subnets should be associated with the VPC ID specified under `var.ecs_vpc_id` | `list(string)` | n/a | yes |
 | <a name="input_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#input\_ecs\_security\_group\_ids) | A maximum list of five AWS VPC security group IDs to attach to all ECS tasks. At a minimum, one of the security groups should have<br>an egress rules that allows HTTP/HTTPS access. This gives the task the ability to pull it's associated Docker registry<br>image and download Terraform provider resources. If not specified, the ECS task will use the VPC's default security group. | `list(string)` | `[]` | no |
@@ -495,6 +498,11 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_pr_plan_status_check_name"></a> [pr\_plan\_status\_check\_name](#input\_pr\_plan\_status\_check\_name) | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
 | <a name="input_pr_plan_vpc_config"></a> [pr\_plan\_vpc\_config](#input\_pr\_plan\_vpc\_config) | AWS VPC configurations associated with PR planning CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | <a name="input_prefix"></a> [prefix](#input\_prefix) | Prefix to attach to all resources | `string` | `null` | no |
+| <a name="input_private_registry_auth"></a> [private\_registry\_auth](#input\_private\_registry\_auth) | Determines if authentification is required to pull the docker images used by the ECS tasks | `bool` | `false` | no |
+| <a name="input_private_registry_custom_kms_key_arn"></a> [private\_registry\_custom\_kms\_key\_arn](#input\_private\_registry\_custom\_kms\_key\_arn) | ARN of the custom AWS KMS key to use for decrypting private registry credentials hosted with AWS Secret Manager | `string` | `null` | no |
+| <a name="input_private_registry_secret_manager_arn"></a> [private\_registry\_secret\_manager\_arn](#input\_private\_registry\_secret\_manager\_arn) | Pre-existing AWS Secret Manager ARN used for private registry authentification | `string` | `null` | no |
+| <a name="input_registry_password"></a> [registry\_password](#input\_registry\_password) | Private Docker registry password used to authenticate ECS task to pull docker image | `string` | `null` | no |
+| <a name="input_registry_username"></a> [registry\_username](#input\_registry\_username) | Private Docker registry username used to authenticate ECS task to pull docker image | `string` | `null` | no |
 | <a name="input_repo_name"></a> [repo\_name](#input\_repo\_name) | Name of the pre-existing GitHub repository that is owned by the Github provider | `string` | n/a | yes |
 | <a name="input_send_verification_email"></a> [send\_verification\_email](#input\_send\_verification\_email) | Determines if an email verification should be sent to the var.approval\_request\_sender\_email address. Set<br>  to true if the email address is not already authorized to send emails via AWS SES. | `bool` | `true` | no |
 | <a name="input_step_function_name"></a> [step\_function\_name](#input\_step\_function\_name) | Name of AWS Step Function machine | `string` | `"deployment-flow"` | no |
@@ -632,7 +640,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
   - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
 - Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is because if the common directories between the PR and the running deployment stack are changed within the  deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
 
-- add commit status success logic to pr plan task
-- add gh token ssm key to pr plan task env vars
-- add gh token ssm param to pr plan task permissions
-- create ecs pr plan .py script that runs tg plan and update commit status
+
+# TODAY
+- ensure that unmatched filter group events are not triggering ecs tasks

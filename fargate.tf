@@ -1,6 +1,7 @@
 locals {
-  ecs_execution_role_name  = "${var.prefix}-ecs-execution"
-  plan_task_container_name = "${var.prefix}-pr-plan"
+  ecs_execution_role_name             = "${var.prefix}-ecs-execution"
+  plan_task_container_name            = "${var.prefix}-pr-plan"
+  private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn))
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -19,13 +20,35 @@ module "ecs_role" {
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
     "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
   ]
+  statements = [var.private_registry_custom_kms_key_arn != null ?
+    {
+      effect = "Allow"
+      actions = [
+        "kms:Decrypt",
+        "ssm:GetParameters",
+        "secretsmanager:GetSecretValue"
+      ]
+      resources = [
+        local.private_registry_secret_manager_arn,
+        var.private_registry_custom_kms_key_arn
+      ]
+    } :
+    {
+      effect = "Allow"
+      actions = [
+        "ssm:GetParameters",
+        "secretsmanager:GetSecretValue"
+      ]
+      resources = [local.private_registry_secret_manager_arn]
+    }
+  ]
   trusted_services = ["ecs-tasks.amazonaws.com"]
 }
 
 module "plan_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-  role_name = local.plan_task_container_name
-
+  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  role_name               = local.plan_task_container_name
+  custom_role_policy_arns = [aws_iam_policy.github_token_ssm_read_access.arn]
   statements = [
     {
       sid       = "CrossAccountTerraformPlanAccess"
@@ -49,6 +72,20 @@ resource "aws_cloudwatch_log_group" "plan" {
   name = "${var.prefix}-pr-plan"
 }
 
+resource "aws_secretsmanager_secret" "registry" {
+  count = var.private_registry_auth && var.create_private_registry_secret ? 1 : 0
+  name  = "${var.prefix}-registry-creds"
+}
+
+resource "aws_secretsmanager_secret_version" "registry" {
+  count     = var.private_registry_auth && var.create_private_registry_secret ? 1 : 0
+  secret_id = aws_secretsmanager_secret.registry[0].id
+  secret_string = jsonencode({
+    username = var.registry_username
+    password = var.registry_password
+  })
+}
+
 resource "aws_ecs_task_definition" "plan" {
   family = "${var.prefix}-pr-plan"
   container_definitions = jsonencode([
@@ -57,6 +94,9 @@ resource "aws_ecs_task_definition" "plan" {
       essential = true
       image     = local.ecs_image_address
       command   = ["python", "/src/pr_plan/plan.py"]
+      repositoryCredentials = {
+        credentialsParameter = local.private_registry_secret_manager_arn
+      }
       portMappings = [
         {
           containerPort = 80
@@ -77,6 +117,10 @@ resource "aws_ecs_task_definition" "plan" {
         }
       }
       environment = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
+        {
+          name  = "GITHUB_TOKEN_SSM_KEY"
+          value = local.github_token_ssm_key
+        },
         {
           name  = "SOURCE_VERSION"
           value = var.base_branch

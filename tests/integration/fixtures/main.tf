@@ -8,7 +8,7 @@ locals {
     # use formatlist() to join directory and file name list since fileset doesn't give full path
     formatlist("${p}/%s", fileset(p, "*"))
   ])
-  full_image_url = "${module.ecr.repository_url}:latest"
+  full_image_url = coalesce(var.full_image_url, "ghcr.io/${github_repository.testing.full_name}/infra-live:latest")
   vpc_endpoints = toset([
     "com.amazonaws.${data.aws_region.current.name}.ecr.dkr",
     "com.amazonaws.${data.aws_region.current.name}.ecr.api",
@@ -210,10 +210,9 @@ resource "null_resource" "build" {
 set -e
 
 docker build -t ${local.full_image_url} ${local.docker_context}
-aws ecr get-login-password --region ${data.aws_region.current.name} | docker login --username AWS --password-stdin ${module.ecr.repository_url}
+echo ${var.registry_password} | docker login ghcr.io -u ${var.registry_username} --password-stdin
 docker push ${local.full_image_url}
-
-      EOF
+EOF
     interpreter = ["bash", "-c"]
   }
 }
@@ -240,7 +239,7 @@ module "vpc" {
     {
       cidr_block  = "0.0.0.0/0"
       from_port   = 0,
-      protocol    = "tcp",
+      protocol    = "-1",
       rule_action = "allow",
       rule_number = 1,
       to_port     = 0
@@ -370,8 +369,12 @@ module "mut_infrastructure_live_ci" {
   ecs_vpc_id             = module.vpc.vpc_id
   ecs_private_subnet_ids = module.vpc.private_subnets
 
-  ecs_image_address      = local.full_image_url
-  ecs_security_group_ids = [aws_security_group.ecs_tasks.id]
+  private_registry_auth          = true
+  create_private_registry_secret = true
+  registry_username              = var.registry_username
+  registry_password              = var.registry_password
+  ecs_image_address              = local.full_image_url
+  ecs_security_group_ids         = [aws_security_group.ecs_tasks.id]
 
   # repo specific env vars required to conditionally set the terraform backend configurations
   codebuild_common_env_vars = [

@@ -449,3 +449,40 @@ EOF
   })
   default = null
 }
+
+variable "private_registry_auth" {
+  description = "Determines if authentification is required to pull the docker images used by the ECS tasks"
+  type        = bool
+  default     = false
+}
+
+variable "create_private_registry_secret" {
+  description = "Determines if the module should create the AWS Secret Manager resource used for private registry authentification"
+  type        = bool
+  default     = true
+}
+
+variable "registry_username" {
+  description = "Private Docker registry username used to authenticate ECS task to pull docker image"
+  type        = string
+  default     = null
+}
+
+variable "registry_password" {
+  description = "Private Docker registry password used to authenticate ECS task to pull docker image"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "private_registry_secret_manager_arn" {
+  description = "Pre-existing AWS Secret Manager ARN used for private registry authentification"
+  type        = string
+  default     = null
+}
+
+variable "private_registry_custom_kms_key_arn" {
+  description = "ARN of the custom AWS KMS key to use for decrypting private registry credentials hosted with AWS Secret Manager"
+  type        = string
+  default     = null
+}

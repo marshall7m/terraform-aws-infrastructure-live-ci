@@ -23,6 +23,28 @@ EOF
   default     = null
 }
 
+variable "registry_username" {
+  description = "Private Docker registry username used to authenticate docker push to registry"
+  type        = string
+  default     = "USERNAME"
+}
+
+variable "registry_password" {
+  description = "Private Docker registry password used to authenticate docker push to registry"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "full_image_url" {
+  description = <<EOF
+Private Docker registry to push the Docker image used for the ECS tasks. 
+Defaults to using the GitHub registry associated with the testing Github repository
+EOF
+  type        = string
+  default     = null
+}
+
 variable "approval_request_sender_email" {
   description = "Email address to use for sending approval requests"
   type        = string
