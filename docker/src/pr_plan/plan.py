@@ -30,12 +30,6 @@ def aws_encode(value):
 def main() -> None:
     """Runs Terragrunt plan command on every Terragrunt directory that has been modified"""
 
-    token = ssm.get_parameter(
-        Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
-    )["Parameter"]["Value"]
-
-    commit_url = f"https://{token}:x-oauth-basic@api.github.com/repos/{os.environ['REPO_FULL_NAME']}/statuses/{os.environ['COMMIT_ID']}"  # noqa: E501
-
     cmd = f'terragrunt plan --terragrunt-working-dir {os.environ["CFG_PATH"]} --terragrunt-iam-role {os.environ["ROLE_ARN"]}'
     log.debug(f"Command: {cmd}")
     try:
@@ -49,7 +43,7 @@ def main() -> None:
 
     log.info("Sending commit status")
     response = requests.post(
-        commit_url,
+        os.environ["COMMIT_URL"],
         json={
             "state": state,
             "description": "Terraform Plan",
