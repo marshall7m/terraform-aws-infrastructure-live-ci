@@ -5,7 +5,7 @@ from typing import List
 import sys
 import aurora_data_api
 import ast
-from buildspecs import subprocess_run
+from common.utils import subprocess_run
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)

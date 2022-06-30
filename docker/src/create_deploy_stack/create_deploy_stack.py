@@ -9,7 +9,12 @@ from pprint import pformat
 import json
 from typing import List
 from collections import defaultdict
-from buildspecs import subprocess_run
+from common.utils import (
+    send_task_status,
+    subprocess_run,
+    TerragruntException,
+    ClientException,
+)
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -18,18 +23,6 @@ log.setLevel(logging.DEBUG)
 
 ssm = boto3.client("ssm")
 lb = boto3.client("lambda")
-
-
-class TerragruntException(Exception):
-    """Wraps around Terragrunt-related errors"""
-
-    pass
-
-
-class ClientException(Exception):
-    """Wraps around client-related errors"""
-
-    pass
 
 
 class CreateStack:
@@ -238,18 +231,14 @@ class CreateStack:
         When a PR that contains Terragrunt and/or Terraform changes is merged within the base branch, each of those new/modified Terragrunt directories will have an associated
         deployment record inserted into the metadb. After all records are inserted, a downstream AWS Lambda function will choose which of those records to run through the deployment flow.
         """
-        if (
-            os.environ["CODEBUILD_INITIATOR"].split("/")[0] == "GitHub-Hookshot"
-            and os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split("/")[0] == "pr"
-        ):
-            log.info("Locking merge action within target branch")
-            ssm.put_parameter(
-                Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
-                Value=os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split("/")[1],
-                Type="String",
-                Overwrite=True,
-            )
-
+        log.info("Locking merge action within target branch")
+        ssm.put_parameter(
+            Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
+            Value=os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split("/")[1],
+            Type="String",
+            Overwrite=True,
+        )
+        try:
             try:
                 log.info("Creating deployment execution records")
                 self.update_executions_with_new_deploy_stack()
@@ -274,15 +263,12 @@ class CreateStack:
                     {"pr_id": os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split("/")[1]}
                 ),
             )
+            state = "success"
+        except Exception as e:
+            log.error(e, exc_info=True)
+            state = "failure"
 
-        else:
-            log.debug(f'CODEBUILD_INITIATOR: {os.environ["CODEBUILD_INITIATOR"]}')
-            log.debug(
-                f'CODEBUILD_WEBHOOK_TRIGGER: {os.environ["CODEBUILD_WEBHOOK_TRIGGER"]}'
-            )
-            raise ClientException("Codebuild triggered action not handled")
-
-        return None
+        send_task_status(state, "Create Deploy Stack")
 
     def cleanup(self):
 
