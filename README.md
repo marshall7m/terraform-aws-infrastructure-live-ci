@@ -527,6 +527,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="output_codebuild_terra_run_arn"></a> [codebuild\_terra\_run\_arn](#output\_codebuild\_terra\_run\_arn) | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | <a name="output_codebuild_terra_run_name"></a> [codebuild\_terra\_run\_name](#output\_codebuild\_terra\_run\_name) | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | <a name="output_codebuild_terra_run_role_arn"></a> [codebuild\_terra\_run\_role\_arn](#output\_codebuild\_terra\_run\_role\_arn) | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| <a name="output_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#output\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub commit status |
 | <a name="output_ecs_cluster_arn"></a> [ecs\_cluster\_arn](#output\_ecs\_cluster\_arn) | AWS ECS cluster ARN |
 | <a name="output_ecs_create_deploy_stack_family"></a> [ecs\_create\_deploy\_stack\_family](#output\_ecs\_create\_deploy\_stack\_family) | AWS ECS task definition family for the create deploy stack task |
 | <a name="output_ecs_create_deploy_stack_role_arn"></a> [ecs\_create\_deploy\_stack\_role\_arn](#output\_ecs\_create\_deploy\_stack\_role\_arn) | AWS ECS create deploy stack task IAM role ARN |
@@ -534,7 +535,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="output_lambda_trigger_sf_arn"></a> [lambda\_trigger\_sf\_arn](#output\_lambda\_trigger\_sf\_arn) | ARN of the Lambda Function used for triggering Step Function execution(s) |
 | <a name="output_merge_lock_github_webhook_id"></a> [merge\_lock\_github\_webhook\_id](#output\_merge\_lock\_github\_webhook\_id) | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda Function |
 | <a name="output_merge_lock_ssm_key"></a> [merge\_lock\_ssm\_key](#output\_merge\_lock\_ssm\_key) | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
-| <a name="output_merge_lock_status_check_name"></a> [merge\_lock\_status\_check\_name](#output\_merge\_lock\_status\_check\_name) | Context name of the merge lock GitHub status check |
+| <a name="output_merge_lock_status_check_name"></a> [merge\_lock\_status\_check\_name](#output\_merge\_lock\_status\_check\_name) | Context name of the merge lock GitHub commit status check |
 | <a name="output_metadb_arn"></a> [metadb\_arn](#output\_metadb\_arn) | ARN for the metadb |
 | <a name="output_metadb_ci_password"></a> [metadb\_ci\_password](#output\_metadb\_ci\_password) | Password used by CI services to connect to the metadb |
 | <a name="output_metadb_ci_username"></a> [metadb\_ci\_username](#output\_metadb\_ci\_username) | Username used by CI services to connect to the metadb |

@@ -75,6 +75,11 @@ output "ecs_create_deploy_stack_role_arn" {
   value       = module.create_deploy_stack_role.role_arn
 }
 
+output "create_deploy_stack_status_check_name" {
+  description = "Name of the create deploy stack GitHub commit status"
+  value       = var.create_deploy_stack_status_check_name
+}
+
 output "codebuild_terra_run_name" {
   description = "Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow"
   value       = module.codebuild_terra_run.name
@@ -121,7 +126,7 @@ output "merge_lock_github_webhook_id" {
 }
 
 output "merge_lock_status_check_name" {
-  description = "Context name of the merge lock GitHub status check"
+  description = "Context name of the merge lock GitHub commit status check"
   value       = var.merge_lock_status_check_name
 }
 
