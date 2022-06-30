@@ -23,22 +23,6 @@ output "merge_lock_ssm_key" {
   value = module.mut_infrastructure_live_ci.merge_lock_ssm_key
 }
 
-output "codebuild_pr_plan_name" {
-  value = module.mut_infrastructure_live_ci.codebuild_pr_plan_name
-}
-
-output "codebuild_create_deploy_stack_name" {
-  value = module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_name
-}
-
-output "codebuild_create_deploy_stack_arn" {
-  value = module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_arn
-}
-
-output "codebuild_create_deploy_stack_role_arn" {
-  value = module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn
-}
-
 output "codebuild_terra_run_name" {
   value = module.mut_infrastructure_live_ci.codebuild_terra_run_name
 }
@@ -101,4 +85,16 @@ output "primary_test_plan_role_arn" {
 
 output "secondary_test_plan_role_arn" {
   value = module.secondary_plan_role.role_arn
+}
+
+output "ecs_cluster_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_cluster_arn
+}
+
+output "ecs_create_deploy_stack_family" {
+  value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_family
+}
+
+output "ecs_create_deploy_stack_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn
 }

@@ -117,7 +117,7 @@ module "plan_role" {
   source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name = local.plan_role_name
   trusted_entities = [
-    module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
+    module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn,
     module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn,
     module.mut_infrastructure_live_ci.ecs_plan_role_arn
   ]
@@ -135,7 +135,7 @@ module "secondary_plan_role" {
   source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name = local.plan_role_name
   trusted_entities = [
-    module.mut_infrastructure_live_ci.codebuild_create_deploy_stack_role_arn,
+    module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn,
     module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn,
     module.mut_infrastructure_live_ci.ecs_plan_role_arn
   ]
