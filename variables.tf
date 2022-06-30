@@ -83,7 +83,7 @@ variable "pr_plan_status_check_name" {
 
 variable "plan_cpu" {
   description = <<EOF
-Number of CPU units the task will use. 
+Number of CPU units the PR plan task will use. 
 See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
 EOF
   type        = number
@@ -92,7 +92,7 @@ EOF
 
 variable "plan_memory" {
   description = <<EOF
-Amount of memory (MiB) the task will use. 
+Amount of memory (MiB) the PR plan task will use. 
 See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
 EOF
   type        = string
@@ -258,6 +258,24 @@ variable "create_deploy_stack_status_check_name" {
   description = "Name of the create deploy stack GitHub status"
   type        = string
   default     = "Create Deploy Stack"
+}
+
+variable "create_deploy_stack_cpu" {
+  description = <<EOF
+Number of CPU units the create deploy stack task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = number
+  default     = 256
+}
+
+variable "create_deploy_stack_memory" {
+  description = <<EOF
+Amount of memory (MiB) the create deploy stack task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = string
+  default     = 512
 }
 
 # GITHUB WEBHOOK #

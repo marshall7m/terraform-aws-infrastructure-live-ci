@@ -374,8 +374,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_agw_role"></a> [agw\_role](#module\_agw\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_codebuild_create_deploy_stack"></a> [codebuild\_create\_deploy\_stack](#module\_codebuild\_create\_deploy\_stack) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
 | <a name="module_codebuild_terra_run"></a> [codebuild\_terra\_run](#module\_codebuild\_terra\_run) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
+| <a name="module_create_deploy_stack_role"></a> [create\_deploy\_stack\_role](#module\_create\_deploy\_stack\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_ecs_role"></a> [ecs\_role](#module\_ecs\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
@@ -405,6 +405,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_log_group.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
+| [aws_ecs_task_definition.create_deploy_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -460,7 +461,9 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_build_tags"></a> [build\_tags](#input\_build\_tags) | Tags to attach to AWS CodeBuild project | `map(string)` | `{}` | no |
 | <a name="input_codebuild_common_env_vars"></a> [codebuild\_common\_env\_vars](#input\_codebuild\_common\_env\_vars) | Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_codebuild_source_auth_token"></a> [codebuild\_source\_auth\_token](#input\_codebuild\_source\_auth\_token) | GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. <br>  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand. | `string` | `null` | no |
+| <a name="input_create_deploy_stack_cpu"></a> [create\_deploy\_stack\_cpu](#input\_create\_deploy\_stack\_cpu) | Number of CPU units the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
 | <a name="input_create_deploy_stack_graph_scan"></a> [create\_deploy\_stack\_graph\_scan](#input\_create\_deploy\_stack\_graph\_scan) | If true, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If false, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `bool` | `true` | no |
+| <a name="input_create_deploy_stack_memory"></a> [create\_deploy\_stack\_memory](#input\_create\_deploy\_stack\_memory) | Amount of memory (MiB) the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
 | <a name="input_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#input\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub status | `string` | `"Create Deploy Stack"` | no |
 | <a name="input_create_deploy_stack_vpc_config"></a> [create\_deploy\_stack\_vpc\_config](#input\_create\_deploy\_stack\_vpc\_config) | AWS VPC configurations associated with terra\_run CodeBuild project.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | <a name="input_create_github_token_ssm_param"></a> [create\_github\_token\_ssm\_param](#input\_create\_github\_token\_ssm\_param) | Determines if the merge lock AWS SSM Parameter Store value should be created | `bool` | n/a | yes |
@@ -491,8 +494,8 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_metadb_security_group_ids"></a> [metadb\_security\_group\_ids](#input\_metadb\_security\_group\_ids) | AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
 | <a name="input_metadb_subnets_group_name"></a> [metadb\_subnets\_group\_name](#input\_metadb\_subnets\_group\_name) | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
 | <a name="input_metadb_username"></a> [metadb\_username](#input\_metadb\_username) | Master username of the metadb | `string` | `"root"` | no |
-| <a name="input_plan_cpu"></a> [plan\_cpu](#input\_plan\_cpu) | Number of CPU units the task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
-| <a name="input_plan_memory"></a> [plan\_memory](#input\_plan\_memory) | Amount of memory (MiB) the task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
+| <a name="input_plan_cpu"></a> [plan\_cpu](#input\_plan\_cpu) | Number of CPU units the PR plan task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
+| <a name="input_plan_memory"></a> [plan\_memory](#input\_plan\_memory) | Amount of memory (MiB) the PR plan task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
 | <a name="input_pr_approval_count"></a> [pr\_approval\_count](#input\_pr\_approval\_count) | Number of GitHub approvals required to merge a PR with infrastructure changes | `number` | `null` | no |
 | <a name="input_pr_plan_env_vars"></a> [pr\_plan\_env\_vars](#input\_pr\_plan\_env\_vars) | Environment variables that will be provided to open PR's Terraform planning builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_pr_plan_status_check_name"></a> [pr\_plan\_status\_check\_name](#input\_pr\_plan\_status\_check\_name) | Name of the CodeBuild pr\_plan GitHub status | `string` | `"Plan"` | no |
@@ -520,14 +523,13 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="output_approval_request_log_group_name"></a> [approval\_request\_log\_group\_name](#output\_approval\_request\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
 | <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | API URL used for requesting deployment approvals |
 | <a name="output_base_branch"></a> [base\_branch](#output\_base\_branch) | Base branch for repository that all PRs will compare to |
-| <a name="output_codebuild_create_deploy_stack_arn"></a> [codebuild\_create\_deploy\_stack\_arn](#output\_codebuild\_create\_deploy\_stack\_arn) | ARN of the CodeBuild project that creates the deployment records within the metadb |
-| <a name="output_codebuild_create_deploy_stack_name"></a> [codebuild\_create\_deploy\_stack\_name](#output\_codebuild\_create\_deploy\_stack\_name) | Name of the CodeBuild project that creates the deployment records within the metadb |
-| <a name="output_codebuild_create_deploy_stack_role_arn"></a> [codebuild\_create\_deploy\_stack\_role\_arn](#output\_codebuild\_create\_deploy\_stack\_role\_arn) | IAM role ARN of the CodeBuild project that creates the deployment records within the metadb |
-| <a name="output_codebuild_pr_plan_name"></a> [codebuild\_pr\_plan\_name](#output\_codebuild\_pr\_plan\_name) | Codebuild project name used for creating Terraform plans for new/modified configurations within PRs |
-| <a name="output_codebuild_pr_plan_role_arn"></a> [codebuild\_pr\_plan\_role\_arn](#output\_codebuild\_pr\_plan\_role\_arn) | IAM role ARN of the CodeBuild project that creates Terraform plans for new/modified configurations within PRs |
 | <a name="output_codebuild_terra_run_arn"></a> [codebuild\_terra\_run\_arn](#output\_codebuild\_terra\_run\_arn) | ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | <a name="output_codebuild_terra_run_name"></a> [codebuild\_terra\_run\_name](#output\_codebuild\_terra\_run\_name) | Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
 | <a name="output_codebuild_terra_run_role_arn"></a> [codebuild\_terra\_run\_role\_arn](#output\_codebuild\_terra\_run\_role\_arn) | IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow |
+| <a name="output_ecs_cluster_arn"></a> [ecs\_cluster\_arn](#output\_ecs\_cluster\_arn) | AWS ECS cluster ARN |
+| <a name="output_ecs_create_deploy_stack_family"></a> [ecs\_create\_deploy\_stack\_family](#output\_ecs\_create\_deploy\_stack\_family) | AWS ECS task definition family for the create deploy stack task |
+| <a name="output_ecs_create_deploy_stack_role_arn"></a> [ecs\_create\_deploy\_stack\_role\_arn](#output\_ecs\_create\_deploy\_stack\_role\_arn) | AWS ECS create deploy stack task IAM role ARN |
+| <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | ECS plan task IAM role ARN |
 | <a name="output_lambda_trigger_sf_arn"></a> [lambda\_trigger\_sf\_arn](#output\_lambda\_trigger\_sf\_arn) | ARN of the Lambda Function used for triggering Step Function execution(s) |
 | <a name="output_merge_lock_github_webhook_id"></a> [merge\_lock\_github\_webhook\_id](#output\_merge\_lock\_github\_webhook\_id) | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda Function |
 | <a name="output_merge_lock_ssm_key"></a> [merge\_lock\_ssm\_key](#output\_merge\_lock\_ssm\_key) | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
@@ -639,7 +641,4 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage it's own version of the docker image 
   - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
 - Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is because if the common directories between the PR and the running deployment stack are changed within the  deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
-
-
-# TODAY
-- ensure that unmatched filter group events are not triggering ecs tasks
+- dynamically create pr-plan and create deploy stack task IAM roles for each AWS-account to isolate task's blast radious from other AWS accounts

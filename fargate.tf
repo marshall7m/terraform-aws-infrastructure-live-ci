@@ -1,7 +1,13 @@
 locals {
-  ecs_execution_role_name             = "${var.prefix}-ecs-execution"
-  plan_task_container_name            = "${var.prefix}-pr-plan"
-  private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn))
+  ecs_execution_role_name = "${var.prefix}-ecs-execution"
+
+  pr_plan_task_family    = "${var.prefix}-pr-plan"
+  pr_plan_container_name = "plan"
+
+  create_deploy_stack_family         = "${var.prefix}-create-deploy-stack"
+  create_deploy_stack_container_name = "create"
+
+  private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null))
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -45,9 +51,27 @@ module "ecs_role" {
   trusted_services = ["ecs-tasks.amazonaws.com"]
 }
 
+resource "aws_secretsmanager_secret" "registry" {
+  count = var.private_registry_auth && var.create_private_registry_secret ? 1 : 0
+  name  = "${var.prefix}-registry-creds"
+}
+
+resource "aws_secretsmanager_secret_version" "registry" {
+  count     = var.private_registry_auth && var.create_private_registry_secret ? 1 : 0
+  secret_id = aws_secretsmanager_secret.registry[0].id
+  secret_string = jsonencode({
+    username = var.registry_username
+    password = var.registry_password
+  })
+}
+
+resource "aws_cloudwatch_log_group" "plan" {
+  name = local.pr_plan_task_family
+}
+
 module "plan_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-  role_name               = local.plan_task_container_name
+  role_name               = local.pr_plan_task_family
   custom_role_policy_arns = [aws_iam_policy.github_token_ssm_read_access.arn]
   statements = [
     {
@@ -68,29 +92,11 @@ module "plan_role" {
   trusted_services = ["ecs-tasks.amazonaws.com"]
 }
 
-resource "aws_cloudwatch_log_group" "plan" {
-  name = "${var.prefix}-pr-plan"
-}
-
-resource "aws_secretsmanager_secret" "registry" {
-  count = var.private_registry_auth && var.create_private_registry_secret ? 1 : 0
-  name  = "${var.prefix}-registry-creds"
-}
-
-resource "aws_secretsmanager_secret_version" "registry" {
-  count     = var.private_registry_auth && var.create_private_registry_secret ? 1 : 0
-  secret_id = aws_secretsmanager_secret.registry[0].id
-  secret_string = jsonencode({
-    username = var.registry_username
-    password = var.registry_password
-  })
-}
-
 resource "aws_ecs_task_definition" "plan" {
-  family = "${var.prefix}-pr-plan"
+  family = local.pr_plan_task_family
   container_definitions = jsonencode([
     {
-      name      = local.plan_task_container_name
+      name      = "plan"
       essential = true
       image     = local.ecs_image_address
       command   = ["python", "/src/pr_plan/plan.py"]
@@ -177,6 +183,123 @@ resource "aws_ecs_task_definition" "plan" {
   memory                   = var.plan_memory
   execution_role_arn       = module.ecs_role.role_arn
   task_role_arn            = module.plan_role.role_arn
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "X86_64"
+  }
+}
+
+module "create_deploy_stack_role" {
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  role_name = local.create_deploy_stack_family
+  custom_role_policy_arns = [
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.merge_lock_ssm_param_full_access.arn,
+    aws_iam_policy.ci_metadb_access.arn,
+    var.tf_state_read_access_policy
+  ]
+  statements = [
+    {
+      sid       = "CrossAccountTerraformPlanAccess"
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
+    },
+    # {
+    #   effect = "Allow"
+    #   actions = [
+    #     "logs:CreateLogStream",
+    #     "logs:PutLogEvents"
+    #   ]
+    #   resources = [aws_cloudwatch_log_group.create_deploy_stack.arn]
+    # },
+    {
+      sid       = "LambdaTriggerSFAccess"
+      effect    = "Allow"
+      actions   = ["lambda:InvokeFunction"]
+      resources = [module.lambda_trigger_sf.function_arn]
+    }
+  ]
+  trusted_services = ["ecs-tasks.amazonaws.com"]
+}
+
+resource "aws_ecs_task_definition" "create_deploy_stack" {
+  family = local.create_deploy_stack_family
+  container_definitions = jsonencode([
+    {
+      name      = local.create_deploy_stack_container_name
+      essential = true
+      image     = local.ecs_image_address
+      command   = ["python", "/src/create_deploy_stack/create_deploy_stack.py"]
+      repositoryCredentials = {
+        credentialsParameter = local.private_registry_secret_manager_arn
+      }
+      portMappings = [
+        {
+          containerPort = 80
+          hostPort      = 80
+        },
+        {
+          containerPort = 443
+          hostPort      = 443
+        }
+      ]
+
+      environment = concat(var.codebuild_common_env_vars, [
+        {
+          name  = "TERRAFORM_VERSION"
+          type  = "PLAINTEXT"
+          value = var.terraform_version
+        },
+        {
+          name  = "TERRAGRUNT_VERSION"
+          type  = "PLAINTEXT"
+          value = var.terragrunt_version
+        },
+        {
+          # passes -s to curl to silence out
+          name  = "TFENV_CURL_OUTPUT"
+          type  = "PLAINTEXT"
+          value = "0"
+        },
+        {
+          name  = "GITHUB_MERGE_LOCK_SSM_KEY"
+          type  = "PLAINTEXT"
+          value = aws_ssm_parameter.merge_lock.name
+        },
+        {
+          name  = "TRIGGER_SF_FUNCTION_NAME"
+          type  = "PLAINTEXT"
+          value = local.trigger_sf_function_name
+        },
+        {
+          name  = "METADB_NAME"
+          type  = "PLAINTEXT"
+          value = local.metadb_name
+        },
+        {
+          name  = "METADB_CLUSTER_ARN"
+          type  = "PLAINTEXT"
+          value = aws_rds_cluster.metadb.arn
+        },
+        {
+          name  = "METADB_SECRET_ARN"
+          type  = "PLAINTEXT"
+          value = aws_secretsmanager_secret_version.ci_metadb_user.arn
+          }], var.create_deploy_stack_graph_scan ? [{
+          name  = "GRAPH_SCAN"
+          type  = "PLAINTEXT"
+          value = "true"
+        }] : []
+      )
+    }
+  ])
+  cpu                      = var.create_deploy_stack_cpu
+  memory                   = var.create_deploy_stack_memory
+  execution_role_arn       = module.ecs_role.role_arn
+  task_role_arn            = module.create_deploy_stack_role.role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   runtime_platform {

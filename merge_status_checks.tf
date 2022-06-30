@@ -132,23 +132,30 @@ module "lambda_webhook_receiver" {
   function_name    = local.webhook_receiver_name
   handler          = "lambda_function.lambda_handler"
   runtime          = "python3.8"
+  timeout          = 120
   env_vars = {
     GITHUB_TOKEN_SSM_KEY = local.github_token_ssm_key
 
-    ENABLE_MERGE_LOCK            = var.enable_merge_lock
-    MERGE_LOCK_SSM_KEY           = aws_ssm_parameter.merge_lock.name
-    MERGE_LOCK_STATUS_CHECK_NAME = var.merge_lock_status_check_name
-
-    ENABLE_PR_PLAN          = var.enable_pr_plan
-    ECS_CLUSTER_ARN         = aws_ecs_cluster.this.arn
-    ECS_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
-    ECS_TASK_CONTAINER_NAME = local.plan_task_container_name
+    ECS_CLUSTER_ARN = aws_ecs_cluster.this.arn
     ECS_NETWORK_CONFIG = jsonencode({
       awsvpcConfiguration = {
         subnets        = var.ecs_private_subnet_ids
         securityGroups = var.ecs_security_group_ids
       }
     })
+
+    ENABLE_MERGE_LOCK            = var.enable_merge_lock
+    MERGE_LOCK_SSM_KEY           = aws_ssm_parameter.merge_lock.name
+    MERGE_LOCK_STATUS_CHECK_NAME = var.merge_lock_status_check_name
+
+    ENABLE_PR_PLAN              = var.enable_pr_plan
+    PR_PLAN_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
+    PR_PLAN_TASK_CONTAINER_NAME = local.pr_plan_container_name
+
+    CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN   = aws_ecs_task_definition.create_deploy_stack.arn
+    CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT = var.create_deploy_stack_status_check_name
+    CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME   = local.create_deploy_stack_container_name
+
     ACCOUNT_DIM = jsonencode(var.account_parent_cfg)
   }
   custom_role_policy_arns = [
@@ -187,7 +194,8 @@ module "lambda_webhook_receiver" {
         }
       ]
       resources = [
-        aws_ecs_task_definition.plan.arn
+        aws_ecs_task_definition.plan.arn,
+        aws_ecs_task_definition.create_deploy_stack.arn
       ]
     },
     {
@@ -204,7 +212,8 @@ module "lambda_webhook_receiver" {
       ]
       resources = [
         module.ecs_role.role_arn,
-        module.plan_role.role_arn
+        module.plan_role.role_arn,
+        module.create_deploy_stack_role.role_arn
       ]
     }
   ]

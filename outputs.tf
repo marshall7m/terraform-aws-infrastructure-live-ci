@@ -55,29 +55,24 @@ output "metadb_ci_password" {
   sensitive   = true
 }
 
-output "codebuild_pr_plan_name" {
-  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PRs"
-  value       = module.codebuild_pr_plan.name
+output "ecs_plan_role_arn" {
+  description = "ECS plan task IAM role ARN"
+  value       = module.plan_role.role_arn
 }
 
-output "codebuild_pr_plan_role_arn" {
-  description = "IAM role ARN of the CodeBuild project that creates Terraform plans for new/modified configurations within PRs"
-  value       = module.codebuild_pr_plan.role_arn
+output "ecs_cluster_arn" {
+  description = "AWS ECS cluster ARN"
+  value       = aws_ecs_cluster.this.arn
 }
 
-output "codebuild_create_deploy_stack_name" {
-  description = "Name of the CodeBuild project that creates the deployment records within the metadb"
-  value       = module.codebuild_create_deploy_stack.name
+output "ecs_create_deploy_stack_family" {
+  description = "AWS ECS task definition family for the create deploy stack task"
+  value       = aws_ecs_task_definition.create_deploy_stack.family
 }
 
-output "codebuild_create_deploy_stack_arn" {
-  description = "ARN of the CodeBuild project that creates the deployment records within the metadb"
-  value       = module.codebuild_create_deploy_stack.arn
-}
-
-output "codebuild_create_deploy_stack_role_arn" {
-  description = "IAM role ARN of the CodeBuild project that creates the deployment records within the metadb"
-  value       = module.codebuild_create_deploy_stack.role_arn
+output "ecs_create_deploy_stack_role_arn" {
+  description = "AWS ECS create deploy stack task IAM role ARN"
+  value       = module.create_deploy_stack_role.role_arn
 }
 
 output "codebuild_terra_run_name" {
@@ -149,3 +144,5 @@ output "trigger_sf_function_name" {
   description = "Name of the Lambda Function used for triggering Step Function execution(s)"
   value       = module.lambda_trigger_sf.function_name
 }
+
+
