@@ -98,3 +98,7 @@ output "ecs_create_deploy_stack_family" {
 output "ecs_create_deploy_stack_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn
 }
+
+output "create_deploy_stack_status_check_name" {
+  value = module.mut_infrastructure_live_ci.create_deploy_stack_status_check_name
+}

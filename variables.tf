@@ -127,6 +127,12 @@ EOF
   type        = string
 }
 
+variable "ecs_task_logs_retention_in_days" {
+  description = "Number of days the ECS task logs will be retained"
+  type        = number
+  default     = 14
+}
+
 variable "pr_plan_env_vars" {
   description = "Environment variables that will be provided to open PR's Terraform planning builds"
   type = list(object({
