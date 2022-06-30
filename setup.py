@@ -15,7 +15,7 @@ extras_require = {
 extras_require["all"] = list(extras_require.values())
 
 setup(
-    name="terraform-aws-infrastructure-live",
+    name="mut-terraform-aws-infrastructure-live",
     packages=find_packages(),
     extras_require=extras_require,
     description="Setup for testing environments",
