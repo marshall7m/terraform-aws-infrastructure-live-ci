@@ -403,7 +403,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_cloudwatch_event_rule.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
 | [aws_cloudwatch_event_target.codebuild_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
-| [aws_cloudwatch_log_group.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
+| [aws_cloudwatch_log_group.ecs_tasks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
 | [aws_ecs_task_definition.create_deploy_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
@@ -629,7 +629,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
 - [ ] Use AWS SQS with Exactly-Once Processing to create a queue of pr tf plan tasks to run
   - User can then set a time range (such as after hours) that the PR plans are runned so that the plan tasks are not runned for every PR update event
-  - Probably only cost-effective for the rase case of large teams frequently committing PR IAC changes
 
 ### Improvements:
 
@@ -642,3 +641,8 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
   - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
 - Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is because if the common directories between the PR and the running deployment stack are changed within the  deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
 - dynamically create pr-plan and create deploy stack task IAM roles for each AWS-account to isolate task's blast radious from other AWS accounts
+- Create deploy stack:
+    graph scan: spin up one container for running tg graph-deps and downstream logic
+    plan scan: 
+      1. spin up container for every AWS account to run tg plan-all and SQL queries
+      2. have a final container that depends on every upstream container that will invoke the trigger SF function
