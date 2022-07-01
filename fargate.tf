@@ -25,7 +25,8 @@ module "ecs_role" {
   role_name = local.ecs_execution_role_name
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-    "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+    "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role",
+    aws_iam_policy.github_token_ssm_read_access.arn
   ]
   statements = [var.private_registry_custom_kms_key_arn != null ?
     {
@@ -124,14 +125,20 @@ resource "aws_ecs_task_definition" "plan" {
           awslogs-stream-prefix = "pr"
         }
       }
-      environment = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
+      secrets = [
         {
-          name  = "GITHUB_TOKEN_SSM_KEY"
-          value = local.github_token_ssm_key
-        },
+          name      = "GITHUB_TOKEN"
+          valueFrom = local.github_token_arn
+        }
+      ]
+      environment = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
         {
           name  = "SOURCE_CLONE_URL"
           value = data.github_repository.this.http_clone_url
+        },
+        {
+          name  = "REPO_FULL_NAME"
+          value = data.github_repository.this.full_name
         },
         {
           name  = "STATUS_CHECK_NAME"
@@ -253,7 +260,22 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
         }
       }
 
+      secrets = [
+        {
+          name      = "GITHUB_TOKEN"
+          valueFrom = local.github_token_arn
+        }
+      ]
+
       environment = concat(var.codebuild_common_env_vars, [
+        {
+          name  = "GITHUB_TOKEN_SSM_KEY"
+          value = local.github_token_ssm_key
+        },
+        {
+          name  = "REPO_FULL_NAME"
+          value = data.github_repository.this.full_name
+        },
         {
           name  = "TERRAFORM_VERSION"
           value = var.terraform_version
