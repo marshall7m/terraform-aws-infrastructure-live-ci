@@ -63,6 +63,13 @@ locals {
   })
 }
 
+resource "aws_ssm_parameter" "metadb_ci_password" {
+  name        = "${local.metadb_name}_${var.metadb_ci_username}"
+  description = "Metadb password used by ECS tasks"
+  type        = "SecureString"
+  value       = var.metadb_ci_password
+}
+
 resource "aws_rds_cluster" "metadb" {
   cluster_identifier = local.cluster_identifier
   engine             = "aurora-postgresql"

@@ -188,6 +188,23 @@ variable "terra_run_env_vars" {
   }))
   default = []
 }
+variable "terra_run_cpu" {
+  description = <<EOF
+Number of CPU units the terra run task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = number
+  default     = 256
+}
+
+variable "terra_run_memory" {
+  description = <<EOF
+Amount of memory (MiB) the terra run task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = string
+  default     = 512
+}
 
 variable "build_tags" {
   description = "Tags to attach to AWS CodeBuild project"

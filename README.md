@@ -374,7 +374,6 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_agw_role"></a> [agw\_role](#module\_agw\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_codebuild_terra_run"></a> [codebuild\_terra\_run](#module\_codebuild\_terra\_run) | github.com/marshall7m/terraform-aws-codebuild | v0.1.0 |
 | <a name="module_create_deploy_stack_role"></a> [create\_deploy\_stack\_role](#module\_create\_deploy\_stack\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
@@ -386,6 +385,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="module_lambda_webhook_receiver"></a> [lambda\_webhook\_receiver](#module\_lambda\_webhook\_receiver) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
 | <a name="module_plan_role"></a> [plan\_role](#module\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+| <a name="module_terra_run_role"></a> [terra\_run\_role](#module\_terra\_run\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 
 ## Resources
 
@@ -407,6 +407,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
 | [aws_ecs_task_definition.create_deploy_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
+| [aws_ecs_task_definition.terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -447,7 +448,6 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 | [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ses_email_identity) | data source |
 | [aws_ssm_parameter.github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ssm_parameter) | data source |
-| [github_repository.build_scripts](https://registry.terraform.io/providers/integrations/github/latest/docs/data-sources/repository) | data source |
 | [github_repository.this](https://registry.terraform.io/providers/integrations/github/latest/docs/data-sources/repository) | data source |
 
 ## Inputs
@@ -510,7 +510,9 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_repo_name"></a> [repo\_name](#input\_repo\_name) | Name of the pre-existing GitHub repository that is owned by the Github provider | `string` | n/a | yes |
 | <a name="input_send_verification_email"></a> [send\_verification\_email](#input\_send\_verification\_email) | Determines if an email verification should be sent to the var.approval\_request\_sender\_email address. Set<br>  to true if the email address is not already authorized to send emails via AWS SES. | `bool` | `true` | no |
 | <a name="input_step_function_name"></a> [step\_function\_name](#input\_step\_function\_name) | Name of AWS Step Function machine | `string` | `"deployment-flow"` | no |
+| <a name="input_terra_run_cpu"></a> [terra\_run\_cpu](#input\_terra\_run\_cpu) | Number of CPU units the terra run task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
 | <a name="input_terra_run_env_vars"></a> [terra\_run\_env\_vars](#input\_terra\_run\_env\_vars) | Environment variables that will be provided for tf plan/apply builds | <pre>list(object({<br>    name  = string<br>    value = string<br>    type  = optional(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_terra_run_memory"></a> [terra\_run\_memory](#input\_terra\_run\_memory) | Amount of memory (MiB) the terra run task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
 | <a name="input_terra_run_vpc_config"></a> [terra\_run\_vpc\_config](#input\_terra\_run\_vpc\_config) | AWS VPC configurations associated with terra\_run CodeBuild project. <br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    vpc_id             = string<br>    subnets            = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | <a name="input_terraform_version"></a> [terraform\_version](#input\_terraform\_version) | Terraform version used for create\_deploy\_stack and terra\_run builds.<br>Version must be >= `0.13.0`.<br>If repo contains a variety of version constraints, implementing a <br>version manager is recommended (e.g. tfenv). | `string` | `""` | no |
 | <a name="input_terragrunt_version"></a> [terragrunt\_version](#input\_terragrunt\_version) | Terragrunt version used for create\_deploy\_stack and terra\_run builds.<br>Version must be >= `0.31.0`.<br>If repo contains a variety of version constraints, implementing a <br>version manager is recommended (e.g. tgswitch). | `string` | `""` | no |

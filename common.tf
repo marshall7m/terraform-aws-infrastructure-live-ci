@@ -3,6 +3,14 @@ locals {
   github_token_arn     = try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)
 }
 
+data "github_repository" "this" {
+  name = var.repo_name
+}
+
+data "aws_region" "current" {}
+
+data "aws_caller_identity" "current" {}
+
 data "aws_ssm_parameter" "github_token" {
   count = var.create_github_token_ssm_param != true ? 1 : 0
   name  = local.github_token_ssm_key
@@ -47,7 +55,8 @@ data "aws_iam_policy_document" "github_token_ssm_read_access" {
     sid    = "GetSSMParameter"
     effect = "Allow"
     actions = [
-      "ssm:GetParameter"
+      "ssm:GetParameter",
+      "ssm:GetParameters"
     ]
     resources = [local.github_token_arn]
   }

@@ -9,6 +9,9 @@ locals {
   create_deploy_stack_family         = "${var.prefix}-create-deploy-stack"
   create_deploy_stack_container_name = "create-stack"
 
+  terra_run_family         = "${var.prefix}-terra-run"
+  terra_run_container_name = "run"
+
   private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null))
 
   ecs_tasks_base_env_vars = [
@@ -42,6 +45,13 @@ locals {
       value = "false"
     },
   ]
+
+  terraform_module_version = trimspace(file("${path.module}/source_version.txt"))
+
+  ecs_image_address = coalesce(
+    var.ecs_image_address,
+    "ghcr.io/${data.github_repository.build_scripts.full_name}:${local.terraform_module_version == "master" ? "latest" : local.terraform_module_version}"
+  )
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -289,6 +299,103 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
   memory                   = var.create_deploy_stack_memory
   execution_role_arn       = module.ecs_role.role_arn
   task_role_arn            = module.create_deploy_stack_role.role_arn
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "X86_64"
+  }
+}
+
+module "terra_run_role" {
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  role_name = local.terra_run_family
+  custom_role_policy_arns = [
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.merge_lock_ssm_param_full_access.arn,
+    aws_iam_policy.ci_metadb_access.arn,
+    var.tf_state_read_access_policy
+  ]
+  statements = [
+    {
+      sid       = "CrossAccountTerraformPlanAndDeployAccess"
+      effect    = "Allow"
+      actions   = ["sts:AssumeRole"]
+      resources = flatten([for account in var.account_parent_cfg : [account.plan_role_arn, account.deploy_role_arn]])
+    },
+    {
+      effect = "Allow"
+      actions = [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ]
+      resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
+    }
+  ]
+  trusted_services = ["ecs-tasks.amazonaws.com"]
+}
+
+resource "aws_ecs_task_definition" "terra_run" {
+  family = local.terra_run_family
+  container_definitions = jsonencode([
+    {
+      name      = local.terra_run_container_name
+      essential = true
+      image     = local.ecs_image_address
+      command   = ["python", "/src/create_deploy_stack/create_deploy_stack.py"]
+      repositoryCredentials = {
+        credentialsParameter = local.private_registry_secret_manager_arn
+      }
+      portMappings = [
+        {
+          containerPort = 80
+          hostPort      = 80
+        },
+        {
+          containerPort = 443
+          hostPort      = 443
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs_tasks.name
+          awslogs-region        = data.aws_region.current.name
+          awslogs-stream-prefix = "run"
+        }
+      }
+
+      secrets = [
+        {
+          name      = "GITHUB_TOKEN"
+          valueFrom = local.github_token_arn
+        }
+      ]
+
+      environment = concat(local.ecs_tasks_base_env_vars, var.ecs_tasks_common_env_vars, [
+        {
+          name  = "SOURCE_VERSION"
+          value = var.base_branch
+        },
+        {
+          name  = "METADB_NAME"
+          value = local.metadb_name
+        },
+        {
+          name  = "METADB_CLUSTER_ARN"
+          value = aws_rds_cluster.metadb.arn
+        },
+        {
+          name  = "METADB_SECRET_ARN"
+          value = aws_secretsmanager_secret_version.ci_metadb_user.arn
+        }
+      ])
+    }
+  ])
+  cpu                      = var.terra_run_cpu
+  memory                   = var.terra_run_memory
+  execution_role_arn       = module.ecs_role.role_arn
+  task_role_arn            = module.terra_run_role.role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   runtime_platform {
