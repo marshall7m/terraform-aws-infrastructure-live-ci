@@ -377,15 +377,13 @@ module "mut_infrastructure_live_ci" {
   ecs_security_group_ids         = [aws_security_group.ecs_tasks.id]
 
   # repo specific env vars required to conditionally set the terraform backend configurations
-  codebuild_common_env_vars = [
+  ecs_tasks_common_env_vars = [
     {
       name  = "TG_BACKEND"
-      type  = "PLAINTEXT"
       value = "s3"
     },
     {
       name  = "TG_S3_BUCKET"
-      type  = "PLAINTEXT"
       value = aws_s3_bucket.testing_tf_state.id
     }
   ]
