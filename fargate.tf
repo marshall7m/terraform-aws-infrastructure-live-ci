@@ -50,7 +50,7 @@ locals {
 
   ecs_image_address = coalesce(
     var.ecs_image_address,
-    "ghcr.io/${data.github_repository.build_scripts.full_name}:${local.terraform_module_version == "master" ? "latest" : local.terraform_module_version}"
+    "ghcr.io/marshall7m/terraform-aws-infrastructure-live:${local.terraform_module_version == "master" ? "latest" : local.terraform_module_version}"
   )
 }
 

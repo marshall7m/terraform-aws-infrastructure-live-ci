@@ -80,19 +80,9 @@ output "create_deploy_stack_status_check_name" {
   value       = var.create_deploy_stack_status_check_name
 }
 
-output "codebuild_terra_run_name" {
-  description = "Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow"
-  value       = module.codebuild_terra_run.name
-}
-
-output "codebuild_terra_run_arn" {
-  description = "ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow"
-  value       = module.codebuild_terra_run.arn
-}
-
-output "codebuild_terra_run_role_arn" {
-  description = "IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow"
-  value       = module.codebuild_terra_run.role_arn
+output "ecs_terra_run_role_arn" {
+  description = "AWS ECS terra run task IAM role ARN"
+  value       = module.terra_run_role.role_arn
 }
 
 output "step_function_arn" {

@@ -12,152 +12,152 @@ resource "aws_sfn_state_machine" "this" {
   definition = jsonencode({
     StartAt = "Plan"
     States = {
-      "Plan" = {
-        Next = "Request Approval"
-        Parameters = {
-          EnvironmentVariablesOverride = [
-            {
-              Name      = "ROLE_ARN"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.plan_role_arn"
-            },
-            {
-              Name      = "TG_COMMAND"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.plan_command"
-            }
-          ]
-          ProjectName = module.codebuild_terra_run.name
-        }
-        Resource = "arn:aws:states:::codebuild:startBuild.sync"
-        Type     = "Task"
-        ResultSelector = {
-          "LogsUrl.$" = "$.Build.Logs.DeepLink"
-        }
-        ResultPath = "$.PlanOutput"
-        Catch = [
-          {
-            ErrorEquals = ["States.ALL"]
-            Next        = "Reject"
-            ResultPath  = null
-          }
-        ]
-      },
-      "Request Approval" = {
-        Next = "Approval Results"
-        Parameters = {
-          FunctionName = module.lambda_approval_request.function_arn
-          Payload = {
-            "PathApproval" = {
-              "Approval" = {
-                "Required.$" = "$.min_approval_count"
-                Count        = 0
-                Voters       = []
-              },
-              "Rejection" = {
-                "Required.$" = "$.min_rejection_count"
-                "Count"      = 0
-                "Voters"     = []
-              },
-              "AwaitingApprovals.$" = "$.voters"
-              "TaskToken.$"         = "$$.Task.Token"
-            }
-            "Voters.$"        = "$.voters"
-            "Path.$"          = "$.cfg_path"
-            "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
-            "ExecutionName.$" = "$$.Execution.Name"
-            "AccountName.$"   = "$.account_name"
-            "PullRequestID.$" = "$.pr_id"
-            "LogsUrl.$"       = "$.PlanOutput.LogsUrl"
-          }
-        }
-        Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
-        Type       = "Task"
-        ResultPath = "$.Action"
-        Catch = [
-          {
-            ErrorEquals = ["States.ALL"]
-            Next        = "Reject"
-            ResultPath  = null
-          }
-        ]
-      },
-      "Approval Results" = {
-        Choices = [
-          {
-            Next         = "Deploy"
-            StringEquals = "approve"
-            Variable     = "$.Action"
-          },
-          {
-            Next         = "Reject"
-            StringEquals = "reject"
-            Variable     = "$.Action"
-          }
-        ]
-        Type = "Choice"
-      },
-      "Deploy" = {
-        Next = "Success"
-        Parameters = {
-          EnvironmentVariablesOverride = [
-            {
-              Name      = "ROLE_ARN"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.deploy_role_arn"
-            },
-            {
-              Name      = "TG_COMMAND"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.deploy_command"
-            },
-            {
-              Name      = "EXECUTION_ID"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.execution_id"
-            },
-            {
-              Name      = "CFG_PATH"
-              Type      = "PLAINTEXT"
-              "Value.$" = "$.cfg_path"
-            },
-            {
-              Name      = "NEW_PROVIDERS"
-              Type      = "PLAINTEXT"
-              "Value.$" = "States.JsonToString($.new_providers)"
-            },
-            {
-              Name      = "IS_ROLLBACK"
-              Type      = "PLAINTEXT"
-              "Value.$" = "States.JsonToString($.is_rollback)"
-            }
-          ]
-          ProjectName = module.codebuild_terra_run.name
-        }
-        Resource   = "arn:aws:states:::codebuild:startBuild.sync"
-        Type       = "Task"
-        ResultPath = null
-        Catch = [
-          {
-            ErrorEquals = ["States.ALL"]
-            Next        = "Reject"
-            ResultPath  = null
-          }
-        ]
-      },
-      "Success" = {
-        Type = "Pass"
-        Parameters = {
-          "execution_id.$"  = "$.execution_id"
-          "is_rollback.$"   = "$.is_rollback"
-          "new_providers.$" = "$.new_providers"
-          "plan_role_arn.$" = "$.plan_role_arn"
-          "cfg_path.$"      = "$.cfg_path"
-          "commit_id.$"     = "$.commit_id"
-          "status"          = "succeeded"
-        }
-        End = true
-      },
+      # "Plan" = {
+      #   Next = "Request Approval"
+      #   Parameters = {
+      #     EnvironmentVariablesOverride = [
+      #       {
+      #         Name      = "ROLE_ARN"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "$.plan_role_arn"
+      #       },
+      #       {
+      #         Name      = "TG_COMMAND"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "$.plan_command"
+      #       }
+      #     ]
+      #     ProjectName = module.codebuild_terra_run.name
+      #   }
+      #   Resource = "arn:aws:states:::codebuild:startBuild.sync"
+      #   Type     = "Task"
+      #   ResultSelector = {
+      #     "LogsUrl.$" = "$.Build.Logs.DeepLink"
+      #   }
+      #   ResultPath = "$.PlanOutput"
+      #   Catch = [
+      #     {
+      #       ErrorEquals = ["States.ALL"]
+      #       Next        = "Reject"
+      #       ResultPath  = null
+      #     }
+      #   ]
+      # },
+      # "Request Approval" = {
+      #   Next = "Approval Results"
+      #   Parameters = {
+      #     FunctionName = module.lambda_approval_request.function_arn
+      #     Payload = {
+      #       "PathApproval" = {
+      #         "Approval" = {
+      #           "Required.$" = "$.min_approval_count"
+      #           Count        = 0
+      #           Voters       = []
+      #         },
+      #         "Rejection" = {
+      #           "Required.$" = "$.min_rejection_count"
+      #           "Count"      = 0
+      #           "Voters"     = []
+      #         },
+      #         "AwaitingApprovals.$" = "$.voters"
+      #         "TaskToken.$"         = "$$.Task.Token"
+      #       }
+      #       "Voters.$"        = "$.voters"
+      #       "Path.$"          = "$.cfg_path"
+      #       "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
+      #       "ExecutionName.$" = "$$.Execution.Name"
+      #       "AccountName.$"   = "$.account_name"
+      #       "PullRequestID.$" = "$.pr_id"
+      #       "LogsUrl.$"       = "$.PlanOutput.LogsUrl"
+      #     }
+      #   }
+      #   Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+      #   Type       = "Task"
+      #   ResultPath = "$.Action"
+      #   Catch = [
+      #     {
+      #       ErrorEquals = ["States.ALL"]
+      #       Next        = "Reject"
+      #       ResultPath  = null
+      #     }
+      #   ]
+      # },
+      # "Approval Results" = {
+      #   Choices = [
+      #     {
+      #       Next         = "Deploy"
+      #       StringEquals = "approve"
+      #       Variable     = "$.Action"
+      #     },
+      #     {
+      #       Next         = "Reject"
+      #       StringEquals = "reject"
+      #       Variable     = "$.Action"
+      #     }
+      #   ]
+      #   Type = "Choice"
+      # },
+      # "Deploy" = {
+      #   Next = "Success"
+      #   Parameters = {
+      #     EnvironmentVariablesOverride = [
+      #       {
+      #         Name      = "ROLE_ARN"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "$.deploy_role_arn"
+      #       },
+      #       {
+      #         Name      = "TG_COMMAND"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "$.deploy_command"
+      #       },
+      #       {
+      #         Name      = "EXECUTION_ID"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "$.execution_id"
+      #       },
+      #       {
+      #         Name      = "CFG_PATH"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "$.cfg_path"
+      #       },
+      #       {
+      #         Name      = "NEW_PROVIDERS"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "States.JsonToString($.new_providers)"
+      #       },
+      #       {
+      #         Name      = "IS_ROLLBACK"
+      #         Type      = "PLAINTEXT"
+      #         "Value.$" = "States.JsonToString($.is_rollback)"
+      #       }
+      #     ]
+      #     ProjectName = module.codebuild_terra_run.name
+      #   }
+      #   Resource   = "arn:aws:states:::codebuild:startBuild.sync"
+      #   Type       = "Task"
+      #   ResultPath = null
+      #   Catch = [
+      #     {
+      #       ErrorEquals = ["States.ALL"]
+      #       Next        = "Reject"
+      #       ResultPath  = null
+      #     }
+      #   ]
+      # },
+      # "Success" = {
+      #   Type = "Pass"
+      #   Parameters = {
+      #     "execution_id.$"  = "$.execution_id"
+      #     "is_rollback.$"   = "$.is_rollback"
+      #     "new_providers.$" = "$.new_providers"
+      #     "plan_role_arn.$" = "$.plan_role_arn"
+      #     "cfg_path.$"      = "$.cfg_path"
+      #     "commit_id.$"     = "$.commit_id"
+      #     "status"          = "succeeded"
+      #   }
+      #   End = true
+      # },
       "Reject" = {
         Type = "Pass"
         Parameters = {
@@ -181,15 +181,19 @@ module "sf_role" {
   trusted_services = ["states.amazonaws.com"]
   statements = [
     {
-      sid    = "CodeBuildInvokeAccess"
       effect = "Allow"
       actions = [
-        "codebuild:StartBuild",
-        "codebuild:StopBuild",
-        "codebuild:BatchGetBuilds"
+        "ecs:RunTask"
+      ]
+      conditions = [
+        {
+          test     = "ArnEquals"
+          variable = "ecs:cluster"
+          values   = [aws_ecs_cluster.this.arn]
+        }
       ]
       resources = [
-        module.codebuild_terra_run.arn
+        aws_ecs_task_definition.terra_run.arn,
       ]
     },
     {

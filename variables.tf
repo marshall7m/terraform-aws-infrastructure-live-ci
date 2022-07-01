@@ -50,36 +50,6 @@ variable "send_verification_email" {
   default     = true
 }
 
-# CODEBUILD #
-
-variable "codebuild_source_auth_token" {
-  description = <<EOF
-  GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. 
-  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand.
-  EOF
-  type        = string
-  default     = null
-  sensitive   = true
-}
-
-variable "pr_plan_vpc_config" {
-  description = <<EOF
-AWS VPC configurations associated with PR planning CodeBuild project. 
-Ensure that the configuration allows for outgoing HTTPS traffic.
-EOF
-  type = object({
-    vpc_id             = string
-    subnets            = list(string)
-    security_group_ids = list(string)
-  })
-  default = null
-}
-
-variable "pr_plan_status_check_name" {
-  description = "Name of the CodeBuild pr_plan GitHub status"
-  type        = string
-  default     = "Plan"
-}
 
 variable "plan_cpu" {
   description = <<EOF
@@ -153,7 +123,7 @@ EOF
 }
 
 variable "tf_state_read_access_policy" {
-  description = "AWS IAM policy ARN that allows create_deploy_stack Codebuild project to read from Terraform remote state resource"
+  description = "AWS IAM policy ARN that allows create deploy stack ECS task to read from Terraform remote state resource"
   type        = string
 }
 
@@ -206,38 +176,6 @@ EOF
   default     = 512
 }
 
-variable "build_tags" {
-  description = "Tags to attach to AWS CodeBuild project"
-  type        = map(string)
-  default     = {}
-}
-
-variable "terra_run_vpc_config" {
-  description = <<EOF
-AWS VPC configurations associated with terra_run CodeBuild project. 
-Ensure that the configuration allows for outgoing HTTPS traffic.
-EOF
-  type = object({
-    vpc_id             = string
-    subnets            = list(string)
-    security_group_ids = list(string)
-  })
-  default = null
-}
-
-variable "create_deploy_stack_vpc_config" {
-  description = <<EOF
-AWS VPC configurations associated with terra_run CodeBuild project.
-Ensure that the configuration allows for outgoing HTTPS traffic.
-EOF
-  type = object({
-    vpc_id             = string
-    subnets            = list(string)
-    security_group_ids = list(string)
-  })
-  default = null
-}
-
 variable "create_deploy_stack_graph_scan" {
   description = <<EOF
 If true, the create_deploy_stack build will use the git detected differences to determine what directories to run Step Function executions for.
@@ -251,7 +189,7 @@ EOF
 }
 
 variable "ecs_tasks_common_env_vars" {
-  description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
+  description = "Common env vars defined within all ECS tasks. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
   type = list(object({
     name  = string
     value = string
@@ -441,13 +379,13 @@ variable "metadb_availability_zones" {
 }
 
 variable "metadb_ci_username" {
-  description = "Name of the metadb user used for the Codebuild projects"
+  description = "Name of the metadb user used for the ECS tasks"
   type        = string
   default     = "ci_user"
 }
 
 variable "metadb_ci_password" {
-  description = "Password for the metadb user used for the Codebuild projects"
+  description = "Password for the metadb user used for the ECS tasks"
   type        = string
   sensitive   = true
 }

@@ -23,14 +23,6 @@ output "merge_lock_ssm_key" {
   value = module.mut_infrastructure_live_ci.merge_lock_ssm_key
 }
 
-output "codebuild_terra_run_name" {
-  value = module.mut_infrastructure_live_ci.codebuild_terra_run_name
-}
-
-output "codebuild_terra_run_arn" {
-  value = module.mut_infrastructure_live_ci.codebuild_terra_run_arn
-}
-
 output "metadb_schema" {
   value = var.metadb_schema
 }
@@ -101,4 +93,8 @@ output "ecs_create_deploy_stack_role_arn" {
 
 output "create_deploy_stack_status_check_name" {
   value = module.mut_infrastructure_live_ci.create_deploy_stack_status_check_name
+}
+
+output "ecs_terra_run_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_terra_run_role_arn
 }

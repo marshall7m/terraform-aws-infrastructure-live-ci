@@ -118,7 +118,7 @@ module "plan_role" {
   role_name = local.plan_role_name
   trusted_entities = [
     module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn,
-    module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn,
+    module.mut_infrastructure_live_ci.ecs_terra_run_role_arn,
     module.mut_infrastructure_live_ci.ecs_plan_role_arn
   ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
@@ -127,7 +127,7 @@ module "plan_role" {
 module "deploy_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name               = local.deploy_role_name
-  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn]
+  trusted_entities        = [module.mut_infrastructure_live_ci.ecs_terra_run_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
 
@@ -136,7 +136,7 @@ module "secondary_plan_role" {
   role_name = local.plan_role_name
   trusted_entities = [
     module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn,
-    module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn,
+    module.mut_infrastructure_live_ci.ecs_terra_run_role_arn,
     module.mut_infrastructure_live_ci.ecs_plan_role_arn
   ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
@@ -148,7 +148,7 @@ module "secondary_plan_role" {
 module "secondary_deploy_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name               = local.deploy_role_name
-  trusted_entities        = [module.mut_infrastructure_live_ci.codebuild_terra_run_role_arn]
+  trusted_entities        = [module.mut_infrastructure_live_ci.ecs_terra_run_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
   providers = {
     aws = aws.secondary
@@ -172,7 +172,7 @@ data "aws_iam_policy_document" "trigger_sf_tf_state_access" {
 resource "aws_iam_policy" "trigger_sf_tf_state_access" {
   name        = "${local.mut_id}-tf-state-read-access"
   path        = "/"
-  description = "Allows trigger_sf Codebuild project to read from terraform state S3 bucket"
+  description = "Allows ECS tasks to read from terraform state S3 bucket"
   policy      = data.aws_iam_policy_document.trigger_sf_tf_state_access.json
 }
 
