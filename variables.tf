@@ -233,12 +233,11 @@ EOF
   default     = true
 }
 
-variable "codebuild_common_env_vars" {
+variable "ecs_tasks_common_env_vars" {
   description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
   type = list(object({
     name  = string
     value = string
-    type  = optional(string)
   }))
   default = []
 }

@@ -10,6 +10,38 @@ locals {
   create_deploy_stack_container_name = "create-stack"
 
   private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null))
+
+  ecs_tasks_base_env_vars = [
+    {
+      name  = "SOURCE_CLONE_URL"
+      value = data.github_repository.this.http_clone_url
+    },
+    {
+      name  = "REPO_FULL_NAME"
+      value = data.github_repository.this.full_name
+    },
+    {
+      name  = "TERRAFORM_VERSION"
+      value = var.terraform_version
+    },
+    {
+      name  = "TERRAGRUNT_VERSION"
+      value = var.terragrunt_version
+    },
+    {
+      # passes -s to curl to silence out
+      name  = "TFENV_CURL_OUTPUT"
+      value = "0"
+    },
+    {
+      name  = "TF_IN_AUTOMATION"
+      value = "true"
+    },
+    {
+      name  = "TF_INPUT"
+      value = "false"
+    },
+  ]
 }
 
 resource "aws_ecs_cluster" "this" {
@@ -131,57 +163,7 @@ resource "aws_ecs_task_definition" "plan" {
           valueFrom = local.github_token_arn
         }
       ]
-      environment = concat(var.pr_plan_env_vars, var.codebuild_common_env_vars, [
-        {
-          name  = "SOURCE_CLONE_URL"
-          value = data.github_repository.this.http_clone_url
-        },
-        {
-          name  = "REPO_FULL_NAME"
-          value = data.github_repository.this.full_name
-        },
-        {
-          name  = "STATUS_CHECK_NAME"
-          value = var.pr_plan_status_check_name
-        },
-        {
-          name  = "TERRAFORM_VERSION"
-          value = var.terraform_version
-        },
-        {
-          name  = "TERRAGRUNT_VERSION"
-          value = var.terragrunt_version
-        },
-        {
-          # passes -s to curl to silence out
-          name  = "TFENV_CURL_OUTPUT"
-          value = "0"
-        },
-        {
-          name  = "TF_IN_AUTOMATION"
-          value = "true"
-        },
-        {
-          name  = "TF_INPUT"
-          value = "false"
-        },
-        {
-          name  = "METADB_NAME"
-          value = local.metadb_name
-        },
-        {
-          name  = "METADB_CLUSTER_ARN"
-          value = aws_rds_cluster.metadb.arn
-        },
-        {
-          name  = "METADB_SECRET_ARN"
-          value = aws_secretsmanager_secret_version.ci_metadb_user.arn
-        },
-        {
-          name  = "ACCOUNT_DIM"
-          value = "${jsonencode(var.account_parent_cfg)}"
-        }
-      ])
+      environment = concat(local.ecs_tasks_base_env_vars, var.ecs_tasks_common_env_vars)
     }
   ])
   cpu                      = var.plan_cpu
@@ -267,28 +249,7 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
         }
       ]
 
-      environment = concat(var.codebuild_common_env_vars, [
-        {
-          name  = "GITHUB_TOKEN_SSM_KEY"
-          value = local.github_token_ssm_key
-        },
-        {
-          name  = "REPO_FULL_NAME"
-          value = data.github_repository.this.full_name
-        },
-        {
-          name  = "TERRAFORM_VERSION"
-          value = var.terraform_version
-        },
-        {
-          name  = "TERRAGRUNT_VERSION"
-          value = var.terragrunt_version
-        },
-        {
-          # passes -s to curl to silence out
-          name  = "TFENV_CURL_OUTPUT"
-          value = "0"
-        },
+      environment = concat(local.ecs_tasks_base_env_vars, var.ecs_tasks_common_env_vars, [
         {
           name  = "GITHUB_MERGE_LOCK_SSM_KEY"
           value = aws_ssm_parameter.merge_lock.name
@@ -296,10 +257,6 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
         {
           name  = "SOURCE_VERSION"
           value = var.base_branch
-        },
-        {
-          name  = "SOURCE_CLONE_URL"
-          value = data.github_repository.this.http_clone_url
         },
         {
           name = "STATUS_CHECK_NAME"
