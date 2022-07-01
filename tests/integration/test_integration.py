@@ -174,8 +174,6 @@ class Integration:
         within each account-level root directory
         """
         yield None
-        cb = boto3.client("codebuild")
-
         log.info("Destroying Terraform provisioned resources from test repository")
 
         with aurora_data_api.connect(
@@ -205,30 +203,47 @@ class Integration:
         log.info("Starting account-level terraform destroy builds")
         # reversed so newer commits are destroyed first
         for source_version in reversed(tf_destroy_commit_ids()):
-            ids = []
+            task_arns = []
             log.debug(f"Source version: {source_version}")
             for account in accounts:
                 log.debug(f'Account Name: {account["account_name"]}')
-                response = cb.start_build(
-                    projectName=mut_output["codebuild_terra_run_name"],
-                    environmentVariablesOverride=[
-                        {
-                            "name": "TG_COMMAND",
-                            "type": "PLAINTEXT",
-                            "value": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve',
-                        }
-                    ],
-                    sourceVersion=source_version,
+                task = ecs.run_task(
+                    cluster=mut_output["ecs_cluster_arn"],
+                    count=1,
+                    launchType="FARGATE",
+                    taskDefinition=mut_output["terra_run_task_definition_arn"],
+                    networkConfiguration=json.loads(mut_output["ecs_network_config"]),
+                    overrides={
+                        "containerOverrides": [
+                            {
+                                "name": mut_output["terra_run_task_container_name"],
+                                "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve',
+                                "environment": [
+                                    {
+                                        "name": "SOURCE_VERSION",
+                                        "value": mut_output["base_branch"],
+                                    }
+                                ],
+                            }
+                        ]
+                    },
                 )
+                log.debug(f"Run task response:\n{pformat(task)}")
 
-                ids.append(response["build"]["id"])
+                task_arns.append(task["tasks"][0]["containers"][0]["taskArn"])
 
-            log.info("Waiting on destroy builds to finish")
-            statuses = utils.get_build_finished_status(
-                mut_output["codebuild_terra_run_name"], ids=ids
-            )
+            log.info("Waiting on destroy tasks to finish")
+            statuses = []
+            while not all(statuses) == "STOPPED":
+                time.sleep(5)
+                response = ecs.describe_tasks(tasks=task_arns)
+                statuses = [
+                    task["containers"][0]["lastStatus"] for task in response["tasks"]
+                ]
 
-            log.info(f"Finished Statuses:\n{statuses}")
+            if len(response["failures"]) > 0:
+                log.error("Cleanup ECS tasks failed")
+                log.error(response["failures"])
 
     def get_finished_commit_status(self, context, repo, commit_id, wait=3):
         status = None
@@ -285,7 +300,7 @@ class Integration:
             log.debug(f"Logs URL: {status.target_url}")
             assert status.state == expected_status
 
-    @timeout_decorator.timeout(600)
+    @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
     def test_pr_plan_commit_status_updated(
         self, request, mut_output, pr, repo, case_param
