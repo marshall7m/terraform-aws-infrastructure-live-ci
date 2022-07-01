@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-import git
+import github
 import aurora_data_api
 import re
 import boto3
@@ -9,8 +9,8 @@ from pprint import pformat
 import json
 from typing import List
 from collections import defaultdict
+import fnmatch
 from common.utils import (
-    send_task_status,
     subprocess_run,
     TerragruntException,
     ClientException,
@@ -51,6 +51,91 @@ class CreateStack:
 
         return list(set(cfg_providers).difference(state_providers))
 
+    def get_graph_deps(self, path, role_arn):
+        graph_deps_run = subprocess_run(
+            f"terragrunt graph-dependencies --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}"
+        )
+
+        # parses output of command to create a map of directories with a list of their directory dependencies
+        # if directory has no dependency, map value default's to list
+        graph_deps = defaultdict(list)
+        for m in re.finditer(
+            r'\t"(.+?)("\s;|"\s->\s")(.+(?=";)|$)', graph_deps_run.stdout, re.MULTILINE
+        ):
+            cfg = os.path.relpath(m.group(1), os.environ["SOURCE_REPO_PATH"])
+            dep = m.group(3)
+            if dep != "":
+                graph_deps[cfg].append(
+                    os.path.relpath(dep, os.environ["SOURCE_REPO_PATH"])
+                )
+            else:
+                # initialize map key with emtpy list if dependency value is none
+                graph_deps[cfg]
+
+        return dict(graph_deps)
+
+    def get_github_diff_paths(self, graph_deps, path):
+
+        repo = github.Github(os.environ["GITHUB_TOKEN"], retry=3).get_repo(
+            os.environ["REPO_FULL_NAME"]
+        )
+
+        log.info("Running Graph Scan")
+        target_diff_paths = []
+
+        parent = repo.get_commit(os.environ["COMMIT_ID"] + "^")
+        log.debug(
+            f'Getting git differences between commits: {parent.sha} and {os.environ["COMMIT_ID"]}'
+        )
+        for diff in repo.compare(
+            os.environ["COMMIT_ID"] + "^", os.environ["COMMIT_ID"]
+        ).files:
+            # collects directories that contain new, modified and deleted .hcl/.tf files
+            if diff.status in ["added", "modified", "deleted"]:
+                if fnmatch.fnmatch(diff.filename, f"{path}/**.hcl") or fnmatch.fnmatch(
+                    diff.filename, f"{path}/**.tf"
+                ):
+                    target_diff_paths.append(os.path.dirname(diff.filename))
+        target_diff_paths = list(set(target_diff_paths))
+
+        log.debug(f"Detected differences:\n{target_diff_paths}")
+        diff_paths = []
+        # recursively searches for the diff directories within the graph dependencies mapping to include chained dependencies
+        while len(target_diff_paths) > 0:
+            log.debug("Current diffs list:")
+            log.debug(target_diff_paths)
+            path = target_diff_paths.pop()
+            for cfg_path, cfg_deps in graph_deps.items():
+                if cfg_path == path:
+                    diff_paths.append(path)
+                if path in cfg_deps:
+                    target_diff_paths.append(cfg_path)
+
+        return list(set(diff_paths))
+
+    def get_plan_diff_paths(self, path, role_arn):
+        log.info("Running Plan Scan")
+        # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
+        # set check=False to prevent error raise since the -detailed-exitcode flags causes a return code of 2 if diff in tf plan
+        run = subprocess_run(
+            f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn} --terragrunt-non-interactive -detailed-exitcode",
+            check=False,
+        )
+
+        if run.returncode not in [0, 2]:
+            log.error(f"Stderr: {run.stderr}")
+            raise TerragruntException(
+                "Terragrunt run-all plan command failed -- Aborting task"
+            )
+
+        # selects directories that contains a exitcode of 2 meaning there is a difference in the terraform plan
+        return [
+            os.path.relpath(p, os.environ["SOURCE_REPO_PATH"])
+            for p in re.findall(
+                r"(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])", run.stderr, re.DOTALL
+            )
+        ]
+
     def create_stack(self, path: str, role_arn: str) -> List[map]:
         """
         Creates a list of dictionaries consisting of a Terragrunt path that contains differences and the path's associated Terragrunt dependencies and new providers
@@ -61,77 +146,16 @@ class CreateStack:
             role_arn: Role used for running terragrunt commands
         """
 
-        graph_deps_run = subprocess_run(
-            f"terragrunt graph-dependencies --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}"
-        )
-
-        # parses output of command to create a map of directories with a list of their directory dependencies
-        graph_deps = defaultdict(list)
-        for m in re.finditer(
-            r'\t"(.+?)("\s;|"\s->\s")(.+(?=";)|$)', graph_deps_run.stdout, re.MULTILINE
-        ):
-            if m.group(3) != "":
-                graph_deps[m.group(1)].append(m.group(3))
-            else:
-                graph_deps[m.group(1)]
-
-        graph_deps = dict(graph_deps)
+        graph_deps = self.get_graph_deps(path, role_arn)
         log.debug(f"Graph Dependency mapping: \n{pformat(graph_deps)}")
 
-        repo = git.Repo(search_parent_directories=True)
         # if set, use graph-dependencies map to determine target execution directories
         log.debug(f'$GRAPH_SCAN: {os.environ.get("GRAPH_SCAN", "")}')
+
         if os.environ.get("GRAPH_SCAN", False):
-            log.info("Running Graph Scan")
-            target_diff_paths = []
-            # collects directories that contain new, modified and deleted .hcl/.tf files
-            parent = repo.commit(os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"] + "^")
-            log.debug(
-                f'Getting git differences between commits: {parent.hexsha} and {os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"]}'
-            )
-            for diff in parent.diff(
-                os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"],
-                paths=[f"{path}/**.hcl", f"{path}/**.tf"],
-            ):
-                if diff.change_type in ["A", "M", "D"]:
-                    target_diff_paths.append(
-                        repo.working_dir + "/" + os.path.dirname(diff.a_path)
-                    )
-            target_diff_paths = list(set(target_diff_paths))
-
-            log.debug(f"Git detected differences:\n{target_diff_paths}")
-            diff_paths = []
-            # recursively searches for the diff directories within the graph dependencies mapping to include chained dependencies
-            while len(target_diff_paths) > 0:
-                log.debug("Current Git diffs list:")
-                log.debug(target_diff_paths)
-                path = target_diff_paths.pop()
-                for cfg_path, cfg_deps in graph_deps.items():
-                    if cfg_path == path:
-                        diff_paths.append(path)
-                    if path in cfg_deps:
-                        target_diff_paths.append(cfg_path)
-
-            diff_paths = list(set(diff_paths))
+            diff_paths = self.get_github_diff_paths(graph_deps, path)
         else:
-            log.info("Running Plan Scan")
-            # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
-            # set check=False to prevent error raise since the -detailed-exitcode flags causes a return code of 2 if diff in tf plan
-            run = subprocess_run(
-                f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn} --terragrunt-non-interactive -detailed-exitcode",
-                check=False,
-            )
-
-            if run.returncode not in [0, 2]:
-                log.error(f"Stderr: {run.stderr}")
-                raise TerragruntException(
-                    "Terragrunt run-all plan command failed -- Aborting CodeBuild run"
-                )
-
-            # selects directories that contains a exitcode of 2 meaning there is a difference in the terraform plan
-            diff_paths = re.findall(
-                r"(?<=exit\sstatus\s2\n\n\sprefix=\[).+?(?=\])", run.stderr, re.DOTALL
-            )
+            diff_paths = self.get_plan_diff_paths(path, role_arn)
 
         if len(diff_paths) == 0:
             log.debug("Detected no Terragrunt paths with difference")
@@ -144,13 +168,9 @@ class CreateStack:
             if cfg_path in diff_paths:
                 stack.append(
                     {
-                        "cfg_path": os.path.relpath(cfg_path, repo.working_dir),
+                        "cfg_path": cfg_path,
                         # only selects dependencies that contain differences
-                        "cfg_deps": [
-                            os.path.relpath(dep, repo.working_dir)
-                            for dep in cfg_deps
-                            if dep in diff_paths
-                        ],
+                        "cfg_deps": [dep for dep in cfg_deps if dep in diff_paths],
                         "new_providers": self.get_new_providers(cfg_path, role_arn),
                     }
                 )
@@ -201,15 +221,11 @@ class CreateStack:
                             "r",
                         ) as f:
                             query = f.read().format(
-                                pr_id=os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split(
-                                    "/"
-                                )[1],
-                                commit_id=os.environ[
-                                    "CODEBUILD_RESOLVED_SOURCE_VERSION"
-                                ],
+                                pr_id=os.environ["PR_ID"],
+                                commit_id=os.environ["COMMIT_ID"],
                                 account_path=account["path"],
-                                base_ref=os.environ["CODEBUILD_WEBHOOK_BASE_REF"],
-                                head_ref=os.environ["CODEBUILD_WEBHOOK_HEAD_REF"],
+                                base_ref=os.environ["BASE_REF"],
+                                head_ref=os.environ["HEAD_REF"],
                             )
                         log.debug(f"Query:\n{query}")
 
@@ -234,7 +250,7 @@ class CreateStack:
         log.info("Locking merge action within target branch")
         ssm.put_parameter(
             Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
-            Value=os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split("/")[1],
+            Value=os.environ["PR_ID"],
             Type="String",
             Overwrite=True,
         )
@@ -259,16 +275,29 @@ class CreateStack:
             lb.invoke(
                 FunctionName=os.environ["TRIGGER_SF_FUNCTION_NAME"],
                 InvocationType="Event",
-                Payload=json.dumps(
-                    {"pr_id": os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split("/")[1]}
-                ),
+                Payload=json.dumps({"pr_id": os.environ["PR_ID"]}),
             )
             state = "success"
         except Exception as e:
             log.error(e, exc_info=True)
             state = "failure"
 
-        send_task_status(state, "Create Deploy Stack")
+        commit = (
+            github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+            .get_repo(os.environ["REPO_FULL_NAME"])
+            .get_commit(os.environ["COMMIT_ID"])
+        )
+
+        log.info("Sending commit status")
+        commit.create_status(
+            state=state,
+            context=os.environ["STATUS_CHECK_NAME"],
+            target_url=[
+                s.target_url
+                for s in commit.get_statuses()
+                if s.context == os.environ["STATUS_CHECK_NAME"]
+            ][0],
+        )
 
     def cleanup(self):
 
