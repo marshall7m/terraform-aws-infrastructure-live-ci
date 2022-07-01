@@ -39,7 +39,7 @@ ENV PATH="/usr/local/.tfenv/bin:$PATH"
 ENV PATH="$VIRTUAL_ENV/bin:$VIRTUAL_ENV/lib/python3.9/site-packages:$PATH"
 
 RUN apt-get -y update \
-    && apt-get install -y git openssl curl unzip jq \
+    && apt-get install -y openssl git curl unzip jq \
     && ln -sf python3 /usr/local/bin/python \
     && python3 -m pip install /src \
     && tfenv install ${TERRAFORM_VERSION} \
