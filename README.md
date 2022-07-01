@@ -399,7 +399,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_api_gateway_method_settings.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_method_settings) | resource |
 | [aws_api_gateway_resource.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_resource) | resource |
 | [aws_api_gateway_rest_api.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_rest_api) | resource |
-| [aws_cloudwatch_event_rule.codebuild_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
+| [aws_cloudwatch_event_rule.ecs_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
 | [aws_cloudwatch_event_rule.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
 | [aws_cloudwatch_event_target.codebuild_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
@@ -646,6 +646,15 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 # TODO:
 
+Fix:
+Traceback (most recent call last):
+  File "/src/create_deploy_stack/create_deploy_stack.py", line 305, in <module>
+    run.main()
+  File "/src/create_deploy_stack/create_deploy_stack.py", line 287, in main
+    context=os.environ["STATUS_CHECK_NAME"],
+  File "/usr/local/lib/python3.9/os.py", line 679, in __getitem__
+    raise KeyError(key) from None
+KeyError: 'STATUS_CHECK_NAME'
 
 
-- change cb cloudwatch event trigger to terra run ecs task trigger
+- change deploy_role_arn to apply_role_arn

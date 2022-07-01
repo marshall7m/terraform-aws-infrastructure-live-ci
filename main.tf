@@ -4,6 +4,25 @@ locals {
   state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${local.step_function_name}"
   cw_event_terra_run_rule    = "${local.terra_run_family}-rule"
   approval_url               = "${module.github_webhook_validator.deployment_invoke_url}${module.github_webhook_validator.api_stage_name}${aws_api_gateway_resource.approval.path}"
+
+  common_terra_run_env_vars = concat([for v in concat(local.ecs_tasks_base_env_vars, var.ecs_tasks_common_env_vars) : { "Name" : "${v.name}", "Value" : "${v.value}" }], [
+    {
+      "Name"    = "STATE_NAME"
+      "Value.$" = "$$.State.Name"
+    },
+    {
+      "Name"    = "CONTEXT"
+      "Value.$" = "States.Format('{} {}: {}', $$.Execution.Name, $$.State.Name, $.cfg_path)"
+    },
+    {
+      "Name"    = "ROLE_ARN"
+      "Value.$" = "$.plan_role_arn"
+    },
+    {
+      "Name"    = "COMMIT_ID"
+      "Value.$" = "$.commit_id"
+    },
+  ])
 }
 
 resource "aws_sfn_state_machine" "this" {
@@ -12,152 +31,170 @@ resource "aws_sfn_state_machine" "this" {
   definition = jsonencode({
     StartAt = "Plan"
     States = {
-      # "Plan" = {
-      #   Next = "Request Approval"
-      #   Parameters = {
-      #     EnvironmentVariablesOverride = [
-      #       {
-      #         Name      = "ROLE_ARN"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "$.plan_role_arn"
-      #       },
-      #       {
-      #         Name      = "TG_COMMAND"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "$.plan_command"
-      #       }
-      #     ]
-      #     ProjectName = module.codebuild_terra_run.name
-      #   }
-      #   Resource = "arn:aws:states:::codebuild:startBuild.sync"
-      #   Type     = "Task"
-      #   ResultSelector = {
-      #     "LogsUrl.$" = "$.Build.Logs.DeepLink"
-      #   }
-      #   ResultPath = "$.PlanOutput"
-      #   Catch = [
-      #     {
-      #       ErrorEquals = ["States.ALL"]
-      #       Next        = "Reject"
-      #       ResultPath  = null
-      #     }
-      #   ]
-      # },
-      # "Request Approval" = {
-      #   Next = "Approval Results"
-      #   Parameters = {
-      #     FunctionName = module.lambda_approval_request.function_arn
-      #     Payload = {
-      #       "PathApproval" = {
-      #         "Approval" = {
-      #           "Required.$" = "$.min_approval_count"
-      #           Count        = 0
-      #           Voters       = []
-      #         },
-      #         "Rejection" = {
-      #           "Required.$" = "$.min_rejection_count"
-      #           "Count"      = 0
-      #           "Voters"     = []
-      #         },
-      #         "AwaitingApprovals.$" = "$.voters"
-      #         "TaskToken.$"         = "$$.Task.Token"
-      #       }
-      #       "Voters.$"        = "$.voters"
-      #       "Path.$"          = "$.cfg_path"
-      #       "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
-      #       "ExecutionName.$" = "$$.Execution.Name"
-      #       "AccountName.$"   = "$.account_name"
-      #       "PullRequestID.$" = "$.pr_id"
-      #       "LogsUrl.$"       = "$.PlanOutput.LogsUrl"
-      #     }
-      #   }
-      #   Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
-      #   Type       = "Task"
-      #   ResultPath = "$.Action"
-      #   Catch = [
-      #     {
-      #       ErrorEquals = ["States.ALL"]
-      #       Next        = "Reject"
-      #       ResultPath  = null
-      #     }
-      #   ]
-      # },
-      # "Approval Results" = {
-      #   Choices = [
-      #     {
-      #       Next         = "Deploy"
-      #       StringEquals = "approve"
-      #       Variable     = "$.Action"
-      #     },
-      #     {
-      #       Next         = "Reject"
-      #       StringEquals = "reject"
-      #       Variable     = "$.Action"
-      #     }
-      #   ]
-      #   Type = "Choice"
-      # },
-      # "Deploy" = {
-      #   Next = "Success"
-      #   Parameters = {
-      #     EnvironmentVariablesOverride = [
-      #       {
-      #         Name      = "ROLE_ARN"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "$.deploy_role_arn"
-      #       },
-      #       {
-      #         Name      = "TG_COMMAND"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "$.deploy_command"
-      #       },
-      #       {
-      #         Name      = "EXECUTION_ID"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "$.execution_id"
-      #       },
-      #       {
-      #         Name      = "CFG_PATH"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "$.cfg_path"
-      #       },
-      #       {
-      #         Name      = "NEW_PROVIDERS"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "States.JsonToString($.new_providers)"
-      #       },
-      #       {
-      #         Name      = "IS_ROLLBACK"
-      #         Type      = "PLAINTEXT"
-      #         "Value.$" = "States.JsonToString($.is_rollback)"
-      #       }
-      #     ]
-      #     ProjectName = module.codebuild_terra_run.name
-      #   }
-      #   Resource   = "arn:aws:states:::codebuild:startBuild.sync"
-      #   Type       = "Task"
-      #   ResultPath = null
-      #   Catch = [
-      #     {
-      #       ErrorEquals = ["States.ALL"]
-      #       Next        = "Reject"
-      #       ResultPath  = null
-      #     }
-      #   ]
-      # },
-      # "Success" = {
-      #   Type = "Pass"
-      #   Parameters = {
-      #     "execution_id.$"  = "$.execution_id"
-      #     "is_rollback.$"   = "$.is_rollback"
-      #     "new_providers.$" = "$.new_providers"
-      #     "plan_role_arn.$" = "$.plan_role_arn"
-      #     "cfg_path.$"      = "$.cfg_path"
-      #     "commit_id.$"     = "$.commit_id"
-      #     "status"          = "succeeded"
-      #   }
-      #   End = true
-      # },
+      "Plan" = {
+        Next = "Request Approval"
+        Parameters = {
+          Cluster        = aws_ecs_cluster.this.arn
+          TaskDefinition = aws_ecs_task_definition.terra_run.arn
+          Overrides = {
+            ContainerOverrides = [
+              {
+                Name = local.terra_run_container_name
+                Environment = concat(
+                  local.common_terra_run_env_vars, [
+                    {
+                      "Name"    = "TG_COMMAND"
+                      "Value.$" = "$.plan_command"
+                    }
+                  ]
+                )
+              }
+            ]
+          }
+        }
+        Resource = "arn:aws:states:::ecs:runTask.sync"
+        Type     = "Task"
+        ResultSelector = {
+          "PlanTaskArn.$" = "$.tasks[0].containers[0].taskArn"
+        }
+        ResultPath = "$.PlanOutput"
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "Reject"
+            ResultPath  = null
+          }
+        ]
+      },
+      "Request Approval" = {
+        Next = "Approval Results"
+        Parameters = {
+          FunctionName = module.lambda_approval_request.function_arn
+          Payload = {
+            "PathApproval" = {
+              "Approval" = {
+                "Required.$" = "$.min_approval_count"
+                Count        = 0
+                Voters       = []
+              },
+              "Rejection" = {
+                "Required.$" = "$.min_rejection_count"
+                "Count"      = 0
+                "Voters"     = []
+              },
+              "AwaitingApprovals.$" = "$.voters"
+              "TaskToken.$"         = "$$.Task.Token"
+            }
+            "Voters.$"        = "$.voters"
+            "Path.$"          = "$.cfg_path"
+            "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
+            "ExecutionName.$" = "$$.Execution.Name"
+            "AccountName.$"   = "$.account_name"
+            "PullRequestID.$" = "$.pr_id"
+            "PlanTaskArn.$"   = "$.PlanOutput.PlanTaskArn"
+            "LogUrlPrefix"    = "https://${data.aws_region.current.name}.console.aws.amazon.com/cloudwatch/home?region=${data.aws_region.current.name}#logsV2:log-groups/log-group/"
+            "LogStreamPrefix" = "${aws_cloudwatch_log_group.ecs_tasks.name}/log-events/${local.terra_run_logs_prefix}/${local.terra_run_container_name}/"
+          }
+        }
+        Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+        Type       = "Task"
+        ResultPath = "$.Action"
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "Reject"
+            ResultPath  = null
+          }
+        ]
+      },
+      "Approval Results" = {
+        Choices = [
+          {
+            Next         = "Deploy"
+            StringEquals = "approve"
+            Variable     = "$.Action"
+          },
+          {
+            Next         = "Reject"
+            StringEquals = "reject"
+            Variable     = "$.Action"
+          }
+        ]
+        Type = "Choice"
+      },
+      "Deploy" = {
+        Next = "Success"
+        Parameters = {
+          Cluster        = aws_ecs_cluster.this.arn
+          TaskDefinition = aws_ecs_task_definition.terra_run.arn
+          Overrides = {
+            ContainerOverrides = [
+              {
+                Name = local.terra_run_container_name
+                Environment = concat(
+                  local.common_terra_run_env_vars, [
+                    {
+                      "Name"    = "TG_COMMAND"
+                      "Value.$" = "$.deploy_command"
+                    },
+                    {
+                      "Name"    = "EXECUTION_ID"
+                      "Value.$" = "$.execution_id"
+                    },
+                    {
+                      "Name"    = "CFG_PATH"
+                      "Value.$" = "$.cfg_path"
+                    },
+                    {
+                      "Name"    = "NEW_PROVIDERS"
+                      "Value.$" = "States.JsonToString($.new_providers)"
+                    },
+                    {
+                      "Name"    = "IS_ROLLBACK"
+                      "Value.$" = "States.JsonToString($.is_rollback)"
+                    },
+                    {
+                      "Name"  = "METADB_NAME"
+                      "Value" = local.metadb_name
+                    },
+                    {
+                      "Name"  = "METADB_CLUSTER_ARN"
+                      "Value" = aws_rds_cluster.metadb.arn
+                    },
+                    {
+                      "Name"  = "METADB_SECRET_ARN"
+                      "Value" = aws_secretsmanager_secret_version.ci_metadb_user.arn
+                    }
+                  ]
+                )
+              }
+            ]
+          }
+        }
+        Resource   = "arn:aws:states:::ecs:runTask.sync"
+        Type       = "Task"
+        ResultPath = null
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "Reject"
+            ResultPath  = null
+          }
+        ]
+      },
+      "Success" = {
+        Type = "Pass"
+        Parameters = {
+          "execution_id.$"  = "$.execution_id"
+          "is_rollback.$"   = "$.is_rollback"
+          "new_providers.$" = "$.new_providers"
+          "plan_role_arn.$" = "$.plan_role_arn"
+          "cfg_path.$"      = "$.cfg_path"
+          "commit_id.$"     = "$.commit_id"
+          "status"          = "succeeded"
+        }
+        End = true
+      },
       "Reject" = {
         Type = "Pass"
         Parameters = {
@@ -181,6 +218,7 @@ module "sf_role" {
   trusted_services = ["states.amazonaws.com"]
   statements = [
     {
+      sid    = "ECSRunAccess"
       effect = "Allow"
       actions = [
         "ecs:RunTask"
@@ -195,6 +233,25 @@ module "sf_role" {
       resources = [
         aws_ecs_task_definition.terra_run.arn,
       ]
+    },
+    {
+      effect = "Allow"
+      actions = [
+        "iam:PassRole"
+      ]
+      resources = [
+        module.ecs_execution_role.role_arn,
+        module.plan_role.role_arn,
+        module.apply_role.role_arn
+      ]
+    },
+    {
+      effect = "Allow"
+      actions = [
+        "ecs:StopTask",
+        "ecs:DescribeTasks"
+      ]
+      resources = ["*"]
     },
     {
       sid     = "LambdaInvokeAccess"
@@ -213,7 +270,7 @@ module "sf_role" {
         "events:DescribeRule"
       ]
       resources = [
-        "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:rule/StepFunctionsGetEventForCodeBuildStartBuildRule"
+        "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:rule/StepFunctionsGetEventsForECSTaskRule"
       ]
     }
   ]
@@ -274,27 +331,21 @@ module "cw_event_rule_role" {
 }
 
 resource "aws_cloudwatch_event_target" "codebuild_terra_run" {
-  rule      = aws_cloudwatch_event_rule.codebuild_terra_run.name
-  target_id = "StepFunctionsGetEventForCodeBuildStartBuildRule"
+  rule      = aws_cloudwatch_event_rule.ecs_terra_run.name
+  target_id = "StepFunctionsGetEventsForECSTaskRule"
   arn       = local.state_machine_arn
   role_arn  = module.cw_event_terra_run.role_arn
 }
 
-resource "aws_cloudwatch_event_rule" "codebuild_terra_run" {
+resource "aws_cloudwatch_event_rule" "ecs_terra_run" {
   name        = local.cw_event_terra_run_rule
-  description = "This rule is used to notify Step Function regarding AWS CodeBuild build"
+  description = "This rule is used to notify Step Function regarding AWS ECS tasks"
 
   event_pattern = jsonencode({
-    source      = ["aws.codebuild"]
-    detail-type = ["CodeBuild Build State Change"]
+    source      = ["aws.ecs"]
+    detail-type = ["ECS Task State Change"]
     detail = {
-      build-status = [
-        "SUCCEEDED",
-        "FAILED",
-        "FAULT",
-        "TIMED_OUT",
-        "STOPPED"
-      ],
+      clusterArn = [aws_ecs_cluster.this.arn],
       additional-information = {
         initiator = [{
           prefix = "states/"
