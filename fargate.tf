@@ -270,8 +270,8 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
           value = var.base_branch
         },
         {
-          name = "STATUS_CHECK_NAME"
-          type = var.create_deploy_stack_status_check_name
+          name  = "STATUS_CHECK_NAME"
+          value = var.create_deploy_stack_status_check_name
         },
         {
           name  = "TRIGGER_SF_FUNCTION_NAME"
