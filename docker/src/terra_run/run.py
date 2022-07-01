@@ -1,8 +1,10 @@
 import os
 import logging
+import subprocess
+import sys
+import github
 import json
 from typing import List
-import sys
 import aurora_data_api
 import ast
 from common.utils import subprocess_run
@@ -34,7 +36,7 @@ def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[st
     ]
 
 
-def main() -> None:
+def update_new_resources() -> None:
     """Inserts new Terraform provider resources into the associated execution record"""
     if (
         os.environ.get("NEW_PROVIDERS", None) != "[]"
@@ -69,6 +71,49 @@ def main() -> None:
             log.info("New provider resources were not created -- skipping")
     else:
         log.info("New provider resources were not created -- skipping")
+
+
+def main() -> None:
+    """Runs Terragrunt plan command on every Terragrunt directory that has been modified"""
+
+    log.debug(f"Command: {os.environ['TG_COMMAND']}")
+    try:
+        run = subprocess.run(
+            os.environ["TG_COMMAND"].split(" "),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        print(run.stdout)
+        state = "success"
+    except subprocess.CalledProcessError as e:
+        print(e.stderr)
+        print(e)
+        state = "failure"
+
+    try:
+        if os.environ["STATE_NAME"] == "Deploy":
+            update_new_resources()
+    except Exception as e:
+        print(e)
+        state = "failure"
+
+    commit = (
+        github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+        .get_repo(os.environ["REPO_FULL_NAME"])
+        .get_commit(os.environ["COMMIT_ID"])
+    )
+
+    log.info("Sending commit status")
+    commit.create_status(
+        state=state,
+        context=os.environ["CONTEXT"],
+        target_url=[
+            s.target_url
+            for s in commit.get_statuses()
+            if s.context == os.environ["CONTEXT"]
+        ][0],
+    )
 
 
 if __name__ == "__main__":
