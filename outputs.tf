@@ -82,7 +82,7 @@ output "create_deploy_stack_status_check_name" {
 
 output "ecs_terra_run_role_arn" {
   description = "AWS ECS terra run task IAM role ARN"
-  value       = module.terra_run_role.role_arn
+  value       = module.apply_role.role_arn
 }
 
 output "step_function_arn" {

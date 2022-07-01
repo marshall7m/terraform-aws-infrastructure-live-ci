@@ -11,6 +11,7 @@ locals {
 
   terra_run_family         = "${var.prefix}-terra-run"
   terra_run_container_name = "run"
+  terra_run_logs_prefix    = "run"
 
   private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null))
 
@@ -62,7 +63,7 @@ resource "aws_ecs_cluster" "this" {
   }
 }
 
-module "ecs_role" {
+module "ecs_execution_role" {
   source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name = local.ecs_execution_role_name
   custom_role_policy_arns = [
@@ -178,7 +179,7 @@ resource "aws_ecs_task_definition" "plan" {
   ])
   cpu                      = var.plan_cpu
   memory                   = var.plan_memory
-  execution_role_arn       = module.ecs_role.role_arn
+  execution_role_arn       = module.ecs_execution_role.role_arn
   task_role_arn            = module.plan_role.role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -288,8 +289,7 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
           name  = "METADB_SECRET_ARN"
           value = aws_secretsmanager_secret_version.ci_metadb_user.arn
           }], var.create_deploy_stack_graph_scan ? [{
-          name = "GRAPH_SCAN"
-
+          name  = "GRAPH_SCAN"
           value = "true"
         }] : []
       )
@@ -297,7 +297,7 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
   ])
   cpu                      = var.create_deploy_stack_cpu
   memory                   = var.create_deploy_stack_memory
-  execution_role_arn       = module.ecs_role.role_arn
+  execution_role_arn       = module.ecs_execution_role.role_arn
   task_role_arn            = module.create_deploy_stack_role.role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -307,7 +307,7 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
   }
 }
 
-module "terra_run_role" {
+module "apply_role" {
   source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
   role_name = local.terra_run_family
   custom_role_policy_arns = [
@@ -318,10 +318,10 @@ module "terra_run_role" {
   ]
   statements = [
     {
-      sid       = "CrossAccountTerraformPlanAndDeployAccess"
+      sid       = "CrossAccountTerraformApplyAccess"
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
-      resources = flatten([for account in var.account_parent_cfg : [account.plan_role_arn, account.deploy_role_arn]])
+      resources = var.account_parent_cfg[*].deploy_role_arn
     },
     {
       effect = "Allow"
@@ -361,7 +361,7 @@ resource "aws_ecs_task_definition" "terra_run" {
         options = {
           awslogs-group         = aws_cloudwatch_log_group.ecs_tasks.name
           awslogs-region        = data.aws_region.current.name
-          awslogs-stream-prefix = "run"
+          awslogs-stream-prefix = local.terra_run_logs_prefix
         }
       }
 
@@ -394,8 +394,7 @@ resource "aws_ecs_task_definition" "terra_run" {
   ])
   cpu                      = var.terra_run_cpu
   memory                   = var.terra_run_memory
-  execution_role_arn       = module.ecs_role.role_arn
-  task_role_arn            = module.terra_run_role.role_arn
+  execution_role_arn       = module.ecs_execution_role.role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   runtime_platform {

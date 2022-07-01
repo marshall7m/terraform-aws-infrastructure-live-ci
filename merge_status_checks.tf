@@ -211,7 +211,7 @@ module "lambda_webhook_receiver" {
         "iam:PassRole"
       ]
       resources = [
-        module.ecs_role.role_arn,
+        module.ecs_execution_role.role_arn,
         module.plan_role.role_arn,
         module.create_deploy_stack_role.role_arn
       ]
