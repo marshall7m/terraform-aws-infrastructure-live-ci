@@ -20,6 +20,8 @@ from tests.integration import utils
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+ecs = boto3.client("ecs")
+
 
 class Integration:
     executions = []
@@ -172,7 +174,6 @@ class Integration:
         within each account-level root directory
         """
         yield None
-
         cb = boto3.client("codebuild")
 
         log.info("Destroying Terraform provisioned resources from test repository")
@@ -229,46 +230,92 @@ class Integration:
 
             log.info(f"Finished Statuses:\n{statuses}")
 
+    def get_finished_commit_status(self, context, repo, commit_id, wait=3):
+        status = None
+        log.info(f"Waiting for commit status check to finish: {context}")
+        while status in [None, "pending"]:
+            log.debug(f"Waiting {wait} seconds")
+            time.sleep(wait)
+            try:
+                status = [
+                    status
+                    for status in repo.get_commit(commit_id).get_statuses()
+                    if status.context == context
+                ][0]
+            except IndexError:
+                status = None
+
+            log.debug(f"Status: {status}")
+
+        return status
+
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, repo, mut_output, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
-        wait = 3
-        merge_lock_status = None
-        while merge_lock_status in [None, "pending"]:
-            log.debug(f"Waiting {wait} seconds")
-            time.sleep(wait)
-            try:
-                merge_lock_status = [
-                    status
-                    for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
-                    if status.context == mut_output["merge_lock_status_check_name"]
-                ][0]
-            except IndexError:
-                merge_lock_status = None
+
+        status = self.get_finished_commit_status(
+            mut_output["merge_lock_status_check_name"], repo, pr["head_commit_id"]
+        )
 
         log.info("Assert PR head commit status is successful")
-        assert merge_lock_status.state == "success"
+        log.debug(f"Logs URL: {status.target_url}")
+        assert status.state == "success"
 
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
-    def test_pr_plan_codebuild(self, mut_output, pr, case_param):
-        """Assert PR plan codebuild status matches it's expected status"""
+    def test_pr_plan_commit_status_created(self, mut_output, pr, repo, case_param):
+        """Assert PR plan tasks initial commit statuses were created"""
 
-        log.info("Giving build time to start")
-        time.sleep(5)
+        statuses = []
+        wait = 3
+        while len(statuses) != len(case_param["executions"]):
+            log.debug(f"Waiting {wait} seconds")
+            time.sleep(wait)
+            statuses = [
+                status
+                for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+                if status.context != mut_output["merge_lock_status_check_name"]
+            ]
 
-        status = utils.get_build_finished_status(
-            mut_output["codebuild_pr_plan_name"],
-            filters={"sourceVersion": f'pr/{pr["number"]}'},
-        )[0]
+        expected_status = "pending"
+        log.info(f"Assert plan commit statuses were set to {expected_status}")
+        for status in statuses:
+            log.debug(f"Context: {status.context}")
+            log.debug(f"Logs URL: {status.target_url}")
+            assert status.state == expected_status
 
-        if case_param.get("expect_failed_pr_plan", False):
-            log.info("Assert build failed")
-            assert status == "FAILED"
-        else:
-            log.info("Assert build succeeded")
-            assert status == "SUCCEEDED"
+    @timeout_decorator.timeout(600)
+    @pytest.mark.dependency()
+    def test_pr_plan_commit_status_updated(
+        self, request, mut_output, pr, repo, case_param
+    ):
+        """Assert PR plan tasks commit statuses were updated"""
+        depends(
+            request, [f"{request.cls.__name__}::test_pr_plan_commit_status_created"]
+        )
+
+        statuses = []
+        wait = 15
+        log.debug(f"Expected Count: {len(case_param['executions'])}")
+        while len(statuses) != len(case_param["executions"]):
+            log.debug(f"Waiting {wait} seconds")
+            time.sleep(wait)
+            statuses = [
+                status
+                for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+                if status.context != mut_output["merge_lock_status_check_name"]
+                and status.state != "pending"
+            ]
+
+            log.debug(f"Finished count: {len(statuses)}")
+
+        expected_status = "success"
+        log.info(f"Assert plan commit statuses were set to {expected_status}")
+        for status in statuses:
+            log.debug(f"Context: {status.context}")
+            log.debug(f"Logs URL: {status.target_url}")
+            assert status.state == expected_status
 
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
@@ -278,26 +325,28 @@ class Integration:
         merges the PR
         """
         depends(request, [f"{request.cls.__name__}::test_merge_lock_pr_status"])
-        depends(request, [f"{request.cls.__name__}::test_pr_plan_codebuild"])
-
-        log.info("Ensure all status checks are completed")
-        branch = repo.get_branch(branch=mut_output["base_branch"])
-        status_checks = branch.get_required_status_checks().contexts
-        log.debug(f"Status Checks Required: {status_checks}")
-        log.debug(
-            f"Branch protection enforced for admins: {branch.get_protection().enforce_admins}"
+        depends(
+            request, [f"{request.cls.__name__}::test_pr_plan_commit_status_updated"]
         )
-
-        statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
-        while statuses.totalCount != 3:
-            time.sleep(3)
-            statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
-            log.debug(f"Count: {statuses.totalCount}")
 
         log.info(f"Merging PR: #{pr['number']}")
         try:
             merge_pr(pr["base_ref"], pr["head_ref"])
         except Exception as e:
+            branch = repo.get_branch(branch=mut_output["base_branch"])
+            log.debug(
+                f"Branch protection enforced for admins: {branch.get_protection().enforce_admins}"
+            )
+            log.debug(
+                f"Status Checks Required: {branch.get_required_status_checks().contexts}"
+            )
+
+            statuses = {
+                status.context: status.state
+                for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+            }
+            log.debug(f"Context statuses: {statuses}")
+
             if case_param.get("expect_failed_pr_plan", False):
                 pytest.skip(
                     "Skipping downstream tests since `expect_failed_pr_plan` is set to True"
@@ -307,7 +356,7 @@ class Integration:
 
     @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
-    def test_create_deploy_stack_codebuild(self, request, case_param, mut_output, pr):
+    def test_create_deploy_stack_task(self, request, repo, case_param, mut_output, pr):
         """Assert create deploy stack codebuild status matches it's expected status"""
         depends(request, [f"{request.cls.__name__}::test_pr_merge"])
 
@@ -318,18 +367,17 @@ class Integration:
             datetime.now().timestamp() * 1000
         )
 
-        log.info("Giving build time to start")
-        time.sleep(5)
-
-        status = utils.get_build_finished_status(
-            mut_output["codebuild_create_deploy_stack_name"],
-            filters={"sourceVersion": f'pr/{pr["number"]}'},
-        )[0]
+        status = self.get_finished_commit_status(
+            mut_output["create_deploy_stack_status_check_name"],
+            repo,
+            pr["head_commit_id"],
+        )
+        log.debug(f"Logs URL: {status.target_url}")
 
         # used for cases where rollback new provider resources executions were not executed beforehand so build is expected to fail
         if case_param.get("expect_failed_create_deploy_stack", False):
-            log.info("Assert build failed")
-            assert status == "FAILED"
+            log.info("Assert task failed")
+            assert status.state == "failure"
 
             log.info(
                 f'Assert no execution records exists for commit_id: {pr["head_commit_id"]}'
@@ -356,8 +404,8 @@ class Integration:
                 "Skipping downstream tests since `expect_failed_create_deploy_stack` is set to True"
             )
         else:
-            log.info("Assert build succeeded")
-            assert status == "SUCCEEDED"
+            log.info("Assert task succeeded")
+            assert status.state == "success"
 
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
@@ -398,9 +446,7 @@ class Integration:
         Depends on create deploy stack codebuild status to be successful to ensure that errors produce by
         the Lambda function are not caused by the build
         """
-        depends(
-            request, [f"{request.cls.__name__}::test_create_deploy_stack_codebuild"]
-        )
+        depends(request, [f"{request.cls.__name__}::test_create_deploy_stack_task"])
 
         if int(request.node.callspec.id) + 1 != len(request.cls.executions):
             # needed for the wait_for_lambda_invocation() start_time arg within the next test_trigger_sf iteration to
