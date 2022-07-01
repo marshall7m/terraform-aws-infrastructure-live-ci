@@ -2,7 +2,7 @@ import os
 import logging
 import subprocess
 import sys
-from common.utils import send_task_status
+import github
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -24,7 +24,18 @@ def main() -> None:
         print(e)
         state = "failure"
 
-    send_task_status(state, "Terraform Plan")
+    commit = github.Github(os.environ["GITHUB_TOKEN"], retry=3).get_repo(
+        os.environ["REPO_FULL_NAME"]
+    ).get_commit(os.environ["COMMIT_ID"])
+
+    log.info("Sending commit status")
+    commit.create_status(
+        state=state,
+        context=os.environ["STATUS_CHECK_NAME"],
+        target_url=[
+            s.target_url for s in commit.get_statuses() if s.context == os.environ["STATUS_CHECK_NAME"]
+        ][0],
+    )
 
 
 if __name__ == "__main__":
