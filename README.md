@@ -630,7 +630,7 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template
 - [ ] Allow GRAPH_SCAN to be toggled on a PR-level without having to change via Terraform module/CodeBuild console
-- [ ] Experiment with replacing CodeBuild with ECS Fargate for create deploy stack and terra run builds
+
 ## Think About...
 - Decouple Docker runner image and place into a separate repository
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage it's own version of the docker image 
@@ -645,16 +645,4 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 
 # TODO:
-
-Fix:
-Traceback (most recent call last):
-  File "/src/create_deploy_stack/create_deploy_stack.py", line 305, in <module>
-    run.main()
-  File "/src/create_deploy_stack/create_deploy_stack.py", line 287, in main
-    context=os.environ["STATUS_CHECK_NAME"],
-  File "/usr/local/lib/python3.9/os.py", line 679, in __getitem__
-    raise KeyError(key) from None
-KeyError: 'STATUS_CHECK_NAME'
-
-
 - change deploy_role_arn to apply_role_arn

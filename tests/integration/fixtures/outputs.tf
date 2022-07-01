@@ -98,3 +98,15 @@ output "create_deploy_stack_status_check_name" {
 output "ecs_terra_run_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_terra_run_role_arn
 }
+
+output "ecs_terra_run_task_definition_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_terra_run_task_definition_arn
+}
+
+output "ecs_private_subnet_ids" {
+  value = module.vpc.private_subnets
+}
+
+output "ecs_security_group_ids" {
+  value = [aws_security_group.ecs_tasks.id]
+}
