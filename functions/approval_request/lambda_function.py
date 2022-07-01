@@ -2,9 +2,17 @@ import boto3
 import logging
 import json
 import os
+import re
+import urllib
 
 ses = boto3.client("ses")
 log = logging.getLogger(__name__)
+
+
+def aws_encode(value):
+    value = urllib.parse.quote_plus(value)
+    value = re.sub(r"\+", " ", value)
+    return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
 
 def lambda_handler(event, context):
@@ -18,7 +26,10 @@ def lambda_handler(event, context):
     template_data = {
         "full_approval_api": event["ApprovalAPI"],
         "path": event["Path"],
-        "logs_url": event["LogsUrl"],
+        "logs_url": os.environ["LogUrlPrefix"]
+        + aws_encode(
+            os.environ["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]
+        ),
         "execution_name": event["ExecutionName"],
         "account_name": event["AccountName"],
         "pr_id": event["PullRequestID"],
