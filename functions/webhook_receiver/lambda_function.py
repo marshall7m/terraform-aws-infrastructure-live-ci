@@ -65,6 +65,7 @@ def trigger_pr_plan(
     branch_protection_url,
     lambda_logs_url,
     head_ref,
+    commit_id,
 ):
 
     log.info("Getting diff files")
@@ -108,7 +109,7 @@ def trigger_pr_plan(
             log.info(f'Plan Role ARN: {account["plan_role_arn"]}')
 
             log_options = ecs.describe_task_definition(
-                taskDefinition=os.environ["ECS_TASK_DEFINITION_ARN"]
+                taskDefinition=os.environ["PR_PLAN_TASK_DEFINITION_ARN"]
             )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"][
                 "options"
             ]
@@ -122,21 +123,21 @@ def trigger_pr_plan(
                         cluster=os.environ["ECS_CLUSTER_ARN"],
                         count=1,
                         launchType="FARGATE",
-                        taskDefinition=os.environ["ECS_TASK_DEFINITION_ARN"],
+                        taskDefinition=os.environ["PR_PLAN_TASK_DEFINITION_ARN"],
                         networkConfiguration=json.loads(
                             os.environ["ECS_NETWORK_CONFIG"]
                         ),
                         overrides={
                             "containerOverrides": [
                                 {
-                                    "name": os.environ["ECS_TASK_CONTAINER_NAME"],
+                                    "name": os.environ["PR_PLAN_TASK_CONTAINER_NAME"],
                                     "command": [
                                         "python",
                                         "/src/pr_plan/plan.py",
                                     ],
                                     "environment": [
                                         {"name": "SOURCE_VERSION", "value": head_ref},
-                                        {"name": "COMMIT_URL", "value": commit_url},
+                                        {"name": "COMMIT_ID", "value": commit_id},
                                         {"name": "CFG_PATH", "value": path},
                                         {
                                             "name": "ROLE_ARN",
@@ -161,7 +162,7 @@ def trigger_pr_plan(
                         "state": "pending",
                         "description": "Terraform Plan",
                         "context": context,
-                        "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["ECS_TASK_CONTAINER_NAME"] + "/" + task_id)}',
+                        "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["PR_PLAN_TASK_CONTAINER_NAME"] + "/" + task_id)}',
                     }
                 except Exception as e:
                     log.error(e, exc_info=True)
@@ -202,6 +203,61 @@ def trigger_pr_plan(
             )
 
 
+def trigger_create_deploy_stack(
+    headers, base_ref, head_ref, pr_id, commit_id, commit_url, lambda_logs_url
+):
+    log_options = ecs.describe_task_definition(
+        taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"]
+    )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"]["options"]
+    try:
+        task = ecs.run_task(
+            cluster=os.environ["ECS_CLUSTER_ARN"],
+            count=1,
+            launchType="FARGATE",
+            taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"],
+            networkConfiguration=json.loads(os.environ["ECS_NETWORK_CONFIG"]),
+            overrides={
+                "containerOverrides": [
+                    {
+                        "name": os.environ["CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME"],
+                        "environment": [
+                            {"name": "BASE_REF", "value": base_ref},
+                            {"name": "HEAD_REF", "value": head_ref},
+                            {"name": "PR_ID", "value": pr_id},
+                            {"name": "COMMIT_ID", "value": commit_id},
+                        ],
+                    }
+                ]
+            },
+        )
+        log.debug(f"Run task response:\n{pformat(task)}")
+
+        task_id = task["tasks"][0]["containers"][0]["taskArn"].split("/")[-1]
+        status_data = {
+            "state": "pending",
+            "description": "Create Deploy Stack",
+            "context": os.environ["CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT"],
+            "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["PR_PLAN_TASK_CONTAINER_NAME"] + "/" + task_id)}',
+        }
+    except Exception as e:
+        log.error(e, exc_info=True)
+        status_data = {
+            "state": "failure",
+            "description": "Create Deploy Stack",
+            "context": os.environ["CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT"],
+            "target_url": lambda_logs_url,
+        }
+
+    log.info("Sending commit status")
+    log.debug(f"Status data:\n{pformat(status_data)}")
+
+    requests.post(
+        commit_url,
+        headers=headers,
+        json=status_data,
+    )
+
+
 def lambda_handler(event, context):
 
     log.debug(f"Event:\n{pformat(event)}")
@@ -215,6 +271,7 @@ def lambda_handler(event, context):
     repo_full_name = payload["repository"]["full_name"]
     pr_id = payload["pull_request"]["number"]
     commit_id = payload["pull_request"]["head"]["sha"]
+    head_ref = payload["pull_request"]["head"]["ref"]
 
     log.info(f"Repo: {repo_full_name}")
     log.info(f"Commit ID: {commit_id}")
@@ -228,19 +285,33 @@ def lambda_handler(event, context):
     }
     logs_url = f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'
 
-    if os.environ["ENABLE_MERGE_LOCK"]:
-        merge_lock(headers, commit_url, logs_url)
+    if not payload["pull_request"]["merged"]:
+        log.info("Running workflow for open PR")
+        if os.environ["ENABLE_MERGE_LOCK"]:
+            merge_lock(headers, commit_url, logs_url)
 
-    if os.environ["ENABLE_PR_PLAN"]:
-        trigger_pr_plan(
+        if os.environ["ENABLE_PR_PLAN"]:
+            trigger_pr_plan(
+                headers,
+                commit_url,
+                f"https://api.github.com/repos/{repo_full_name}/commits/{commit_id}/statuses",
+                payload["repository"]["compare_url"].format(
+                    base=payload["pull_request"]["base"]["sha"],
+                    head=payload["pull_request"]["head"]["sha"],
+                ),
+                f"{payload['pull_request']['base']['repo']['branches_url'].replace('{/branch}', '/' + payload['pull_request']['base']['ref'])}/protection",
+                logs_url,
+                head_ref,
+                commit_id,
+            )
+    else:
+        log.info("Running workflow for merged PR")
+        trigger_create_deploy_stack(
             headers,
+            payload["pull_request"]["base"]["ref"],
+            head_ref,
+            str(pr_id),
+            commit_id,
             commit_url,
-            f"https://api.github.com/repos/{repo_full_name}/commits/{commit_id}/statuses",
-            payload["repository"]["compare_url"].format(
-                base=payload["pull_request"]["base"]["sha"],
-                head=payload["pull_request"]["head"]["sha"],
-            ),
-            f"{payload['pull_request']['base']['repo']['branches_url'].replace('{/branch}', '/' + payload['pull_request']['base']['ref'])}/protection",
             logs_url,
-            payload["pull_request"]["head"]["ref"],
         )
