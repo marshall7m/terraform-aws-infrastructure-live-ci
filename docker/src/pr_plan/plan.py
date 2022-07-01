@@ -24,16 +24,20 @@ def main() -> None:
         print(e)
         state = "failure"
 
-    commit = github.Github(os.environ["GITHUB_TOKEN"], retry=3).get_repo(
-        os.environ["REPO_FULL_NAME"]
-    ).get_commit(os.environ["COMMIT_ID"])
+    commit = (
+        github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+        .get_repo(os.environ["REPO_FULL_NAME"])
+        .get_commit(os.environ["COMMIT_ID"])
+    )
 
     log.info("Sending commit status")
     commit.create_status(
         state=state,
-        context=os.environ["STATUS_CHECK_NAME"],
+        context=os.environ["CONTEXT"],
         target_url=[
-            s.target_url for s in commit.get_statuses() if s.context == os.environ["STATUS_CHECK_NAME"]
+            s.target_url
+            for s in commit.get_statuses()
+            if s.context == os.environ["CONTEXT"]
         ][0],
     )
 
