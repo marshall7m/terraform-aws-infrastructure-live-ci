@@ -2,12 +2,11 @@ import os
 import logging
 import subprocess
 import sys
-import github
 import json
 from typing import List
 import aurora_data_api
 import ast
-from common.utils import subprocess_run
+from common.utils import subprocess_run, send_commit_status
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -98,22 +97,7 @@ def main() -> None:
         print(e)
         state = "failure"
 
-    commit = (
-        github.Github(os.environ["GITHUB_TOKEN"], retry=3)
-        .get_repo(os.environ["REPO_FULL_NAME"])
-        .get_commit(os.environ["COMMIT_ID"])
-    )
-
-    log.info("Sending commit status")
-    commit.create_status(
-        state=state,
-        context=os.environ["CONTEXT"],
-        target_url=[
-            s.target_url
-            for s in commit.get_statuses()
-            if s.context == os.environ["CONTEXT"]
-        ][0],
-    )
+    send_commit_status(state)
 
 
 if __name__ == "__main__":
