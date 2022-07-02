@@ -70,6 +70,16 @@ output "ecs_create_deploy_stack_family" {
   value       = aws_ecs_task_definition.create_deploy_stack.family
 }
 
+output "ecs_create_deploy_stack_container_name" {
+  description = "Name of the create deploy stack ECS task container"
+  value       = local.create_deploy_stack_container_name
+}
+
+output "ecs_create_deploy_stack_definition_arn" {
+  description = "AWS ECS create deploy stack defintion ARN"
+  value       = aws_ecs_task_definition.create_deploy_stack.arn
+}
+
 output "ecs_create_deploy_stack_role_arn" {
   description = "AWS ECS create deploy stack task IAM role ARN"
   value       = module.create_deploy_stack_role.role_arn
@@ -78,6 +88,11 @@ output "ecs_create_deploy_stack_role_arn" {
 output "create_deploy_stack_status_check_name" {
   description = "Name of the create deploy stack GitHub commit status"
   value       = var.create_deploy_stack_status_check_name
+}
+
+output "scan_type_ssm_param_name" {
+  description = "Name of the AWS SSM Parameter store value used to determine the scan type within the create deploy stack task"
+  value       = aws_ssm_parameter.scan_type.name
 }
 
 output "ecs_terra_run_role_arn" {

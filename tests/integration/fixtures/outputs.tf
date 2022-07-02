@@ -87,12 +87,24 @@ output "ecs_create_deploy_stack_family" {
   value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_family
 }
 
+output "ecs_create_deploy_stack_container_name" {
+  value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_container_name
+}
+
 output "ecs_create_deploy_stack_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn
 }
 
+output "scan_type_ssm_param_name" {
+  value = module.mut_infrastructure_live_ci.scan_type_ssm_param_name
+}
+
 output "create_deploy_stack_status_check_name" {
   value = module.mut_infrastructure_live_ci.create_deploy_stack_status_check_name
+}
+
+output "ecs_create_deploy_stack_definition_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_definition_arn
 }
 
 output "ecs_terra_run_role_arn" {
