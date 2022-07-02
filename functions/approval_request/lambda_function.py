@@ -26,10 +26,8 @@ def lambda_handler(event, context):
     template_data = {
         "full_approval_api": event["ApprovalAPI"],
         "path": event["Path"],
-        "logs_url": os.environ["LogUrlPrefix"]
-        + aws_encode(
-            os.environ["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]
-        ),
+        "logs_url": event["LogUrlPrefix"]
+        + aws_encode(event["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]),
         "execution_name": event["ExecutionName"],
         "account_name": event["AccountName"],
         "pr_id": event["PullRequestID"],
