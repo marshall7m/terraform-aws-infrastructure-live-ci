@@ -33,7 +33,7 @@ class Integration:
 
     @pytest.fixture(scope="module")
     def tf_destroy_commit_ids(self, mut_output):
-        """Creates a list of commit Ids to be used for the source version of the teardown Terragrunt destroy builds"""
+        """Creates a list of commit Ids to be used for the source version of the teardown Terragrunt destroy tasks"""
         commit_ids = [mut_output["base_branch"]]
 
         def _add(id=None):
@@ -101,7 +101,7 @@ class Integration:
 
             if case_param.get("destroy_tf_resources_with_pr", False):
                 # set attribute if PR contains new Terraform provider blocks that require credentials so teardown
-                # Terragrunt destroy builds will have the provider blocks needed to destroy the provider resources
+                # Terragrunt destroy tasks will have the provider blocks needed to destroy the provider resources
                 tf_destroy_commit_ids(commit_id)
 
             yield {
@@ -170,7 +170,7 @@ class Integration:
     @pytest.fixture(scope="module")
     def destroy_scenario_tf_resources(self, mut_output, tf_destroy_commit_ids):
         """
-        Starts a terra_run build for each AWS account and runs terragrunt run-all destroy
+        Starts a terra run task for each AWS account and runs terragrunt run-all destroy
         within each account-level root directory
         """
         yield None
@@ -200,7 +200,7 @@ class Integration:
                 accounts.append(record)
 
         log.debug(f"Accounts:\n{pformat(accounts)}")
-        log.info("Starting account-level terraform destroy builds")
+        log.info("Starting account-level terraform destroy tasks")
         # reversed so newer commits are destroyed first
         for source_version in reversed(tf_destroy_commit_ids()):
             task_arns = []
@@ -211,12 +211,17 @@ class Integration:
                     cluster=mut_output["ecs_cluster_arn"],
                     count=1,
                     launchType="FARGATE",
-                    taskDefinition=mut_output["terra_run_task_definition_arn"],
-                    networkConfiguration=json.loads(mut_output["ecs_network_config"]),
+                    taskDefinition=mut_output["ecs_terra_run_task_definition_arn"],
+                    networkConfiguration={
+                        "awsvpcConfiguration": {
+                            "subnets": mut_output["ecs_private_subnet_ids"],
+                            "securityGroups": mut_output["ecs_security_group_ids"],
+                        }
+                    },
                     overrides={
                         "containerOverrides": [
                             {
-                                "name": mut_output["terra_run_task_container_name"],
+                                "name": mut_output["ecs_terra_run_task_container_name"],
                                 "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve',
                                 "environment": [
                                     {
@@ -246,9 +251,9 @@ class Integration:
                 log.error(response["failures"])
 
     def get_finished_commit_status(self, context, repo, commit_id, wait=3):
-        status = None
+        state = None
         log.info(f"Waiting for commit status check to finish: {context}")
-        while status in [None, "pending"]:
+        while state in [None, "pending"]:
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
             try:
@@ -257,10 +262,11 @@ class Integration:
                     for status in repo.get_commit(commit_id).get_statuses()
                     if status.context == context
                 ][0]
+                state = status.state
             except IndexError:
-                status = None
+                state = None
 
-            log.debug(f"Status: {status}")
+            log.debug(f"Status state: {state}")
 
         return status
 
@@ -372,7 +378,7 @@ class Integration:
     @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
     def test_create_deploy_stack_task(self, request, repo, case_param, mut_output, pr):
-        """Assert create deploy stack codebuild status matches it's expected status"""
+        """Assert create deploy stack status matches it's expected status"""
         depends(request, [f"{request.cls.__name__}::test_pr_merge"])
 
         # needed for the wait_for_lambda_invocation() start_time arg within the first test_trigger_sf iteration so
@@ -389,7 +395,7 @@ class Integration:
         )
         log.debug(f"Logs URL: {status.target_url}")
 
-        # used for cases where rollback new provider resources executions were not executed beforehand so build is expected to fail
+        # used for cases where rollback new provider resources executions were not executed beforehand so task is expected to fail
         if case_param.get("expect_failed_create_deploy_stack", False):
             log.info("Assert task failed")
             assert status.state == "failure"
@@ -458,8 +464,8 @@ class Integration:
         """
         Assert that there are no errors within the latest invocation of the trigger Step Function Lambda
 
-        Depends on create deploy stack codebuild status to be successful to ensure that errors produce by
-        the Lambda function are not caused by the build
+        Depends on create deploy stack task status to be successful to ensure that errors produce by
+        the Lambda function are not caused by the task
         """
         depends(request, [f"{request.cls.__name__}::test_create_deploy_stack_task"])
 
@@ -729,7 +735,7 @@ class Integration:
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_terra_run_plan_codebuild(self, request, mut_output):
+    def test_terra_run_plan(self, request, mut_output):
         """Assert terra run plan task within Step Function execution succeeded"""
         depends(
             request,
@@ -754,7 +760,7 @@ class Integration:
         depends(
             request,
             [
-                f"{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]"
+                f"{request.cls.__name__}::test_terra_run_plan[{request.node.callspec.id}]"
             ],
         )
 
@@ -884,7 +890,7 @@ class Integration:
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_terra_run_deploy_codebuild(self, request, mut_output):
+    def test_terra_run_deploy(self, request, mut_output):
         """Assert terra run deploy task within Step Function execution succeeded"""
         depends(
             request,
@@ -905,7 +911,7 @@ class Integration:
 
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    # runs cleanup builds only if step function deploy task was executed
+    # runs cleanup tasks only if step function deploy task was executed
     @pytest.mark.usefixtures("destroy_scenario_tf_resources")
     def test_sf_execution_status(self, request, mut_output):
         """Assert Step Function execution succeeded"""
@@ -925,7 +931,7 @@ class Integration:
             depends(
                 request,
                 [
-                    f"{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]"
+                    f"{request.cls.__name__}::test_terra_run_deploy[{request.node.callspec.id}]"
                 ],
             )
         else:
@@ -958,7 +964,7 @@ class Integration:
 
         elif case_param.get("expect_failed_create_deploy_stack", False):
             # merge lock should be unlocked if error is caught within
-            # build's update_executions_with_new_deploy_stack()
+            # task's update_executions_with_new_deploy_stack()
             log.info("Assert merge lock is unlocked")
             assert (
                 ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
