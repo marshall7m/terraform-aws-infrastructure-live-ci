@@ -11,7 +11,7 @@ locals {
 
   terra_run_family         = "${var.prefix}-terra-run"
   terra_run_container_name = "run"
-  terra_run_logs_prefix    = "run"
+  terra_run_logs_prefix    = "sf"
 
   private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null))
 
@@ -342,7 +342,7 @@ resource "aws_ecs_task_definition" "terra_run" {
       name      = local.terra_run_container_name
       essential = true
       image     = local.ecs_image_address
-      command   = ["python", "/src/create_deploy_stack/create_deploy_stack.py"]
+      command   = ["python", "/src/terra_run/run.py"]
       repositoryCredentials = {
         credentialsParameter = local.private_registry_secret_manager_arn
       }
