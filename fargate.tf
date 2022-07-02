@@ -388,6 +388,14 @@ resource "aws_ecs_task_definition" "terra_run" {
         {
           name  = "METADB_SECRET_ARN"
           value = aws_secretsmanager_secret_version.ci_metadb_user.arn
+        },
+        {
+          name  = "LOG_URL_PREFIX"
+          value = local.log_url_prefix
+        },
+        {
+          name  = "LOG_STREAM_PREFIX"
+          value = local.log_stream_prefix
         }
       ])
     }

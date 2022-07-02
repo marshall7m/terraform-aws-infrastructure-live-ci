@@ -5,6 +5,8 @@ locals {
   cw_event_terra_run_rule    = "${local.terra_run_family}-rule"
   approval_url               = "${module.github_webhook_validator.deployment_invoke_url}${module.github_webhook_validator.api_stage_name}${aws_api_gateway_resource.approval.path}"
 
+  log_url_prefix    = "https://${data.aws_region.current.name}.console.aws.amazon.com/cloudwatch/home?region=${data.aws_region.current.name}#logsV2:log-groups/log-group/"
+  log_stream_prefix = "${aws_cloudwatch_log_group.ecs_tasks.name}/log-events/${local.terra_run_logs_prefix}/${local.terra_run_container_name}/"
   common_terra_run_env_vars = concat([for v in concat(local.ecs_tasks_base_env_vars, var.ecs_tasks_common_env_vars) : { "Name" : "${v.name}", "Value" : "${v.value}" }], [
     {
       "Name"    = "STATE_NAME"
@@ -44,6 +46,7 @@ resource "aws_sfn_state_machine" "this" {
             }
           }
           Overrides = {
+            TaskRoleArn = module.plan_role.role_arn
             ContainerOverrides = [
               {
                 Name = local.terra_run_container_name
@@ -52,7 +55,7 @@ resource "aws_sfn_state_machine" "this" {
                     {
                       "Name"    = "TG_COMMAND"
                       "Value.$" = "$.plan_command"
-                    }
+                    },
                   ]
                 )
               }
@@ -62,7 +65,7 @@ resource "aws_sfn_state_machine" "this" {
         Resource = "arn:aws:states:::ecs:runTask.sync"
         Type     = "Task"
         ResultSelector = {
-          "PlanTaskArn.$" = "$.tasks[0].containers[0].taskArn"
+          "PlanTaskArn.$" = "$.TaskArn"
         }
         ResultPath = "$.PlanOutput"
         Catch = [
@@ -99,8 +102,8 @@ resource "aws_sfn_state_machine" "this" {
             "AccountName.$"   = "$.account_name"
             "PullRequestID.$" = "$.pr_id"
             "PlanTaskArn.$"   = "$.PlanOutput.PlanTaskArn"
-            "LogUrlPrefix"    = "https://${data.aws_region.current.name}.console.aws.amazon.com/cloudwatch/home?region=${data.aws_region.current.name}#logsV2:log-groups/log-group/"
-            "LogStreamPrefix" = "${aws_cloudwatch_log_group.ecs_tasks.name}/log-events/${local.terra_run_logs_prefix}/${local.terra_run_container_name}/"
+            "LogUrlPrefix"    = local.log_url_prefix
+            "LogStreamPrefix" = local.log_stream_prefix
           }
         }
         Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
@@ -142,6 +145,7 @@ resource "aws_sfn_state_machine" "this" {
             }
           }
           Overrides = {
+            TaskRoleArn = module.apply_role.role_arn
             ContainerOverrides = [
               {
                 Name = local.terra_run_container_name
