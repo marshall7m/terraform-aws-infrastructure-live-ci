@@ -85,6 +85,16 @@ output "ecs_terra_run_role_arn" {
   value       = module.apply_role.role_arn
 }
 
+output "ecs_terra_run_task_definition_arn" {
+  description = "AWS ECS terra run task defintion ARN"
+  value       = aws_ecs_task_definition.terra_run.arn
+}
+
+output "ecs_terra_run_task_container_name" {
+  description = "Name of the terra run ECS task container"
+  value       = local.terra_run_container_name
+}
+
 output "step_function_arn" {
   description = "ARN of the Step Function"
   value       = aws_sfn_state_machine.this.arn

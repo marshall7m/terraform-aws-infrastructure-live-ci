@@ -36,6 +36,7 @@ resource "aws_sfn_state_machine" "this" {
         Parameters = {
           Cluster        = aws_ecs_cluster.this.arn
           TaskDefinition = aws_ecs_task_definition.terra_run.arn
+          LaunchType     = "FARGATE"
           NetworkConfiguration = {
             AwsvpcConfiguration = {
               Subnets        = var.ecs_private_subnet_ids
@@ -133,6 +134,7 @@ resource "aws_sfn_state_machine" "this" {
         Parameters = {
           Cluster        = aws_ecs_cluster.this.arn
           TaskDefinition = aws_ecs_task_definition.terra_run.arn
+          LaunchType     = "FARGATE"
           NetworkConfiguration = {
             AwsvpcConfiguration = {
               Subnets        = var.ecs_private_subnet_ids

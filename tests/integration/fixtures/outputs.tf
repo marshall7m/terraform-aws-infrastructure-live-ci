@@ -103,6 +103,10 @@ output "ecs_terra_run_task_definition_arn" {
   value = module.mut_infrastructure_live_ci.ecs_terra_run_task_definition_arn
 }
 
+output "ecs_terra_run_task_container_name" {
+  value = module.mut_infrastructure_live_ci.ecs_terra_run_task_container_name
+}
+
 output "ecs_private_subnet_ids" {
   value = module.vpc.private_subnets
 }
