@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 import github
 import git
+from tests.integration.conftest import mut_output
 import timeout_decorator
 import random
 import string
@@ -42,6 +43,21 @@ class Integration:
             return commit_ids
 
         yield _add
+
+    @pytest.fixture(scope="class", autouse=True)
+    def set_scan_type(self, case_param, mut_output):
+        ssm = boto3.client("ssm")
+
+        scan_type = case_param.get("scan_type", "graph")
+        log.info(f"Case scan type: {scan_type}")
+
+        ssm.put_parameter(
+            Name=mut_output["scan_type_ssm_param_name"],
+            Value=scan_type,
+            Type="String",
+            Overwrite=True,
+        )
+        yield None
 
     @pytest.fixture(scope="class", autouse=True)
     def pr(
@@ -222,7 +238,9 @@ class Integration:
                         "containerOverrides": [
                             {
                                 "name": mut_output["ecs_terra_run_task_container_name"],
-                                "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve',
+                                "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve'.split(
+                                    " "
+                                ),
                                 "environment": [
                                     {
                                         "name": "SOURCE_VERSION",
@@ -674,7 +692,7 @@ class Integration:
 
         sf = boto3.client("stepfunctions")
 
-        log.debug(f'Target Execution Status: {["status"]}')
+        log.debug(f'Target Execution Status: {record["status"]}')
         if record["status"] != "aborted":
             pytest.skip("Execution approval action is not set to `aborted`")
 
