@@ -54,13 +54,10 @@ def send_commit_status(state):
     )
     log.info("Sending commit status")
 
-    metadata = requests.get(os.environ["ECS_CONTAINER_METADATA_URI_V4"]).json()
-    print(f"Container metadata:\n{pformat(metadata)}")
-
     metadata = requests.get(
         os.environ["ECS_CONTAINER_METADATA_URI_V4"] + "/task"
     ).json()
-    print(f"Container metadata:\n{pformat(metadata)}")
+    log.debug(f"Container metadata:\n{pformat(metadata)}")
     task_id = metadata["TaskARN"].split("/")[-1]
 
     return commit.create_status(
