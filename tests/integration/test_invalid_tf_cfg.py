@@ -20,6 +20,7 @@ class TestInvalidTFConfig(test_integration.Integration):
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
                 "sf_execution_exists": False,
+                "expect_failed_pr_plan": True,
                 "pr_files_content": [dummy_tf_output(name="1_invalid_name")],
             },
         },

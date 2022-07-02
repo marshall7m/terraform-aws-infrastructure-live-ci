@@ -259,7 +259,9 @@ class Integration:
             statuses = []
             while not all(statuses) == "STOPPED":
                 time.sleep(5)
-                response = ecs.describe_tasks(tasks=task_arns)
+                response = ecs.describe_tasks(
+                    cluster=mut_output["ecs_cluster_arn"], tasks=task_arns
+                )
                 statuses = [
                     task["containers"][0]["lastStatus"] for task in response["tasks"]
                 ]
@@ -349,12 +351,23 @@ class Integration:
 
             log.debug(f"Finished count: {len(statuses)}")
 
-        expected_status = "success"
-        log.info(f"Assert plan commit statuses were set to {expected_status}")
+        log.info("Assert plan commit statuses were set to expected status")
         for status in statuses:
+            expected_status = "success"
+            for path, cfg in case_param["executions"].items():
+                if re.match(f"Plan: {re.escape(path)}$", status.context) and cfg.get(
+                    "expect_failed_pr_plan", False
+                ):
+                    expected_status = "failure"
+                    break
+            log.debug(f"Expected status: {expected_status}")
             log.debug(f"Context: {status.context}")
             log.debug(f"Logs URL: {status.target_url}")
             assert status.state == expected_status
+
+        pytest.skip(
+            "Skipping downstream tests since `expect_failed_pr_plan` is set to True"
+        )
 
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
@@ -386,12 +399,8 @@ class Integration:
             }
             log.debug(f"Context statuses: {statuses}")
 
-            if case_param.get("expect_failed_pr_plan", False):
-                pytest.skip(
-                    "Skipping downstream tests since `expect_failed_pr_plan` is set to True"
-                )
-            else:
-                raise e
+            log.error(e, exc_info=True)
+            raise e
 
     @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
