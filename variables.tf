@@ -176,16 +176,16 @@ EOF
   default     = 512
 }
 
-variable "create_deploy_stack_graph_scan" {
+variable "create_deploy_stack_scan_type" {
   description = <<EOF
-If true, the create_deploy_stack build will use the git detected differences to determine what directories to run Step Function executions for.
-If false, the build will use terragrunt run-all plan detected differences to determine the executions.
-Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)
+If set to `graph`, the create_deploy_stack build will use the git detected differences to determine what directories to run Step Function executions for.
+If set to `plan`, the build will use terragrunt run-all plan detected differences to determine the executions.
+Set to `plan` if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)
 which results in need to refresh the terraform remote state to accurately detect changes.
-Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan.
+Otherwise set to `graph`, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan.
 EOF
-  type        = bool
-  default     = true
+  type        = string
+  default     = "graph"
 }
 
 variable "ecs_tasks_common_env_vars" {

@@ -55,6 +55,12 @@ locals {
   )
 }
 
+resource "aws_ssm_parameter" "scan_type" {
+  name  = "${local.create_deploy_stack_container_name}-scan-type"
+  type  = "String"
+  value = var.create_deploy_stack_scan_type
+}
+
 resource "aws_ecs_cluster" "this" {
   name = local.ecs_cluster_name
   setting {
@@ -214,6 +220,14 @@ module "create_deploy_stack_role" {
       resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
     },
     {
+      effect = "Allow"
+      actions = [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ]
+      resources = [aws_ssm_parameter.scan_type.arn]
+    },
+    {
       sid       = "LambdaTriggerSFAccess"
       effect    = "Allow"
       actions   = ["lambda:InvokeFunction"]
@@ -257,6 +271,10 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
         {
           name      = "GITHUB_TOKEN"
           valueFrom = local.github_token_arn
+        },
+        {
+          name      = "SCAN_TYPE"
+          valueFrom = aws_ssm_parameter.scan_type.arn
         }
       ]
 
@@ -288,11 +306,8 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
         {
           name  = "METADB_SECRET_ARN"
           value = aws_secretsmanager_secret_version.ci_metadb_user.arn
-          }], var.create_deploy_stack_graph_scan ? [{
-          name  = "GRAPH_SCAN"
-          value = "true"
-        }] : []
-      )
+        }
+      ])
     }
   ])
   cpu                      = var.create_deploy_stack_cpu

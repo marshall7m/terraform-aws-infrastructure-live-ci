@@ -150,12 +150,14 @@ class CreateStack:
         log.debug(f"Graph Dependency mapping: \n{pformat(graph_deps)}")
 
         # if set, use graph-dependencies map to determine target execution directories
-        log.debug(f'$GRAPH_SCAN: {os.environ.get("GRAPH_SCAN", "")}')
+        log.debug(f'Scan type: {os.environ["SCAN_TYPE"]}')
 
-        if os.environ.get("GRAPH_SCAN", False):
+        if os.environ["SCAN_TYPE"] == "graph":
             diff_paths = self.get_github_diff_paths(graph_deps, path)
-        else:
+        elif os.environ["SCAN_TYPE"] == "plan":
             diff_paths = self.get_plan_diff_paths(path, role_arn)
+        else:
+            raise ClientException(f"Scan type is invalid: {os.environ['SCAN_TYPE']}")
 
         if len(diff_paths) == 0:
             log.debug("Detected no Terragrunt paths with difference")

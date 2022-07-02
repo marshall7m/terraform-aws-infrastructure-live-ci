@@ -52,7 +52,7 @@ data "aws_iam_policy_document" "github_token_ssm_read_access" {
     resources = ["*"]
   }
   statement {
-    sid    = "GetSSMParameter"
+    sid    = "GetGitHubTokenSSMParameter"
     effect = "Allow"
     actions = [
       "ssm:GetParameter",
