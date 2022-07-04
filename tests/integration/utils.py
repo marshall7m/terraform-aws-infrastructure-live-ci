@@ -67,7 +67,9 @@ def wait_for_lambda_invocation(function_name, start_time, expected_count=1, time
         log.debug(f"Refreshed Count: {actual_count}")
 
 
-def get_latest_log_stream_errs(log_group: str, start_time=None, end_time=None) -> list:
+def get_latest_log_stream_errs(
+    log_group: str, start_time=None, end_time=None, wait=5, timeout=30
+) -> list:
     """
     Gets a list of log events that contain the word `ERROR` within the latest stream of the CloudWatch log group
 
@@ -77,10 +79,24 @@ def get_latest_log_stream_errs(log_group: str, start_time=None, end_time=None) -
         end_time:  End of the time range in milliseconds UTC
     """
     logs = boto3.client("logs")
-
-    stream = logs.describe_log_streams(
-        logGroupName=log_group, orderBy="LastEventTime", descending=True, limit=1
-    )["logStreams"][0]["logStreamName"]
+    timeout = time.time() + timeout
+    stream = None
+    while not stream:
+        if time.time() > timeout:
+            raise TimeoutError(f"No stream exists within log group")
+        try:
+            stream = logs.describe_log_streams(
+                logGroupName=log_group,
+                orderBy="LastEventTime",
+                descending=True,
+                limit=1,
+            )["logStreams"][0]["logStreamName"]
+        except IndexError:
+            log.debug(
+                f"No stream exists within log group -- Retrying in {wait} seconds"
+            )
+            stream = None
+            time.sleep(wait)
 
     log.debug(f"Latest Stream: {stream}")
 
