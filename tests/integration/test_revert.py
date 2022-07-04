@@ -35,10 +35,12 @@ class TestBasePR(test_integration.Integration):
 )
 class TestDeployPR(test_integration.Integration):
     """
-    Case covers a 5 node deployment with 2 modified directories. One of the deployments will be rejected causing
-    the directory with new provider resources to be rolled back. The purpose of this case is
-    to ensure that the new provider resources introduced from the previous PR are not rolled back
-    while the new provider resources introduced in this PR are rolled back.
+    Case covers a 5 node deployment with 2 modified directories. One of the
+    deployments will be rejected causing the directory with new provider
+    resources to be rolled back. The purpose of this case is to ensure that the
+    new provider resources introduced from the previous PR are not rolled back
+    while the new provider resources introduced in this PR are rolled back within
+    the downstream revert PR.
     """
 
     case = {
@@ -71,8 +73,9 @@ class TestDeployPR(test_integration.Integration):
 )
 class TestRevertPR(test_integration.Integration):
     """
-    Case covers a 5 node deployment containing no new modified directories other than the revert changes for the previous PR.
-    This case will create a revert PR that will contain the base ref version of the repo that was compared to the previous PR defined above.
+    Case covers a 5 node deployment containing no new modified directories other
+    than the revert changes for the previous PR. This case will create a PR to
+    revert the changes introduced within the previous PR.
     """
 
     case = {
