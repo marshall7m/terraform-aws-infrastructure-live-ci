@@ -17,10 +17,6 @@ locals {
       "Value.$" = "States.Format('{} {}: {}', $$.Execution.Name, $$.State.Name, $.cfg_path)"
     },
     {
-      "Name"    = "ROLE_ARN"
-      "Value.$" = "$.plan_role_arn"
-    },
-    {
       "Name"    = "COMMIT_ID"
       "Value.$" = "$.commit_id"
     },
@@ -158,6 +154,10 @@ resource "aws_sfn_state_machine" "this" {
                     {
                       "Name"    = "EXECUTION_ID"
                       "Value.$" = "$.execution_id"
+                    },
+                    {
+                      "Name"    = "ROLE_ARN"
+                      "Value.$" = "$.deploy_role_arn"
                     },
                     {
                       "Name"    = "CFG_PATH"
