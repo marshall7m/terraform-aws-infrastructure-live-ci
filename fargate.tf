@@ -97,6 +97,13 @@ module "ecs_execution_role" {
         "secretsmanager:GetSecretValue"
       ]
       resources = [local.private_registry_secret_manager_arn]
+    },
+    {
+      effect = "Allow"
+      actions = [
+        "ssm:GetParameters"
+      ]
+      resources = [aws_ssm_parameter.scan_type.arn]
     }
   ]
   trusted_services = ["ecs-tasks.amazonaws.com"]
@@ -218,14 +225,6 @@ module "create_deploy_stack_role" {
         "logs:PutLogEvents"
       ]
       resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "ssm:GetParameter",
-        "ssm:GetParameters"
-      ]
-      resources = [aws_ssm_parameter.scan_type.arn]
     },
     {
       sid       = "LambdaTriggerSFAccess"
