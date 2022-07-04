@@ -107,10 +107,6 @@ output "ecs_create_deploy_stack_definition_arn" {
   value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_definition_arn
 }
 
-output "ecs_terra_run_role_arn" {
-  value = module.mut_infrastructure_live_ci.ecs_terra_run_role_arn
-}
-
 output "ecs_terra_run_task_definition_arn" {
   value = module.mut_infrastructure_live_ci.ecs_terra_run_task_definition_arn
 }
@@ -125,4 +121,12 @@ output "ecs_private_subnet_ids" {
 
 output "ecs_security_group_ids" {
   value = [aws_security_group.ecs_tasks.id]
+}
+
+output "ecs_apply_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_apply_role_arn
+}
+
+output "ecs_plan_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_plan_role_arn
 }

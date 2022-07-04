@@ -55,11 +55,6 @@ output "metadb_ci_password" {
   sensitive   = true
 }
 
-output "ecs_plan_role_arn" {
-  description = "ECS plan task IAM role ARN"
-  value       = module.plan_role.role_arn
-}
-
 output "ecs_cluster_arn" {
   description = "AWS ECS cluster ARN"
   value       = aws_ecs_cluster.this.arn
@@ -95,9 +90,14 @@ output "scan_type_ssm_param_name" {
   value       = aws_ssm_parameter.scan_type.name
 }
 
-output "ecs_terra_run_role_arn" {
-  description = "AWS ECS terra run task IAM role ARN"
+output "ecs_apply_role_arn" {
+  description = "IAM role ARN the AWS ECS terra run task can assume"
   value       = module.apply_role.role_arn
+}
+
+output "ecs_plan_role_arn" {
+  description = "IAM role ARN the AWS ECS pr plan and terra run task can assume"
+  value       = module.plan_role.role_arn
 }
 
 output "ecs_terra_run_task_definition_arn" {

@@ -522,13 +522,13 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | API URL used for requesting deployment approvals |
 | <a name="output_base_branch"></a> [base\_branch](#output\_base\_branch) | Base branch for repository that all PRs will compare to |
 | <a name="output_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#output\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub commit status |
+| <a name="output_ecs_apply_role_arn"></a> [ecs\_apply\_role\_arn](#output\_ecs\_apply\_role\_arn) | IAM role ARN the AWS ECS terra run task can assume |
 | <a name="output_ecs_cluster_arn"></a> [ecs\_cluster\_arn](#output\_ecs\_cluster\_arn) | AWS ECS cluster ARN |
 | <a name="output_ecs_create_deploy_stack_container_name"></a> [ecs\_create\_deploy\_stack\_container\_name](#output\_ecs\_create\_deploy\_stack\_container\_name) | Name of the create deploy stack ECS task container |
 | <a name="output_ecs_create_deploy_stack_definition_arn"></a> [ecs\_create\_deploy\_stack\_definition\_arn](#output\_ecs\_create\_deploy\_stack\_definition\_arn) | AWS ECS create deploy stack defintion ARN |
 | <a name="output_ecs_create_deploy_stack_family"></a> [ecs\_create\_deploy\_stack\_family](#output\_ecs\_create\_deploy\_stack\_family) | AWS ECS task definition family for the create deploy stack task |
 | <a name="output_ecs_create_deploy_stack_role_arn"></a> [ecs\_create\_deploy\_stack\_role\_arn](#output\_ecs\_create\_deploy\_stack\_role\_arn) | AWS ECS create deploy stack task IAM role ARN |
-| <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | ECS plan task IAM role ARN |
-| <a name="output_ecs_terra_run_role_arn"></a> [ecs\_terra\_run\_role\_arn](#output\_ecs\_terra\_run\_role\_arn) | AWS ECS terra run task IAM role ARN |
+| <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_lambda_trigger_sf_arn"></a> [lambda\_trigger\_sf\_arn](#output\_lambda\_trigger\_sf\_arn) | ARN of the Lambda Function used for triggering Step Function execution(s) |
@@ -653,3 +653,11 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - change deploy_role_arn to apply_role_arn
 - add new py func doc strings/comments
 - add scan_type read me docs
+
+
+integrations tests:
+  - test_revert.py
+  - test_deployments.py
+  - test_create_deploy_stack_rollback.py
+  - test_reject_rollback_provider.py
+  - test_rollback_providers.py
