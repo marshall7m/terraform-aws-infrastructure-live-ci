@@ -248,7 +248,8 @@ class Integration:
                                     }
                                 ],
                             }
-                        ]
+                        ],
+                        "taskRoleArn": mut_output["ecs_apply_role_arn"],
                     },
                 )
                 log.debug(f"Run task response:\n{pformat(task)}")
@@ -257,7 +258,7 @@ class Integration:
 
             log.info("Waiting on destroy tasks to finish")
             statuses = []
-            while not all(statuses) == "STOPPED":
+            while all([s == "STOPPED" for s in statuses]):
                 time.sleep(5)
                 response = ecs.describe_tasks(
                     cluster=mut_output["ecs_cluster_arn"], tasks=task_arns
@@ -265,6 +266,7 @@ class Integration:
                 statuses = [
                     task["containers"][0]["lastStatus"] for task in response["tasks"]
                 ]
+                log.debug(f"Statuses:\n{statuses}")
 
             if len(response["failures"]) > 0:
                 log.error("Cleanup ECS tasks failed")
@@ -303,14 +305,28 @@ class Integration:
         log.debug(f"Logs URL: {status.target_url}")
         assert status.state == "success"
 
+    @pytest.fixture(scope="class")
+    def case_param_modified_dirs(self, case_param):
+        return {
+            path: cfg
+            for path, cfg in case_param["executions"].items()
+            if cfg.get("pr_files_content", False)
+        }
+
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
-    def test_pr_plan_commit_status_created(self, mut_output, pr, repo, case_param):
+    def test_pr_plan_commit_status_created(
+        self, mut_output, pr, repo, case_param_modified_dirs
+    ):
         """Assert PR plan tasks initial commit statuses were created"""
 
+        log.info("Waiting for all PR plan commit statuses to be created")
+        expected_count = len(case_param_modified_dirs)
+        log.debug(f"Expected count: {expected_count}")
+
         statuses = []
-        wait = 3
-        while len(statuses) != len(case_param["executions"]):
+        wait = 10
+        while len(statuses) != expected_count:
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
             statuses = [
@@ -329,17 +345,19 @@ class Integration:
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
     def test_pr_plan_commit_status_updated(
-        self, request, mut_output, pr, repo, case_param
+        self, request, mut_output, pr, repo, case_param_modified_dirs
     ):
         """Assert PR plan tasks commit statuses were updated"""
         depends(
             request, [f"{request.cls.__name__}::test_pr_plan_commit_status_created"]
         )
+        log.info("Waiting for all PR plan commit statuses to be updated")
+        expected_count = len(case_param_modified_dirs)
+        log.debug(f"Expected count: {expected_count}")
 
         statuses = []
         wait = 15
-        log.debug(f"Expected Count: {len(case_param['executions'])}")
-        while len(statuses) != len(case_param["executions"]):
+        while len(statuses) != expected_count:
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
             statuses = [
@@ -354,7 +372,7 @@ class Integration:
         log.info("Assert plan commit statuses were set to expected status")
         for status in statuses:
             expected_status = "success"
-            for path, cfg in case_param["executions"].items():
+            for path, cfg in case_param_modified_dirs.items():
                 if re.match(f"Plan: {re.escape(path)}$", status.context) and cfg.get(
                     "expect_failed_pr_plan", False
                 ):
@@ -365,13 +383,9 @@ class Integration:
             log.debug(f"Logs URL: {status.target_url}")
             assert status.state == expected_status
 
-        pytest.skip(
-            "Skipping downstream tests since `expect_failed_pr_plan` is set to True"
-        )
-
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
-    def test_pr_merge(self, request, mut_output, case_param, merge_pr, pr, repo):
+    def test_pr_merge(self, request, mut_output, merge_pr, case_param, pr, repo):
         """
         Ensures that the PR status checks before merging are complete and then
         merges the PR
@@ -380,6 +394,9 @@ class Integration:
         depends(
             request, [f"{request.cls.__name__}::test_pr_plan_commit_status_updated"]
         )
+        for cfg in case_param["executions"].values():
+            if cfg.get("expect_failed_pr_plan", False):
+                pytest.skip("Skip merging PR since atleast one of the PR plans failed")
 
         log.info(f"Merging PR: #{pr['number']}")
         try:
