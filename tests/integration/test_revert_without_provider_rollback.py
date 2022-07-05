@@ -22,9 +22,6 @@ class TestDeployPR(test_integration.Integration):
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
                 "actions": {"deploy": "approve"},
-                # TODO: Find or create a new dummy provider that has provider configurations
-                # since this one vanished: https://registry.terraform.io/providers/nfx04/dummy/latest/docs
-                # NOTE: Test will fail on `terraform init` given provider doesn't exists
                 "pr_files_content": [dummy_configured_provider_resource],
             }
         },
