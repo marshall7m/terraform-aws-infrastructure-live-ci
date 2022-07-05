@@ -90,8 +90,8 @@ class CreateStack:
         for diff in repo.compare(
             os.environ["COMMIT_ID"] + "^", os.environ["COMMIT_ID"]
         ).files:
-            # collects directories that contain new, modified and deleted .hcl/.tf files
-            if diff.status in ["added", "modified", "deleted"]:
+            # collects directories that contain new, modified and removed .hcl/.tf files
+            if diff.status in ["added", "modified", "removed"]:
                 if fnmatch.fnmatch(diff.filename, f"{path}/**.hcl") or fnmatch.fnmatch(
                     diff.filename, f"{path}/**.tf"
                 ):
