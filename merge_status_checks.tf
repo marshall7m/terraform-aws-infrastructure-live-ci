@@ -144,11 +144,9 @@ module "lambda_webhook_receiver" {
       }
     })
 
-    ENABLE_MERGE_LOCK            = var.enable_merge_lock
     MERGE_LOCK_SSM_KEY           = aws_ssm_parameter.merge_lock.name
     MERGE_LOCK_STATUS_CHECK_NAME = var.merge_lock_status_check_name
 
-    ENABLE_PR_PLAN              = var.enable_pr_plan
     PR_PLAN_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
     PR_PLAN_TASK_CONTAINER_NAME = local.pr_plan_container_name
 

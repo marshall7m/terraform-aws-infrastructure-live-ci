@@ -287,23 +287,21 @@ def lambda_handler(event, context):
 
     if not payload["pull_request"]["merged"]:
         log.info("Running workflow for open PR")
-        if os.environ["ENABLE_MERGE_LOCK"]:
-            merge_lock(headers, commit_url, logs_url)
+        merge_lock(headers, commit_url, logs_url)
 
-        if os.environ["ENABLE_PR_PLAN"]:
-            trigger_pr_plan(
-                headers,
-                commit_url,
-                f"https://api.github.com/repos/{repo_full_name}/commits/{commit_id}/statuses",
-                payload["repository"]["compare_url"].format(
-                    base=payload["pull_request"]["base"]["sha"],
-                    head=payload["pull_request"]["head"]["sha"],
-                ),
-                f"{payload['pull_request']['base']['repo']['branches_url'].replace('{/branch}', '/' + payload['pull_request']['base']['ref'])}/protection",
-                logs_url,
-                head_ref,
-                commit_id,
-            )
+        trigger_pr_plan(
+            headers,
+            commit_url,
+            f"https://api.github.com/repos/{repo_full_name}/commits/{commit_id}/statuses",
+            payload["repository"]["compare_url"].format(
+                base=payload["pull_request"]["base"]["sha"],
+                head=payload["pull_request"]["head"]["sha"],
+            ),
+            f"{payload['pull_request']['base']['repo']['branches_url'].replace('{/branch}', '/' + payload['pull_request']['base']['ref'])}/protection",
+            logs_url,
+            head_ref,
+            commit_id,
+        )
     else:
         log.info("Running workflow for merged PR")
         trigger_create_deploy_stack(

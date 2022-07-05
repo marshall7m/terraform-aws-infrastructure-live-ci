@@ -197,18 +197,6 @@ variable "ecs_tasks_common_env_vars" {
   default = []
 }
 
-variable "enable_pr_plan" {
-  description = "Determines if PR plans will be created"
-  type        = bool
-  default     = true
-}
-
-variable "enable_merge_lock" {
-  description = "Determines if merge lock will be enabled"
-  type        = bool
-  default     = true
-}
-
 variable "merge_lock_status_check_name" {
   description = "Name of the merge lock GitHub status"
   type        = string
