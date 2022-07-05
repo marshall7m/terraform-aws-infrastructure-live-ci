@@ -41,21 +41,19 @@ resource "null_resource" "this" {}
 
 dummy_configured_provider_resource = """
 terraform {
-    required_providers {
-        dummy = {
-        source = "nfx04/dummy"
-        version = "0.0.6"
-        }
+  required_providers {
+    dummy = {
+      source = "marshall7m/dummy"
+      version = "0.0.3"
     }
+  }
 }
 
 provider "dummy" {
-    name = "foo"
+  foo = "bar"
 }
 
-resource "dummy_thing" "this" {
-    name = "bar"
-}
+resource "dummy_resource" "this" {}
 """
 
 
