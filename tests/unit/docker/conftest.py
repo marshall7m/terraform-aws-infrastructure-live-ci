@@ -3,7 +3,7 @@ import os
 import logging
 import git
 import re
-from buildspecs import subprocess_run
+from docker.src.common.utils import subprocess_run
 from tests.helpers.utils import insert_records
 
 log = logging.getLogger(__name__)

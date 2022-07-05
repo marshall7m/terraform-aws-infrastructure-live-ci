@@ -3,9 +3,9 @@ import os
 import logging
 from unittest.mock import patch
 from tests.helpers.utils import null_provider_resource, insert_records
-from buildspecs.terra_run import update_new_resources
-from tests.unit.buildspecs.conftest import mock_subprocess_run
-from buildspecs import subprocess_run
+from docker.src.terra_run import update_new_resources
+from tests.unit.docker.conftest import mock_subprocess_run
+from docker.src.common import subprocess_run
 from psycopg2 import sql
 
 log = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def git_repo_cwd(git_repo):
     },
 )
 @patch(
-    "buildspecs.terra_run.update_new_resources.subprocess_run",
+    "docker.src.terra_run.update_new_resources.subprocess_run",
     side_effect=mock_subprocess_run,
 )
 @pytest.mark.usefixtures("terraform_version", "terragrunt_version")
@@ -79,7 +79,7 @@ def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expec
         "ROLE_ARN": "tf-role-arn",
     },
 )
-@patch("buildspecs.terra_run.update_new_resources.get_new_provider_resources")
+@patch("docker.src.terra_run.update_new_resources.get_new_provider_resources")
 @pytest.mark.usefixtures("mock_conn", "aws_credentials", "truncate_executions")
 @pytest.mark.parametrize(
     "resources",

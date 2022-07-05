@@ -4,7 +4,7 @@ import logging
 from unittest.mock import patch
 import uuid
 from tests.helpers.utils import dummy_tf_output, null_provider_resource
-from tests.unit.buildspecs.conftest import mock_subprocess_run
+from tests.unit.docker.conftest import mock_subprocess_run
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -103,7 +103,7 @@ def scan_type(request):
     indirect=["repo_changes"],
 )
 @patch.dict(os.environ, {"TG_BACKEND": "local", "CODEBUILD_WEBHOOK_BASE_REF": "master"})
-@patch("buildspecs.subprocess_run", side_effect=mock_subprocess_run)
+@patch("docker.src.common.subprocess_run", side_effect=mock_subprocess_run)
 @pytest.mark.usefixtures(
     "aws_credentials", "terraform_version", "terragrunt_version", "scan_type"
 )
@@ -113,7 +113,7 @@ def test_create_stack(mock_run, git_repo, repo_changes, expected_stack):
     filters out any directories that don't have changes and detects any new
     providers introduced within the configurations
     """
-    from buildspecs.create_deploy_stack.create_deploy_stack import CreateStack
+    from docker.src.create_deploy_stack.create_deploy_stack import CreateStack
 
     log.debug("Changing to the test repo's root directory")
     git_root = git_repo.git.rev_parse("--show-toplevel")
@@ -158,11 +158,11 @@ def test_create_stack(mock_run, git_repo, repo_changes, expected_stack):
     },
 )
 @patch(
-    "buildspecs.create_deploy_stack.create_deploy_stack.subprocess_run",
+    "docker.src.create_deploy_stack.create_deploy_stack.subprocess_run",
     side_effect=mock_subprocess_run,
 )
-@patch("buildspecs.create_deploy_stack.create_deploy_stack.ssm")
-@patch("buildspecs.create_deploy_stack.create_deploy_stack.lb")
+@patch("docker.src.create_deploy_stack.create_deploy_stack.ssm")
+@patch("docker.src.create_deploy_stack.create_deploy_stack.lb")
 @patch("aurora_data_api.connect")
 @pytest.mark.usefixtures("aws_credentials")
 @pytest.mark.parametrize(
@@ -212,7 +212,7 @@ def test_main(
     git_repo,
 ):
     """Ensures main() handles errors properly from top level"""
-    from buildspecs.create_deploy_stack.create_deploy_stack import CreateStack
+    from docker.src.create_deploy_stack.create_deploy_stack import CreateStack
 
     log.debug("Changing to the test repo's root directory")
     git_root = git_repo.git.rev_parse("--show-toplevel")
