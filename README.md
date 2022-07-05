@@ -21,7 +21,7 @@ dev/vpc
 ```
 if `dev/rds` and `dev/ec2` have changes, only `dev/rds` and `dev/ec2` will be collected.
 
-After all directories and their associated dependencies are gathered, they are put into separate database records that will then be used by a downstream Lambda Function. The Lambda Function will determine the order in which the directories are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./buildspecs/create_deploy_stack/create_deploy_stack.py).
+After all directories and their associated dependencies are gathered, they are put into separate database records that will then be used by a downstream Lambda Function. The Lambda Function will determine the order in which the directories are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./docker/src/create_deploy_stack/create_deploy_stack.py).
  
  
 ## Design
@@ -409,6 +409,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -423,6 +424,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_ses_identity_policy.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_identity_policy) | resource |
 | [aws_ses_template.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_template) | resource |
 | [aws_sfn_state_machine.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) | resource |
+| [aws_ssm_parameter.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.merge_lock](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
@@ -443,6 +445,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_iam_policy_document.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
@@ -459,6 +462,7 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_api_stage_name"></a> [api\_stage\_name](#input\_api\_stage\_name) | API deployment stage name | `string` | `"prod"` | no |
 | <a name="input_approval_request_sender_email"></a> [approval\_request\_sender\_email](#input\_approval\_request\_sender\_email) | Email address to use for sending approval requests | `string` | n/a | yes |
 | <a name="input_base_branch"></a> [base\_branch](#input\_base\_branch) | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
+| <a name="input_commit_status_config"></a> [commit\_status\_config](#input\_commit\_status\_config) | Determine if commit statuses should be sent for each of the specified pipeline components | <pre>object({<br>    PrPlan            = optional(bool)<br>    CreateDeployStack = optional(bool)<br>    Plan              = optional(bool)<br>    Deploy            = optional(bool)<br>    Execution         = optional(bool)<br>  })</pre> | `{}` | no |
 | <a name="input_create_deploy_stack_cpu"></a> [create\_deploy\_stack\_cpu](#input\_create\_deploy\_stack\_cpu) | Number of CPU units the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
 | <a name="input_create_deploy_stack_memory"></a> [create\_deploy\_stack\_memory](#input\_create\_deploy\_stack\_memory) | Amount of memory (MiB) the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
 | <a name="input_create_deploy_stack_scan_type"></a> [create\_deploy\_stack\_scan\_type](#input\_create\_deploy\_stack\_scan\_type) | If set to `graph`, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If set to `plan`, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to `plan` if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to `graph`, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `string` | `"graph"` | no |
@@ -472,8 +476,6 @@ Requirements below are needed in order to run `terraform apply` within this modu
 | <a name="input_ecs_tasks_common_env_vars"></a> [ecs\_tasks\_common\_env\_vars](#input\_ecs\_tasks\_common\_env\_vars) | Common env vars defined within all ECS tasks. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>  }))</pre> | `[]` | no |
 | <a name="input_ecs_vpc_id"></a> [ecs\_vpc\_id](#input\_ecs\_vpc\_id) | AWS VPC ID to host the ECS container instances within.<br>The VPC should be associated with the subnet IDs specified under `var.ecs_private_subnet_ids` | `string` | n/a | yes |
 | <a name="input_enable_branch_protection"></a> [enable\_branch\_protection](#input\_enable\_branch\_protection) | Determines if the branch protection rule is created. If the repository is private (most likely), the GitHub account associated with<br>the GitHub provider must be registered as a GitHub Pro, GitHub Team, GitHub Enterprise Cloud, or GitHub Enterprise Server account. See here for details: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/about-protected-branches | `bool` | `true` | no |
-| <a name="input_enable_merge_lock"></a> [enable\_merge\_lock](#input\_enable\_merge\_lock) | Determines if merge lock will be enabled | `bool` | `true` | no |
-| <a name="input_enable_pr_plan"></a> [enable\_pr\_plan](#input\_enable\_pr\_plan) | Determines if PR plans will be created | `bool` | `true` | no |
 | <a name="input_enforce_admin_branch_protection"></a> [enforce\_admin\_branch\_protection](#input\_enforce\_admin\_branch\_protection) | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
 | <a name="input_file_path_pattern"></a> [file\_path\_pattern](#input\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
 | <a name="input_github_token_ssm_description"></a> [github\_token\_ssm\_description](#input\_github\_token\_ssm\_description) | Github token SSM parameter description | `string` | `"Github token used by Merge Lock Lambda Function"` | no |
@@ -642,22 +644,16 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
   - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
 - Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is because if the common directories between the PR and the running deployment stack are changed within the  deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
 - dynamically create pr-plan and create deploy stack task IAM roles for each AWS-account to isolate task's blast radious from other AWS accounts
-- Create deploy stack:
-    graph scan: spin up one container for running tg graph-deps and downstream logic
-    plan scan: 
-      1. spin up container for every AWS account to run tg plan-all and SQL queries
-      2. have a final container that depends on every upstream container that will invoke the trigger SF function
-
 
 # TODO:
 - change deploy_role_arn to apply_role_arn
 - add new py func doc strings/comments
 - add scan_type read me docs
+- add infracost
+- add cloudcraft
+- replace codebuild with ecs within readme
 
+# TODAY
+- ensure all unit tests pass
 
-integrations tests:
-  - test_revert.py
-  - test_deployments.py
-  - test_create_deploy_stack_rollback.py
-  - test_reject_rollback_provider.py
-  - test_rollback_providers.py
+- add tests to ensure cw log URL is valid

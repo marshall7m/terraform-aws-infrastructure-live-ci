@@ -15,7 +15,7 @@ resource "null_resource" "lambda_trigger_sf_deps" {
     zip_hash = fileexists(local.trigger_sf_dep_zip) ? 0 : timestamp()
   }
   provisioner "local-exec" {
-    command = "python3 -m pip install --upgrade pip && python3 -m pip install --upgrade --target ${local.trigger_sf_dep_dir}/python aurora-data-api==0.4.0 awscli==1.22.5 boto3==1.20.5"
+    command = "python3 -m pip install --upgrade pip && python3 -m pip install --upgrade --target ${local.trigger_sf_dep_dir}/python aurora-data-api==0.4.0 awscli==1.22.5 boto3==1.20.5 requests==2.28.0"
   }
 }
 
@@ -38,18 +38,24 @@ module "lambda_trigger_sf" {
   vpc_config       = var.lambda_trigger_sf_vpc_config
 
   env_vars = {
-    GITHUB_MERGE_LOCK_SSM_KEY = aws_ssm_parameter.merge_lock.name
-    STATE_MACHINE_ARN         = local.state_machine_arn
-    PGUSER                    = var.metadb_ci_username
-    PGPORT                    = var.metadb_port
-    METADB_NAME               = local.metadb_name
-    METADB_CLUSTER_ARN        = aws_rds_cluster.metadb.arn
-    METADB_SECRET_ARN         = aws_secretsmanager_secret_version.ci_metadb_user.arn
+    GITHUB_MERGE_LOCK_SSM_KEY    = aws_ssm_parameter.merge_lock.name
+    GITHUB_TOKEN_SSM_KEY         = local.github_token_ssm_key
+    COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_name
+    REPO_FULL_NAME               = data.github_repository.this.full_name
+    STATE_MACHINE_ARN            = local.state_machine_arn
+
+    PGUSER             = var.metadb_ci_username
+    PGPORT             = var.metadb_port
+    METADB_NAME        = local.metadb_name
+    METADB_CLUSTER_ARN = aws_rds_cluster.metadb.arn
+    METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
-    aws_iam_policy.ci_metadb_access.arn
+    aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.commit_status_config.arn
   ]
   statements = [
     {

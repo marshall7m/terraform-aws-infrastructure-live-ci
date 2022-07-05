@@ -75,7 +75,8 @@ module "ecs_execution_role" {
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
     "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role",
-    aws_iam_policy.github_token_ssm_read_access.arn
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.commit_status_config.arn
   ]
   statements = [var.private_registry_custom_kms_key_arn != null ?
     {
@@ -185,6 +186,10 @@ resource "aws_ecs_task_definition" "plan" {
         {
           name      = "GITHUB_TOKEN"
           valueFrom = local.github_token_arn
+        },
+        {
+          name      = "COMMIT_STATUS_CONFIG"
+          valueFrom = aws_ssm_parameter.commit_status_config.arn
         }
       ]
       environment = concat(local.ecs_tasks_base_env_vars, var.ecs_tasks_common_env_vars)
@@ -274,6 +279,10 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
         {
           name      = "SCAN_TYPE"
           valueFrom = aws_ssm_parameter.scan_type.arn
+        },
+        {
+          name      = "COMMIT_STATUS_CONFIG"
+          valueFrom = aws_ssm_parameter.commit_status_config.arn
         }
       ]
 
@@ -383,6 +392,10 @@ resource "aws_ecs_task_definition" "terra_run" {
         {
           name      = "GITHUB_TOKEN"
           valueFrom = local.github_token_arn
+        },
+        {
+          name      = "COMMIT_STATUS_CONFIG"
+          valueFrom = aws_ssm_parameter.commit_status_config.arn
         }
       ]
 

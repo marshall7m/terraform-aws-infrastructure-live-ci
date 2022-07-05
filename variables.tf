@@ -452,3 +452,16 @@ variable "private_registry_custom_kms_key_arn" {
   type        = string
   default     = null
 }
+
+
+variable "commit_status_config" {
+  description = "Determine if commit statuses should be sent for each of the specified pipeline components"
+  type = object({
+    PrPlan            = optional(bool)
+    CreateDeployStack = optional(bool)
+    Plan              = optional(bool)
+    Deploy            = optional(bool)
+    Execution         = optional(bool)
+  })
+  default = {}
+}

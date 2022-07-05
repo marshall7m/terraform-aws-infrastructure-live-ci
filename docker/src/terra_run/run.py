@@ -6,6 +6,7 @@ import json
 from typing import List
 import aurora_data_api
 import ast
+from pprint import pformat
 from common.utils import subprocess_run, send_commit_status
 
 log = logging.getLogger(__name__)
@@ -73,7 +74,13 @@ def update_new_resources() -> None:
 
 
 def main() -> None:
-    """Runs Terragrunt plan command on every Terragrunt directory that has been modified"""
+    """
+    Primarily this function prints the results of the Terragrunt command. If the
+    command fails, the function sends a commit status labeled under the
+    Step Function execution task name if enabled. If the execution is applying
+    Terraform resources, the function will update the execution's associated
+    metadb record with the new provider resources that were created.
+    """
 
     log.debug(f"Command: {os.environ['TG_COMMAND']}")
     try:
@@ -97,7 +104,11 @@ def main() -> None:
         print(e)
         state = "failure"
 
-    send_commit_status(state)
+    commit_status_config = json.loads(os.environ["COMMIT_STATUS_CONFIG"])
+    log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
+
+    if commit_status_config[os.environ["STATE_NAME"]]:
+        send_commit_status(state)
 
 
 if __name__ == "__main__":

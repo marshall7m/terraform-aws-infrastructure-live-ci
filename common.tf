@@ -1,6 +1,14 @@
 locals {
   github_token_ssm_key = coalesce(var.github_token_ssm_key, "${var.prefix}-github-token")
   github_token_arn     = try(data.aws_ssm_parameter.github_token[0].arn, aws_ssm_parameter.github_token[0].arn)
+  commit_status_config = defaults(var.commit_status_config, {
+    PrPlan            = true
+    CreateDeployStack = false
+    Plan              = false
+    Deploy            = false
+    Execution         = true
+  })
+  commit_status_config_name = "${var.prefix}-commit-status-config"
 }
 
 data "github_repository" "this" {
@@ -94,4 +102,34 @@ resource "aws_iam_policy" "ci_metadb_access" {
   name        = replace("${local.metadb_name}-access", "_", "-")
   description = "Allows CI services to connect to metadb"
   policy      = data.aws_iam_policy_document.ci_metadb_access.json
+}
+
+
+resource "aws_ssm_parameter" "commit_status_config" {
+  name  = local.commit_status_config_name
+  type  = "String"
+  value = jsonencode(local.commit_status_config)
+}
+
+data "aws_iam_policy_document" "commit_status_config" {
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "SSMCommitStatusConfig"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters"
+    ]
+    resources = [aws_ssm_parameter.commit_status_config.arn]
+  }
+}
+
+resource "aws_iam_policy" "commit_status_config" {
+  name        = "${aws_ssm_parameter.commit_status_config.name}-access"
+  description = "Allows read/write access to commit status config SSM Parameter Store value"
+  policy      = data.aws_iam_policy_document.commit_status_config.json
 }

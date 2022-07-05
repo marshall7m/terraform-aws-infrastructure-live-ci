@@ -66,6 +66,7 @@ def trigger_pr_plan(
     lambda_logs_url,
     head_ref,
     commit_id,
+    send_commit_status,
 ):
 
     log.info("Getting diff files")
@@ -175,28 +176,31 @@ def trigger_pr_plan(
 
                 log.info("Sending commit status for Terraform plan")
                 log.debug(f"Status data:\n{pformat(status_data)}")
+                if send_commit_status:
+                    response = requests.post(
+                        commit_url,
+                        headers=headers,
+                        json=status_data,
+                    )
+                    log.debug(f"Response:\n{response.text}")
 
-                response = requests.post(
-                    commit_url,
-                    headers=headers,
-                    json=status_data,
+                    plan_contexts.append(context)
+
+            if send_commit_status:
+                log.info(
+                    "Adding directory plans to branch protection required status checks"
                 )
-                log.debug(f"Response:\n{response.text}")
+                log.debug(f"Branch protection URL: {branch_protection_url}")
+                protection_data = requests.get(
+                    branch_protection_url, headers=headers
+                ).json()
+                log.debug(f"Branch protection payload: {pformat(protection_data)}")
 
-                plan_contexts.append(context)
-
-            log.info(
-                "Adding directory plans to branch protection required status checks"
-            )
-            log.debug(f"Branch protection URL: {branch_protection_url}")
-            protection_data = requests.get(
-                branch_protection_url, headers=headers
-            ).json()
-            log.debug(f"Branch protection payload: {pformat(protection_data)}")
-
-            log.info("Adding Terraform plan(s) to required status checks")
-            protection_data["required_status_checks"]["contexts"] += plan_contexts
-            requests.put(branch_protection_url, headers=headers, data=protection_data)
+                log.info("Adding Terraform plan(s) to required status checks")
+                protection_data["required_status_checks"]["contexts"] += plan_contexts
+                requests.put(
+                    branch_protection_url, headers=headers, data=protection_data
+                )
         else:
             log.info(
                 "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
@@ -204,7 +208,14 @@ def trigger_pr_plan(
 
 
 def trigger_create_deploy_stack(
-    headers, base_ref, head_ref, pr_id, commit_id, commit_url, lambda_logs_url
+    headers,
+    base_ref,
+    head_ref,
+    pr_id,
+    commit_id,
+    commit_url,
+    lambda_logs_url,
+    send_commit_status,
 ):
     log_options = ecs.describe_task_definition(
         taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"]
@@ -247,15 +258,15 @@ def trigger_create_deploy_stack(
             "context": os.environ["CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT"],
             "target_url": lambda_logs_url,
         }
+    if send_commit_status:
+        log.info("Sending commit status")
+        log.debug(f"Status data:\n{pformat(status_data)}")
 
-    log.info("Sending commit status")
-    log.debug(f"Status data:\n{pformat(status_data)}")
-
-    requests.post(
-        commit_url,
-        headers=headers,
-        json=status_data,
-    )
+        requests.post(
+            commit_url,
+            headers=headers,
+            json=status_data,
+        )
 
 
 def lambda_handler(event, context):
@@ -267,6 +278,14 @@ def lambda_handler(event, context):
     token = ssm.get_parameter(
         Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
     )["Parameter"]["Value"]
+
+    commit_status_config = json.loads(
+        ssm.get_parameter(Name=os.environ["COMMIT_STATUS_CONFIG_SSM_KEY"])["Parameter"][
+            "Value"
+        ]
+    )
+
+    log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
 
     repo_full_name = payload["repository"]["full_name"]
     pr_id = payload["pull_request"]["number"]
@@ -287,6 +306,7 @@ def lambda_handler(event, context):
 
     if not payload["pull_request"]["merged"]:
         log.info("Running workflow for open PR")
+
         merge_lock(headers, commit_url, logs_url)
 
         trigger_pr_plan(
@@ -301,6 +321,7 @@ def lambda_handler(event, context):
             logs_url,
             head_ref,
             commit_id,
+            commit_status_config["PrPlan"],
         )
     else:
         log.info("Running workflow for merged PR")
@@ -312,4 +333,5 @@ def lambda_handler(event, context):
             commit_id,
             commit_url,
             logs_url,
+            commit_status_config["CreateDeployStack"],
         )

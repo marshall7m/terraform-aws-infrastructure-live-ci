@@ -134,7 +134,8 @@ module "lambda_webhook_receiver" {
   runtime          = "python3.8"
   timeout          = 120
   env_vars = {
-    GITHUB_TOKEN_SSM_KEY = local.github_token_ssm_key
+    GITHUB_TOKEN_SSM_KEY         = local.github_token_ssm_key
+    COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_name
 
     ECS_CLUSTER_ARN = aws_ecs_cluster.this.arn
     ECS_NETWORK_CONFIG = jsonencode({
@@ -158,7 +159,8 @@ module "lambda_webhook_receiver" {
   }
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.github_token_ssm_read_access.arn
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.commit_status_config.arn
   ]
   allowed_to_invoke = [
     {

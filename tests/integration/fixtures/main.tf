@@ -358,6 +358,22 @@ module "mut_infrastructure_live_ci" {
   # testing changes without having to create a PR and triggering the entire CI pipeline
   enforce_admin_branch_protection = false
 
+  # send all commit statuses so that the commit statuse state
+  # can be used for integration testing assertions
+  # eliminates need to try pin point the exact task instance via parsing
+  # with boto3 list commands
+  # the commit status state is a valid reflection of if the process succeeded or not
+  # since the commit status state takes into account all workload errors with the 
+  # exception of the actual commit status failing to be sent which should be easy
+  # to identify
+  commit_status_config = {
+    PrPlan            = true
+    CreateDeployStack = true
+    Plan              = true
+    Deploy            = true
+    Execution         = true
+  }
+
   metadb_username    = "mut_user"
   metadb_password    = random_password.metadb["master"].result
   metadb_ci_username = "mut_ci_user"

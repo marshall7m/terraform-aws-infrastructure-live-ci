@@ -1,8 +1,10 @@
 import os
 import logging
+from pprint import pformat
 import subprocess
 import sys
 import github
+import json
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -24,22 +26,25 @@ def main() -> None:
         print(e)
         state = "failure"
 
-    commit = (
-        github.Github(os.environ["GITHUB_TOKEN"], retry=3)
-        .get_repo(os.environ["REPO_FULL_NAME"])
-        .get_commit(os.environ["COMMIT_ID"])
-    )
+    commit_status_config = json.loads(os.environ["COMMIT_STATUS_CONFIG"])
+    log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
+    if commit_status_config["PrPlan"]:
+        commit = (
+            github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+            .get_repo(os.environ["REPO_FULL_NAME"])
+            .get_commit(os.environ["COMMIT_ID"])
+        )
 
-    log.info("Sending commit status")
-    commit.create_status(
-        state=state,
-        context=os.environ["CONTEXT"],
-        target_url=[
-            s.target_url
-            for s in commit.get_statuses()
-            if s.context == os.environ["CONTEXT"]
-        ][0],
-    )
+        log.info("Sending commit status")
+        commit.create_status(
+            state=state,
+            context=os.environ["CONTEXT"],
+            target_url=[
+                s.target_url
+                for s in commit.get_statuses()
+                if s.context == os.environ["CONTEXT"]
+            ][0],
+        )
 
 
 if __name__ == "__main__":
