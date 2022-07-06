@@ -17,6 +17,7 @@ ecs = boto3.client("ecs")
 
 
 def aws_encode(value):
+    """Encodes value into AWS friendly URL component"""
     value = urllib.parse.quote_plus(value)
     value = re.sub(r"\+", " ", value)
     return re.sub(r"%", "$", urllib.parse.quote_plus(value))
@@ -58,16 +59,31 @@ def merge_lock(headers, commit_url, target_url):
 
 
 def trigger_pr_plan(
-    headers,
-    commit_url,
-    commit_statuses_url,
-    compare_url,
-    branch_protection_url,
-    lambda_logs_url,
-    head_ref,
-    commit_id,
-    send_commit_status,
-):
+    headers: dict,
+    commit_url: str,
+    commit_statuses_url: str,
+    compare_url: str,
+    branch_protection_url: str,
+    lambda_logs_url: str,
+    head_ref: str,
+    commit_id: str,
+    send_commit_status: bool,
+) -> None:
+    """
+    Runs the PR Terragrunt plan ECS task for every added or modified Terragrunt
+    directory
+
+    Arguments:
+        headers: GitHub authorization headers
+        commit_url: GitHub API commit URL
+        commit_statuses_url: GitHub API commit statuses URL
+        compare_url: GitHub API compare URL interpolated with PR base and head refs
+        branch_protection_url: GitHub API branch protection URL for the base ref
+        lambda_logs_url: Cloudwatch log group stream associated with function invocation
+        head_ref: PR head ref
+        commit_id: PR head ref commit ID
+        send_commit_status: Send a pending commit status for each of the PR plan ECS task
+    """
 
     log.info("Getting diff files")
     log.debug(f"Compare URL: {compare_url}")
@@ -208,15 +224,28 @@ def trigger_pr_plan(
 
 
 def trigger_create_deploy_stack(
-    headers,
-    base_ref,
-    head_ref,
-    pr_id,
-    commit_id,
-    commit_url,
-    lambda_logs_url,
-    send_commit_status,
-):
+    headers: str,
+    base_ref: str,
+    head_ref: str,
+    pr_id: str,
+    commit_id: str,
+    commit_url: str,
+    lambda_logs_url: str,
+    send_commit_status: bool,
+) -> None:
+    """
+    Runs the Create Deploy Stack ECS task
+
+    Arguments:
+        headers: GitHub authorization headers
+        base_ref: PR base ref
+        head_ref: PR head ref
+        pr_id: PR ID or also referred to as PR number
+        commit_id: PR head ref commit ID
+        commit_url: GitHub API commit URL
+        lambda_logs_url: Cloudwatch log group stream associated with function invocation
+        send_commit_status: Send a pending commit status for each of the PR plan ECS task
+    """
     log_options = ecs.describe_task_definition(
         taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"]
     )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"]["options"]
@@ -270,6 +299,10 @@ def trigger_create_deploy_stack(
 
 
 def lambda_handler(event, context):
+    """
+    Runs the approriate workflow depending upon on if the function was triggered
+    by an open PR activity or PR merge event
+    """
 
     log.debug(f"Event:\n{pformat(event)}")
 

@@ -198,6 +198,9 @@ module "ecr" {
   })
 }
 
+# build docker image used for ECS tasks
+# needed for testing current implementation of docker image or else
+# the module will use the pre-existing master's branch latest version
 resource "null_resource" "build" {
   triggers = { for file in local.trigger_file_paths : basename(file) => filesha256(file) }
 
@@ -215,6 +218,7 @@ EOF
   }
 }
 
+# test VPC used for hosting ECS tasks
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "3.14.2"
@@ -361,7 +365,7 @@ module "mut_infrastructure_live_ci" {
   # send all commit statuses so that the commit statuse state
   # can be used for integration testing assertions
   # eliminates need to try pin point the exact task instance via parsing
-  # with boto3 list commands
+  # with boto3 ecs list command
   # the commit status state is a valid reflection of if the process succeeded or not
   # since the commit status state takes into account all workload errors with the 
   # exception of the actual commit status failing to be sent which should be easy

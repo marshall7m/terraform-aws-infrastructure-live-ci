@@ -10,13 +10,14 @@ log = logging.getLogger(__name__)
 
 
 def aws_encode(value):
+    """Encodes value into AWS friendly URL component"""
     value = urllib.parse.quote_plus(value)
     value = re.sub(r"\+", " ", value)
     return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
 
 def lambda_handler(event, context):
-    """Sends approval request email to email addresses asssociated with Terragrunt path."""
+    """Sends approval request email to email addresses asssociated with Terragrunt path"""
 
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
@@ -37,7 +38,8 @@ def lambda_handler(event, context):
 
     destinations = []
 
-    # need to create a separate destination object for each address since only the target address is interpolated into message template
+    # need to create a separate destination object for each address since only
+    # the target address is interpolated into message template
     for address in event["Voters"]:
         destinations.append(
             {

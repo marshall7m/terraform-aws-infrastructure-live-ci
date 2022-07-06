@@ -11,10 +11,14 @@ log.setLevel(logging.DEBUG)
 
 
 class TimeoutError(Exception):
+    """Wraps around timeout-related errors"""
+
     pass
 
 
 class ClientException(Exception):
+    """Wraps around client-related errors"""
+
     pass
 
 

@@ -9,7 +9,7 @@ locals {
 
 resource "aws_api_gateway_rest_api" "this" {
   name        = local.approval_logs
-  description = "HTTP Endpoint backed by API Gateway that is used for handling PR merge lock status requests and Step Function approvals"
+  description = "HTTP Endpoint backed by API Gateway that is used for handling GitHub webhook events and Step Function approvals"
 }
 
 resource "aws_api_gateway_resource" "approval" {

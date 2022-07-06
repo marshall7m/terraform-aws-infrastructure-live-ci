@@ -24,6 +24,7 @@ class ClientException(Exception):
 
 
 def aws_encode(value):
+    """Encodes value into AWS friendly URL component"""
     value = urllib.parse.quote_plus(value)
     value = re.sub(r"\+", " ", value)
     return re.sub(r"%", "$", urllib.parse.quote_plus(value))
@@ -47,6 +48,12 @@ def subprocess_run(cmd: str, check=True):
 
 
 def send_commit_status(state):
+    """Sends GitHub commit status for ECS tasks. The AWS CloudWatch log group
+    stream associated with the ECS task is used for the commit status target URL.
+
+    Arguments:
+        state: Commit status state (e.g. success, failure, pending)
+    """
     commit = (
         github.Github(os.environ["GITHUB_TOKEN"], retry=3)
         .get_repo(os.environ["REPO_FULL_NAME"])

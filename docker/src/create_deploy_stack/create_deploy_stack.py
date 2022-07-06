@@ -26,13 +26,14 @@ lb = boto3.client("lambda")
 
 
 class CreateStack:
-    def get_new_providers(self, path: str, role_arn) -> List[str]:
+    def get_new_providers(self, path: str, role_arn: str) -> List[str]:
         """
-        Returns list of Terraform provider sources that are defined within the `path` that are not within the terraform state
+        Returns list of Terraform provider sources that are defined within the
+        `path` that are not within the Terraform state
 
         Arguments:
             path: Absolute path to a directory that contains atleast one Terragrunt *.hcl file
-            role_arn: Role used for running terragrunt command
+            role_arn: Role used for running Terragrunt command
         """
         log.debug(f"Path: {path}")
         run = subprocess_run(
@@ -51,7 +52,14 @@ class CreateStack:
 
         return list(set(cfg_providers).difference(state_providers))
 
-    def get_graph_deps(self, path, role_arn):
+    def get_graph_deps(self, path: str, role_arn: str) -> dict:
+        """
+        Returns a Python dictionary version of the `terragrunt graph-dependencies` command
+
+        Arguments:
+            path: Absolute path to a directory to run the Terragrunt command from
+            role_arn: Role used for running Terragrunt command
+        """
         graph_deps_run = subprocess_run(
             f"terragrunt graph-dependencies --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn}"
         )
@@ -74,7 +82,16 @@ class CreateStack:
 
         return dict(graph_deps)
 
-    def get_github_diff_paths(self, graph_deps, path):
+    def get_github_diff_paths(self, graph_deps: dict, path: str) -> List[str]:
+        """
+        Returns unique list of GitHub diff directories and the directories that
+        are dependent on them. Function uses the graph-dependencies dictionary
+        to find the directories that are dependent on the GitHub diff directories.
+
+        Arguments:
+            graph_deps: Terragrunt graph-dependencies Python version dictionary
+            path: Parent directory to search for differences within
+        """
 
         repo = github.Github(os.environ["GITHUB_TOKEN"], retry=3).get_repo(
             os.environ["REPO_FULL_NAME"]
@@ -100,7 +117,8 @@ class CreateStack:
 
         log.debug(f"Detected differences:\n{target_diff_paths}")
         diff_paths = []
-        # recursively searches for the diff directories within the graph dependencies mapping to include chained dependencies
+        # recursively searches for the diff directories within the graph
+        # dependencies mapping to include chained dependencies
         while len(target_diff_paths) > 0:
             log.debug("Current diffs list:")
             log.debug(target_diff_paths)
@@ -114,9 +132,21 @@ class CreateStack:
         return list(set(diff_paths))
 
     def get_plan_diff_paths(self, path, role_arn):
+        """
+        Returns unique list of Terragrunt directories that contain a difference
+        in their respective Terraform state file.
+
+        Arguments:
+            path: Parent directory to search for differences within
+            role_arn: Role used for running Terragrunt command
+        """
         log.info("Running Plan Scan")
-        # use the terraform exitcode for each directory found in the terragrunt run-all plan output to determine target execution directories
-        # set check=False to prevent error raise since the -detailed-exitcode flags causes a return code of 2 if diff in tf plan
+        # use the terraform exitcode for each directory found in the terragrunt
+        # run-all plan output to determine what directories to collect
+
+        # set check=False to prevent raising subprocess.CalledProcessError
+        # since the -detailed-exitcode flags causes a return code of 2 if diff
+        # in Terraform plan
         run = subprocess_run(
             f"terragrunt run-all plan --terragrunt-working-dir {path} --terragrunt-iam-role {role_arn} --terragrunt-non-interactive -detailed-exitcode",
             check=False,
@@ -128,7 +158,8 @@ class CreateStack:
                 "Terragrunt run-all plan command failed -- Aborting task"
             )
 
-        # selects directories that contains a exitcode of 2 meaning there is a difference in the terraform plan
+        # selects directories that contains a exitcode of 2 meaning there is a
+        # difference in the terraform plan
         return [
             os.path.relpath(p, os.environ["SOURCE_REPO_PATH"])
             for p in re.findall(
@@ -138,18 +169,22 @@ class CreateStack:
 
     def create_stack(self, path: str, role_arn: str) -> List[map]:
         """
-        Creates a list of dictionaries consisting of a Terragrunt path that contains differences and the path's associated Terragrunt dependencies and new providers
+        Creates a list of dictionaries consisting of keys representing
+        Terragrunt paths that contain differences in their respective
+        Terraform tfstate file and values that contain the path's associated
+        Terragrunt dependencies and new providers
 
         Arguments:
-            path: Parent directory to search for differences within. When $GRAPH_DEPS is not set, terragrunt run-all plan
-            will be used to search for differences which means the parent directory must contain a `terragrunt.hcl` file.
-            role_arn: Role used for running terragrunt commands
+            path: Parent directory to search for differences within. When
+                SCAN_TYPE is `plan`, terragrunt run-all plan will be used
+                to search for differences which means the parent directory must
+                contain a `terragrunt.hcl` file.
+            role_arn: AWS account role used for running Terragrunt commands
         """
 
         graph_deps = self.get_graph_deps(path, role_arn)
         log.debug(f"Graph Dependency mapping: \n{pformat(graph_deps)}")
 
-        # if set, use graph-dependencies map to determine target execution directories
         log.debug(f'Scan type: {os.environ["SCAN_TYPE"]}')
 
         if os.environ["SCAN_TYPE"] == "graph":
@@ -160,7 +195,7 @@ class CreateStack:
             raise ClientException(f"Scan type is invalid: {os.environ['SCAN_TYPE']}")
 
         if len(diff_paths) == 0:
-            log.debug("Detected no Terragrunt paths with difference")
+            log.debug("Detected no Terragrunt paths with differences")
             return []
         else:
             log.debug(f"Detected new/modified Terragrunt paths:\n{diff_paths}")
@@ -180,7 +215,8 @@ class CreateStack:
 
     def update_executions_with_new_deploy_stack(self) -> None:
         """
-        Iterates through every parent account-level directory and insert it's associated deployment stack within the metadb
+        Iterates through every parent account-level directory and insert it's
+        associated deployment stack within the metadb
         """
         with aurora_data_api.connect(
             aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
@@ -189,7 +225,11 @@ class CreateStack:
         ) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT account_path, plan_role_arn FROM account_dim ORDER BY account_name"
+                    """
+                SELECT account_path, plan_role_arn
+                FROM account_dim
+                ORDER BY account_name
+                """
                 )
                 accounts = [{"path": r[0], "role": r[1]} for r in cur.fetchall()]
 
@@ -231,7 +271,8 @@ class CreateStack:
                             )
                         log.debug(f"Query:\n{query}")
 
-                        # convert lists to comma-delimitted strings that will parsed to TEXT[] within query
+                        # convert lists to comma-delimitted strings that will
+                        # parsed to TEXT[] within query
                         for cfg in stack:
                             for k, v in cfg.items():
                                 if type(v) == list:
@@ -246,8 +287,12 @@ class CreateStack:
 
     def main(self) -> None:
         """
-        When a PR that contains Terragrunt and/or Terraform changes is merged within the base branch, each of those new/modified Terragrunt directories will have an associated
-        deployment record inserted into the metadb. After all records are inserted, a downstream AWS Lambda function will choose which of those records to run through the deployment flow.
+        When a PR that contains Terragrunt and/or Terraform changes is merged
+        within the base branch, each of those new/modified Terragrunt
+        directories will have an associated deployment record inserted into the
+        metadb. After all records are inserted, a downstream AWS Lambda
+        Function will choose which of those records to run through the
+        AWS Step Function deployment flow.
         """
         log.info("Locking merge action within target branch")
         ssm.put_parameter(
@@ -303,14 +348,6 @@ class CreateStack:
                     if s.context == os.environ["STATUS_CHECK_NAME"]
                 ][0],
             )
-
-    def cleanup(self):
-
-        log.debug("Closing metadb cursor")
-        self.cur.close()
-
-        log.debug("Closing metadb connection")
-        self.conn.close()
 
 
 if __name__ == "__main__":

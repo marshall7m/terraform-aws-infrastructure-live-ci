@@ -17,7 +17,9 @@ log.setLevel(logging.DEBUG)
 
 def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[str]:
     """
-    Parses the directory's Terraform state and returns a list of Terraform resource addresses that are from the list of specified provider addresses
+    Parses the directory's Terraform state and returns a list of Terraform
+    resource addresses that are from the list of specified provider addresses
+
     Arguments:
         tg_dir: Terragrunt directory to get new provider resources for
         new_providers: List of Terraform resource addresses (e.g. registry.terraform.io/hashicorp/aws)
@@ -37,7 +39,9 @@ def get_new_provider_resources(tg_dir: str, new_providers: List[str]) -> List[st
 
 
 def update_new_resources() -> None:
-    """Inserts new Terraform provider resources into the associated execution record"""
+    """
+    Inserts new Terraform provider resources into the associated execution record
+    """
     if (
         os.environ.get("NEW_PROVIDERS", None) != "[]"
         and os.environ.get("IS_ROLLBACK", None) == "false"

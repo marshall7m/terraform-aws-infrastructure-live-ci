@@ -18,10 +18,12 @@ ssm = boto3.client("ssm")
 
 def _execution_finished(cur, execution: map, account_id) -> None:
     """
-    Updates the Step Function's associated metadb record status and handles the case where the Step Function execution fails or is aborted
+    Updates the Step Function's associated metadb record status and handles
+    the case where the Step Function execution fails or is aborted
 
     Arguments:
-        execution: Cloudwatch event payload associated with finished Step Function execution
+        execution: Cloudwatch event payload associated with finished Step
+            Function execution
         account_id: AWS account ID that the Step Function machine is hosted in
     """
 
@@ -129,7 +131,8 @@ def _execution_finished(cur, execution: map, account_id) -> None:
         "failed",
         "aborted",
     ]:
-        # not aborting waiting and running rollback executions to allow CI flow to continue after admin intervention since future PR deployments
+        # not aborting waiting and running rollback executions to allow CI flow
+        # to continue after admin intervention since future PR deployments
         # will break if the new provider resources are not destroyed beforehand
         raise ClientException(
             "Rollback execution failed -- User with administrative privileges will need to manually fix configuration"
@@ -138,7 +141,8 @@ def _execution_finished(cur, execution: map, account_id) -> None:
 
 def _start_sf_executions(cur) -> None:
     """
-    Selects execution records to pass to Step Function deployment flow and starts the Step Function executions
+    Selects execution records to pass to Step Function deployment flow and
+    starts the Step Function executions
 
     Arguments:
         cur: Database cursor
@@ -200,7 +204,10 @@ def _start_sf_executions(cur) -> None:
 
 
 def lambda_handler(event, context):
-    """Runs Step Function deployment flow or resets SSM Parameter Store merge lock value"""
+    """
+    Runs Step Function deployment flow or resets SSM Parameter Store merge
+    lock value if deployment stack is empty
+    """
 
     log.debug(f"Event:\n{event}")
     try:

@@ -13,7 +13,10 @@ log.setLevel(logging.DEBUG)
 
 
 def main() -> None:
-    """Runs Terragrunt plan command on every Terragrunt directory that has been modified"""
+    """
+    Runs Terragrunt plan command on Terragrunt directory that has been modified
+    and send a commit status if enabled.
+    """
 
     cmd = f'terragrunt plan --terragrunt-working-dir {os.environ["CFG_PATH"]} --terragrunt-iam-role {os.environ["ROLE_ARN"]}'
     log.debug(f"Command: {cmd}")
