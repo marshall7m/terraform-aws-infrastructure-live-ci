@@ -348,7 +348,7 @@ module "cw_event_rule_role" {
   ]
 }
 
-resource "aws_cloudwatch_event_target" "codebuild_terra_run" {
+resource "aws_cloudwatch_event_target" "terra_run" {
   rule      = aws_cloudwatch_event_rule.ecs_terra_run.name
   target_id = "StepFunctionsGetEventsForECSTaskRule"
   arn       = local.state_machine_arn
