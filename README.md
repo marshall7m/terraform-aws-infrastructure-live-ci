@@ -1,5 +1,53 @@
 # Terraform AWS Infrastructure Live CI
- 
+
+<!-- toc -->
+
+  * [Problem](#problem)
+  * [Solution](#solution)
+  * [Design](#design)
+  * [Commit Statuses](#commit-statuses)
+  * [Step Function Input](#step-function-input)
+  * [Rollback New Provider Resources](#rollback-new-provider-resources)
+  * [Infrastructure Repository Requirements](#infrastructure-repository-requirements)
+  * [Why AWS Step Function for deployment flow?](#why-aws-step-function-for-deployment-flow)
+    + [Step Function](#step-function)
+      - [Pros](#pros)
+    + [CodePipeline](#codepipeline)
+      - [Pros](#pros-1)
+      - [Cons](#cons)
+  * [Pricing](#pricing)
+    + [Lambda](#lambda)
+    + [ECS](#ecs)
+    + [Step Function](#step-function-1)
+    + [RDS](#rds)
+    + [EventBridge](#eventbridge)
+  * [Cost](#cost)
+  * [Requirements](#requirements)
+  * [Providers](#providers)
+  * [Modules](#modules)
+  * [Resources](#resources)
+  * [Inputs](#inputs)
+  * [Outputs](#outputs)
+  * [Deploy the Terraform Module](#deploy-the-terraform-module)
+    + [CLI Requirements](#cli-requirements)
+    + [Steps](#steps)
+  * [Testing](#testing)
+    + [Docker Environment](#docker-environment)
+      - [Requirements](#requirements-1)
+      - [Steps](#steps-1)
+    + [Local GitHub Actions Workflow](#local-github-actions-workflow)
+      - [Requirements](#requirements-2)
+      - [Steps](#steps-2)
+  * [Pitfalls](#pitfalls)
+- [TODO:](#todo)
+    + [Features:](#features)
+    + [Improvements:](#improvements)
+  * [Think About...](#think-about)
+- [TODO:](#todo-1)
+- [TODAY](#today)
+
+<!-- tocstop -->
+
 ## Problem
  
 `terragrunt run-all` commands have a limitation of inaccurately outputting the dependency values for child terraform plans if the dependency configuration changes. The current advice is to exclude `terragrunt run-all` from CI systems and run individual `terragrunt` commands within each target directory (see [GitHub issue](https://github.com/gruntwork-io/terragrunt/issues/720#issuecomment-497888756)). This imposes the tedious process of manually determining what directories to run on and the explicit ordering between them within the CI pipeline. As other users of Terragrunt have [stated](https://github.com/gruntwork-io/terragrunt/issues/262
@@ -67,7 +115,7 @@ Each ECS tasks with the addition of the merge lock, will be available to send co
 The each of the ECS task-related commit statuses will link to the task's associated AWS CloudWatch Log Stream. If calling service of the task failed to configure and run the task, the calling service's page or log link will be used.
 
 `** NOTE: Permissions for users to access the log streams is not managed via this module **`
-### Input
+## Step Function Input
  
 Each execution is passed a JSON input that contains record attributes that will help configure the tasks within the Step Function. A sample JSON input will look like the following:
  
@@ -149,7 +197,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  
 `deploy_role_arn`: AWS IAM role ARN used to run `deploy_command`
  
-### Rollback New Provider Resources
+## Rollback New Provider Resources
  
 Let us say a PR introduces a new provider and resource block. The PR is merged and the deployment associated with the new provider resource succeeds. For some reason, a downstream deployment fails and the entire PR needs to be reverted. The revert PR is created and merged. The directory containing the new provider resource will be non-existent within the revert PR although the terraform state file associated with the directory will still contain the new provider resources. Given that the provider block and its associated provider credentials are gone, Terraform will output an error when trying to initialize the directory within the deployment flow. This type of scenario is also referenced in this [StackOverflow post](https://stackoverflow.com/a/57829202/12659025).
  
@@ -216,7 +264,7 @@ Given that EventBridge rules and event deliveries are free, the Step Function ex
 
 ## Cost
 
-### Cost estimate in the us-west-2 region via [Infracost](https://github.com/infracost/infracost):
+Cost estimate in the us-west-2 region via [Infracost](https://github.com/infracost/infracost):
 
 ```
  Name                                                                                            Monthly Qty  Unit                        Monthly Cost 
@@ -332,16 +380,6 @@ Given that EventBridge rules and event deliveries are free, the Step Function ex
   ∙ 1 x aws_ses_identity_policy
   ∙ 1 x aws_ses_template
 ```
-
-## CLI Requirements
- 
-Requirements below are needed to run `terraform apply` within this module. This module contains null resources that run bash scripts to install pip packages, and zip directories, and query the RDS database.
- 
-| Name | Version |
-|------|---------|
-| awscli | >= 1.22.5 |
-| python3 | >= 3.9 |
-| pip | >= 22.0.4 |
  
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -548,11 +586,21 @@ Requirements below are needed to run `terraform apply` within this module. This 
 | <a name="output_trigger_sf_log_group_name"></a> [trigger\_sf\_log\_group\_name](#output\_trigger\_sf\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
  
-# Deploy the Terraform Module
+## Deploy the Terraform Module
 
-## Prerequisites
+### CLI Requirements
+ 
+Requirements below are needed to run `terraform apply` on this module. This module contains null resources that run bash scripts to install pip packages, and zip directories, and query the RDS database.
+ 
+| Name | Version |
+|------|---------|
+| awscli | >= 1.22.5 |
+| python3 | >= 3.9 |
+| pip | >= 22.0.4 |
+### Steps
  
 For a demo of the module that will clean up any resources created, see the `Integration` section of this README. The steps below are meant for implementing the module into your current AWS ecosystem.
+
 1. Open a terragrunt `.hcl` or terraform `.tf` file
 2. Create a module block using this repo as the source
 3. Fill in the required module variables
@@ -570,13 +618,15 @@ For a demo of the module that will clean up any resources created, see the `Inte
 14. Verify that the Terraform changes have been deployed
 
 ## Testing
-### Option 1: Docker Environment
+### Docker Environment
 
 #### Requirements
  
 The following tools are required:
 - [git](https://github.com/git/git)
 - [docker](https://docs.docker.com/get-docker/)
+
+#### Steps
 
 The steps below will set up a testing Docker environment for running tests.
 
@@ -591,7 +641,7 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destroy`). BEWARE: If the resources are left alive after the tests, the AWS account may incur additional charges.
 ```
 
-### Option 2: Local GitHub Actions Workflow via [act](https://github.com/nektos/act)
+### Local GitHub Actions Workflow
 
 #### Requirements
  
@@ -600,7 +650,8 @@ The following tools are required:
 - [docker](https://docs.docker.com/get-docker/)
 - [act](https://github.com/nektos/act)
 
-The steps below will run the GitHub Actions workflow within local Docker containers.
+#### Steps
+The steps below will run the GitHub Actions workflow via [act](https://github.com/nektos/act) within local Docker containers.
 
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo

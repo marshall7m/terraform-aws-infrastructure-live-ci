@@ -23,3 +23,11 @@ repos:
     hooks:
       - id: sqlfluff-lint
         args: [--nocolor, --dialect, 'postgres', -vv]
+  - repo: local
+    hooks:
+      - id: markdown-toc
+        name: Insert a table of contents in README.md file
+        entry: markdown-toc
+        args: [-i]
+        language: node
+        files: ^README.md$
