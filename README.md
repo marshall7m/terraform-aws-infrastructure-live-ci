@@ -8,9 +8,9 @@
  
 ## Solution
  
-Before getting into how the entire module works, we'll dive into the proposed solution to the problem and how it boils down to a specific piece of the CI pipeline. As mentioned above, the `terragrunt run-all` command will produce an inaccurate dependency value for child directories that depend on parent directories that haven't been applied yet. Obviously if all parent dependencies were applied beforehand, the dependency value within the child Terraform plan would then be valid. So what if we created a component of a CI pipeline that detects all dependency paths that include changes, run a separate approval flow for each of those paths, and then run an approval flow for the child path? This will ensure that every `terragrunt plan` command contains valid dependency values.
+Before getting into how the entire module works, we'll dive into the proposed solution to the problem and how it boils down to a specific piece of the CI pipeline. As mentioned above, the `terragrunt run-all` command will produce an inaccurate dependency value for child directories that depend on parent directories that haven't been applied yet. If all parent dependencies were applied beforehand, the dependency value within the child Terraform plan would then be valid. So what if we created a component of a CI pipeline that detects all dependency paths that include changes, runs a separate approval flow for each of those paths, and then runs an approval flow for the child path? This will ensure that every `terragrunt plan` command contains valid dependency values.
  
-This module includes two different approaches to detecting changes which we will call "graph scan" and "plan scan". The scan type can be toggled via the `create_deploy_stack_scan_type` Terraform variable. The graph scan will initially use the `git diff` command to collect directories that contain .tf or .hcl file changes. Using a mapping of the terragrunt directories and their associated dependency list, the script will recursively collect directories that contain dependency changes. The plan scan approach will run the command `terragrunt run-all plan -detailed-exitcode` (command is shortened to include only relevant arguments). The `terragrunt run-all plan` portion will traverse from the root terragrunt directory down to every child Terragrunt directory. It will then run `teraform plan -detailed-exitcode` within each directory and output the [exitcode](https://www.terraform.io/cli/commands/plan#detailed-exitcode) that represents whether the plan contains changes or not. If the directory does contain changes, the directory and it's associated dependencies that also have changes will be collected. This excludes dependencies that are unchanged but upstream from changed directories. For example, consider the following directory dependency tree:
+This module includes two different approaches to detecting changes which we will call "graph scan" and "plan scan". The scan type can be toggled via the `create_deploy_stack_scan_type` Terraform variable. The graph scan will initially use the `git diff` command to collect directories that contain .tf or .hcl file changes. Using mapping of the terragrunt directories and their associated dependency list, the script will recursively collect directories that contain dependency changes. The plan scan approach will run the command `terragrunt run-all plan -detailed-exitcode` (command is shortened to include only relevant arguments). The `terragrunt run-all plan` portion will traverse from the root terragrunt directory down to every child Terragrunt directory. It will then run `terraform plan -detailed-exitcode` within each directory and output the [exitcode](https://www.terraform.io/cli/commands/plan#detailed-exitcode) that represents whether the plan contains changes or not. If the directory does contain changes, the directory and its associated dependencies that also have changed will be collected. This excludes dependencies that are unchanged but upstream from changed directories. For example, consider the following directory dependency tree:
 
 ```
 dev/vpc
@@ -28,15 +28,15 @@ After all directories and their associated dependencies are gathered, they are p
  
 ![Diagram](diagram.png)
  
-1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS API Gateway endpoint on open PR activties or merge PR events. The API will pass the webhook payload to the #2 Lambda Function.
+1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS API Gateway endpoint on open PR activities or merge PR events. The API will pass the webhook payload to the #2 Lambda Function.
 
 2. The Lambda Function will validate the request's SHA-256 header value with the secret configured within Terraform module. If the request is valid, the function will check if the payload meets the requirements to pass the request to the next Lambda Function. The payload must contain attributes that reflect that the GitHub event was an open PR activity or PR merge, includes .tf and/or .hcl file additions and/or modifications, and has a PR base ref that is the trunk branch (trunk branch represents the live Terraform configurations and should be reflected within the Terraform state files).
 
 3. The Lambda Function acts as a branch that runs different logic depending on the GitHub event. 
 
-    If Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#5). In addition to the ECS task(s), the Lambda Function will check if there's an deployment flow in progress and add the check to the PR's commit status. 
+    If the Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#5). In addition to the ECS task(s), the Lambda Function will check if there's a deployment flow in progress and add the check to the PR's commit status. 
 
-    If the Github event was a merged PR, an ECS task named Create Deploy Stack will be runned.
+    If the Github event was a merged PR, an ECS task named Create Deploy Stack will be run.
 
 4. The Lambda Function will load an AWS System Manager Parameter Store value reference as `merge_lock` that will contain the PR ID of the deployment in progress or `none` if there isn't any in progress. Merging will be locked until the deployment flow is done. Once the deployment flow is finished, the downstream Lambda Function (see #7) will reset the parameter value.
 
@@ -44,25 +44,25 @@ After all directories and their associated dependencies are gathered, they are p
 
 5. The ECS task will run a plan on the Terragrunt directory. The task will upload a commit status displaying if the plan command was successfully executed or not. (See section ##Commit Statuses for more info on commit statuses created in this module).
 
-6. The task will overwrite the current merge lock value with the associated PR ID. Next the task will scan the trunk branch for changes made from the PR. The task will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the task will invoke #7 Lambda Function.
+6. The task will overwrite the current merge lock value with the associated PR ID. Next, the task will scan the trunk branch for changes made from the PR. The task will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the task will invoke the #7 Lambda Function.
  
-7. A Lambda Function referenced within the module as `trigger_sf` will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into json objects and pass each json as input into separate Step Function executions. 
+7. A Lambda Function referenced within the module as `trigger_sf` will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into JSON objects and pass each JSON as input into separate Step Function executions. 
  
-8. An ECS task referenced as `terra_run` within the module will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created, modified and/or deleted.
+8. An ECS task referenced as `terra_run` within the module will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created, modified, and/or deleted.
  
 9. A Lambda Function referenced as `approval_request` within the module will send an approval request via AWS SES to every email address defined under the record's `voters` attribute.
 
 10. When a voter approves/rejects a deployment, the Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a task success token back to the associated Step Function execution.
 
-11. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will be runned and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task task will run the record's associated `deploy_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. The "Rollback New Provider Resources" section below will explain how the `new_resources` attribute will be used. 
+11. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will be run and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task will run the record's associated `deploy_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified, and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. The "Rollback New Provider Resources" section below will explain how the `new_resources` attribute will be used. 
  
 11. After every Step Function execution, a Cloudwatch event rule will invoke the `trigger_sf` Lambda Function mentioned in step #7. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. If the `Success` task of the Step Function was successful, the updated status will be `succeeded` and if the `Reject` task was successful, the updated status will be `failed`.
 
-    The Lambda Function will then repeat the same process as mentioned in step #7 until there are no records that are waiting to be runned with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform related PRs to be merged.
+    The Lambda Function will then repeat the same process as mentioned in step #7 until there are no records that are waiting to be run with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform-related PRs to be merged.
   
 ### Input
  
-Each execution is passed a json input that contains record attributes that will help configure the tasks within the Step Function. A sample json input will look like the following:
+Each execution is passed a JSON input that contains record attributes that will help configure the tasks within the Step Function. A sample JSON input will look like the following:
  
 ```
 {
@@ -98,9 +98,9 @@ Each execution is passed a json input that contains record attributes that will 
 }
 ```
  
-`execution_id`: An unique identifier that represents the execution name. The ID is formatted to be `run-{pr_id}-{first four digits of commit_id}-{account_name}-{leaf directory of cfg_path}-{random three digits}`. Only three random digits are used because if the record has a long account_name and/or cfg_path, the execution_id may exceed Step Function's 80 character or less execution name limit.
+`execution_id`: An unique identifier that represents the execution name. The ID is formatted to be `run-{pr_id}-{first four digits of commit_id}-{account_name}-{leaf directory of cfg_path}-{random three digits}`. Only three random digits are used because if the record has a long account_name and/or cfg_path, the execution_id may exceed Step Function's 80 characters or less execution name limit.
  
-`is_rollback`: Determines if the execution pertains to a deployment that will rollback changes from a previous execution. (See section `Rollbacks` for more info)
+`is_rollback`: Determines if the execution pertains to a deployment that will roll back changes from a previous execution. (See section `Rollbacks` for more info)
  
 `pr_id`: Pull Request Number
  
@@ -128,7 +128,7 @@ Each execution is passed a json input that contains record attributes that will 
  
 `account_deps`: List of AWS accounts (`account_name`) the record's `account_name` depends on
  
-`voters`: List of email addresses to send approval request to
+`voters`: List of email addresses to send an approval request to
  
 `approval_voters`: List of `voters` who have approved the deployment
  
@@ -144,18 +144,18 @@ Each execution is passed a json input that contains record attributes that will 
  
 ### Rollback New Provider Resources
  
-Lets say a PR introduces a new provider and resource block. The PR is merged and the deployment associated with the new provider resource succeeds. For some reason a downstream deployment fails and the entire PR needs to be reverted. The revert PR is created and is merged. The directory containing the new provider resource will be non-existent within the revert PR although the terraform state file associated with the directory will still contain the new provider resources.Given that the provider block and it's associated provider credentials are gone, Terraform will output an error when trying to initialize the directory within the deployment flow. This type of scenario is also referenced in this [StackOverflow post](https://stackoverflow.com/a/57829202/12659025).
+Let us say a PR introduces a new provider and resource block. The PR is merged and the deployment associated with the new provider resource succeeds. For some reason, a downstream deployment fails and the entire PR needs to be reverted. The revert PR is created and merged. The directory containing the new provider resource will be non-existent within the revert PR although the terraform state file associated with the directory will still contain the new provider resources. Given that the provider block and its associated provider credentials are gone, Terraform will output an error when trying to initialize the directory within the deployment flow. This type of scenario is also referenced in this [StackOverflow post](https://stackoverflow.com/a/57829202/12659025).
  
-To handle this scenario, the CI pipeline will document which directories define new provider resources within the metadb. After every deployment, any new provider resources that were deployed will also be documented. If any deployment flow fails, the CI pipeline will start Step Function executions for every directory that contains new providers and target destroy the new provider resources. To see it in action, run the [test_rollback_providers.py](./tests/integration/test_rollback_providers.py) test.
+To handle this scenario, the CI pipeline will document which directories define new provider resources within the metadb. After every deployment, any new provider resources that were deployed will also be documented. If any deployment flow fails, the CI pipeline will start Step Function executions for every directory that contains new providers with `-target` flags to destroy the new provider resources. To see it in action, run the [test_rollback_providers.py](./tests/integration/test_rollback_providers.py) test.
  
 ## Infrastructure Repository Requirements
  
-- Terraform files can be present but they must be referenced by Terragrunt configurations in order for it be detected by the CI workflow
+- Terraform files can be present but they must be referenced by Terragrunt configurations for them to be detected by the CI workflow
 - Configuration can't depend on environment variables that are not already passed to the builds
  
 ## Why AWS Step Function for deployment flow?
  
-It would seem like CodePipeline would be the go to AWS service for hosting the deployment workflow. After a long period of trying both I found the following trade offs.
+It would seem like CodePipeline would be the go-to AWS service for hosting the deployment workflow. After a long period of trying both, I found the following trade-offs.
  
 ### Step Function
  
@@ -165,7 +165,7 @@ It would seem like CodePipeline would be the go to AWS service for hosting the d
 - Ability to capture errors and define fallback states (see [here](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html) for more info)
 - Updates to the workflow in itself will not fail the current execution and changes will be reflected within future executions [(reference)](https://docs.aws.amazon.com/step-functions/latest/dg/getting-started.html#update-state-machine-step-3
 )
-- Ability to customize the execution name which is useful searching for executions within the console
+- Ability to customize the execution name which is useful in searching for executions within the console
  
 ### CodePipeline
  
@@ -174,21 +174,21 @@ It would seem like CodePipeline would be the go to AWS service for hosting the d
 - Integrated approval flow managed via IAM users/roles
 - Simple and intuitive GUI
 - Satisfied with just being able to do account-level execution concurrency
-- A single AWS account with a simple plan, approval, deploy workflow is only needed
+- A single AWS account with a simple plan, approval, and deploy workflow is only needed
  
 #### Cons
  
 - Can't handle complex task branching. The current implementation is fairly simple but newer versions of this module may contain feature Step Function definitions that handle complex deployment workflows.
-- Concurrent runs are not available which can lead slow deployment rollouts for changes within deeply rooted dependencies or changes within a large amount of independent sibling directories
+- Concurrent runs are not available which can lead to slow deployment rollouts for changes within deeply rooted dependencies or changes within a large number of independent sibling directories
 - Updates to the pipeline in itself causes the execution to fail and prevent any downstream actions from running as described [here](https://docs.aws.amazon.com/codepipeline/latest/userguide/pipelines-edit.html
 )
-- Free tier only allows for one free pipeline a month. After the free tier, the cost for each active pipeline is $1 a month not including the additional charges for storing the CodePipeline artifacts within S3. Given that this module is intended for handling a large amount of AWS accounts, a CodePipeline for each account would be necessary which would spike up the total cost for running this module.
+- Free tier only allows for one free pipeline a month. After the free tier, the cost for each active pipeline is $1 a month not including the additional charges for storing the CodePipeline artifacts within S3. Given that this module is intended for handling a large amount of AWS accounts, a CodePipeline for each account would be necessary which would spike up the total cost of running this module.
  
 ## Pricing
  
 ### Lambda
  
-The AWS Lambda free tier includes one million free requests per month and 400,000 GB-seconds of compute time per month. Given the use of the Lambda Functions are revolved around infrastructure changes, the total amount of invocations will likely be minimal and will probably chip away only a tiny fraction of the free tier allocation.
+The AWS Lambda free tier includes one million free requests per month and 400,000 GB seconds of computing time per month. Given the use of the Lambda Functions are revolved around infrastructure changes, the total amount of invocations will likely be minimal and will probably chip away only a tiny fraction of the free tier allocation.
  
 ### ECS
  
@@ -198,11 +198,11 @@ The cost for the Step Function machine is based on state transitions. Luckily 4,
  
 ### RDS
  
-The metadb uses a [Aurora Serverless](https://aws.amazon.com/rds/aurora/serverless/) PostgreSQL database type. Essentially a serverless database will allow users to only pay for when the database is in use and free up users from managing the database capacity given that it will automatically scale based on demand. The serverless type is beneficial for this use case given that the metadb is only used within CI services after a PR merge event. Since this module is dealing with live infrastructure and not application changes, there will likely be long periods of time between PR merges. The serverless database starts with one ACU (Aurora Capacity Units) which contains two GB of memory. The use of the database is likely never to scale beyond using two GB of memory so using one ACU will likely be constant.
+The metadb uses a [Aurora Serverless](https://aws.amazon.com/rds/aurora/serverless/) PostgreSQL database type. Essentially a serverless database will allow users to only pay when the database is in use and free up users from managing the database capacity given that it will automatically scale based on demand. The serverless type is beneficial for this use case given that the metadb is only used within CI services after a PR merge event. Since this module is dealing with live infrastructure and not application changes, there will likely be long periods between PR merges. The serverless database starts with one ACU (Aurora Capacity Units) which contains two GB of memory. The use of the database is likely never to scale beyond using two GB of memory so using one ACU will likely be constant.
  
 ### EventBridge
  
-Given EventBridge rules and event deliveries are free, the Step Function execution rule and event delivery to the Lambda Function produces no cost.
+Given that EventBridge rules and event deliveries are free, the Step Function execution rule and event delivery to the Lambda Function produces at no cost.
 
 
 ## Cost
@@ -326,7 +326,7 @@ Given EventBridge rules and event deliveries are free, the Step Function executi
 
 ## CLI Requirements
  
-Requirements below are needed in order to run `terraform apply` within this module. This module contains null resources that run bash scripts to install pip packages, zip directories, and query the RDS database.
+Requirements below are needed to run `terraform apply` within this module. This module contains null resources that run bash scripts to install pip packages, and zip directories, and query the RDS database.
  
 | Name | Version |
 |------|---------|
@@ -541,9 +541,9 @@ Requirements below are needed in order to run `terraform apply` within this modu
  
 # Deploy the Terraform Module
 
-## Prerequistes
+## Prerequisites
  
-For a demo of the module that will cleanup any resources created, see the `Integration` section of this README. The steps below are meant for implementing the module into your current AWS ecosystem.
+For a demo of the module that will clean up any resources created, see the `Integration` section of this README. The steps below are meant for implementing the module into your current AWS ecosystem.
 1. Open a terragrunt `.hcl` or terraform `.tf` file
 2. Create a module block using this repo as the source
 3. Fill in the required module variables
@@ -556,7 +556,7 @@ For a demo of the module that will cleanup any resources created, see the `Integ
 9. Merge the PR
 10. Wait for the approval email to be sent to the voter's email address
 11. Login into the voter's email address and open the approval request email (subject should be something like "${var.step_function_name} - Need Approval for Path: {{path}}")
-12. Choose either to approval or reject the deployment and click on the submit button
+12. Choose either to approve or reject the deployment and click on the submit button
 13. Wait for the deployment build to finish
 14. Verify that the Terraform changes have been deployed
 
@@ -569,12 +569,12 @@ The following tools are required:
 - [git](https://github.com/git/git)
 - [docker](https://docs.docker.com/get-docker/)
 
-The steps below will setup a testing Docker environment for running tests.
+The steps below will set up a testing Docker environment for running tests.
 
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
 3. Ensure that the environment variables from the `docker-compose.yml` file's `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/integration/variables.tf` files.
-4. Run `docker-compose run --rm unit /bin/bash` to setup a docker environment for unit testing or run `docker-compose run --rm integration /bin/bash` to setup a docker environment for integration testing. The command will create an interactive shell within the docker container.
+4. Run `docker-compose run --rm unit /bin/bash` to set up a docker environment for unit testing or run `docker-compose run --rm integration /bin/bash` to set up a docker environment for integration testing. The command will create an interactive shell within the docker container.
 5. Run tests within the `tests` directory
 
 ```
@@ -595,7 +595,7 @@ The steps below will run the GitHub Actions workflow within local Docker contain
 
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
-3. Run the following commmand: `act push`. This will run the GitHub workflow logic for push events
+3. Run the following command: `act push`. This will run the GitHub workflow logic for push events
 4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/integration/variables.tf` files.
 
 ```
@@ -604,8 +604,8 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 ## Pitfalls
 
-- Management of a GitHub Personal Access Token (PAT). User is would need to refresh the GitHub token value when the expiration date is close.
-  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration? User would specify a pre-existing machine user or the module can create a machine user (would require a TF local-exec script to create the user).
+- Management of a GitHub Personal Access Token (PAT). The user is would need to refresh the GitHub token value when the expiration date is close.
+  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
 
 # TODO:
  
@@ -615,7 +615,7 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Create a feature for handling migrated terragrunt directories using git diff commands / tf state pull
 - [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
 - [ ] Use AWS SQS with Exactly-Once Processing to create a queue of pr tf plan tasks to run
-  - User can then set a time range (such as after hours) that the PR plans are runned so that the plan tasks are not runned for every PR update event
+  - User can then set a time range (such as after hours) that the PR plans are run so that the plan tasks are not run for every PR update event
 
 ### Improvements:
 
@@ -623,15 +623,16 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 ## Think About...
 - Decouple Docker runner image and place into a separate repository
-  - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage it's own version of the docker image 
-  - Would require docker scripts to be cloud agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api that uses HTTPS
-- Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is because if the common directories between the PR and the running deployment stack are changed within the  deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
-- dynamically create pr-plan and create deploy stack task IAM roles for each AWS-account to isolate task's blast radious from other AWS accounts
+  - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
+  - Would require docker scripts to be cloud-agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
+- Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
+- dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
 
 # TODO:
 - change deploy_role_arn to apply_role_arn
 - add scan_type read me docs
 - add ### ECS section of readme
 - add readme section #Commit Statuses describing all commit statuses and data included
+- create a standardized way of referencing readme sections (``, "", #)
 # TODAY
 - ensure all unit tests pass
