@@ -10,7 +10,7 @@
  
 Before getting into how the entire module works, we'll dive into the proposed solution to the problem and how it boils down to a specific piece of the CI pipeline. As mentioned above, the `terragrunt run-all` command will produce an inaccurate dependency value for child directories that depend on parent directories that haven't been applied yet. If all parent dependencies were applied beforehand, the dependency value within the child Terraform plan would then be valid. So what if we created a component of a CI pipeline that detects all dependency paths that include changes, runs a separate approval flow for each of those paths, and then runs an approval flow for the child path? This will ensure that every `terragrunt plan` command contains valid dependency values.
  
-This module includes two different approaches to detecting changes which we will call "graph scan" and "plan scan". The scan type can be toggled via the `create_deploy_stack_scan_type` Terraform variable. The graph scan will initially use the `git diff` command to collect directories that contain .tf or .hcl file changes. Using mapping of the terragrunt directories and their associated dependency list, the script will recursively collect directories that contain dependency changes. The plan scan approach will run the command `terragrunt run-all plan -detailed-exitcode` (command is shortened to include only relevant arguments). The `terragrunt run-all plan` portion will traverse from the root terragrunt directory down to every child Terragrunt directory. It will then run `terraform plan -detailed-exitcode` within each directory and output the [exitcode](https://www.terraform.io/cli/commands/plan#detailed-exitcode) that represents whether the plan contains changes or not. If the directory does contain changes, the directory and its associated dependencies that also have changed will be collected. This excludes dependencies that are unchanged but upstream from changed directories. For example, consider the following directory dependency tree:
+This module includes two different approaches to detecting changes which we will call "graph scan" and "plan scan". The scan type can be toggled via the `create_deploy_stack_scan_type` Terraform variable. The `graph` scan will initially use the `git diff` command to collect directories that contain .tf or .hcl file changes. Using mapping of the terragrunt directories and their associated dependency list, the script will recursively collect directories that contain dependency changes. The `plan` scan approach will run the command `terragrunt run-all plan -detailed-exitcode` (command is shortened to include only relevant arguments). The `terragrunt run-all plan` portion will traverse from the root terragrunt directory down to every child Terragrunt directory. It will then run `terraform plan -detailed-exitcode` within each directory and output the [exitcode](https://www.terraform.io/cli/commands/plan#detailed-exitcode) that represents whether the plan contains changes or not. If the directory does contain changes, the directory and its associated dependencies that also have changed will be collected. This excludes dependencies that are unchanged but upstream from changed directories. For example, consider the following directory dependency tree:
 
 ```
 dev/vpc
@@ -36,13 +36,13 @@ After all directories and their associated dependencies are gathered, they are p
 
     If the Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#5). In addition to the ECS task(s), the Lambda Function will check if there's a deployment flow in progress and add the check to the PR's commit status. 
 
-    If the Github event was a merged PR, an ECS task named Create Deploy Stack will be run.
+    If the Github event was a merged PR, an ECS task named create deploy stack will be run.
 
 4. The Lambda Function will load an AWS System Manager Parameter Store value reference as `merge_lock` that will contain the PR ID of the deployment in progress or `none` if there isn't any in progress. Merging will be locked until the deployment flow is done. Once the deployment flow is finished, the downstream Lambda Function (see #7) will reset the parameter value.
 
-    `**NOTE The PR committer will have to create another commit once the merge lock status is unlocked to get an updated merge lock commit status. **`
+    `**NOTE: The PR committer will have to create another commit once the merge lock status is unlocked to get an updated merge lock commit status. **`
 
-5. The ECS task will run a plan on the Terragrunt directory. The task will upload a commit status displaying if the plan command was successfully executed or not. (See section ##Commit Statuses for more info on commit statuses created in this module).
+5. The ECS task will run a plan on the Terragrunt directory. This will output the Terraform plan to the CloudWatch logs for users to see what resources are proposed to be created, modified, and/or deleted.
 
 6. The task will overwrite the current merge lock value with the associated PR ID. Next, the task will scan the trunk branch for changes made from the PR. The task will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the task will invoke the #7 Lambda Function.
  
@@ -59,7 +59,14 @@ After all directories and their associated dependencies are gathered, they are p
 11. After every Step Function execution, a Cloudwatch event rule will invoke the `trigger_sf` Lambda Function mentioned in step #7. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. If the `Success` task of the Step Function was successful, the updated status will be `succeeded` and if the `Reject` task was successful, the updated status will be `failed`.
 
     The Lambda Function will then repeat the same process as mentioned in step #7 until there are no records that are waiting to be run with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform-related PRs to be merged.
-  
+
+## Commit Statuses
+
+Each ECS tasks with the addition of the merge lock, will be available to send commit statuses displaying the current state of the task. The commit statuses can be toggled via the `var.commit_status_config` variable or by manually editing the actual configuration stored on AWS System Manager Parameter Store.
+
+The each of the ECS task-related commit statuses will link to the task's associated AWS CloudWatch Log Stream. If calling service of the task failed to configure and run the task, the calling service's page or log link will be used.
+
+`** NOTE: Permissions for users to access the log streams is not managed via this module **`
 ### Input
  
 Each execution is passed a JSON input that contains record attributes that will help configure the tasks within the Step Function. A sample JSON input will look like the following:
@@ -147,7 +154,7 @@ Each execution is passed a JSON input that contains record attributes that will 
 Let us say a PR introduces a new provider and resource block. The PR is merged and the deployment associated with the new provider resource succeeds. For some reason, a downstream deployment fails and the entire PR needs to be reverted. The revert PR is created and merged. The directory containing the new provider resource will be non-existent within the revert PR although the terraform state file associated with the directory will still contain the new provider resources. Given that the provider block and its associated provider credentials are gone, Terraform will output an error when trying to initialize the directory within the deployment flow. This type of scenario is also referenced in this [StackOverflow post](https://stackoverflow.com/a/57829202/12659025).
  
 To handle this scenario, the CI pipeline will document which directories define new provider resources within the metadb. After every deployment, any new provider resources that were deployed will also be documented. If any deployment flow fails, the CI pipeline will start Step Function executions for every directory that contains new providers with `-target` flags to destroy the new provider resources. To see it in action, run the [test_rollback_providers.py](./tests/integration/test_rollback_providers.py) test.
- 
+
 ## Infrastructure Repository Requirements
  
 - Terraform files can be present but they must be referenced by Terragrunt configurations for them to be detected by the CI workflow
@@ -191,6 +198,8 @@ It would seem like CodePipeline would be the go-to AWS service for hosting the d
 The AWS Lambda free tier includes one million free requests per month and 400,000 GB seconds of computing time per month. Given the use of the Lambda Functions are revolved around infrastructure changes, the total amount of invocations will likely be minimal and will probably chip away only a tiny fraction of the free tier allocation.
  
 ### ECS
+
+AWS ECS Fargate does not have a free tier. The cost of running the tasks will depend on the resource configurations and duration of the tasks. Each of tasks's CPU, memory, and storage capacity can be declare within the module and should be tuned to your needs. It's important to consider having a larger memory capacity for the create deploy stack task given the task is running queries on the metadb that loads the query results into memory. The terra run apply tasks does run an insert query but doesn't require larger resources. See Terraform's recommendations [here](https://www.terraform.io/enterprise/system-overview/capacity).
  
 ### Step Function
 
@@ -630,9 +639,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 # TODO:
 - change deploy_role_arn to apply_role_arn
-- add scan_type read me docs
-- add ### ECS section of readme
-- add readme section #Commit Statuses describing all commit statuses and data included
-- create a standardized way of referencing readme sections (``, "", #)
 # TODAY
 - ensure all unit tests pass
+- run grammarly check on readme
