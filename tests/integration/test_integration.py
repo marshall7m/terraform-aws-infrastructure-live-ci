@@ -71,7 +71,7 @@ class Integration:
         tmp_path_factory,
         tf_destroy_commit_ids,
     ):
-        """Creates the PR used testing the CI flow. Current implementation creates all PR changes within one commit."""
+        """Creates the PR used for testing the CI flow. Current implementation creates all PR changes within one commit."""
         if "revert_ref" not in case_param:
             base_commit = repo.get_branch(mut_output["base_branch"])
             head_ref = repo.create_git_ref(
