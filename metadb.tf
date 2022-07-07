@@ -55,8 +55,8 @@ locals {
           value = { stringValue = account.plan_role_arn }
         },
         {
-          name  = "deploy_role_arn"
-          value = { stringValue = account.deploy_role_arn }
+          name  = "apply_role_arn"
+          value = { stringValue = account.apply_role_arn }
         }
       ]
     ]), "\"", "\\\"")

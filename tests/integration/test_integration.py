@@ -200,7 +200,7 @@ class Integration:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                SELECT account_name, account_path, deploy_role_arn
+                SELECT account_name, account_path, apply_role_arn
                 FROM {mut_output["metadb_schema"]}.account_dim
                 """
                 )
@@ -238,7 +238,7 @@ class Integration:
                         "containerOverrides": [
                             {
                                 "name": mut_output["ecs_terra_run_task_container_name"],
-                                "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve'.split(
+                                "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["apply_role_arn"]} -auto-approve'.split(
                                     " "
                                 ),
                                 "environment": [

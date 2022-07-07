@@ -116,7 +116,7 @@ resource "aws_sfn_state_machine" "this" {
       "Approval Results" = {
         Choices = [
           {
-            Next         = "Deploy"
+            Next         = "Apply"
             StringEquals = "approve"
             Variable     = "$.Action"
           },
@@ -128,7 +128,7 @@ resource "aws_sfn_state_machine" "this" {
         ]
         Type = "Choice"
       },
-      "Deploy" = {
+      "Apply" = {
         Next = "Success"
         Parameters = {
           Cluster        = aws_ecs_cluster.this.arn
@@ -149,7 +149,7 @@ resource "aws_sfn_state_machine" "this" {
                   local.common_terra_run_env_vars, [
                     {
                       "Name"    = "TG_COMMAND"
-                      "Value.$" = "$.deploy_command"
+                      "Value.$" = "$.apply_command"
                     },
                     {
                       "Name"    = "EXECUTION_ID"
@@ -157,7 +157,7 @@ resource "aws_sfn_state_machine" "this" {
                     },
                     {
                       "Name"    = "ROLE_ARN"
-                      "Value.$" = "$.deploy_role_arn"
+                      "Value.$" = "$.apply_role_arn"
                     },
                     {
                       "Name"    = "CFG_PATH"

@@ -344,7 +344,7 @@ module "apply_role" {
       sid       = "CrossAccountTerraformApplyAccess"
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
-      resources = var.account_parent_cfg[*].deploy_role_arn
+      resources = var.account_parent_cfg[*].apply_role_arn
     },
     {
       effect = "Allow"

@@ -22,7 +22,7 @@ module "mut_infrastructure_live_ci" {
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::123456789101:role/tf-plan"
-      deploy_role_arn     = "arn:aws:iam::123456789101:role/tf-apply"
+      apply_role_arn      = "arn:aws:iam::123456789101:role/tf-apply"
     }
   ]
   metadb_ci_password          = "test-ci"

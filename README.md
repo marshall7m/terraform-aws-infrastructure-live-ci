@@ -2,48 +2,47 @@
 
 <!-- toc -->
 
-  * [Problem](#problem)
-  * [Solution](#solution)
-  * [Design](#design)
-  * [Commit Statuses](#commit-statuses)
-  * [Step Function Input](#step-function-input)
-  * [Rollback New Provider Resources](#rollback-new-provider-resources)
-  * [Infrastructure Repository Requirements](#infrastructure-repository-requirements)
-  * [Why AWS Step Function for deployment flow?](#why-aws-step-function-for-deployment-flow)
-    + [Step Function](#step-function)
-      - [Pros](#pros)
-    + [CodePipeline](#codepipeline)
-      - [Pros](#pros-1)
-      - [Cons](#cons)
-  * [Pricing](#pricing)
-    + [Lambda](#lambda)
-    + [ECS](#ecs)
-    + [Step Function](#step-function-1)
-    + [RDS](#rds)
-    + [EventBridge](#eventbridge)
-  * [Cost](#cost)
-  * [Requirements](#requirements)
-  * [Providers](#providers)
-  * [Modules](#modules)
-  * [Resources](#resources)
-  * [Inputs](#inputs)
-  * [Outputs](#outputs)
-  * [Deploy the Terraform Module](#deploy-the-terraform-module)
-    + [CLI Requirements](#cli-requirements)
-    + [Steps](#steps)
-  * [Testing](#testing)
-    + [Docker Environment](#docker-environment)
-      - [Requirements](#requirements-1)
-      - [Steps](#steps-1)
-    + [Local GitHub Actions Workflow](#local-github-actions-workflow)
-      - [Requirements](#requirements-2)
-      - [Steps](#steps-2)
-  * [Pitfalls](#pitfalls)
+- [Problem](#problem)
+- [Solution](#solution)
+- [Design](#design)
+- [Commit Statuses](#commit-statuses)
+- [Step Function Input](#step-function-input)
+- [Rollback New Provider Resources](#rollback-new-provider-resources)
+- [Infrastructure Repository Requirements](#infrastructure-repository-requirements)
+- [Why AWS Step Function for deployment flow?](#why-aws-step-function-for-deployment-flow)
+  * [Step Function](#step-function)
+    + [Pros](#pros)
+  * [CodePipeline](#codepipeline)
+    + [Pros](#pros-1)
+    + [Cons](#cons)
+- [Pricing](#pricing)
+  * [Lambda](#lambda)
+  * [ECS](#ecs)
+  * [Step Function](#step-function-1)
+  * [RDS](#rds)
+  * [EventBridge](#eventbridge)
+- [Cost](#cost)
+- [Requirements](#requirements)
+- [Providers](#providers)
+- [Modules](#modules)
+- [Resources](#resources)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+- [Deploy the Terraform Module](#deploy-the-terraform-module)
+  * [CLI Requirements](#cli-requirements)
+  * [Steps](#steps)
+- [Testing](#testing)
+  * [Docker Environment](#docker-environment)
+    + [Requirements](#requirements-1)
+    + [Steps](#steps-1)
+  * [Local GitHub Actions Workflow](#local-github-actions-workflow)
+    + [Requirements](#requirements-2)
+    + [Steps](#steps-2)
+- [Pitfalls](#pitfalls)
 - [TODO:](#todo)
-    + [Features:](#features)
-    + [Improvements:](#improvements)
+  * [Features:](#features)
+  * [Improvements:](#improvements)
   * [Think About...](#think-about)
-- [TODO:](#todo-1)
 
 <!-- tocstop -->
 
@@ -101,7 +100,7 @@ After all directories and their associated dependencies are gathered, they are p
 
 10. When a voter approves/rejects a deployment, the Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a task success token back to the associated Step Function execution.
 
-11. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will be run and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task will run the record's associated `deploy_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified, and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. The "Rollback New Provider Resources" section below will explain how the `new_resources` attribute will be used. 
+11. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will be run and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task will run the record's associated `apply_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified, and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. The "Rollback New Provider Resources" section below will explain how the `new_resources` attribute will be used. 
  
 11. After every Step Function execution, a Cloudwatch event rule will invoke the `trigger_sf` Lambda Function mentioned in step #7. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. If the `Success` task of the Step Function was successful, the updated status will be `succeeded` and if the `Reject` task was successful, the updated status will be `failed`.
 
@@ -132,7 +131,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  ],
  "status": "running",
  "plan_command": "terragrunt plan --terragrunt-working-dir directory_dependency/dev-account/us-west-2/env-one/baz",
- "deploy_command": "terragrunt apply --terragrunt-working-dir directory_dependency/dev-account/us-west-2/env-one/baz -auto-approve",
+ "apply_command": "terragrunt apply --terragrunt-working-dir directory_dependency/dev-account/us-west-2/env-one/baz -auto-approve",
  "new_providers": ["registry.terraform.io/hashicorp/null"],
  "new_resources": ["null_resource.this"],
  "account_name": "dev",
@@ -148,7 +147,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  "rejection_voters": [],
  "min_rejection_count": 1,
  "plan_role_arn": "arn:aws:iam::111111111111:role/terraform-aws-infrastructure-live-ci-plan",
- "deploy_role_arn": "arn:aws:iam::111111111111:role/terraform-aws-infrastructure-live-ci-deploy"
+ "apply_role_arn": "arn:aws:iam::111111111111:role/terraform-aws-infrastructure-live-ci-apply"
 }
 ```
  
@@ -172,7 +171,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  
 `plan_command`: Terragrunt command used to display the Terraform plan within the Step Function `Plan` task
  
-`deploy_command`: Terragrunt command used to deploy the Terraform configurations within the Step Function `Deploy` task
+`apply_command`: Terragrunt command used to apply the Terraform configurations within the Step Function `Apply` task
  
 `new_providers`: List of new providers introduced by the pull request (See section `Rollbacks` for more info)
  
@@ -194,7 +193,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  
 `plan_role_arn`: AWS IAM role ARN used to run `plan_command`
  
-`deploy_role_arn`: AWS IAM role ARN used to run `deploy_command`
+`apply_role_arn`: AWS IAM role ARN used to run `apply_command`
  
 ## Rollback New Provider Resources
  
@@ -489,7 +488,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_account_parent_cfg"></a> [account\_parent\_cfg](#input\_account\_parent\_cfg) | AWS account-level configurations.<br>  - name: AWS account name (e.g. dev, staging, prod, etc.)<br>  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)<br>  - voters: List of email addresses that will be sent approval request to<br>  - min\_approval\_count: Minimum approval count needed for CI pipeline to run deployment<br>  - min\_rejection\_count: Minimum rejection count needed for CI pipeline to decline deployment<br>  - dependencies: List of AWS account names that this account depends on before running any of it's deployments <br>    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),<br>      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a<br>      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.<br>  - plan\_role\_arn: IAM role ARN within the account that the plan build will assume<br>    - **CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised**<br>  - deploy\_role\_arn: IAM role ARN within the account that the deploy build will assume<br>    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before\_hook block that<br>      conditionally defines that assume\_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,<br>      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then<br>      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles. | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>    plan_role_arn       = string<br>    deploy_role_arn     = string<br>  }))</pre> | n/a | yes |
+| <a name="input_account_parent_cfg"></a> [account\_parent\_cfg](#input\_account\_parent\_cfg) | AWS account-level configurations.<br>  - name: AWS account name (e.g. dev, staging, prod, etc.)<br>  - path: Parent account directory path relative to the repository's root directory path (e.g. infrastructure-live/dev-account)<br>  - voters: List of email addresses that will be sent approval request to<br>  - min\_approval\_count: Minimum approval count needed for CI pipeline to run deployment<br>  - min\_rejection\_count: Minimum rejection count needed for CI pipeline to decline deployment<br>  - dependencies: List of AWS account names that this account depends on before running any of it's deployments <br>    - For example, if the `dev` account depends on the `shared-services` account and both accounts contain infrastructure changes within a PR (rare scenario but possible),<br>      all deployments that resolve infrastructure changes within `shared-services` need to be applied before any `dev` deployments are executed. This is useful given a<br>      scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.<br>  - plan\_role\_arn: IAM role ARN within the account that the plan build will assume<br>    - **CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised**<br>  - apply\_role\_arn: IAM role ARN within the account that the deploy build will assume<br>    - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before\_hook block that<br>      conditionally defines that assume\_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,<br>      define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then<br>      within the `apply_role_arn` attribute here, define a IAM role that can assume both of these roles. | <pre>list(object({<br>    name                = string<br>    path                = string<br>    voters              = list(string)<br>    min_approval_count  = number<br>    min_rejection_count = number<br>    dependencies        = list(string)<br>    plan_role_arn       = string<br>    apply_role_arn      = string<br>  }))</pre> | n/a | yes |
 | <a name="input_api_stage_name"></a> [api\_stage\_name](#input\_api\_stage\_name) | API deployment stage name | `string` | `"prod"` | no |
 | <a name="input_approval_request_sender_email"></a> [approval\_request\_sender\_email](#input\_approval\_request\_sender\_email) | Email address to use for sending approval requests | `string` | n/a | yes |
 | <a name="input_base_branch"></a> [base\_branch](#input\_base\_branch) | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
@@ -666,8 +665,8 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - Management of a GitHub Personal Access Token (PAT). The user is would need to refresh the GitHub token value when the expiration date is close.
   - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
 
-# TODO:
- 
+## TODO:
+- change apply_role_arn to apply_role_arn
 ### Features:
 
 - [ ] Create a feature for handling deleted terragrunt folder using git diff commands
@@ -680,13 +679,11 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template
 
-## Think About...
+### Think About...
+
 - Decouple Docker runner image and place into a separate repository
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
   - Would require docker scripts to be cloud-agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
 - Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
 - dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
-
-# TODO:
-- change deploy_role_arn to apply_role_arn
 

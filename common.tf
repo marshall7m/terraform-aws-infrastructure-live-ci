@@ -5,7 +5,7 @@ locals {
     PrPlan            = true
     CreateDeployStack = false
     Plan              = false
-    Deploy            = false
+    Apply             = false
     Execution         = true
   })
   commit_status_config_name = "${var.prefix}-commit-status-config"

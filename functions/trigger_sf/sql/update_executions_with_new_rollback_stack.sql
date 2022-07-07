@@ -22,7 +22,7 @@ INSERT INTO executions (
     cfg_path,
     "status",  -- noqa: L059
     plan_command,
-    deploy_command,
+    apply_command,
     new_providers,
     new_resources,
     account_name,
@@ -34,7 +34,7 @@ INSERT INTO executions (
     approval_voters,
     rejection_voters,
     plan_role_arn,
-    deploy_role_arn,
+    apply_role_arn,
     cfg_deps
 )
 SELECT
@@ -47,7 +47,7 @@ SELECT
     cfg_path,
     "status",  -- noqa: L059
     plan_command,
-    deploy_command,
+    apply_command,
     new_providers,
     new_resources,
     account_name,
@@ -59,7 +59,7 @@ SELECT
     approval_voters,
     rejection_voters,
     plan_role_arn,
-    deploy_role_arn,
+    apply_role_arn,
     -- gets cfg dependencies that depend on cfg_path 
     -- by reversing the dependency tree
     ARRAY(
@@ -88,7 +88,7 @@ FROM (
         min_approval_count,
         min_rejection_count,
         plan_role_arn,
-        deploy_role_arn,
+        apply_role_arn,
         ARRAY[]::TEXT[] AS approval_voters,  --noqa: L013, L019
         ARRAY[]::TEXT[] AS rejection_voters,  --noqa: L013, L019
         'run-rollback-' || pr_id || '-' || substring(
@@ -101,9 +101,9 @@ FROM (
             new_resources
         ) || ' -destroy' AS plan_command,
         'terragrunt destroy --terragrunt-working-dir ' || cfg_path
-        || ' --terragrunt-iam-role ' || deploy_role_arn || target_resources(
+        || ' --terragrunt-iam-role ' || apply_role_arn || target_resources(
             new_resources
-        ) || ' -auto-approve' AS deploy_command
+        ) || ' -auto-approve' AS apply_command
     FROM executions
     WHERE commit_id = '{commit_id}'
           AND cardinality(new_resources) > 0

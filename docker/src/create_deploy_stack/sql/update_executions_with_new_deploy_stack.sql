@@ -19,10 +19,10 @@ INSERT INTO executions (
     rejection_voters,
     min_rejection_count,
     plan_role_arn,
-    deploy_role_arn,
+    apply_role_arn,
     pr_id,
     plan_command,
-    deploy_command
+    apply_command
 )
 SELECT  -- noqa: L034, L036
     'run-' || {pr_id} || '-' || substring('{commit_id}', 1, 4) || '-' || a.account_name || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-' || substr(md5(random()::text), 0, 4) AS execution_id,
@@ -44,12 +44,12 @@ SELECT  -- noqa: L034, L036
     array[]::TEXT[],  -- noqa: L027, L019
     a.min_rejection_count,
     a.plan_role_arn,
-    a.deploy_role_arn,
+    a.apply_role_arn,
     {pr_id},  -- noqa: L019
     'terragrunt plan --terragrunt-working-dir ' || stack.cfg_path
     || ' --terragrunt-iam-role ' || a.plan_role_arn,
     'terragrunt apply --terragrunt-working-dir ' || stack.cfg_path
-    || ' --terragrunt-iam-role ' || a.deploy_role_arn || ' -auto-approve'
+    || ' --terragrunt-iam-role ' || a.apply_role_arn || ' -auto-approve'
 FROM (
     SELECT
         account_dim.account_name,
@@ -59,7 +59,7 @@ FROM (
         account_dim.min_approval_count,
         account_dim.min_rejection_count,
         account_dim.plan_role_arn,
-        account_dim.deploy_role_arn
+        account_dim.apply_role_arn
     FROM account_dim
     WHERE account_dim.account_path = '{account_path}'
 ) AS a,  -- noqa: L025

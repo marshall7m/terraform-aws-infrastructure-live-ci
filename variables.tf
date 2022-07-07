@@ -18,11 +18,11 @@ AWS account-level configurations.
       scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.
   - plan_role_arn: IAM role ARN within the account that the plan build will assume
     - **CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised**
-  - deploy_role_arn: IAM role ARN within the account that the deploy build will assume
+  - apply_role_arn: IAM role ARN within the account that the deploy build will assume
     - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before_hook block that
       conditionally defines that assume_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,
       define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then
-      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles.
+      within the `apply_role_arn` attribute here, define a IAM role that can assume both of these roles.
 EOF
   type = list(object({
     name                = string
@@ -32,7 +32,7 @@ EOF
     min_rejection_count = number
     dependencies        = list(string)
     plan_role_arn       = string
-    deploy_role_arn     = string
+    apply_role_arn      = string
   }))
 }
 
