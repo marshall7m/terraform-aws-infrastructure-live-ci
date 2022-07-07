@@ -37,7 +37,7 @@ class TestDeployPR(test_integration.Integration):
 class TestRevertPRWithoutProviderRollback(test_integration.Integration):
     """
     Case will merge a PR that will revert the changes from the upstream case's PR.
-    This case's associated create deploy stack Codebuild is expected to fail given
+    This case's associated create deploy stack task is expected to fail given
     that the reversion of the PR will remove not only the new dummy resource block
     but also it's respective dummy provider block that Terraform needs in order to destroy
     the dummy resource. The task is specifically expected to fail when SCAN_TYPE is set to `plan`
