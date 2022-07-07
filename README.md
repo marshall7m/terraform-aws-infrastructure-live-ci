@@ -44,7 +44,6 @@
     + [Improvements:](#improvements)
   * [Think About...](#think-about)
 - [TODO:](#todo-1)
-- [TODAY](#today)
 
 <!-- tocstop -->
 
@@ -69,7 +68,7 @@ dev/vpc
 ```
 if `dev/rds` and `dev/ec2` have changes, only `dev/rds` and `dev/ec2` will be collected.
 
-After all directories and their associated dependencies are gathered, they are put into separate database records that will then be used by a downstream Lambda Function. The Lambda Function will determine the order in which the directories are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./docker/src/create_deploy_stack/create_deploy_stack.py).
+After all directories and their associated dependencies are gathered, they are put into separate database records that a downstream Lambda Function will then use. The Lambda Function will determine the order in which the directories are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./docker/src/create_deploy_stack/create_deploy_stack.py).
  
  
 ## Design
@@ -110,11 +109,11 @@ After all directories and their associated dependencies are gathered, they are p
 
 ## Commit Statuses
 
-Each ECS tasks with the addition of the merge lock, will be available to send commit statuses displaying the current state of the task. The commit statuses can be toggled via the `var.commit_status_config` variable or by manually editing the actual configuration stored on AWS System Manager Parameter Store.
+Each ECS task with the addition of the merge lock will be available to send commit statuses displaying the current state of the task. The commit statuses can be toggled via the `var.commit_status_config` variable or by manually editing the actual configuration stored on AWS System Manager Parameter Store.
 
-The each of the ECS task-related commit statuses will link to the task's associated AWS CloudWatch Log Stream. If calling service of the task failed to configure and run the task, the calling service's page or log link will be used.
+Each of the ECS task-related commit statuses will link to the task's associated AWS CloudWatch Log Stream. If the calling service of the task failed to configure and run the task, the calling service's page or log link will be used.
 
-`** NOTE: Permissions for users to access the log streams is not managed via this module **`
+`** NOTE: Permissions for users to access the log streams are not managed via this module **`
 ## Step Function Input
  
 Each execution is passed a JSON input that contains record attributes that will help configure the tasks within the Step Function. A sample JSON input will look like the following:
@@ -247,7 +246,7 @@ The AWS Lambda free tier includes one million free requests per month and 400,00
  
 ### ECS
 
-AWS ECS Fargate does not have a free tier. The cost of running the tasks will depend on the resource configurations and duration of the tasks. Each of tasks's CPU, memory, and storage capacity can be declare within the module and should be tuned to your needs. It's important to consider having a larger memory capacity for the create deploy stack task given the task is running queries on the metadb that loads the query results into memory. The terra run apply tasks does run an insert query but doesn't require larger resources. See Terraform's recommendations [here](https://www.terraform.io/enterprise/system-overview/capacity).
+AWS ECS Fargate does not have a free tier. The cost of running the tasks will depend on the resource configurations and duration of the tasks. Each of the tasks' CPU, memory, and storage capacity can be declared within the module and should be tuned to your needs. It's important to consider having a larger memory capacity for the create deploy stack task given the task is running queries on the metadb that loads the query results into memory. The terra run apply tasks do run an insert query but don't require larger resources. See Terraform's recommendations [here](https://www.terraform.io/enterprise/system-overview/capacity).
  
 ### Step Function
 
@@ -690,6 +689,4 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 # TODO:
 - change deploy_role_arn to apply_role_arn
-# TODAY
-- ensure all unit tests pass
-- run grammarly check on readme
+
