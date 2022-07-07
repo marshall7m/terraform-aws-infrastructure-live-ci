@@ -2,17 +2,22 @@ import pytest
 from psycopg2 import sql
 from unittest.mock import patch
 import os
+import json
 import logging
 from tests.helpers.utils import insert_records
+from functions.trigger_sf import lambda_function
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-@patch("functions.trigger_sf.lambda_function.sf")
 @patch.dict(
     os.environ,
     {
+        "REPO_FULL_NAME": "user/repo",
+        "AWS_REGION": "us-west-2",
+        "GITHUB_TOKEN_SSM_KEY": "mock-ssm-token-key",
+        "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
         "METADB_CLUSTER_ARN": "mock",
         "METADB_SECRET_ARN": "mock",
         "METADB_NAME": "mock",
@@ -116,8 +121,13 @@ log.setLevel(logging.DEBUG)
         ),
     ],
 )
+@patch("requests.post")
+@patch("functions.trigger_sf.lambda_function.ssm")
+@patch("functions.trigger_sf.lambda_function.sf")
 def test__execution_finished_status_update(
-    mock_client,
+    mock_sf,
+    mock_ssm,
+    mock_post,
     cur,
     conn,
     records,
@@ -129,21 +139,23 @@ def test__execution_finished_status_update(
     Test to ensure that the finished execution's respective status was updated and
     the function handles all possible execution statuses.
     """
-    from functions.trigger_sf import lambda_function
+    mock_ssm.get_parameter.return_value = {
+        "Parameter": {"Value": json.dumps({"Execution": True})}
+    }
 
     cur = conn.cursor()
-    mock_client.list_executions.return_value = {
+    mock_sf.list_executions.return_value = {
         "executions": [
             {"name": record["execution_id"], "executionArn": "mock-arn"}
             for record in records
             if record["status"] != "waiting"
         ]
     }
-    mock_client.stop_execution.return_value = None
+    mock_sf.stop_execution.return_value = None
     records = insert_records(conn, "executions", records, enable_defaults=True)
 
     try:
-        lambda_function._execution_finished(cur, execution)
+        lambda_function._execution_finished(cur, execution, 000000000000)
     except lambda_function.ClientException as e:
         # expects lambda to error if execution was a rollback and wasn't successful
         if not execution["is_rollback"] and execution["status"] not in [
@@ -185,6 +197,7 @@ def test__execution_finished_status_update(
 @patch.dict(
     os.environ,
     {
+        "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
         "METADB_CLUSTER_ARN": "mock",
         "METADB_SECRET_ARN": "mock",
         "METADB_NAME": "mock",
@@ -333,9 +346,8 @@ def test__execution_finished_status_update(
         ),
     ],
 )
-def test__start_executions(mock_client, conn, records, expected_running_ids):
+def test__start_executions(mock_sf, conn, records, expected_running_ids):
     """Test to ensure that the Lambda Function handles account and directory level dependencies before starting any Step Function executions"""
-    from functions.trigger_sf import lambda_function
 
     cur = conn.cursor()
     records = insert_records(conn, "executions", records, enable_defaults=True)
@@ -349,7 +361,7 @@ def test__start_executions(mock_client, conn, records, expected_running_ids):
     assert all(path in res for path in expected_running_ids) is True
 
     log.info("Assert correct number of Step Function execution were started")
-    assert mock_client.start_execution.call_count == len(expected_running_ids)
+    assert mock_sf.start_execution.call_count == len(expected_running_ids)
 
 
 @pytest.mark.parametrize(
@@ -372,6 +384,7 @@ def test__start_executions(mock_client, conn, records, expected_running_ids):
 @patch.dict(
     os.environ,
     {
+        "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
         "METADB_CLUSTER_ARN": "mock",
         "METADB_SECRET_ARN": "mock",
         "METADB_NAME": "mock",
@@ -380,7 +393,7 @@ def test__start_executions(mock_client, conn, records, expected_running_ids):
     },
     clear=True,
 )
-def test_merge_lock(mock_client, conn, records, expect_unlocked_merge_lock):
+def test_merge_lock(mock_ssm, conn, records, expect_unlocked_merge_lock):
     """Test to ensure that the AWS System Manager Parameter Store merge lock value was reset to none if all executions within the metadb are finished"""
     from functions.trigger_sf.lambda_function import lambda_handler
 
@@ -389,7 +402,7 @@ def test_merge_lock(mock_client, conn, records, expect_unlocked_merge_lock):
     lambda_handler({}, {})
     log.info("Assert merge lock value")
     if expect_unlocked_merge_lock:
-        assert mock_client.put_parameter.called_once_with(
+        assert mock_ssm.put_parameter.called_once_with(
             Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
             Value="none",
             Type="String",
