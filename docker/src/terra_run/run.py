@@ -6,8 +6,8 @@ import json
 from typing import List
 import aurora_data_api
 import ast
-from pprint import pformat
 from common.utils import subprocess_run, send_commit_status
+from functions.webhook_receiver.lambda_function import ServerException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -104,14 +104,20 @@ def main() -> None:
     try:
         if os.environ["STATE_NAME"] == "Deploy":
             update_new_resources()
+    except KeyError as e:
+        log.error(e, exc_info=True)
+        ServerException("Env var: `STATE_NAME` is not passed from Step Function")
     except Exception as e:
-        print(e)
+        log.error(e, exc_info=True)
         state = "failure"
 
-    commit_status_config = json.loads(os.environ["COMMIT_STATUS_CONFIG"])
-    log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
-
-    if commit_status_config[os.environ["STATE_NAME"]]:
+    try:
+        send = json.loads(os.environ["COMMIT_STATUS_CONFIG"])[os.environ["STATE_NAME"]]
+    except KeyError:
+        log.error(
+            f"Update SSM parameter for commit status config to include: {os.environ['STATE_NAME']}"
+        )
+    if send:
         send_commit_status(state)
 
 
