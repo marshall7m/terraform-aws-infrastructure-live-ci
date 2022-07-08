@@ -4,9 +4,9 @@ import os
 import json
 from unittest.mock import patch
 import uuid
-import github
 from tests.helpers.utils import dummy_tf_output
 from functions.webhook_receiver.lambda_function import Invoker, lambda_handler
+from tests.unit.conftest import ServerException
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -44,66 +44,6 @@ def pytest_generate_tests(metafunc):
             ],
             indirect=True,
         )
-
-
-class ServerException(Exception):
-    pass
-
-
-@pytest.fixture
-def pr(repo, request):
-    """
-    Creates the PR used for testing the function calls to the GitHub API.
-    Current implementation creates all PR changes within one commit.
-    """
-
-    param = request.param[0]
-    base_commit = repo.get_branch(param["base_ref"])
-    head_ref = repo.create_git_ref(
-        ref="refs/heads/" + param["head_ref"], sha=base_commit.commit.sha
-    )
-    elements = []
-    for filepath, content in param["changes"].items():
-        log.debug(f"Creating file: {filepath}")
-        blob = repo.create_git_blob(content, "utf-8")
-        elements.append(
-            github.InputGitTreeElement(
-                path=filepath, mode="100644", type="blob", sha=blob.sha
-            )
-        )
-
-    head_sha = repo.get_branch(param["head_ref"]).commit.sha
-    base_tree = repo.get_git_tree(sha=head_sha)
-    tree = repo.create_git_tree(elements, base_tree)
-    parent = repo.get_git_commit(sha=head_sha)
-    commit_id = repo.create_git_commit(
-        param.get("commit_message", "Adding test files"), tree, [parent]
-    ).sha
-    head_ref.edit(sha=commit_id)
-
-    log.info("Creating PR")
-    pr = repo.create_pull(
-        title=param.get("title", f"test-{param['head_ref']}"),
-        body=param.get("body", "Test PR"),
-        base=param["base_ref"],
-        head=param["head_ref"],
-    )
-
-    yield {
-        "number": pr.number,
-        "head_commit_id": commit_id,
-        "base_ref": param["base_ref"],
-        "head_ref": param["head_ref"],
-    }
-
-    log.info(f"Removing PR head ref branch: {param['head_ref']}")
-    head_ref.delete()
-
-    log.info(f"Closing PR: #{pr.number}")
-    try:
-        pr.edit(state="closed")
-    except Exception:
-        log.info("PR is merged or already closed")
 
 
 @pytest.fixture
