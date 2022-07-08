@@ -13,7 +13,7 @@ locals {
   terra_run_container_name = "run"
   terra_run_logs_prefix    = "sf"
 
-  private_registry_secret_manager_arn = coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null))
+  private_registry_secret_manager_arn = var.private_registry_auth ? coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null)) : null
 
   ecs_tasks_base_env_vars = [
     {
@@ -78,7 +78,7 @@ module "ecs_execution_role" {
     aws_iam_policy.github_token_ssm_read_access.arn,
     aws_iam_policy.commit_status_config.arn
   ]
-  statements = [var.private_registry_custom_kms_key_arn != null ?
+  statements = compact([var.private_registry_auth ? var.private_registry_custom_kms_key_arn != null ?
     {
       effect = "Allow"
       actions = [
@@ -98,7 +98,7 @@ module "ecs_execution_role" {
         "secretsmanager:GetSecretValue"
       ]
       resources = [local.private_registry_secret_manager_arn]
-    },
+    } : "",
     {
       effect = "Allow"
       actions = [
@@ -106,7 +106,7 @@ module "ecs_execution_role" {
       ]
       resources = [aws_ssm_parameter.scan_type.arn]
     }
-  ]
+  ])
   trusted_services = ["ecs-tasks.amazonaws.com"]
 }
 
