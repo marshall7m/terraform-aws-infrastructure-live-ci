@@ -120,8 +120,7 @@ class CreateStack:
         # recursively searches for the diff directories within the graph
         # dependencies mapping to include chained dependencies
         while len(target_diff_paths) > 0:
-            log.debug("Current diffs list:")
-            log.debug(target_diff_paths)
+            log.debug(f"Current diffs list:\n{target_diff_paths}")
             path = target_diff_paths.pop()
             for cfg_path, cfg_deps in graph_deps.items():
                 if cfg_path == path:
@@ -182,6 +181,9 @@ class CreateStack:
             role_arn: AWS account role used for running Terragrunt commands
         """
 
+        if not os.path.isdir(path):
+            raise ClientException(f"Account path does not exist within repo: {path}")
+
         graph_deps = self.get_graph_deps(path, role_arn)
         log.debug(f"Graph Dependency mapping: \n{pformat(graph_deps)}")
 
@@ -226,13 +228,17 @@ class CreateStack:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                SELECT account_path, plan_role_arn
+                SELECT *
                 FROM account_dim
                 ORDER BY account_name
                 """
                 )
-                accounts = [{"path": r[0], "role": r[1]} for r in cur.fetchall()]
-
+                cols = [desc[0] for desc in cur.description]
+                res = cur.fetchall()
+                log.debug(f"Raw accounts records:\n{res}")
+                accounts = []
+                for account in res:
+                    accounts.append(dict(zip(cols, account)))
                 log.debug(f"Accounts:\n{accounts}")
 
                 if len(accounts) == 0:
@@ -242,15 +248,12 @@ class CreateStack:
                 try:
                     log.info("Getting account stacks")
                     for account in accounts:
-                        log.info(f'Account path: {account["path"]}')
-                        log.debug(f'Account plan role ARN: {account["role"]}')
+                        log.info(f'Account path: {account["account_path"]}')
+                        log.info(f'Account plan role ARN: {account["plan_role_arn"]}')
 
-                        if not os.path.isdir(account["path"]):
-                            raise ClientException(
-                                f'Account path does not exist within repo: {account["path"]}'
-                            )
-
-                        stack = self.create_stack(account["path"], account["role"])
+                        stack = self.create_stack(
+                            account["account_path"], account["plan_role_arn"]
+                        )
 
                         log.debug(f"Stack:\n{stack}")
 
@@ -258,6 +261,21 @@ class CreateStack:
                             log.debug("Stack is empty -- skipping")
                             continue
 
+                        # convert lists to comma-delimitted strings that will
+                        # parsed to TEXT[] within query
+                        stack_values = []
+                        for cfg in stack:
+                            stack_values.append(
+                                str(
+                                    tuple(
+                                        [
+                                            v if type(v) != list else ",".join(v)
+                                            for v in cfg.values()
+                                        ]
+                                    )
+                                )
+                            )
+                        stack_values = ",".join(stack_values)
                         with open(
                             f"{os.path.dirname(os.path.realpath(__file__))}/sql/update_executions_with_new_deploy_stack.sql",
                             "r",
@@ -265,20 +283,21 @@ class CreateStack:
                             query = f.read().format(
                                 pr_id=os.environ["PR_ID"],
                                 commit_id=os.environ["COMMIT_ID"],
-                                account_path=account["path"],
                                 base_ref=os.environ["BASE_REF"],
                                 head_ref=os.environ["HEAD_REF"],
+                                account_name=account["account_name"],
+                                account_path=account["account_path"],
+                                account_deps=",".join(account["account_deps"]),
+                                min_approval_count=account["min_approval_count"],
+                                min_rejection_count=account["min_rejection_count"],
+                                voters=",".join(account["voters"]),
+                                plan_role_arn=account["plan_role_arn"],
+                                apply_role_arn=account["apply_role_arn"],
+                                stack=stack_values,
                             )
                         log.debug(f"Query:\n{query}")
 
-                        # convert lists to comma-delimitted strings that will
-                        # parsed to TEXT[] within query
-                        for cfg in stack:
-                            for k, v in cfg.items():
-                                if type(v) == list:
-                                    cfg.update({k: ",".join(v)})
-
-                        cur.executemany(query, stack)
+                        cur.execute(query)
                 except Exception as e:
                     log.info("Rolling back execution insertions")
                     conn.rollback()

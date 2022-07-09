@@ -25,48 +25,32 @@ INSERT INTO executions (
     apply_command
 )
 SELECT  -- noqa: L034, L036
-    'run-' || {pr_id} || '-' || substring('{commit_id}', 1, 4) || '-' || a.account_name || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-' || substr(md5(random()::text), 0, 4) AS execution_id,
+    'run-' || {pr_id} || '-' || substring('{commit_id}', 1, 4) || '-' || '{account_name}' || '-' || regexp_replace(stack.cfg_path, '.*/', '') || '-' || substr(md5(random()::text), 0, 4) AS execution_id,
     FALSE,
     '{commit_id}',
     '{base_ref}',
     '{head_ref}',
     stack.cfg_path,
-    stack.cfg_deps::TEXT[],
+    string_to_array(stack.cfg_deps, ',')::TEXT[],
     'waiting',
-    stack.new_providers::TEXT[],
+    string_to_array(stack.new_providers, ',')::TEXT[],
     array[]::TEXT[], -- noqa: L027, L019
-    a.account_name,
-    a.account_path,
-    a.account_deps,
-    a.voters,
+    '{account_name}',
+    '{account_path}',
+    string_to_array('{account_deps}', ','),
+    string_to_array('{voters}', ','),
     array[]::TEXT[],  -- noqa: L027, L019
-    a.min_approval_count,
+    {min_approval_count},
     array[]::TEXT[],  -- noqa: L027, L019
-    a.min_rejection_count,
-    a.plan_role_arn,
-    a.apply_role_arn,
+    {min_rejection_count},
+    '{plan_role_arn}',
+    '{apply_role_arn}',
     {pr_id},  -- noqa: L019
     'terragrunt plan --terragrunt-working-dir ' || stack.cfg_path
-    || ' --terragrunt-iam-role ' || a.plan_role_arn,
+    || ' --terragrunt-iam-role ' || '{plan_role_arn}',
     'terragrunt apply --terragrunt-working-dir ' || stack.cfg_path
-    || ' --terragrunt-iam-role ' || a.apply_role_arn || ' -auto-approve'
+    || ' --terragrunt-iam-role ' || '{apply_role_arn}' || ' -auto-approve'
 FROM (
-    SELECT
-        account_dim.account_name,
-        account_dim.account_path,
-        account_dim.account_deps,
-        account_dim.voters,
-        account_dim.min_approval_count,
-        account_dim.min_rejection_count,
-        account_dim.plan_role_arn,
-        account_dim.apply_role_arn
-    FROM account_dim
-    WHERE account_dim.account_path = '{account_path}'
-) AS a,  -- noqa: L025
-(
-    SELECT
-        :cfg_path,  -- noqa: L019
-        string_to_array(:cfg_deps, ','),
-        string_to_array(:new_providers, ',')
+    VALUES {stack}
 ) stack(cfg_path, cfg_deps, new_providers)  -- noqa: L011, L025
 RETURNING *;
