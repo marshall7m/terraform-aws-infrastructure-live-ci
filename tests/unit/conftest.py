@@ -97,7 +97,7 @@ def repo(gh, request):
             repo = gh.get_user().create_fork(base)
     else:
         log.info(f"Creating repo: {request.param}")
-        repo = gh.create_repo(request.param, auto_init=True)
+        repo = gh.get_user().create_repo(request.param, auto_init=True)
 
     yield repo
 
@@ -159,7 +159,9 @@ def pr(repo, request):
     head_ref = repo.create_git_ref(
         ref="refs/heads/" + param["head_ref"], sha=base_commit.commit.sha
     )
-    commit_id = commit(param["head_ref"], param["changes"]).sha
+    commit_id = commit(
+        repo, param["head_ref"], param["changes"], param["commit_message"]
+    ).sha
     head_ref.edit(sha=commit_id)
 
     log.info("Creating PR")
