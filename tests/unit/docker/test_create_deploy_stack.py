@@ -1,153 +1,339 @@
 import pytest
+from mock import Mock
 import os
 import logging
 from unittest.mock import patch
 import uuid
-from tests.helpers.utils import dummy_tf_output, null_provider_resource
+import sys
+import git
+import json
+from tests.helpers.utils import dummy_configured_provider_resource
 from tests.unit.docker.conftest import mock_subprocess_run
+from tests.unit.conftest import push
+
+# adds ecs src to PATH
+# prevents import errs within src files that are caused by src import paths being relative to it's own setup
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    + "/docker/src"
+)
+from docker.src.create_deploy_stack.create_deploy_stack import CreateStack  # noqa: E402
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-
-def scan_type_idfn(val):
-    if val:
-        return "graph_scan"
-    else:
-        return "plan_scan"
+task = CreateStack()
 
 
-@pytest.fixture(
-    params=[pytest.param(True), pytest.param(False)],
-    ids=scan_type_idfn,
+def pytest_generate_tests(metafunc):
+    # creates a dummy remote repo using the following parametrized value
+    if "repo" in metafunc.fixturenames:
+        metafunc.parametrize(
+            "repo",
+            [
+                {
+                    "name": "marshall7m/infrastructure-live-testing-template",
+                    "is_fork": True,
+                }
+            ],
+            scope="module",
+            indirect=True,
+        )
+
+
+@patch.dict(os.environ, {"TG_BACKEND": "local"})
+@patch(
+    "docker.src.create_deploy_stack.create_deploy_stack.subprocess_run",
+    side_effect=mock_subprocess_run,
 )
-def scan_type(request):
-    """Determiens if Terragrun graph depedencies or run-all plan command is used to detect directories with differences"""
-    if request.param:
-        os.environ["SCAN_TYPE"] = "graph"
-    else:
-        if "SCAN_TYPE" in os.environ:
-            del os.environ["SCAN_TYPE"]
-    yield None
+@pytest.mark.usefixtures("terraform_version", "terragrunt_version")
+def test_get_new_providers(mock_run, repo, tmp_path_factory):
+    """
+    Ensures get_new_providers() parses the Terragrunt command properly
+    to extract the existing and new Terraform providers
+    """
+    git_root = str(tmp_path_factory.mktemp(f"test-{uuid.uuid4()}"))
+    branch = f"test-{uuid.uuid4()}"
+    path = "directory_dependency/dev-account/global"
+    push(
+        repo=repo,
+        branch=branch,
+        changes={f"{path}/b.tf": dummy_configured_provider_resource},
+    )
+    git.Repo.clone_from(repo.clone_url, git_root, branch=branch)
 
-    if "SCAN_TYPE" in os.environ:
-        del os.environ["SCAN_TYPE"]
+    actual = task.get_new_providers(f"{git_root}/{path}", "mock-role-arn")
+    assert actual == ["registry.terraform.io/marshall7m/dummy"]
 
 
+@patch.dict(os.environ, {"TG_BACKEND": "local"})
+@pytest.mark.usefixtures("terraform_version", "terragrunt_version")
+def test_get_graph_deps(tmp_path_factory, repo):
+    """
+    Ensures get_graph_deps() parses the Terragrunt command properly
+    to transform the command output into a Python dictionary
+    """
+    git_root = str(tmp_path_factory.mktemp(f"test-{uuid.uuid4()}"))
+    os.environ["SOURCE_REPO_PATH"] = git_root
+
+    git.Repo.clone_from(
+        repo.clone_url,
+        git_root,
+    )
+    # need to cd into git dir in order for directories within Terragrunt
+    # command output to be relative to git root
+    os.chdir(git_root)
+    actual = task.get_graph_deps(
+        git_root + "/directory_dependency/dev-account", "mock-role-arn"
+    )
+
+    assert actual == {
+        "global": [],
+        "us-west-2/env-one/bar": ["us-west-2/env-one/baz", "global"],
+        "us-west-2/env-one/baz": ["global"],
+        "us-west-2/env-one/doo": ["global"],
+        "us-west-2/env-one/foo": ["us-west-2/env-one/bar"],
+    }
+
+
+@patch.dict(
+    os.environ,
+    {
+        "TG_BACKEND": "local",
+        "GITHUB_TOKEN": os.environ["TF_VAR_testing_unit_github_token"],
+    },
+)
+def test_get_github_diff_paths(repo, tmp_path_factory):
+    """
+    Ensures get_github_diff_paths() returns the expected list of
+    diff directories using the GitHub API and Terragrunt graph-dependencies
+    dictionary
+    """
+    os.environ["REPO_FULL_NAME"] = repo.full_name
+    git_root = str(tmp_path_factory.mktemp(f"test-{uuid.uuid4()}"))
+    os.environ["SOURCE_REPO_PATH"] = git_root
+    branch = f"test-{uuid.uuid4()}"
+    path = "directory_dependency/dev-account/global"
+
+    push(
+        repo=repo,
+        branch=branch,
+        changes={
+            "directory_dependency/dev-account/global/b.tf": dummy_configured_provider_resource
+        },
+    )
+    os.environ["COMMIT_ID"] = repo.get_branch(branch).commit.sha
+
+    git.Repo.clone_from(repo.clone_url, git_root, branch=branch)
+    # need to cd into git dir in order for directories within Terragrunt
+    # command output to be relative to git root
+    os.chdir(git_root)
+
+    graph_deps = task.get_graph_deps(
+        "directory_dependency/dev-account", "mock-role-arn"
+    )
+    log.debug(f"Graph deps: {graph_deps}")
+    actual = task.get_github_diff_paths(graph_deps, "directory_dependency/dev-account")
+
+    assert sorted(actual) == sorted(
+        [
+            path,
+            "directory_dependency/dev-account/us-west-2/env-one/baz",
+            "directory_dependency/dev-account/us-west-2/env-one/doo",
+            "directory_dependency/dev-account/us-west-2/env-one/bar",
+            "directory_dependency/dev-account/us-west-2/env-one/foo",
+        ]
+    )
+
+
+@patch.dict(
+    os.environ,
+    {
+        "TG_BACKEND": "local",
+        "GITHUB_TOKEN": os.environ["TF_VAR_testing_unit_github_token"],
+    },
+)
+@patch(
+    "docker.src.create_deploy_stack.create_deploy_stack.subprocess_run",
+    side_effect=mock_subprocess_run,
+)
+@pytest.mark.usefixtures("terraform_version", "terragrunt_version")
+def test_get_plan_diff_paths(mock_run, repo, tmp_path_factory):
+    """
+    Ensures get_plan_diff_paths() returns the expected list of
+    diff directories using the Terragrunt run-all plan command output
+    """
+    os.environ["REPO_FULL_NAME"] = repo.full_name
+    git_root = str(tmp_path_factory.mktemp(f"test-{uuid.uuid4()}"))
+    os.environ["SOURCE_REPO_PATH"] = git_root
+    branch = f"test-{uuid.uuid4()}"
+    path = "directory_dependency/dev-account/global"
+
+    push(
+        repo=repo,
+        branch=branch,
+        changes={
+            "directory_dependency/dev-account/global/b.tf": dummy_configured_provider_resource
+        },
+    )
+    os.environ["COMMIT_ID"] = repo.get_branch(branch).commit.sha
+
+    git.Repo.clone_from(repo.clone_url, git_root, branch=branch)
+    # need to cd into git dir in order for directories within Terragrunt
+    # command output to be relative to git root
+    os.chdir(git_root)
+
+    actual = task.get_plan_diff_paths(
+        "directory_dependency/dev-account", "mock-role-arn"
+    )
+
+    assert sorted(actual) == sorted(
+        [
+            path,
+            "directory_dependency/dev-account/us-west-2/env-one/baz",
+            "directory_dependency/dev-account/us-west-2/env-one/doo",
+            "directory_dependency/dev-account/us-west-2/env-one/bar",
+            "directory_dependency/dev-account/us-west-2/env-one/foo",
+        ]
+    )
+
+
+@patch.dict(os.environ, {"SCAN_TYPE": "graph"})
 @pytest.mark.parametrize(
-    "repo_changes,expected_stack",
+    "path,get_graph_deps,get_github_diff_paths,get_new_providers,expected",
     [
         pytest.param(
+            "directory_dependency/dev-account",
             {
-                "directory_dependency/dev-account/us-west-2/env-one/doo/a.tf": dummy_tf_output()
+                "directory_dependency/dev-account/us-west-2/env-one/doo": [],
+                "directory_dependency/dev-account/us-west-2/env-one/baz": [],
+                "directory_dependency/dev-account/us-west-2/env-one/foo": [
+                    "directory_dependency/dev-account/us-west-2/env-one/baz"
+                ],
             },
+            [
+                "directory_dependency/dev-account/us-west-2/env-one/foo",
+                "directory_dependency/dev-account/us-west-2/env-one/baz",
+            ],
+            ["test/provider"],
+            [
+                {
+                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
+                    "cfg_deps": [],
+                    "new_providers": ["test/provider"],
+                },
+                {
+                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo",
+                    "cfg_deps": [
+                        "directory_dependency/dev-account/us-west-2/env-one/baz"
+                    ],
+                    "new_providers": ["test/provider"],
+                },
+            ],
+            id="multi_deps",
+        ),
+        pytest.param(
+            "directory_dependency/dev-account",
+            {
+                "directory_dependency/dev-account/us-west-2/env-one/doo": [],
+                "directory_dependency/dev-account/us-west-2/env-one/baz": [],
+                "directory_dependency/dev-account/us-west-2/env-one/foo": [
+                    "directory_dependency/dev-account/us-west-2/env-one/baz"
+                ],
+            },
+            [
+                "directory_dependency/dev-account/us-west-2/env-one/doo",
+            ],
+            ["test/provider"],
             [
                 {
                     "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/doo",
                     "cfg_deps": [],
-                    "new_providers": [],
+                    "new_providers": ["test/provider"],
                 }
             ],
             id="no_deps",
         ),
         pytest.param(
+            "directory_dependency/dev-account",
             {
-                "directory_dependency/dev-account/us-west-2/env-one/doo/a.tf": null_provider_resource
+                "directory_dependency/dev-account/us-west-2/env-one/doo": [],
+                "directory_dependency/dev-account/us-west-2/env-one/baz": [],
+                "directory_dependency/dev-account/us-west-2/env-one/foo": [
+                    "directory_dependency/dev-account/us-west-2/env-one/baz"
+                ],
             },
-            [
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/doo",
-                    "cfg_deps": [],
-                    "new_providers": ["registry.terraform.io/hashicorp/null"],
-                }
-            ],
-            id="no_deps_new_provider",
-        ),
-        pytest.param(
-            {"directory_dependency/dev-account/global/a.tf": dummy_tf_output()},
-            [
-                {
-                    "cfg_path": "directory_dependency/dev-account/global",
-                    "cfg_deps": [],
-                    "new_providers": [],
-                },
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/doo",
-                    "cfg_deps": ["directory_dependency/dev-account/global"],
-                    "new_providers": [],
-                },
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
-                    "cfg_deps": ["directory_dependency/dev-account/global"],
-                    "new_providers": [],
-                },
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/bar",
-                    "cfg_deps": [
-                        "directory_dependency/dev-account/us-west-2/env-one/baz",
-                        "directory_dependency/dev-account/global",
-                    ],
-                    "new_providers": [],
-                },
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo",
-                    "cfg_deps": [
-                        "directory_dependency/dev-account/us-west-2/env-one/bar"
-                    ],
-                    "new_providers": [],
-                },
-            ],
-            id="multi_deps",
+            [],
+            ["test/provider"],
+            [],
+            id="no_diff_paths",
         ),
     ],
-    indirect=["repo_changes"],
 )
-@patch.dict(os.environ, {"TG_BACKEND": "local", "CODEBUILD_WEBHOOK_BASE_REF": "master"})
-@patch("docker.src.common.subprocess_run", side_effect=mock_subprocess_run)
-@pytest.mark.usefixtures(
-    "aws_credentials", "terraform_version", "terragrunt_version", "scan_type"
-)
-def test_create_stack(mock_run, git_repo, repo_changes, expected_stack):
+def test_create_stack(
+    path, get_graph_deps, get_github_diff_paths, get_new_providers, expected
+):
     """
-    Ensures that create_stack() parses the Terragrunt command output correctly,
-    filters out any directories that don't have changes and detects any new
-    providers introduced within the configurations
+    Ensures create_stack() returns the correct list of directory configurations.
+    All mocked dependency methods within create_stack() contain side effects that are
+    parameterizable to produce different outcomes.
     """
-    from docker.src.create_deploy_stack.create_deploy_stack import CreateStack
+    with patch.multiple(
+        task,
+        get_graph_deps=Mock(return_value=get_graph_deps),
+        get_github_diff_paths=Mock(return_value=get_github_diff_paths),
+        get_new_providers=Mock(return_value=get_new_providers),
+    ):
+        actual = task.create_stack(path, "mock-role-arn")
 
-    log.debug("Changing to the test repo's root directory")
-    git_root = git_repo.git.rev_parse("--show-toplevel")
-    os.chdir(git_root)
-
-    test_branch = git_repo.create_head(f"test-{uuid.uuid4()}").checkout().repo
-    test_branch.index.add(list(repo_changes.keys()))
-    commit = test_branch.index.commit("Add terraform testing changes")
-
-    os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"] = commit.hexsha
-
-    log.debug("Running create_stack()")
-    create_stack = CreateStack()
-    # for sake of testing, using just one account directory
-    stack = create_stack.create_stack(
-        "directory_dependency/dev-account", "plan-role-arn"
-    )
-
-    log.debug(f"Stack:\n{stack}")
-    # convert list of dict to list of list of tuples since dict are not ordered
-    assert sorted(sorted(cfg.items()) for cfg in stack) == sorted(
-        sorted(cfg.items()) for cfg in expected_stack
-    )
+        assert actual == expected
 
 
-# mock codebuild env vars
 @patch.dict(
     os.environ,
     {
-        "CODEBUILD_INITIATOR": "GitHub-Hookshot/test",
-        "CODEBUILD_WEBHOOK_TRIGGER": "pr/1",
-        "CODEBUILD_RESOLVED_SOURCE_VERSION": "test-commit",
-        "CODEBUILD_WEBHOOK_BASE_REF": "master",
-        "CODEBUILD_WEBHOOK_HEAD_REF": "test-feature",
+        "METADB_CLUSTER_ARN": "mock",
+        "METADB_SECRET_ARN": "mock",
+        "METADB_NAME": "mock",
+        "PR_ID": "1",
+        "COMMIT_ID": "commit-1",
+        "BASE_REF": "master",
+        "HEAD_REF": "feature-1",
+    },
+)
+@pytest.mark.usefixtures("mock_conn", "account_dim", "truncate_executions")
+@pytest.mark.parametrize(
+    "create_stack",
+    [
+        pytest.param(
+            [
+                [{"cfg_path": "foo", "cfg_deps": ["bar"], "new_providers": ["baz"]}],
+                [{"cfg_path": "foo", "cfg_deps": ["bar"], "new_providers": ["baz"]}],
+            ]
+        )
+    ],
+)
+def test_update_executions_with_new_deploy_stack_query(conn, create_stack):
+    """
+    Ensures update_executions_with_new_deploy_stack_query() runs the insert
+    query without error. Test includes assertion to ensure that the expected
+    count of records are inserted.
+    """
+    with patch.object(task, "create_stack", side_effect=create_stack):
+        task.update_executions_with_new_deploy_stack()
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM executions")
+            count = cur.fetchone()[0]
+
+            assert count == len(create_stack)
+
+
+# mock task's env vars
+@patch.dict(
+    os.environ,
+    {
+        "BASE_REF": "master",
+        "HEAD_REF": "test-feature",
         "METADB_CLUSTER_ARN": "mock",
         "METADB_SECRET_ARN": "mock",
         "METADB_NAME": "mock",
@@ -155,92 +341,44 @@ def test_create_stack(mock_run, git_repo, repo_changes, expected_stack):
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
         "TRIGGER_SF_FUNCTION_NAME": "mock-lambda",
         "TG_BACKEND": "local",
+        "PR_ID": "1",
+        "COMMIT_ID": "mock-commit-id",
+        "COMMIT_STATUS_CONFIG": json.dumps({"CreateDeployStack": True}),
+        "STATUS_CHECK_NAME": "foo",
+        "GITHUB_TOKEN": "mock-token",
+        "REPO_FULL_NAME": "owner/repo",
     },
 )
-@patch(
-    "docker.src.create_deploy_stack.create_deploy_stack.subprocess_run",
-    side_effect=mock_subprocess_run,
+@pytest.mark.parametrize(
+    "update_side_effect,expected_state",
+    [
+        pytest.param(None, "success", id="success"),
+        pytest.param(Exception, "failure", id="failure"),
+    ],
 )
+@patch("docker.src.create_deploy_stack.create_deploy_stack.github")
 @patch("docker.src.create_deploy_stack.create_deploy_stack.ssm")
 @patch("docker.src.create_deploy_stack.create_deploy_stack.lb")
-@patch("aurora_data_api.connect")
 @pytest.mark.usefixtures("aws_credentials")
-@pytest.mark.parametrize(
-    "repo_changes,accounts,scan_type,expected_failure",
-    [
-        pytest.param(
-            {"directory_dependency/dev-account/global/a.tf": dummy_tf_output()},
-            [("directory_dependency/dev-account", "mock-plan-role-arn")],
-            True,
-            False,
-            id="no_deps",
-        ),
-        pytest.param(
-            {"directory_dependency/dev-account/global/a.tf": dummy_tf_output()},
-            [("directory_dependency/invalid-account", "mock-plan-role-arn")],
-            True,
-            True,
-            id="invalid_account_path",
-        ),
-        pytest.param(
-            {
-                "directory_dependency/dev-account/global/a.tf": dummy_tf_output(
-                    name="1_invalid_name"
-                ),
-                "directory_dependency/shared-services-account/global/a.tf": dummy_tf_output(),
-            },
-            [
-                ("directory_dependency/dev-account", "mock-plan-role-arn"),
-                ("directory_dependency/shared-services-account", "mock-plan-role-arn"),
-            ],
-            False,
-            True,
-            id="tg_error",
-        ),
-    ],
-    indirect=["repo_changes", "scan_type"],
-)
-def test_main(
-    mock_conn,
-    mock_lambda,
-    mock_ssm,
-    mock_run,
-    repo_changes,
-    accounts,
-    scan_type,
-    expected_failure,
-    git_repo,
-):
-    """Ensures main() handles errors properly from top level"""
-    from docker.src.create_deploy_stack.create_deploy_stack import CreateStack
+def test_main(mock_lambda, mock_ssm, mock_github, update_side_effect, expected_state):
+    """Ensures main() handles sub-method errors properly"""
 
-    log.debug("Changing to the test repo's root directory")
-    git_root = git_repo.git.rev_parse("--show-toplevel")
-    os.chdir(git_root)
+    class MockStatus:
+        def __init__(self):
+            self.target_url = "foo"
+            self.context = os.environ["STATUS_CHECK_NAME"]
 
-    test_branch = git_repo.create_head(f"test-{uuid.uuid4()}").checkout().repo
-    test_branch.index.add(list(repo_changes.keys()))
-    commit = test_branch.index.commit("Add terraform testing changes")
+    mock_status = MockStatus()
+    mock_github.Github.return_value.get_repo.return_value.get_commit.return_value.get_statuses.return_value = [
+        mock_status
+    ]
 
-    os.environ["CODEBUILD_RESOLVED_SOURCE_VERSION"] = commit.hexsha
+    with patch.object(
+        task, "update_executions_with_new_deploy_stack", side_effect=update_side_effect
+    ):
+        task.main()
 
-    # get nested aurora.connect() context manager mock
-    mock_conn_context = mock_conn.return_value.__enter__.return_value
-    # get nested conn.cursor() context manager mock
-    mock_cur = mock_conn_context.cursor.return_value.__enter__.return_value
-    # mock retrieval of [(account_path, plan_role_arn)] from account dim
-    mock_cur.fetchall.return_value = accounts
-
-    create_stack = CreateStack()
-    try:
-        create_stack.main()
-    except Exception as e:
-        log.debug(e)
-
-    if expected_failure:
-        log.info("Assert execution record creation was rolled back")
-        mock_conn_context.rollback.assert_called_once()
-
+    if expected_state == "failure":
         log.info("Assert merge lock value was reset")
         mock_ssm.put_parameter.assert_called_with(
             Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
@@ -251,17 +389,18 @@ def test_main(
 
         log.info("Assert Lambda Function was not invoked")
         mock_lambda.invoke.assert_not_called()
-    else:
-        log.info("Assert execution record creation was not rolled back")
-        mock_cur.rollback.assert_not_called()
 
+    elif expected_state == "success":
         log.info("Assert merge lock value was set")
         mock_ssm.put_parameter.assert_called_with(
             Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
-            Value=os.environ["CODEBUILD_WEBHOOK_TRIGGER"].split("/")[1],
+            Value=os.environ["PR_ID"],
             Type="String",
             Overwrite=True,
         )
 
         log.info("Assert Lambda Function was invoked")
         mock_lambda.invoke.assert_called_once()
+
+    else:
+        raise Exception(f"Expected state is not handled: {expected_state}")
