@@ -460,7 +460,7 @@ variable "commit_status_config" {
     PrPlan            = optional(bool)
     CreateDeployStack = optional(bool)
     Plan              = optional(bool)
-    Deploy            = optional(bool)
+    Apply             = optional(bool)
     Execution         = optional(bool)
   })
   default = {}

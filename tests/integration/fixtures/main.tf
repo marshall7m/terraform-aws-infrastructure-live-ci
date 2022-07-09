@@ -374,7 +374,7 @@ module "mut_infrastructure_live_ci" {
     PrPlan            = true
     CreateDeployStack = true
     Plan              = true
-    Deploy            = true
+    Apply             = true
     Execution         = true
   }
 
