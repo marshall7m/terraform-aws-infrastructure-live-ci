@@ -28,4 +28,7 @@ module "mut_infrastructure_live_ci" {
   metadb_ci_password          = "test-ci"
   metadb_password             = "test"
   tf_state_read_access_policy = "arn:aws:iam::123456789101:role/tf-apply"
+
+  ecs_vpc_id             = "vpc-123"
+  ecs_private_subnet_ids = ["subnet-123"]
 }
