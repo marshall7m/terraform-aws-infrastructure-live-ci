@@ -39,6 +39,7 @@ def pytest_generate_tests(metafunc):
                             "directory_dependency/dev-account/global/a.tf": dummy_tf_output(),
                             "directory_dependency/shared-services-account/global/a.txt": "",
                         },
+                        "commit_message": "Adding testing files",
                     },
                 )
             ],
