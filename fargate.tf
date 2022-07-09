@@ -13,6 +13,26 @@ locals {
   terra_run_container_name = "run"
   terra_run_logs_prefix    = "sf"
 
+  private_registry_auth_statement = var.private_registry_auth ? var.private_registry_custom_kms_key_arn != null ? {
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "ssm:GetParameters",
+      "secretsmanager:GetSecretValue"
+    ]
+    resources = [
+      local.private_registry_secret_manager_arn,
+      var.private_registry_custom_kms_key_arn
+    ]
+    } : {
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameters",
+      "secretsmanager:GetSecretValue"
+    ]
+    resources = [local.private_registry_secret_manager_arn]
+  } : null
+
   private_registry_secret_manager_arn = var.private_registry_auth ? coalesce(var.private_registry_secret_manager_arn, try(aws_secretsmanager_secret_version.registry[0].arn, null)) : null
 
   ecs_tasks_base_env_vars = [
@@ -78,34 +98,15 @@ module "ecs_execution_role" {
     aws_iam_policy.github_token_ssm_read_access.arn,
     aws_iam_policy.commit_status_config.arn
   ]
-  statements = compact([var.private_registry_auth ? var.private_registry_custom_kms_key_arn != null ?
-    {
-      effect = "Allow"
-      actions = [
-        "kms:Decrypt",
-        "ssm:GetParameters",
-        "secretsmanager:GetSecretValue"
-      ]
-      resources = [
-        local.private_registry_secret_manager_arn,
-        var.private_registry_custom_kms_key_arn
-      ]
-    } :
-    {
-      effect = "Allow"
-      actions = [
-        "ssm:GetParameters",
-        "secretsmanager:GetSecretValue"
-      ]
-      resources = [local.private_registry_secret_manager_arn]
-    } : "",
-    {
-      effect = "Allow"
-      actions = [
-        "ssm:GetParameters"
-      ]
-      resources = [aws_ssm_parameter.scan_type.arn]
-    }
+  statements = concat(local.private_registry_auth_statement != null ? [local.private_registry_auth_statement] : [],
+    [
+      {
+        effect = "Allow"
+        actions = [
+          "ssm:GetParameters"
+        ]
+        resources = [aws_ssm_parameter.scan_type.arn]
+      }
   ])
   trusted_services = ["ecs-tasks.amazonaws.com"]
 }
