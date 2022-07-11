@@ -1,50 +1,53 @@
 # Terraform AWS Infrastructure Live CI
 
-<!-- toc -->
+<!--ts-->
+* [Terraform AWS Infrastructure Live CI](README.md#terraform-aws-infrastructure-live-ci)
+   * [Problem](README.md#problem)
+   * [Solution](README.md#solution)
+   * [Design](README.md#design)
+   * [Commit Statuses](README.md#commit-statuses)
+   * [Step Function Input](README.md#step-function-input)
+   * [Rollback New Provider Resources](README.md#rollback-new-provider-resources)
+   * [Infrastructure Repository Requirements](README.md#infrastructure-repository-requirements)
+   * [Why AWS Step Function for deployment flow?](README.md#why-aws-step-function-for-deployment-flow)
+      * [Step Function](README.md#step-function)
+         * [Pros](README.md#pros)
+      * [CodePipeline](README.md#codepipeline)
+         * [Pros](README.md#pros-1)
+         * [Cons](README.md#cons)
+   * [Pricing](README.md#pricing)
+      * [Lambda](README.md#lambda)
+      * [ECS](README.md#ecs)
+      * [Step Function](README.md#step-function-1)
+      * [RDS](README.md#rds)
+      * [EventBridge](README.md#eventbridge)
+   * [Cost](README.md#cost)
+   * [Requirements](README.md#requirements)
+   * [Providers](README.md#providers)
+   * [Modules](README.md#modules)
+   * [Resources](README.md#resources)
+   * [Inputs](README.md#inputs)
+   * [Outputs](README.md#outputs)
+   * [Deploy the Terraform Module](README.md#deploy-the-terraform-module)
+      * [CLI Requirements](README.md#cli-requirements)
+      * [Steps](README.md#steps)
+   * [Testing](README.md#testing)
+      * [Docker Environment](README.md#docker-environment)
+         * [Requirements](README.md#requirements-1)
+         * [Steps](README.md#steps-1)
+      * [Local GitHub Actions Workflow](README.md#local-github-actions-workflow)
+         * [Requirements](README.md#requirements-2)
+         * [Steps](README.md#steps-2)
+   * [Pitfalls](README.md#pitfalls)
+   * [TODO:](README.md#todo)
+      * [Features:](README.md#features)
+      * [Improvements:](README.md#improvements)
+      * [Think About...](README.md#think-about)
 
-- [Problem](#problem)
-- [Solution](#solution)
-- [Design](#design)
-- [Commit Statuses](#commit-statuses)
-- [Step Function Input](#step-function-input)
-- [Rollback New Provider Resources](#rollback-new-provider-resources)
-- [Infrastructure Repository Requirements](#infrastructure-repository-requirements)
-- [Why AWS Step Function for deployment flow?](#why-aws-step-function-for-deployment-flow)
-  * [Step Function](#step-function)
-    + [Pros](#pros)
-  * [CodePipeline](#codepipeline)
-    + [Pros](#pros-1)
-    + [Cons](#cons)
-- [Pricing](#pricing)
-  * [Lambda](#lambda)
-  * [ECS](#ecs)
-  * [Step Function](#step-function-1)
-  * [RDS](#rds)
-  * [EventBridge](#eventbridge)
-- [Cost](#cost)
-- [Requirements](#requirements)
-- [Providers](#providers)
-- [Modules](#modules)
-- [Resources](#resources)
-- [Inputs](#inputs)
-- [Outputs](#outputs)
-- [Deploy the Terraform Module](#deploy-the-terraform-module)
-  * [CLI Requirements](#cli-requirements)
-  * [Steps](#steps)
-- [Testing](#testing)
-  * [Docker Environment](#docker-environment)
-    + [Requirements](#requirements-1)
-    + [Steps](#steps-1)
-  * [Local GitHub Actions Workflow](#local-github-actions-workflow)
-    + [Requirements](#requirements-2)
-    + [Steps](#steps-2)
-- [Pitfalls](#pitfalls)
-- [TODO:](#todo)
-  * [Features:](#features)
-  * [Improvements:](#improvements)
-  * [Think About...](#think-about)
+<!-- Added by: marshallmamiya, at: Sun Jul 10 22:21:22 PDT 2022 -->
 
-<!-- tocstop -->
+<!--te-->
+
 
 ## Problem
  
@@ -492,7 +495,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_api_stage_name"></a> [api\_stage\_name](#input\_api\_stage\_name) | API deployment stage name | `string` | `"prod"` | no |
 | <a name="input_approval_request_sender_email"></a> [approval\_request\_sender\_email](#input\_approval\_request\_sender\_email) | Email address to use for sending approval requests | `string` | n/a | yes |
 | <a name="input_base_branch"></a> [base\_branch](#input\_base\_branch) | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
-| <a name="input_commit_status_config"></a> [commit\_status\_config](#input\_commit\_status\_config) | Determine if commit statuses should be sent for each of the specified pipeline components | <pre>object({<br>    PrPlan            = optional(bool)<br>    CreateDeployStack = optional(bool)<br>    Plan              = optional(bool)<br>    Apply             = optional(bool)<br>    Execution         = optional(bool)<br>  })</pre> | `{}` | no |
+| <a name="input_commit_status_config"></a> [commit\_status\_config](#input\_commit\_status\_config) | Determine which commit statuses should be sent for each of the specified pipeline components. <br>The commit status will contain the current state (e.g pending, success, failure) and will link to <br>the component's associated AWS console page.<br><br>Each of the following descriptions specify where and what the commit status links to:<br><br>PrPlan: CloudWatch log stream displaying the Terraform plan for a directory within the open pull request<br>CreateDeployStack: CloudWatch log stream displaying the execution metadb records that were created for <br>  the merged pull request<br>Plan: CloudWatch log stream displaying the Terraform plan for a directory within the merged pull request<br>Apply: CloudWatch log stream displaying the Terraform apply output for a directory within the merged pull request<br>Execution: AWS Step Function page for the deployment flow execution | <pre>object({<br>    PrPlan            = optional(bool)<br>    CreateDeployStack = optional(bool)<br>    Plan              = optional(bool)<br>    Apply             = optional(bool)<br>    Execution         = optional(bool)<br>  })</pre> | `{}` | no |
 | <a name="input_create_deploy_stack_cpu"></a> [create\_deploy\_stack\_cpu](#input\_create\_deploy\_stack\_cpu) | Number of CPU units the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
 | <a name="input_create_deploy_stack_memory"></a> [create\_deploy\_stack\_memory](#input\_create\_deploy\_stack\_memory) | Amount of memory (MiB) the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
 | <a name="input_create_deploy_stack_scan_type"></a> [create\_deploy\_stack\_scan\_type](#input\_create\_deploy\_stack\_scan\_type) | If set to `graph`, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If set to `plan`, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to `plan` if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to `graph`, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `string` | `"graph"` | no |

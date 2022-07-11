@@ -455,7 +455,20 @@ variable "private_registry_custom_kms_key_arn" {
 
 
 variable "commit_status_config" {
-  description = "Determine if commit statuses should be sent for each of the specified pipeline components"
+  description = <<EOF
+Determine which commit statuses should be sent for each of the specified pipeline components. 
+The commit status will contain the current state (e.g pending, success, failure) and will link to 
+the component's associated AWS console page.
+
+Each of the following descriptions specify where and what the commit status links to:
+
+PrPlan: CloudWatch log stream displaying the Terraform plan for a directory within the open pull request
+CreateDeployStack: CloudWatch log stream displaying the execution metadb records that were created for 
+  the merged pull request
+Plan: CloudWatch log stream displaying the Terraform plan for a directory within the merged pull request
+Apply: CloudWatch log stream displaying the Terraform apply output for a directory within the merged pull request
+Execution: AWS Step Function page for the deployment flow execution 
+EOF
   type = object({
     PrPlan            = optional(bool)
     CreateDeployStack = optional(bool)
