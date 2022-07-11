@@ -104,7 +104,7 @@ variable "ecs_task_logs_retention_in_days" {
 }
 
 variable "pr_plan_env_vars" {
-  description = "Environment variables that will be provided to open PR's Terraform planning builds"
+  description = "Environment variables that will be provided to open PR's Terraform planning tasks"
   type = list(object({
     name  = string
     value = string
@@ -129,7 +129,7 @@ variable "tf_state_read_access_policy" {
 
 variable "terraform_version" {
   description = <<EOF
-Terraform version used for create_deploy_stack and terra_run builds.
+Terraform version used for create_deploy_stack and terra_run tasks.
 Version must be >= `0.13.0`.
 If repo contains a variety of version constraints, implementing a 
 version manager is recommended (e.g. tfenv).
@@ -140,7 +140,7 @@ EOF
 
 variable "terragrunt_version" {
   description = <<EOF
-Terragrunt version used for create_deploy_stack and terra_run builds.
+Terragrunt version used for create_deploy_stack and terra_run tasks.
 Version must be >= `0.31.0`.
 If repo contains a variety of version constraints, implementing a 
 version manager is recommended (e.g. tgswitch).
@@ -150,7 +150,7 @@ EOF
 }
 
 variable "terra_run_env_vars" {
-  description = "Environment variables that will be provided for tf plan/apply builds"
+  description = "Environment variables that will be provided for tf plan/apply tasks"
   type = list(object({
     name  = string
     value = string
