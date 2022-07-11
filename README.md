@@ -85,9 +85,9 @@ After all directories and their associated dependencies are gathered, they are p
 
     If the Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#5). In addition to the ECS task(s), the Lambda Function will check if there's a deployment flow in progress and add the check to the PR's commit status. 
 
-    If the Github event was a merged PR, an ECS task named create deploy stack will be run.
+    If the Github event was a merged PR, an ECS task named Create Deploy Stack will be run.
 
-4. The Lambda Function will load an AWS System Manager Parameter Store value reference as `merge_lock` that will contain the PR ID of the deployment in progress or `none` if there isn't any in progress. Merging will be locked until the deployment flow is done. Once the deployment flow is finished, the downstream Lambda Function (see #7) will reset the parameter value.
+4. The Lambda Function will load an AWS System Manager Parameter Store value reference as `merge_lock` that will contain the PR ID of the deployment in progress or `none` if there isn't any in progress. Merging will be locked until the deployment flow is done. Once the deployment flow is finished, the downstream Lambda Function will reset the parameter value (see #7).
 
     `**NOTE: The PR committer will have to create another commit once the merge lock status is unlocked to get an updated merge lock commit status. **`
 
@@ -99,11 +99,11 @@ After all directories and their associated dependencies are gathered, they are p
  
 8. An ECS task referenced as `terra_run` within the module will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created, modified, and/or deleted.
  
-9. A Lambda Function referenced as `approval_request` within the module will send an approval request via AWS SES to every email address defined under the record's `voters` attribute.
+9. A Lambda Function referenced as `approval_request` within the module will send an email via AWS SES to every email address defined under the record's `voters` attribute. The contents of the email will include metadata about the execution, a link to the Terraform plan, and a very minimal HTML forum for voters to cast their vote.
 
-10. When a voter approves/rejects a deployment, the Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a task success token back to the associated Step Function execution.
+10. When a voter approves or rejects a deployment, the Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a success [task token](https://docs.aws.amazon.com/step-functions/latest/dg/connect-to-resource.html#connect-wait-token) back to the associated Step Function execution.
 
-11. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will be run and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task will run the record's associated `apply_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified, and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. The "Rollback New Provider Resources" section below will explain how the `new_resources` attribute will be used. 
+11. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will run and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task will run the record's associated `apply_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified, and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. This [Rollback New Provider Resources](#rollback-new-provider-resources) section below will explain how the `new_resources` attribute will be used. 
  
 11. After every Step Function execution, a Cloudwatch event rule will invoke the `trigger_sf` Lambda Function mentioned in step #7. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. If the `Success` task of the Step Function was successful, the updated status will be `succeeded` and if the `Reject` task was successful, the updated status will be `failed`.
 
@@ -113,12 +113,12 @@ After all directories and their associated dependencies are gathered, they are p
 
 Each ECS task with the addition of the merge lock will be available to send commit statuses displaying the current state of the task. The commit statuses can be toggled via the `var.commit_status_config` variable or by manually editing the actual configuration stored on AWS System Manager Parameter Store.
 
-Each of the ECS task-related commit statuses will link to the task's associated AWS CloudWatch Log Stream. If the calling service of the task failed to configure and run the task, the calling service's page or log link will be used.
+Each of the ECS-related commit statuses will link to the task's associated AWS CloudWatch Log Stream. If the calling service failed to run the task, the service's page or log link will be used.
 
-`** NOTE: Permissions for users to access the log streams are not managed via this module **`
+`** NOTE: Permissions for users (including approval voters) to access the log streams are not managed via this module **`
 ## Step Function Input
  
-Each execution is passed a JSON input that contains record attributes that will help configure the tasks within the Step Function. A sample JSON input will look like the following:
+Each execution is passed a JSON input that contains record attributes that will help configure the Step Function tasks. A sample JSON input will look like the following:
  
 ```
 {
@@ -156,7 +156,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  
 `execution_id`: An unique identifier that represents the execution name. The ID is formatted to be `run-{pr_id}-{first four digits of commit_id}-{account_name}-{leaf directory of cfg_path}-{random three digits}`. Only three random digits are used because if the record has a long account_name and/or cfg_path, the execution_id may exceed Step Function's 80 characters or less execution name limit.
  
-`is_rollback`: Determines if the execution pertains to a deployment that will roll back changes from a previous execution. (See section `Rollbacks` for more info)
+`is_rollback`: Determines if the execution pertains to a deployment that will roll back changes from a previous execution. (See the [Rollback New Provider Resources](#rollback-new-provider-resources) section for more info)
  
 `pr_id`: Pull Request Number
  
@@ -176,9 +176,9 @@ Each execution is passed a JSON input that contains record attributes that will 
  
 `apply_command`: Terragrunt command used to apply the Terraform configurations within the Step Function `Apply` task
  
-`new_providers`: List of new providers introduced by the pull request (See section `Rollbacks` for more info)
+`new_providers`: List of new providers introduced by the pull request (See the [Rollback New Provider Resources](#rollback-new-provider-resources) section for more info)
  
-`new_resources`: List of new provider resources that were deployed (See section `Rollbacks` for more info)
+`new_resources`: List of new provider resources that were deployed  (See the [Rollback New Provider Resources](#rollback-new-provider-resources) section for more info)
  
 `account_name`: AWS account the `cfg_path` will deploy resources to
  
@@ -207,9 +207,9 @@ To handle this scenario, the CI pipeline will document which directories define 
 ## Infrastructure Repository Requirements
  
 - Terraform files can be present but they must be referenced by Terragrunt configurations for them to be detected by the CI workflow
-- Configuration can't depend on environment variables that are not already passed to the builds
+- Configuration can't depend on environment variables that are not already passed to the tasks
  
-## Why AWS Step Function for deployment flow?
+## Why use AWS Step Function for the deployment flow?
  
 It would seem like CodePipeline would be the go-to AWS service for hosting the deployment workflow. After a long period of trying both, I found the following trade-offs.
  
@@ -591,7 +591,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 
 ### CLI Requirements
  
-Requirements below are needed to run `terraform apply` on this module. This module contains null resources that run bash scripts to install pip packages, and zip directories, and query the RDS database.
+Requirements below are needed to run `terraform apply` on this module. This module contains null resources that run bash scripts to install pip packages, create zip files, and query the RDS database.
  
 | Name | Version |
 |------|---------|
@@ -600,7 +600,7 @@ Requirements below are needed to run `terraform apply` on this module. This modu
 | pip | >= 22.0.4 |
 ### Steps
  
-For a demo of the module that will clean up any resources created, see the `Integration` section of this README. The steps below are meant for implementing the module into your current AWS ecosystem.
+For a demo of the module that will automatically clean up any resources created, see the [Testing](#testing) section of the README. The steps below are meant for implementing the module into your current AWS ecosystem.
 
 1. Open a terragrunt `.hcl` or terraform `.tf` file
 2. Create a module block using this repo as the source
@@ -657,7 +657,7 @@ The steps below will run the GitHub Actions workflow via [act](https://github.co
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
 3. Run the following command: `act push`. This will run the GitHub workflow logic for push events
-4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/integration/variables.tf` files.
+4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the unit testing [variables.tf](./tests/unit/tf-module-defaults/fixtures/variables.tf) and integration testing [variables.tf](./tests/integration/fixtures/variables.tf) file.
 
 ```
 NOTE: All Terraform resources will automatically be deleted during the PyTest session cleanup
@@ -665,11 +665,10 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 ## Pitfalls
 
-- Management of a GitHub Personal Access Token (PAT). The user is would need to refresh the GitHub token value when the expiration date is close.
-  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
+- Management of a GitHub Personal Access Token (PAT). The user will need to refresh the GitHub token value when the expiration date is close.
+  - Possibly create a GitHub machine user and add as a collaborator to the repo to remove the need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
 
 ## TODO:
-- create release description
 - retag v0.1.0 to v0.1.0-codebuild
 ### Features:
 
@@ -681,7 +680,7 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 ### Improvements:
 
-- [ ] create aesthetically pleasing approval request HTML template
+- [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)
 
 ### Think About...
 
@@ -689,5 +688,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
   - Would require docker scripts to be cloud-agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
 - Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
-- dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
+- Dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
+
 
