@@ -1,7 +1,7 @@
 locals {
-  webhook_receiver_name     = "${var.prefix}-webhook-receiver"
-  webhook_receiver_deps_zip = "${path.module}/webhook_receiver_deps.zip"
-  webhook_receiver_deps_dir = "${path.module}/functions/webhook_receiver/deps"
+  webhook_receiver_name = "${var.prefix}-webhook-receiver"
+  webhook_receiver_zip  = "${path.module}/webhook_receiver_deps.zip"
+  webhook_receiver_dir  = "${path.module}/functions/webhook_receiver"
 
   trigger_pr_plan_name     = "${var.prefix}-trigger-pr-plan"
   trigger_pr_plan_deps_zip = "${path.module}/trigger_pr_plan_deps.zip"
@@ -102,28 +102,18 @@ resource "aws_ssm_parameter" "merge_lock" {
 
 data "archive_file" "lambda_webhook_receiver" {
   type        = "zip"
-  source_dir  = "${path.module}/functions/webhook_receiver"
-  output_path = "${path.module}/webhook_receiver.zip"
+  source_dir  = local.webhook_receiver_dir
+  output_path = local.webhook_receiver_zip
 }
 
 resource "null_resource" "lambda_webhook_receiver_deps" {
   triggers = {
-    zip_hash = fileexists(local.webhook_receiver_deps_zip) ? 0 : timestamp()
+    zip_hash = fileexists(local.webhook_receiver_zip) ? 0 : timestamp()
   }
   provisioner "local-exec" {
-    command = "pip install --target ${local.webhook_receiver_deps_dir}/python requests==2.27.1"
+    command = "pip install --target ${local.webhook_receiver_dir} requests==2.27.1 PyGithub==1.54.1"
   }
 }
-
-data "archive_file" "lambda_webhook_receiver_deps" {
-  type        = "zip"
-  source_dir  = local.webhook_receiver_deps_dir
-  output_path = local.webhook_receiver_deps_zip
-  depends_on = [
-    null_resource.lambda_webhook_receiver_deps
-  ]
-}
-
 
 module "lambda_webhook_receiver" {
   source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
@@ -215,15 +205,6 @@ module "lambda_webhook_receiver" {
         module.plan_role.role_arn,
         module.create_deploy_stack_role.role_arn
       ]
-    }
-  ]
-  lambda_layers = [
-    {
-      filename         = data.archive_file.lambda_webhook_receiver_deps.output_path
-      name             = "${local.webhook_receiver_name}-deps"
-      runtimes         = ["python3.8"]
-      source_code_hash = data.archive_file.lambda_webhook_receiver_deps.output_base64sha256
-      description      = "Dependencies for lambda function: ${local.webhook_receiver_name}"
     }
   ]
 }
