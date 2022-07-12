@@ -97,13 +97,13 @@ class TestWebhookReceiver:
         "expected_state,expected_plan_dirs,run_task_side_effect",
         [
             pytest.param(
-                "success",
+                "pending",
                 [
                     "directory_dependency/dev-account/us-west-2/env-one/doo",
                     "directory_dependency/dev-account/global",
                 ],
                 None,
-                id="success",
+                id="pending_state",
             ),
             pytest.param(
                 "failure",
@@ -112,7 +112,7 @@ class TestWebhookReceiver:
                     "directory_dependency/dev-account/global",
                 ],
                 ServerException("Invalid task"),
-                id="failure",
+                id="failure_state",
             ),
         ],
     )
@@ -135,6 +135,25 @@ class TestWebhookReceiver:
         the commit status for every pr plan task to `failure` and `success` if
         not.
         """
+        mock_ecs.describe_task_definition.return_value = {
+            "taskDefinition": {
+                "containerDefinitions": [
+                    {
+                        "logConfiguration": {
+                            "options": {
+                                "awslogs-group": "mock-group",
+                                "awslogs-stream-prefix": "mock-prefix",
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+
+        mock_ecs.run_task.return_value = {
+            "tasks": [{"containers": [{"taskArn": "arn/task-id"}]}]
+        }
+
         mock_ecs.run_task.side_effect = run_task_side_effect
         repo.get_branch("master").edit_protection(contexts=["foo"])
 
