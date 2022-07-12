@@ -65,7 +65,7 @@ class Invoker:
 
         elif merge_lock == "none":
             log.info("Merge lock status: unlocked")
-            self.head.create_status(
+            self.head.commit.create_status(
                 state="success",
                 description="Unlocked",
                 context=os.environ["MERGE_LOCK_STATUS_CHECK_NAME"],
@@ -190,7 +190,7 @@ class Invoker:
                     log.info("Sending commit status for Terraform plan")
                     log.debug(f"Status data:\n{pformat(status_data)}")
                     if send_commit_status:
-                        self.base.commit.create_status(**status_data)
+                        self.head.commit.create_status(**status_data)
                         plan_contexts.append(context)
 
                 if send_commit_status:
