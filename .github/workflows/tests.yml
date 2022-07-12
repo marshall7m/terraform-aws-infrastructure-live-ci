@@ -40,6 +40,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
       - name: Hooks
         shell: bash
         run: |
@@ -49,10 +52,10 @@ jobs:
           pre-commit run --all-files
 
       - name: Update README.md TOC
-        id: pytest_unit
+        id: readme_toc
         shell: bash
         if: ${{ !env.ACT }}
-        run: gh-md-toc --insert README.md
+        run: gh-md-toc --no-backup README.md
 
       - uses: stefanzweifel/git-auto-commit-action@v4
         if: ${{ !env.ACT }}
