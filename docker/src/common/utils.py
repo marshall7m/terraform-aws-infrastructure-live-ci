@@ -23,6 +23,12 @@ class ClientException(Exception):
     pass
 
 
+class ServerException(Exception):
+    """Wraps around server-related errors"""
+
+    pass
+
+
 def aws_encode(value):
     """Encodes value into AWS friendly URL component"""
     value = urllib.parse.quote_plus(value)
