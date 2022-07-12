@@ -6,8 +6,7 @@ locals {
 
 
 module "github_webhook_validator" {
-  # source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.4"
-  source = "github.com/marshall7m/terraform-aws-github-webhook"
+  source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.4"
 
   deployment_triggers = {
     approval = filesha1("${path.module}/approval.tf")
