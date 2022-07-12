@@ -200,13 +200,14 @@ module "lambda_webhook_receiver" {
   publish = true
 
   attach_policies               = true
-  number_of_policies            = 3
+  number_of_policies            = 4
   role_force_detach_policies    = true
   attach_cloudwatch_logs_policy = true
   policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.github_token_ssm_read_access.arn,
-    aws_iam_policy.commit_status_config.arn
+    aws_iam_policy.commit_status_config.arn,
+    aws_iam_policy.webhook_receiver.arn
   ]
   vpc_subnet_ids         = try(var.lambda_webhook_receiver_vpc_config.subnet_ids, null)
   vpc_security_group_ids = try(var.lambda_webhook_receiver_vpc_config.security_group_ids, null)
