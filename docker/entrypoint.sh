@@ -26,4 +26,4 @@ echo "Current working directory: $PWD"
 # TODO: Design guardrails around what commands can be runned from the ecs task
 # Either restrict commands only from this docker image's /src (user won't be able to customize task execution with before/after scripts)
 # or create a check to ensure that the command is only running a script from the $SOURCE_CLONE_URL
-/bin/bash "$@"
+exec "$@"
