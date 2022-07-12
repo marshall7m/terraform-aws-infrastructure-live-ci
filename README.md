@@ -75,7 +75,7 @@ After all directories and their associated dependencies are gathered, they are p
  
 ## Design
  
-![Diagram](diagram.png)
+![Diagram](terraform-aws-infrastructure-live.png)
  
 1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS API Gateway endpoint on open PR activities or merge PR events. The API will pass the webhook payload to the #2 Lambda Function.
 
