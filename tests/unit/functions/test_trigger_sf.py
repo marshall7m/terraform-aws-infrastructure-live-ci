@@ -121,13 +121,13 @@ log.setLevel(logging.DEBUG)
         ),
     ],
 )
-@patch("requests.post")
+@patch("github.Github")
 @patch("functions.trigger_sf.lambda_function.ssm")
 @patch("functions.trigger_sf.lambda_function.sf")
 def test__execution_finished_status_update(
     mock_sf,
     mock_ssm,
-    mock_post,
+    mock_github,
     cur,
     conn,
     records,
