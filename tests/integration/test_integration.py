@@ -128,60 +128,65 @@ class Integration:
             }
 
         else:
-            log.info(
-                f'Creating PR to revert changes from PR named: {case_param["revert_ref"]}'
-            )
-            dir = str(tmp_path_factory.mktemp("scenario-repo-revert"))
-
-            log.info(f'Creating revert branch: {case_param["head_ref"]}')
-            base_commit = repo.get_branch(mut_output["base_branch"])
-            head_ref = repo.create_git_ref(
-                ref="refs/heads/" + case_param["head_ref"], sha=base_commit.commit.sha
-            )
-
-            git_repo = git.Repo.clone_from(
-                f'https://oauth2:{os.environ["TF_VAR_testing_integration_github_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
-                dir,
-                branch=case_param["head_ref"],
-            )
-
             merge_commit = merge_pr()
-            log.debug(f"Merged Commits: {merge_commit}")
-            log.debug(
-                f'Reverting merge commit: {merge_commit[case_param["revert_ref"]].sha}'
-            )
-            git_repo.git.revert(
-                "-m",
-                "1",
-                "--no-commit",
-                str(merge_commit[case_param["revert_ref"]].sha),
-            )
-            git_repo.git.commit("-m", "Revert PR changes within PR case")
-            git_repo.git.push("origin")
 
-            log.debug("Creating PR")
-            pr = repo.create_pull(
-                title=f'Revert {case_param["revert_ref"]}',
-                body="Rollback PR",
-                base=mut_output["base_branch"],
-                head=case_param["head_ref"],
-            )
+            if case_param["revert_ref"] in merge_commit:
+                log.info(
+                    f'Creating PR to revert changes from PR named: {case_param["revert_ref"]}'
+                )
+                dir = str(tmp_path_factory.mktemp("scenario-repo-revert"))
 
-            yield {
-                "number": pr.number,
-                "head_commit_id": git_repo.head.object.hexsha,
-                "base_ref": mut_output["base_branch"],
-                "head_ref": case_param["head_ref"],
-            }
+                log.info(f'Creating revert branch: {case_param["head_ref"]}')
+                base_commit = repo.get_branch(mut_output["base_branch"])
+                head_ref = repo.create_git_ref(
+                    ref="refs/heads/" + case_param["head_ref"],
+                    sha=base_commit.commit.sha,
+                )
 
-        log.info(f"Removing PR head ref branch: {case_param['head_ref']}")
-        head_ref.delete()
+                git_repo = git.Repo.clone_from(
+                    f'https://oauth2:{os.environ["TF_VAR_testing_integration_github_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
+                    dir,
+                    branch=case_param["head_ref"],
+                )
 
-        log.info(f"Closing PR: #{pr.number}")
-        try:
-            pr.edit(state="closed")
-        except Exception:
-            log.info("PR is merged or already closed")
+                log.debug(f"Merged Commits: {merge_commit}")
+                log.debug(
+                    f'Reverting merge commit: {merge_commit[case_param["revert_ref"]].sha}'
+                )
+                git_repo.git.revert(
+                    "-m",
+                    "1",
+                    "--no-commit",
+                    str(merge_commit[case_param["revert_ref"]].sha),
+                )
+                git_repo.git.commit("-m", "Revert PR changes within PR case")
+                git_repo.git.push("origin")
+
+                log.debug("Creating PR")
+                pr = repo.create_pull(
+                    title=f'Revert {case_param["revert_ref"]}',
+                    body="Rollback PR",
+                    base=mut_output["base_branch"],
+                    head=case_param["head_ref"],
+                )
+
+                yield {
+                    "number": pr.number,
+                    "head_commit_id": git_repo.head.object.hexsha,
+                    "base_ref": mut_output["base_branch"],
+                    "head_ref": case_param["head_ref"],
+                }
+
+                log.info(f"Removing PR head ref branch: {case_param['head_ref']}")
+                head_ref.delete()
+
+                log.info(f"Closing PR: #{pr.number}")
+                try:
+                    pr.edit(state="closed")
+                except Exception:
+                    log.info("PR is merged or already closed")
+            else:
+                pytest.skip(f"PR to revert does not exist: {case_param['head_ref']}")
 
     @pytest.fixture(scope="module")
     def destroy_scenario_tf_resources(self, mut_output, tf_destroy_commit_ids):
@@ -307,6 +312,10 @@ class Integration:
 
     @pytest.fixture(scope="class")
     def case_param_modified_dirs(self, case_param):
+        """
+        Returns a list of directory paths that contains added or modified files
+        from the testing class's case attribute
+        """
         return {
             path: cfg
             for path, cfg in case_param["executions"].items()
@@ -373,6 +382,7 @@ class Integration:
         for status in statuses:
             expected_status = "success"
             for path, cfg in case_param_modified_dirs.items():
+                # checks if the case directory's associated commit status is expected to fail
                 if re.match(f"Plan: {re.escape(path)}$", status.context) and cfg.get(
                     "expect_failed_pr_plan", False
                 ):
@@ -385,18 +395,12 @@ class Integration:
 
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
-    def test_pr_merge(self, request, mut_output, merge_pr, case_param, pr, repo):
-        """
-        Ensures that the PR status checks before merging are complete and then
-        merges the PR
-        """
+    def test_pr_merge(self, request, mut_output, merge_pr, pr, repo):
+        """Ensure that the PR merges without error"""
         depends(request, [f"{request.cls.__name__}::test_merge_lock_pr_status"])
         depends(
             request, [f"{request.cls.__name__}::test_pr_plan_commit_status_updated"]
         )
-        for cfg in case_param["executions"].values():
-            if cfg.get("expect_failed_pr_plan", False):
-                pytest.skip("Skip merging PR since atleast one of the PR plans failed")
 
         log.info(f"Merging PR: #{pr['number']}")
         try:
@@ -410,11 +414,12 @@ class Integration:
                 f"Status Checks Required: {branch.get_required_status_checks().contexts}"
             )
 
-            statuses = {
+            merge_lock_status = {
                 status.context: status.state
                 for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+                if status.context == mut_output["merge_lock_status_check_name"]
             }
-            log.debug(f"Context statuses: {statuses}")
+            log.debug(f"Merge Lock status: {merge_lock_status}")
 
             log.error(e, exc_info=True)
             raise e
