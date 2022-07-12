@@ -183,7 +183,6 @@ jobs:
       - name: Install Docker
         id: unit_install_docker
         shell: bash
-        if: ${{ env.ACT }} 
         run: |
           bash ./runner_install_docker.sh
 
