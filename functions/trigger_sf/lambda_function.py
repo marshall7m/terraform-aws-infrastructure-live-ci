@@ -5,7 +5,7 @@ import json
 import boto3
 import aurora_data_api
 from pprint import pformat
-import requests
+import github
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -55,20 +55,16 @@ def _execution_finished(cur, execution: map, account_id) -> None:
             state = "failure"
         else:
             state = "success"
-        response = requests.post(
-            f"https://api.github.com/repos/{os.environ['REPO_FULL_NAME']}/statuses/{execution['commit_id']}",
-            headers={
-                "Accept": "application/vnd.github.v3+json",
-                "Authorization": f"token {token}",
-            },
-            json={
-                "state": state,
-                "description": "Step Function Execution",
-                "context": execution["execution_id"],
-                "target_url": f"https://{os.environ['AWS_REGION']}.console.aws.amazon.com/states/home?region={os.environ['AWS_REGION']}#/executions/details/arn:aws:states:{os.environ['AWS_REGION']}:{account_id}:execution:{os.environ['STATE_MACHINE_ARN'].split(':')[-1]}:{execution['execution_id']}",
-            },
+
+        gh = github.Github(token)
+        gh.get_repo(os.environ["REPO_FULL_NAME"]).get_commit(
+            execution["commit_id"]
+        ).create_status(
+            state=state,
+            description="Step Function Execution",
+            context=execution["execution_id"],
+            target_url=f"https://{os.environ['AWS_REGION']}.console.aws.amazon.com/states/home?region={os.environ['AWS_REGION']}#/executions/details/arn:aws:states:{os.environ['AWS_REGION']}:{account_id}:execution:{os.environ['STATE_MACHINE_ARN'].split(':')[-1]}:{execution['execution_id']}",
         )
-        log.debug(f"Response:\n{response.text}")
 
     if not execution["is_rollback"] and execution["status"] in ["failed", "aborted"]:
         log.info("Aborting all deployments for commit")
