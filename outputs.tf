@@ -127,7 +127,7 @@ output "approval_url" {
 
 output "approval_request_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses"
-  value       = module.lambda_approval_request.lambda_cloudwatch_log_group_arn
+  value       = module.lambda_approval_request.lambda_cloudwatch_log_group_name
 }
 
 output "approval_request_function_name" {
@@ -157,7 +157,7 @@ output "lambda_trigger_sf_arn" {
 
 output "trigger_sf_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s)"
-  value       = module.lambda_trigger_sf.lambda_cloudwatch_log_group_arn
+  value       = module.lambda_trigger_sf.lambda_cloudwatch_log_group_name
 }
 
 output "trigger_sf_function_name" {
