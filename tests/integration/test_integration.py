@@ -694,7 +694,7 @@ class Integration:
             request.cls.executions[int(request.node.callspec.id)]["action"] = (
                 case_param["executions"][record["cfg_path"]]
                 .get("actions", {})
-                .get("deploy", None)
+                .get("apply", None)
             )
 
         log.info("Putting record into request execution dict")
@@ -951,7 +951,7 @@ class Integration:
             mut_output["state_machine_arn"], record["execution_id"]
         )
 
-        utils.assert_terra_run_status(execution_arn, "Deploy", "TaskSucceeded")
+        utils.assert_terra_run_status(execution_arn, "Apply", "TaskSucceeded")
 
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()

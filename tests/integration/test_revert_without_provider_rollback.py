@@ -21,7 +21,7 @@ class TestDeployPR(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": [dummy_configured_provider_resource],
             }
         },

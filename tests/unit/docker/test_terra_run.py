@@ -144,16 +144,16 @@ def test_update_new_resources(mock_get_new_provider_resources, conn, resources):
     "state_name,expected_status,run_side_effect,update_new_resources_side_effect",
     [
         pytest.param("Plan", "success", None, None, id="plan_run_succeed"),
-        pytest.param("Deploy", "success", None, None, id="all_succeed"),
+        pytest.param("Apply", "success", None, None, id="all_succeed"),
         pytest.param(
-            "Deploy",
+            "Apply",
             "failure",
             CalledProcessError(1, ""),
             None,
             id="update_resources_failed",
         ),
         pytest.param(
-            "Deploy",
+            "Apply",
             "failure",
             CalledProcessError(1, ""),
             ServerException("Function failed"),
@@ -165,7 +165,7 @@ def test_update_new_resources(mock_get_new_provider_resources, conn, resources):
     os.environ,
     {
         "TG_COMMAND": "",
-        "COMMIT_STATUS_CONFIG": json.dumps({"Plan": True, "Deploy": True}),
+        "COMMIT_STATUS_CONFIG": json.dumps({"Plan": True, "Apply": True}),
     },
 )
 @patch("docker.src.terra_run.run.send_commit_status")

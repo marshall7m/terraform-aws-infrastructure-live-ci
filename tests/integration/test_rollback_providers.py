@@ -24,14 +24,14 @@ class TestDeployPR(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "approve", "rollback_providers": "approve"},
+                "actions": {"apply": "approve", "rollback_providers": "approve"},
                 "pr_files_content": [
                     dummy_configured_provider_resource,
                     dummy_tf_output(),
                 ],
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
-                "actions": {"deploy": "reject"},
+                "actions": {"apply": "reject"},
                 "pr_files_content": [dummy_tf_output()],
             },
         },
@@ -53,10 +53,10 @@ class TestRevertPR(test_integration.Integration):
         "revert_ref": TestDeployPR.case["head_ref"],
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
         },
     }

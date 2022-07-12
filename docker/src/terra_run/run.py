@@ -101,7 +101,7 @@ def main() -> None:
         state = "failure"
 
     try:
-        if os.environ["STATE_NAME"] == "Deploy":
+        if os.environ["STATE_NAME"] == "Apply":
             update_new_resources()
     except KeyError as e:
         log.error(e, exc_info=True)

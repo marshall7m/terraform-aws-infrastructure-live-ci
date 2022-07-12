@@ -13,7 +13,7 @@ class TestSucceededDeployment(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/shared-services-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": [
                     dummy_tf_output(),
                     dummy_tf_output(),
@@ -21,7 +21,7 @@ class TestSucceededDeployment(test_integration.Integration):
                 ],
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": [dummy_tf_output()],
             },
         },
@@ -40,7 +40,7 @@ class TestRejectedDeployment(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/shared-services-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "reject"},
+                "actions": {"apply": "reject"},
                 "pr_files_content": [dummy_tf_output()],
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {

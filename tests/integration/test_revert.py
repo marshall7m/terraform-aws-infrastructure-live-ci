@@ -16,14 +16,14 @@ class TestBasePR(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": [null_provider_resource],
             },
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
         },
     }
@@ -47,18 +47,18 @@ class TestDeployPR(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/global": {
-                "actions": {"deploy": "approve", "rollback_providers": "approve"},
+                "actions": {"apply": "approve", "rollback_providers": "approve"},
                 "pr_files_content": [null_provider_resource],
             },
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": ['resource "null_resource" "baz" {}'],
             },
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "reject"}
+                "actions": {"apply": "reject"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
                 "sf_execution_exists": False
@@ -83,19 +83,19 @@ class TestRevertPR(test_integration.Integration):
         "revert_ref": TestDeployPR.case["head_ref"],
         "executions": {
             "directory_dependency/dev-account/global": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
         },
     }
