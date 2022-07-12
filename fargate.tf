@@ -236,7 +236,7 @@ module "create_deploy_stack_role" {
       sid       = "LambdaTriggerSFAccess"
       effect    = "Allow"
       actions   = ["lambda:InvokeFunction"]
-      resources = [module.lambda_trigger_sf.function_arn]
+      resources = [module.lambda_trigger_sf.lambda_function_arn]
     }
   ]
   trusted_services = ["ecs-tasks.amazonaws.com"]

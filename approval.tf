@@ -2,9 +2,6 @@ locals {
   approval_request_name  = "${var.prefix}-request"
   approval_response_name = "${var.prefix}-response"
   approval_logs          = "${var.prefix}-approval"
-
-  approval_response_deps_zip_path = replace("${path.module}/${local.approval_response_name}_deps.zip", "-", "_")
-  approval_deps_dir               = "${path.module}/deps"
 }
 
 resource "aws_api_gateway_rest_api" "this" {
@@ -43,7 +40,7 @@ resource "aws_api_gateway_integration" "approval" {
   http_method             = aws_api_gateway_method.approval.http_method
   integration_http_method = "POST"
   type                    = "AWS"
-  uri                     = module.lambda_approval_response.function_invoke_arn
+  uri                     = module.lambda_approval_response.lambda_function_invoke_arn
 
   request_templates = {
     # converts to key-value pairs (e.g. {'action': 'accept', 'comments': 'Reasoning for action\r\n'})
@@ -128,12 +125,6 @@ module "agw_role" {
   ]
 }
 
-data "archive_file" "lambda_approval_request" {
-  type        = "zip"
-  source_dir  = "${path.module}/functions/approval_request"
-  output_path = "${path.module}/approval_request.zip"
-}
-
 data "aws_iam_policy_document" "lambda_approval_request" {
   statement {
     sid    = "SESAccess"
@@ -164,100 +155,96 @@ resource "aws_iam_policy" "lambda_approval_request" {
 }
 
 module "lambda_approval_request" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
-  filename         = data.archive_file.lambda_approval_request.output_path
-  source_code_hash = data.archive_file.lambda_approval_request.output_base64sha256
-  function_name    = local.approval_request_name
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.8"
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "3.3.1"
 
-  vpc_config = var.lambda_approval_request_vpc_config
-  env_vars = {
+  function_name = local.approval_request_name
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.9"
+
+  source_path = "${path.module}/functions/approval_request"
+
+  environment_variables = {
     SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
     SES_TEMPLATE         = aws_ses_template.approval.name
   }
-  custom_role_policy_arns = [
+
+  publish = true
+  policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.lambda_approval_request.arn
   ]
+  attach_policies               = true
+  number_of_policies            = 2
+  role_force_detach_policies    = true
+  attach_cloudwatch_logs_policy = true
+
+  vpc_subnet_ids         = try(var.lambda_approval_request_vpc_config.subnet_ids, null)
+  vpc_security_group_ids = try(var.lambda_approval_request_vpc_config.security_group_ids, null)
+  attach_network_policy  = var.lambda_approval_request_vpc_config != null ? true : false
 }
 
-data "archive_file" "lambda_approval_response" {
-  type        = "zip"
-  source_dir  = "${path.module}/functions/approval_response"
-  output_path = "${path.module}/approval_response.zip"
-}
 
-
-resource "null_resource" "lambda_approval_response_deps" {
-  triggers = {
-    zip_hash = fileexists(local.approval_response_deps_zip_path) ? 0 : timestamp()
+data "aws_iam_policy_document" "approval_response" {
+  statement {
+    effect    = "Allow"
+    actions   = ["states:SendTaskSuccess"]
+    resources = [aws_sfn_state_machine.this.arn]
   }
-  # pip install runtime packages needed for function
-  provisioner "local-exec" {
-    command = <<EOF
-    python3 -m pip install --target ${local.approval_deps_dir}/python aurora-data-api==0.4.0
-    EOF
+  statement {
+    effect    = "Allow"
+    actions   = ["states:DescribeExecution"]
+    resources = ["*"]
   }
 }
-
-data "archive_file" "lambda_approval_response_deps" {
-  type        = "zip"
-  source_dir  = local.approval_deps_dir
-  output_path = local.approval_response_deps_zip_path
-  depends_on = [
-    null_resource.lambda_approval_response_deps
-  ]
+resource "aws_iam_policy" "approval_response" {
+  name        = "${local.approval_response_name}-sf-access"
+  description = "Allows Lambda function to describe Step Function executions and send success task tokens to associated Step Function machine"
+  policy      = data.aws_iam_policy_document.approval_response.json
 }
 
 module "lambda_approval_response" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
-  filename         = data.archive_file.lambda_approval_response.output_path
-  source_code_hash = data.archive_file.lambda_approval_response.output_base64sha256
-  function_name    = local.approval_response_name
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.8"
-  allowed_to_invoke = [
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "3.3.1"
+
+  function_name = local.approval_response_name
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.9"
+
+  source_path = [
     {
-      principal = "apigateway.amazonaws.com"
+      path             = "${path.module}/functions/approval_response"
+      pip_requirements = true
     }
   ]
-
-  vpc_config = var.lambda_approval_response_vpc_config
-  timeout    = 180
-
-  env_vars = {
+  timeout = 180
+  environment_variables = {
     METADB_NAME        = local.metadb_name
     METADB_CLUSTER_ARN = aws_rds_cluster.metadb.arn
     METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
 
-  custom_role_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    aws_iam_policy.ci_metadb_access.arn
-  ]
+  allowed_triggers = {
+    APIGatewayInvokeAccess = {
+      service    = "apigateway"
+      source_arn = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
+    }
+  }
 
-  statements = [
-    {
-      effect    = "Allow"
-      actions   = ["states:SendTaskSuccess"]
-      resources = [aws_sfn_state_machine.this.arn]
-    },
-    {
-      effect    = "Allow"
-      actions   = ["states:DescribeExecution"]
-      resources = ["*"]
-    }
+  publish = true
+
+  attach_policies               = true
+  number_of_policies            = 3
+  role_force_detach_policies    = true
+  attach_cloudwatch_logs_policy = true
+  policies = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.approval_response.arn
   ]
-  lambda_layers = [
-    {
-      filename         = data.archive_file.lambda_approval_response_deps.output_path
-      name             = "${local.approval_response_name}-deps"
-      runtimes         = ["python3.8"]
-      source_code_hash = data.archive_file.lambda_approval_response_deps.output_base64sha256
-      description      = "Dependencies for lambda function: ${local.approval_response_name}"
-    }
-  ]
+  vpc_subnet_ids         = try(var.lambda_approval_response_vpc_config.subnet_ids, null)
+  vpc_security_group_ids = try(var.lambda_approval_response_vpc_config.security_group_ids, null)
+  attach_network_policy  = var.lambda_approval_response_vpc_config != null ? true : false
 }
 
 data "aws_ses_email_identity" "approval" {

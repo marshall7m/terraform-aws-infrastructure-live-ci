@@ -75,7 +75,7 @@ resource "aws_sfn_state_machine" "this" {
       "Request Approval" = {
         Next = "Approval Results"
         Parameters = {
-          FunctionName = module.lambda_approval_request.function_arn
+          FunctionName = module.lambda_approval_request.lambda_function_arn
           Payload = {
             "PathApproval" = {
               "Approval" = {
@@ -276,7 +276,7 @@ module "sf_role" {
       effect  = "Allow"
       actions = ["lambda:InvokeFunction"]
       resources = [
-        module.lambda_approval_request.function_arn
+        module.lambda_approval_request.lambda_function_arn
       ]
     },
     {
@@ -297,7 +297,7 @@ module "sf_role" {
 resource "aws_cloudwatch_event_target" "sf_execution" {
   rule      = aws_cloudwatch_event_rule.sf_execution.name
   target_id = "LambdaTriggerStepFunction"
-  arn       = module.lambda_trigger_sf.function_arn
+  arn       = module.lambda_trigger_sf.lambda_function_arn
   input_transformer {
     input_paths = {
       output = "$.detail.output",
@@ -343,7 +343,7 @@ module "cw_event_rule_role" {
         "lambda:GetFunction",
         "lambda:InvokeFunction"
       ]
-      resources = [module.lambda_trigger_sf.function_arn]
+      resources = [module.lambda_trigger_sf.lambda_function_arn]
     }
   ]
 }

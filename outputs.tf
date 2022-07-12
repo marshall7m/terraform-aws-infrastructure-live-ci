@@ -127,12 +127,12 @@ output "approval_url" {
 
 output "approval_request_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses"
-  value       = module.lambda_approval_request.cw_log_group_name
+  value       = module.lambda_approval_request.lambda_cloudwatch_log_group_arn
 }
 
 output "approval_request_function_name" {
   description = "Name of the Lambda Function used for sending approval requests"
-  value       = module.lambda_approval_request.function_name
+  value       = module.lambda_approval_request.lambda_function_name
 }
 
 output "merge_lock_github_webhook_id" {
@@ -152,17 +152,17 @@ output "merge_lock_ssm_key" {
 
 output "lambda_trigger_sf_arn" {
   description = "ARN of the Lambda Function used for triggering Step Function execution(s)"
-  value       = module.lambda_trigger_sf.function_arn
+  value       = module.lambda_trigger_sf.lambda_function_arn
 }
 
 output "trigger_sf_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s)"
-  value       = module.lambda_trigger_sf.cw_log_group_name
+  value       = module.lambda_trigger_sf.lambda_cloudwatch_log_group_arn
 }
 
 output "trigger_sf_function_name" {
   description = "Name of the Lambda Function used for triggering Step Function execution(s)"
-  value       = module.lambda_trigger_sf.function_name
+  value       = module.lambda_trigger_sf.lambda_function_name
 }
 
 

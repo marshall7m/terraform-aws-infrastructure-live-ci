@@ -416,6 +416,18 @@ EOF
   default = null
 }
 
+variable "lambda_webhook_receiver_vpc_config" {
+  description = <<EOF
+VPC configuration for Lambda webhook_receiver function.
+Ensure that the configuration allows for outgoing HTTPS traffic.
+EOF
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
 variable "private_registry_auth" {
   description = "Determines if authentification is required to pull the docker images used by the ECS tasks"
   type        = bool

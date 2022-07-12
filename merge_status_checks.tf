@@ -1,18 +1,12 @@
 locals {
-  webhook_receiver_name = "${var.prefix}-webhook-receiver"
-  webhook_receiver_zip  = "${path.module}/webhook_receiver_deps.zip"
-  webhook_receiver_dir  = "${path.module}/functions/webhook_receiver"
-
-  trigger_pr_plan_name     = "${var.prefix}-trigger-pr-plan"
-  trigger_pr_plan_deps_zip = "${path.module}/trigger_pr_plan_deps.zip"
-  trigger_pr_plan_deps_dir = "${path.module}/functions/trigger_pr_plan/deps"
-
+  webhook_receiver_name                  = "${var.prefix}-webhook-receiver"
+  trigger_pr_plan_name                   = "${var.prefix}-trigger-pr-plan"
   github_webhook_validator_function_name = "${var.prefix}-webhook-validator"
 }
 
 
 module "github_webhook_validator" {
-  # source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.3"
+  # source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.4"
   source = "github.com/marshall7m/terraform-aws-github-webhook"
 
   deployment_triggers = {
@@ -30,9 +24,9 @@ module "github_webhook_validator" {
 
   github_secret_ssm_key = "${local.github_webhook_validator_function_name}-secret"
 
-  lambda_destination_on_success    = module.lambda_webhook_receiver.function_arn
   lambda_attach_async_event_policy = true
   lambda_create_async_event_config = true
+  lambda_destination_on_success    = module.lambda_webhook_receiver.lambda_function_arn
 
   repos = [
     {
@@ -99,31 +93,79 @@ resource "aws_ssm_parameter" "merge_lock" {
   value       = "none"
 }
 
+data "aws_iam_policy_document" "webhook_receiver" {
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
 
-data "archive_file" "lambda_webhook_receiver" {
-  type        = "zip"
-  source_dir  = local.webhook_receiver_dir
-  output_path = local.webhook_receiver_zip
+  statement {
+    sid       = "SSMParamMergeLockReadAccess"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.merge_lock.arn]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ecs:RunTask"
+    ]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.this.arn]
+    }
+    resources = [
+      aws_ecs_task_definition.plan.arn,
+      aws_ecs_task_definition.create_deploy_stack.arn
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ecs:DescribeTaskDefinition"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "iam:PassRole"
+    ]
+    resources = [
+      module.ecs_execution_role.role_arn,
+      module.plan_role.role_arn,
+      module.create_deploy_stack_role.role_arn
+    ]
+  }
 }
 
-resource "null_resource" "lambda_webhook_receiver_deps" {
-  triggers = {
-    zip_hash = fileexists(local.webhook_receiver_zip) ? 0 : timestamp()
-  }
-  provisioner "local-exec" {
-    command = "pip install --target ${local.webhook_receiver_dir} requests==2.27.1 PyGithub==1.54.1"
-  }
+resource "aws_iam_policy" "webhook_receiver" {
+  name   = local.webhook_receiver_name
+  policy = data.aws_iam_policy_document.webhook_receiver.json
 }
 
 module "lambda_webhook_receiver" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.5"
-  filename         = data.archive_file.lambda_webhook_receiver.output_path
-  source_code_hash = data.archive_file.lambda_webhook_receiver.output_base64sha256
-  function_name    = local.webhook_receiver_name
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.8"
-  timeout          = 120
-  env_vars = {
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "3.3.1"
+
+  function_name = local.webhook_receiver_name
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.9"
+  timeout       = 120
+
+  source_path = [
+    {
+      path             = "${path.module}/functions/webhook_receiver"
+      pip_requirements = true
+    }
+  ]
+
+  environment_variables = {
     GITHUB_TOKEN_SSM_KEY         = local.github_token_ssm_key
     COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_name
 
@@ -147,66 +189,28 @@ module "lambda_webhook_receiver" {
 
     ACCOUNT_DIM = jsonencode(var.account_parent_cfg)
   }
-  custom_role_policy_arns = [
+
+  allowed_triggers = {
+    WebhookValidator = {
+      principal  = "lambda.amazonaws.com"
+      source_arn = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:function:${local.github_webhook_validator_function_name}"
+    }
+  }
+
+  publish = true
+
+  attach_policies               = true
+  number_of_policies            = 3
+  role_force_detach_policies    = true
+  attach_cloudwatch_logs_policy = true
+  policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.github_token_ssm_read_access.arn,
     aws_iam_policy.commit_status_config.arn
   ]
-  allowed_to_invoke = [
-    {
-      principal = "lambda.amazonaws.com"
-      arn       = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:function:${local.github_webhook_validator_function_name}"
-    }
-  ]
-
-  statements = [
-    {
-      effect    = "Allow"
-      actions   = ["ssm:DescribeParameters"]
-      resources = ["*"]
-    },
-    {
-      sid       = "SSMParamMergeLockReadAccess"
-      effect    = "Allow"
-      actions   = ["ssm:GetParameter"]
-      resources = [aws_ssm_parameter.merge_lock.arn]
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "ecs:RunTask"
-      ]
-      conditions = [
-        {
-          test     = "ArnEquals"
-          variable = "ecs:cluster"
-          values   = [aws_ecs_cluster.this.arn]
-        }
-      ]
-      resources = [
-        aws_ecs_task_definition.plan.arn,
-        aws_ecs_task_definition.create_deploy_stack.arn
-      ]
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "ecs:DescribeTaskDefinition"
-      ]
-      resources = ["*"]
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "iam:PassRole"
-      ]
-      resources = [
-        module.ecs_execution_role.role_arn,
-        module.plan_role.role_arn,
-        module.create_deploy_stack_role.role_arn
-      ]
-    }
-  ]
+  vpc_subnet_ids         = try(var.lambda_webhook_receiver_vpc_config.subnet_ids, null)
+  vpc_security_group_ids = try(var.lambda_webhook_receiver_vpc_config.security_group_ids, null)
+  attach_network_policy  = var.lambda_webhook_receiver_vpc_config != null ? true : false
 }
 
 resource "github_branch_protection" "merge_lock" {

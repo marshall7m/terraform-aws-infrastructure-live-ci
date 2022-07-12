@@ -396,7 +396,6 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 
 | Name | Version |
 |------|---------|
-| <a name="provider_archive"></a> [archive](#provider\_archive) | n/a |
 | <a name="provider_aws"></a> [aws](#provider\_aws) | >= 3.44 |
 | <a name="provider_github"></a> [github](#provider\_github) | >= 4.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | n/a |
@@ -413,10 +412,10 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_ecs_execution_role"></a> [ecs\_execution\_role](#module\_ecs\_execution\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | n/a |
-| <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
-| <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
-| <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
-| <a name="module_lambda_webhook_receiver"></a> [lambda\_webhook\_receiver](#module\_lambda\_webhook\_receiver) | github.com/marshall7m/terraform-aws-lambda | v0.1.5 |
+| <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | terraform-aws-modules/lambda/aws | 3.3.1 |
+| <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | terraform-aws-modules/lambda/aws | 3.3.1 |
+| <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | terraform-aws-modules/lambda/aws | 3.3.1 |
+| <a name="module_lambda_webhook_receiver"></a> [lambda\_webhook\_receiver](#module\_lambda\_webhook\_receiver) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_plan_role"></a> [plan\_role](#module\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 
@@ -441,11 +440,14 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | [aws_ecs_task_definition.create_deploy_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
+| [aws_iam_policy.approval_response](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.trigger_sf](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.webhook_receiver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_rds_cluster.metadb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/rds_cluster) | resource |
 | [aws_secretsmanager_secret.ci_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
 | [aws_secretsmanager_secret.master_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
@@ -463,24 +465,18 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.scan_type](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
-| [null_resource.lambda_approval_response_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [null_resource.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [null_resource.lambda_webhook_receiver_deps](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.metadb_users](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
-| [archive_file.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_approval_response](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_approval_response_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_trigger_sf](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_trigger_sf_deps](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
-| [archive_file.lambda_webhook_receiver](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_iam_policy_document.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.approval_response](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.trigger_sf](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.webhook_receiver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 | [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ses_email_identity) | data source |
 | [aws_ssm_parameter.github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ssm_parameter) | data source |
@@ -517,6 +513,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_lambda_approval_request_vpc_config"></a> [lambda\_approval\_request\_vpc\_config](#input\_lambda\_approval\_request\_vpc\_config) | VPC configuration for Lambda approval request function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | <a name="input_lambda_approval_response_vpc_config"></a> [lambda\_approval\_response\_vpc\_config](#input\_lambda\_approval\_response\_vpc\_config) | VPC configuration for Lambda approval response function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | <a name="input_lambda_trigger_sf_vpc_config"></a> [lambda\_trigger\_sf\_vpc\_config](#input\_lambda\_trigger\_sf\_vpc\_config) | VPC configuration for Lambda trigger\_sf function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
+| <a name="input_lambda_webhook_receiver_vpc_config"></a> [lambda\_webhook\_receiver\_vpc\_config](#input\_lambda\_webhook\_receiver\_vpc\_config) | VPC configuration for Lambda webhook\_receiver function.<br>Ensure that the configuration allows for outgoing HTTPS traffic. | <pre>object({<br>    subnet_ids         = list(string)<br>    security_group_ids = list(string)<br>  })</pre> | `null` | no |
 | <a name="input_merge_lock_status_check_name"></a> [merge\_lock\_status\_check\_name](#input\_merge\_lock\_status\_check\_name) | Name of the merge lock GitHub status | `string` | `"Merge Lock"` | no |
 | <a name="input_metadb_availability_zones"></a> [metadb\_availability\_zones](#input\_metadb\_availability\_zones) | AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones. | `list(string)` | `null` | no |
 | <a name="input_metadb_ci_password"></a> [metadb\_ci\_password](#input\_metadb\_ci\_password) | Password for the metadb user used for the ECS tasks | `string` | n/a | yes |
@@ -668,6 +665,7 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
   - Possibly create a GitHub machine user and add as a collaborator to the repo to remove the need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
 
 ## TODO:
+- pin terraform-aws-github-webhook version
 - retag v0.1.0 to v0.1.0-codebuild
 ### Features:
 
