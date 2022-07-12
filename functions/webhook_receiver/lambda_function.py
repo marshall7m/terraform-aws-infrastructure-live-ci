@@ -96,7 +96,6 @@ class Invoker:
         )
         log.debug(f"Added or modified files within PR:\n{pformat(diff_paths)}")
 
-        plan_contexts = []
         for account in json.loads(os.environ["ACCOUNT_DIM"]):
             log.debug(f"Account Record:\n{account}")
 
@@ -191,18 +190,6 @@ class Invoker:
                     log.debug(f"Status data:\n{pformat(status_data)}")
                     if send_commit_status:
                         self.head.commit.create_status(**status_data)
-                        plan_contexts.append(context)
-
-                if send_commit_status:
-                    log.info("Adding Terraform plan(s) to required status checks")
-                    log.debug(f"Plan status checks:\n{plan_contexts}")
-
-                    contexts = (
-                        self.base.get_protection().required_status_checks.contexts
-                        + plan_contexts
-                    )
-                    self.base.edit_required_status_checks(contexts=contexts)
-                    log.debug(f"Required status checks:\n{pformat(contexts)}")
             else:
                 log.info(
                     "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
