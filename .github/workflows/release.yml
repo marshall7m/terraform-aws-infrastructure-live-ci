@@ -16,9 +16,10 @@ jobs:
         shell: bash
         if: ${{ !env.ACT }}
         run: |
-          echo ${{ github.event.release.tag_name }} > source_version.txt
+          echo "master" > source_version.txt
 
       - uses: stefanzweifel/git-auto-commit-action@v4
         if: ${{ !env.ACT }}
         with:
+          branch: master
           commit_message: Auto update source_version.txt
