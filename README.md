@@ -665,8 +665,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
   - Possibly create a GitHub machine user and add as a collaborator to the repo to remove the need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
 
 ## TODO:
-- create release!
-- retag v0.1.0 to v0.1.0-codebuild
 ### Features:
 
 - [ ] Create a feature for handling deleted terragrunt folder using git diff commands
