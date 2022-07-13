@@ -24,7 +24,7 @@ services:
   unit:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.8
+    image: ghcr.io/marshall7m/terrace:v0.1.10
     volumes:
       - "$PWD:/src"
     environment:
@@ -34,6 +34,7 @@ services:
       - AWS_DEFAULT_REGION
       - AWS_SESSION_TOKEN
       - AWS_SESSION_EXPIRATION
+      - UNTIL_AWS_EXP=30m
       - TF_VAR_testing_unit_github_token
       - TF_VAR_approval_request_sender_email
       - PGUSER=postgres
@@ -50,7 +51,7 @@ services:
   integration:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.8
+    image: ghcr.io/marshall7m/terrace:v0.1.10
     volumes:
       - "$PWD:/src"
       - "/usr/bin/docker:/usr/bin/docker"
@@ -63,8 +64,8 @@ services:
       - AWS_SESSION_TOKEN
       - AWS_SESSION_EXPIRATION
       - TF_VAR_testing_integration_github_token
-      - TF_VAR_merge_lock_github_token_ssm_value
-      - TF_VAR_github_webhook_validator_github_token_ssm_value
+      - TF_VAR_registry_password
+      - TF_VAR_github_token_ssm_value
       - TF_VAR_testing_secondary_aws_account_id
       - TF_VAR_approval_request_sender_email
       - UNTIL_AWS_EXP=1h

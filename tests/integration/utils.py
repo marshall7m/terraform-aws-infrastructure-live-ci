@@ -11,10 +11,14 @@ log.setLevel(logging.DEBUG)
 
 
 class TimeoutError(Exception):
+    """Wraps around timeout-related errors"""
+
     pass
 
 
 class ClientException(Exception):
+    """Wraps around client-related errors"""
+
     pass
 
 
@@ -67,50 +71,9 @@ def wait_for_lambda_invocation(function_name, start_time, expected_count=1, time
         log.debug(f"Refreshed Count: {actual_count}")
 
 
-def get_build_finished_status(name: str, ids=[], filters={}) -> str:
-    """
-    Waits for a CodeBuild project build to finish and returns the status
-
-    Arguments:
-        name: Name of the CodeBuild project
-        ids: Pre-existing CodeBuild project build IDs to get the statuses for
-        filters: Attributes builds need to have in order to return their associated statuses.
-            All filter attributes need to be matched for the build ID to be chosen. These
-            attribute are in regards to the response return by client.batch_get_builds().
-    """
-    cb = boto3.client("codebuild")
-    statuses = ["IN_PROGRESS"]
-
-    if len(ids) == 0:
-        ids = cb.list_builds_for_project(projectName=name, sortOrder="DESCENDING")[
-            "ids"
-        ]
-
-        if len(ids) == 0:
-            log.error(f"No builds have runned for project: {name}")
-            sys.exit(1)
-
-        log.debug(f"Build Filters:\n{filters}")
-        for build in cb.batch_get_builds(ids=ids)["builds"]:
-            for key, value in filters.items():
-                if build.get(key, None) != value:
-                    ids.remove(build["id"])
-                    break
-        if len(ids) == 0:
-            log.error("No builds have met provided filters")
-            sys.exit(1)
-
-    log.debug(f"Getting build statuses for the following IDs:\n{ids}")
-    while "IN_PROGRESS" in statuses:
-        time.sleep(15)
-        statuses = []
-        for build in cb.batch_get_builds(ids=ids)["builds"]:
-            statuses.append(build["buildStatus"])
-
-    return statuses
-
-
-def get_latest_log_stream_errs(log_group: str, start_time=None, end_time=None) -> list:
+def get_latest_log_stream_errs(
+    log_group: str, start_time=None, end_time=None, wait=5, timeout=30
+) -> list:
     """
     Gets a list of log events that contain the word `ERROR` within the latest stream of the CloudWatch log group
 
@@ -120,10 +83,24 @@ def get_latest_log_stream_errs(log_group: str, start_time=None, end_time=None) -
         end_time:  End of the time range in milliseconds UTC
     """
     logs = boto3.client("logs")
-
-    stream = logs.describe_log_streams(
-        logGroupName=log_group, orderBy="LastEventTime", descending=True, limit=1
-    )["logStreams"][0]["logStreamName"]
+    timeout = time.time() + timeout
+    stream = None
+    while not stream:
+        if time.time() > timeout:
+            raise TimeoutError(f"No stream exists within log group")
+        try:
+            stream = logs.describe_log_streams(
+                logGroupName=log_group,
+                orderBy="LastEventTime",
+                descending=True,
+                limit=1,
+            )["logStreams"][0]["logStreamName"]
+        except IndexError:
+            log.debug(
+                f"No stream exists within log group -- Retrying in {wait} seconds"
+            )
+            stream = None
+            time.sleep(wait)
 
     log.debug(f"Latest Stream: {stream}")
 
@@ -197,20 +174,7 @@ def assert_terra_run_status(execution_arn: str, task_name: str, expected_status:
     except AssertionError as e:
         log.debug(f"{task_name} status event:\n{pformat(status_event)}")
 
-        cw = boto3.client("logs")
-
-        log_event = json.loads(status_event["taskFailedEventDetails"]["cause"])[
-            "Build"
-        ]["Logs"]
-
-        stream = cw.get_log_events(
-            logGroupName=log_event["GroupName"],
-            logStreamName=log_event["StreamName"],
-            startFromHead=True,
-        )
-
-        log.debug(f"Cloudwatch logs for build")
-        for event in stream:
-            log.debug(pformat(event["message"]))
+        cause = json.loads(status_event["taskFailedEventDetails"]["cause"])
+        log.error(f"Cause:\n{cause}")
 
         raise e

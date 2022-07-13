@@ -55,44 +55,59 @@ output "metadb_ci_password" {
   sensitive   = true
 }
 
-output "codebuild_pr_plan_name" {
-  description = "Codebuild project name used for creating Terraform plans for new/modified configurations within PRs"
-  value       = module.codebuild_pr_plan.name
+output "ecs_cluster_arn" {
+  description = "AWS ECS cluster ARN"
+  value       = aws_ecs_cluster.this.arn
 }
 
-output "codebuild_pr_plan_role_arn" {
-  description = "IAM role ARN of the CodeBuild project that creates Terraform plans for new/modified configurations within PRs"
-  value       = module.codebuild_pr_plan.role_arn
+output "ecs_create_deploy_stack_family" {
+  description = "AWS ECS task definition family for the create deploy stack task"
+  value       = aws_ecs_task_definition.create_deploy_stack.family
 }
 
-output "codebuild_create_deploy_stack_name" {
-  description = "Name of the CodeBuild project that creates the deployment records within the metadb"
-  value       = module.codebuild_create_deploy_stack.name
+output "ecs_create_deploy_stack_container_name" {
+  description = "Name of the create deploy stack ECS task container"
+  value       = local.create_deploy_stack_container_name
 }
 
-output "codebuild_create_deploy_stack_arn" {
-  description = "ARN of the CodeBuild project that creates the deployment records within the metadb"
-  value       = module.codebuild_create_deploy_stack.arn
+output "ecs_create_deploy_stack_definition_arn" {
+  description = "AWS ECS create deploy stack defintion ARN"
+  value       = aws_ecs_task_definition.create_deploy_stack.arn
 }
 
-output "codebuild_create_deploy_stack_role_arn" {
-  description = "IAM role ARN of the CodeBuild project that creates the deployment records within the metadb"
-  value       = module.codebuild_create_deploy_stack.role_arn
+output "ecs_create_deploy_stack_role_arn" {
+  description = "AWS ECS create deploy stack task IAM role ARN"
+  value       = module.create_deploy_stack_role.role_arn
 }
 
-output "codebuild_terra_run_name" {
-  description = "Name of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow"
-  value       = module.codebuild_terra_run.name
+output "create_deploy_stack_status_check_name" {
+  description = "Name of the create deploy stack GitHub commit status"
+  value       = var.create_deploy_stack_status_check_name
 }
 
-output "codebuild_terra_run_arn" {
-  description = "ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow"
-  value       = module.codebuild_terra_run.arn
+output "scan_type_ssm_param_name" {
+  description = "Name of the AWS SSM Parameter store value used to determine the scan type within the create deploy stack task"
+  value       = aws_ssm_parameter.scan_type.name
 }
 
-output "codebuild_terra_run_role_arn" {
-  description = "IAM role ARN of the CodeBuild project that runs Terragrunt plan/apply commands within the Step Function execution flow"
-  value       = module.codebuild_terra_run.role_arn
+output "ecs_apply_role_arn" {
+  description = "IAM role ARN the AWS ECS terra run task can assume"
+  value       = module.apply_role.role_arn
+}
+
+output "ecs_plan_role_arn" {
+  description = "IAM role ARN the AWS ECS pr plan and terra run task can assume"
+  value       = module.plan_role.role_arn
+}
+
+output "ecs_terra_run_task_definition_arn" {
+  description = "AWS ECS terra run task defintion ARN"
+  value       = aws_ecs_task_definition.terra_run.arn
+}
+
+output "ecs_terra_run_task_container_name" {
+  description = "Name of the terra run ECS task container"
+  value       = local.terra_run_container_name
 }
 
 output "step_function_arn" {
@@ -112,12 +127,12 @@ output "approval_url" {
 
 output "approval_request_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses"
-  value       = module.lambda_approval_request.cw_log_group_name
+  value       = module.lambda_approval_request.lambda_cloudwatch_log_group_name
 }
 
 output "approval_request_function_name" {
   description = "Name of the Lambda Function used for sending approval requests"
-  value       = module.lambda_approval_request.function_name
+  value       = module.lambda_approval_request.lambda_function_name
 }
 
 output "merge_lock_github_webhook_id" {
@@ -126,7 +141,7 @@ output "merge_lock_github_webhook_id" {
 }
 
 output "merge_lock_status_check_name" {
-  description = "Context name of the merge lock GitHub status check"
+  description = "Context name of the merge lock GitHub commit status check"
   value       = var.merge_lock_status_check_name
 }
 
@@ -137,15 +152,17 @@ output "merge_lock_ssm_key" {
 
 output "lambda_trigger_sf_arn" {
   description = "ARN of the Lambda Function used for triggering Step Function execution(s)"
-  value       = module.lambda_trigger_sf.function_arn
+  value       = module.lambda_trigger_sf.lambda_function_arn
 }
 
 output "trigger_sf_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s)"
-  value       = module.lambda_trigger_sf.cw_log_group_name
+  value       = module.lambda_trigger_sf.lambda_cloudwatch_log_group_name
 }
 
 output "trigger_sf_function_name" {
   description = "Name of the Lambda Function used for triggering Step Function execution(s)"
-  value       = module.lambda_trigger_sf.function_name
+  value       = module.lambda_trigger_sf.lambda_function_name
 }
+
+

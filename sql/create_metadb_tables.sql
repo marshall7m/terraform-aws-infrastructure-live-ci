@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS executions (
     cfg_deps TEXT[],
     "status" VARCHAR,  -- noqa: L059
     plan_command TEXT,
-    deploy_command TEXT,
+    apply_command TEXT,
     new_providers TEXT[],
     new_resources TEXT[],
     account_name VARCHAR,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS executions (
     rejection_voters TEXT[],
     min_rejection_count INT CHECK (min_rejection_count >= 0),
     plan_role_arn VARCHAR,
-    deploy_role_arn VARCHAR
+    apply_role_arn VARCHAR
 );
 
 CREATE TABLE IF NOT EXISTS account_dim (
@@ -38,5 +38,5 @@ CREATE TABLE IF NOT EXISTS account_dim (
     min_rejection_count INT,
     voters TEXT[],
     plan_role_arn VARCHAR,
-    deploy_role_arn VARCHAR
+    apply_role_arn VARCHAR
 );

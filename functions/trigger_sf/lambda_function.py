@@ -4,6 +4,8 @@ import logging
 import json
 import boto3
 import aurora_data_api
+from pprint import pformat
+import github
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -14,12 +16,15 @@ sf = boto3.client("stepfunctions")
 ssm = boto3.client("ssm")
 
 
-def _execution_finished(cur, execution: map) -> None:
+def _execution_finished(cur, execution: map, account_id) -> None:
     """
-    Updates the Step Function's associated metadb record status and handles the case where the Step Function execution fails or is aborted
+    Updates the Step Function's associated metadb record status and handles
+    the case where the Step Function execution fails or is aborted
 
     Arguments:
-        execution: Cloudwatch event payload associated with finished Step Function execution
+        execution: Cloudwatch event payload associated with finished Step
+            Function execution
+        account_id: AWS account ID that the Step Function machine is hosted in
     """
 
     log.info("Updating execution record status")
@@ -30,6 +35,36 @@ def _execution_finished(cur, execution: map) -> None:
     WHERE execution_id = '{execution['execution_id']}'
     """
     )
+
+    commit_status_config = json.loads(
+        ssm.get_parameter(Name=os.environ["COMMIT_STATUS_CONFIG_SSM_KEY"])["Parameter"][
+            "Value"
+        ]
+    )
+
+    log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
+
+    if commit_status_config["Execution"]:
+        log.info("Sending commit status")
+
+        token = ssm.get_parameter(
+            Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
+        )["Parameter"]["Value"]
+
+        if execution["status"] in ["failed", "aborted"]:
+            state = "failure"
+        else:
+            state = "success"
+
+        gh = github.Github(token)
+        gh.get_repo(os.environ["REPO_FULL_NAME"]).get_commit(
+            execution["commit_id"]
+        ).create_status(
+            state=state,
+            description="Step Function Execution",
+            context=execution["execution_id"],
+            target_url=f"https://{os.environ['AWS_REGION']}.console.aws.amazon.com/states/home?region={os.environ['AWS_REGION']}#/executions/details/arn:aws:states:{os.environ['AWS_REGION']}:{account_id}:execution:{os.environ['STATE_MACHINE_ARN'].split(':')[-1]}:{execution['execution_id']}",
+        )
 
     if not execution["is_rollback"] and execution["status"] in ["failed", "aborted"]:
         log.info("Aborting all deployments for commit")
@@ -92,7 +127,8 @@ def _execution_finished(cur, execution: map) -> None:
         "failed",
         "aborted",
     ]:
-        # not aborting waiting and running rollback executions to allow CI flow to continue after admin intervention since future PR deployments
+        # not aborting waiting and running rollback executions to allow CI flow
+        # to continue after admin intervention since future PR deployments
         # will break if the new provider resources are not destroyed beforehand
         raise ClientException(
             "Rollback execution failed -- User with administrative privileges will need to manually fix configuration"
@@ -101,7 +137,8 @@ def _execution_finished(cur, execution: map) -> None:
 
 def _start_sf_executions(cur) -> None:
     """
-    Selects execution records to pass to Step Function deployment flow and starts the Step Function executions
+    Selects execution records to pass to Step Function deployment flow and
+    starts the Step Function executions
 
     Arguments:
         cur: Database cursor
@@ -163,7 +200,10 @@ def _start_sf_executions(cur) -> None:
 
 
 def lambda_handler(event, context):
-    """Runs Step Function deployment flow or resets SSM Parameter Store merge lock value"""
+    """
+    Runs Step Function deployment flow or resets SSM Parameter Store merge
+    lock value if deployment stack is empty
+    """
 
     log.debug(f"Event:\n{event}")
     try:
@@ -186,7 +226,9 @@ def lambda_handler(event, context):
                         }
                     else:
                         record = json.loads(execution["output"])
-                    _execution_finished(cur, record)
+                    _execution_finished(
+                        cur, record, context.invoked_function_arn.split(":")[4]
+                    )
 
                 log.info("Checking if commit executions are in progress")
                 cur.execute(

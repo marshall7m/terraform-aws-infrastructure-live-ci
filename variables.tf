@@ -18,11 +18,11 @@ AWS account-level configurations.
       scenario where resources within the `dev` account are explicitly dependent on resources within the `shared-serives` account.
   - plan_role_arn: IAM role ARN within the account that the plan build will assume
     - **CAUTION: Do not give the plan role broad administrative permissions as that could lead to detrimental results if the build was compromised**
-  - deploy_role_arn: IAM role ARN within the account that the deploy build will assume
+  - apply_role_arn: IAM role ARN within the account that the deploy build will assume
     - Fine-grained permissions for each Terragrunt directory within the account can be used by defining a before_hook block that
       conditionally defines that assume_role block within the directory dependant on the Terragrunt command. For example within `prod/iam/terragrunt.hcl`,
       define a before hook block that passes a strict read-only role ARN for `terragrunt plan` commands and a strict write role ARN for `terragrunt apply`. Then
-      within the `deploy_role_arn` attribute here, define a IAM role that can assume both of these roles.
+      within the `apply_role_arn` attribute here, define a IAM role that can assume both of these roles.
 EOF
   type = list(object({
     name                = string
@@ -32,7 +32,7 @@ EOF
     min_rejection_count = number
     dependencies        = list(string)
     plan_role_arn       = string
-    deploy_role_arn     = string
+    apply_role_arn      = string
   }))
 }
 
@@ -50,39 +50,61 @@ variable "send_verification_email" {
   default     = true
 }
 
-# CODEBUILD #
 
-variable "codebuild_source_auth_token" {
+variable "plan_cpu" {
   description = <<EOF
-  GitHub personal access token used to authorize CodeBuild projects to clone GitHub repos within the Terraform AWS provider's AWS account and region. 
-  If not specified, existing CodeBuild OAUTH or GitHub personal access token authorization is required beforehand.
-  EOF
-  type        = string
-  default     = null
-  sensitive   = true
-}
-
-variable "pr_plan_vpc_config" {
-  description = <<EOF
-AWS VPC configurations associated with PR planning CodeBuild project. 
-Ensure that the configuration allows for outgoing HTTPS traffic.
+Number of CPU units the PR plan task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
 EOF
-  type = object({
-    vpc_id             = string
-    subnets            = list(string)
-    security_group_ids = list(string)
-  })
-  default = null
+  type        = number
+  default     = 256
 }
 
-variable "pr_plan_status_check_name" {
-  description = "Name of the CodeBuild pr_plan GitHub status"
+variable "plan_memory" {
+  description = <<EOF
+Amount of memory (MiB) the PR plan task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
   type        = string
-  default     = "Plan"
+  default     = 512
+}
+
+variable "ecs_private_subnet_ids" {
+  description = <<EOF
+AWS VPC private subnet IDs to host the ECS container instances within.
+Subnets should deny all inbound access and allow the minimum outbound access needed to pull
+the container image and make API calls to Terraform provider resources.
+The subnets should be associated with the VPC ID specified under `var.ecs_vpc_id`
+EOF
+  type        = list(string)
+}
+
+variable "ecs_security_group_ids" {
+  description = <<EOF
+A maximum list of five AWS VPC security group IDs to attach to all ECS tasks. At a minimum, one of the security groups should have
+an egress rules that allows HTTP/HTTPS access. This gives the task the ability to pull it's associated Docker registry
+image and download Terraform provider resources. If not specified, the ECS task will use the VPC's default security group.
+EOF
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_vpc_id" {
+  description = <<EOF
+AWS VPC ID to host the ECS container instances within.
+The VPC should be associated with the subnet IDs specified under `var.ecs_private_subnet_ids`
+EOF
+  type        = string
+}
+
+variable "ecs_task_logs_retention_in_days" {
+  description = "Number of days the ECS task logs will be retained"
+  type        = number
+  default     = 14
 }
 
 variable "pr_plan_env_vars" {
-  description = "Environment variables that will be provided to open PR's Terraform planning builds"
+  description = "Environment variables that will be provided to open PR's Terraform planning tasks"
   type = list(object({
     name  = string
     value = string
@@ -91,20 +113,23 @@ variable "pr_plan_env_vars" {
   default = []
 }
 
-variable "build_img" {
-  description = "Docker, ECR or AWS CodeBuild managed image to use for the CodeBuild projects. If not specified, Terraform module will create an ECR image for them."
+variable "ecs_image_address" {
+  description = <<EOF
+Docker registry image to use for the ECS Fargate containers. If not specified, this Terraform module's GitHub registry image
+will be used with the tag associated with the version of this module. 
+EOF
   type        = string
   default     = null
 }
 
 variable "tf_state_read_access_policy" {
-  description = "AWS IAM policy ARN that allows create_deploy_stack Codebuild project to read from Terraform remote state resource"
+  description = "AWS IAM policy ARN that allows create deploy stack ECS task to read from Terraform remote state resource"
   type        = string
 }
 
 variable "terraform_version" {
   description = <<EOF
-Terraform version used for create_deploy_stack and terra_run builds.
+Terraform version used for create_deploy_stack and terra_run tasks.
 Version must be >= `0.13.0`.
 If repo contains a variety of version constraints, implementing a 
 version manager is recommended (e.g. tfenv).
@@ -115,7 +140,7 @@ EOF
 
 variable "terragrunt_version" {
   description = <<EOF
-Terragrunt version used for create_deploy_stack and terra_run builds.
+Terragrunt version used for create_deploy_stack and terra_run tasks.
 Version must be >= `0.31.0`.
 If repo contains a variety of version constraints, implementing a 
 version manager is recommended (e.g. tgswitch).
@@ -125,7 +150,7 @@ EOF
 }
 
 variable "terra_run_env_vars" {
-  description = "Environment variables that will be provided for tf plan/apply builds"
+  description = "Environment variables that will be provided for tf plan/apply tasks"
   type = list(object({
     name  = string
     value = string
@@ -133,57 +158,41 @@ variable "terra_run_env_vars" {
   }))
   default = []
 }
-
-variable "build_tags" {
-  description = "Tags to attach to AWS CodeBuild project"
-  type        = map(string)
-  default     = {}
-}
-
-variable "terra_run_vpc_config" {
+variable "terra_run_cpu" {
   description = <<EOF
-AWS VPC configurations associated with terra_run CodeBuild project. 
-Ensure that the configuration allows for outgoing HTTPS traffic.
+Number of CPU units the terra run task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
 EOF
-  type = object({
-    vpc_id             = string
-    subnets            = list(string)
-    security_group_ids = list(string)
-  })
-  default = null
+  type        = number
+  default     = 256
 }
 
-variable "create_deploy_stack_vpc_config" {
+variable "terra_run_memory" {
   description = <<EOF
-AWS VPC configurations associated with terra_run CodeBuild project.
-Ensure that the configuration allows for outgoing HTTPS traffic.
+Amount of memory (MiB) the terra run task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
 EOF
-  type = object({
-    vpc_id             = string
-    subnets            = list(string)
-    security_group_ids = list(string)
-  })
-  default = null
+  type        = string
+  default     = 512
 }
 
-variable "create_deploy_stack_graph_scan" {
+variable "create_deploy_stack_scan_type" {
   description = <<EOF
-If true, the create_deploy_stack build will use the git detected differences to determine what directories to run Step Function executions for.
-If false, the build will use terragrunt run-all plan detected differences to determine the executions.
-Set to false if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)
+If set to `graph`, the create_deploy_stack build will use the git detected differences to determine what directories to run Step Function executions for.
+If set to `plan`, the build will use terragrunt run-all plan detected differences to determine the executions.
+Set to `plan` if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)
 which results in need to refresh the terraform remote state to accurately detect changes.
-Otherwise set to true, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan.
+Otherwise set to `graph`, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan.
 EOF
-  type        = bool
-  default     = true
+  type        = string
+  default     = "graph"
 }
 
-variable "codebuild_common_env_vars" {
-  description = "Common env vars defined within all Codebuild projects. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
+variable "ecs_tasks_common_env_vars" {
+  description = "Common env vars defined within all ECS tasks. Useful for setting Terragrunt specific env vars required to run Terragrunt commands."
   type = list(object({
     name  = string
     value = string
-    type  = optional(string)
   }))
   default = []
 }
@@ -197,6 +206,24 @@ variable "create_deploy_stack_status_check_name" {
   description = "Name of the create deploy stack GitHub status"
   type        = string
   default     = "Create Deploy Stack"
+}
+
+variable "create_deploy_stack_cpu" {
+  description = <<EOF
+Number of CPU units the create deploy stack task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = number
+  default     = 256
+}
+
+variable "create_deploy_stack_memory" {
+  description = <<EOF
+Amount of memory (MiB) the create deploy stack task will use. 
+See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
+EOF
+  type        = string
+  default     = 512
 }
 
 # GITHUB WEBHOOK #
@@ -253,28 +280,28 @@ EOF
 
 # SSM #
 
-variable "create_merge_lock_github_token_ssm_param" {
+variable "create_github_token_ssm_param" {
   description = "Determines if the merge lock AWS SSM Parameter Store value should be created"
   type        = bool
 }
 
-variable "merge_lock_github_token_ssm_key" {
+variable "github_token_ssm_key" {
   description = "AWS SSM Parameter Store key for sensitive Github personal token used by the Merge Lock Lambda Function"
   type        = string
   default     = null
 }
 
-variable "merge_lock_github_token_ssm_description" {
+variable "github_token_ssm_description" {
   description = "Github token SSM parameter description"
   type        = string
   default     = "Github token used by Merge Lock Lambda Function"
 }
 
-variable "merge_lock_github_token_ssm_value" {
+variable "github_token_ssm_value" {
   description = <<EOF
 Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.
-If not provided, module looks for pre-existing SSM parameter via `var.merge_lock_github_token_ssm_key`".
-GitHub token only needs the `repo:status` permission. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
+GitHub token needs the `repo` permission to send commit statuses for private repos. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
   EOF
   type        = string
   default     = ""
@@ -282,37 +309,6 @@ GitHub token only needs the `repo:status` permission. (see more about OAuth scop
 }
 
 variable "github_token_ssm_tags" {
-  description = "Tags for Github token SSM parameter"
-  type        = map(string)
-  default     = {}
-}
-
-## GH-VALIDATOR-TOKEN ##
-
-variable "github_webhook_validator_github_token_ssm_key" {
-  description = "AWS SSM Parameter Store key for sensitive Github personal token used by the Github Webhook Validator Lambda Function"
-  type        = string
-  default     = null
-}
-
-variable "github_webhook_validator_github_token_ssm_description" {
-  description = "Github token SSM parameter description"
-  type        = string
-  default     = "Github token used by Github Webhook Validator Lambda Function"
-}
-
-variable "github_webhook_validator_github_token_ssm_value" {
-  description = <<EOF
-Registered Github webhook token associated with the Github provider. The token will be used by the Github Webhook Validator Lambda Function.
-If not provided, module looks for pre-existing SSM parameter via `var.github_webhook_validator_github_token_ssm_key`".
-GitHub token needs the `repo` permission to access the private repo. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
-  EOF
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "github_webhook_validator_github_token_ssm_tags" {
   description = "Tags for Github token SSM parameter"
   type        = map(string)
   default     = {}
@@ -371,13 +367,13 @@ variable "metadb_availability_zones" {
 }
 
 variable "metadb_ci_username" {
-  description = "Name of the metadb user used for the Codebuild projects"
+  description = "Name of the metadb user used for the ECS tasks"
   type        = string
   default     = "ci_user"
 }
 
 variable "metadb_ci_password" {
-  description = "Password for the metadb user used for the Codebuild projects"
+  description = "Password for the metadb user used for the ECS tasks"
   type        = string
   sensitive   = true
 }
@@ -418,4 +414,79 @@ EOF
     security_group_ids = list(string)
   })
   default = null
+}
+
+variable "lambda_webhook_receiver_vpc_config" {
+  description = <<EOF
+VPC configuration for Lambda webhook_receiver function.
+Ensure that the configuration allows for outgoing HTTPS traffic.
+EOF
+  type = object({
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+  })
+  default = null
+}
+
+variable "private_registry_auth" {
+  description = "Determines if authentification is required to pull the docker images used by the ECS tasks"
+  type        = bool
+  default     = false
+}
+
+variable "create_private_registry_secret" {
+  description = "Determines if the module should create the AWS Secret Manager resource used for private registry authentification"
+  type        = bool
+  default     = true
+}
+
+variable "registry_username" {
+  description = "Private Docker registry username used to authenticate ECS task to pull docker image"
+  type        = string
+  default     = null
+}
+
+variable "registry_password" {
+  description = "Private Docker registry password used to authenticate ECS task to pull docker image"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "private_registry_secret_manager_arn" {
+  description = "Pre-existing AWS Secret Manager ARN used for private registry authentification"
+  type        = string
+  default     = null
+}
+
+variable "private_registry_custom_kms_key_arn" {
+  description = "ARN of the custom AWS KMS key to use for decrypting private registry credentials hosted with AWS Secret Manager"
+  type        = string
+  default     = null
+}
+
+
+variable "commit_status_config" {
+  description = <<EOF
+Determine which commit statuses should be sent for each of the specified pipeline components. 
+The commit status will contain the current state (e.g pending, success, failure) and will link to 
+the component's associated AWS console page.
+
+Each of the following descriptions specify where and what the commit status links to:
+
+PrPlan: CloudWatch log stream displaying the Terraform plan for a directory within the open pull request
+CreateDeployStack: CloudWatch log stream displaying the execution metadb records that were created for 
+  the merged pull request
+Plan: CloudWatch log stream displaying the Terraform plan for a directory within the merged pull request
+Apply: CloudWatch log stream displaying the Terraform apply output for a directory within the merged pull request
+Execution: AWS Step Function page for the deployment flow execution 
+EOF
+  type = object({
+    PrPlan            = optional(bool)
+    CreateDeployStack = optional(bool)
+    Plan              = optional(bool)
+    Apply             = optional(bool)
+    Execution         = optional(bool)
+  })
+  default = {}
 }

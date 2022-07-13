@@ -3,7 +3,7 @@ import os
 import logging
 import git
 import re
-from buildspecs import subprocess_run
+from docker.src.common.utils import subprocess_run
 from tests.helpers.utils import insert_records
 
 log = logging.getLogger(__name__)
@@ -30,13 +30,16 @@ def account_dim(conn, cur):
                 "account_name": "dev",
                 "account_path": "directory_dependency/dev-account",
                 "account_deps": ["shared-services"],
+                "voters": ["voter-1"],
             },
             {
                 "account_name": "shared-services",
                 "account_path": "directory_dependency/shared-services-account",
                 "account_deps": [],
+                "voters": ["voter-1"],
             },
         ],
+        enable_defaults=True,
     )
 
     yield results
@@ -94,6 +97,7 @@ tg_versions = [
 
 def pytest_generate_tests(metafunc):
 
+    # Sets pytest parameter-level Terraform binary version
     if "terraform_version" in metafunc.fixturenames:
         metafunc.parametrize(
             "terraform_version",
@@ -103,6 +107,7 @@ def pytest_generate_tests(metafunc):
             indirect=True,
         )
 
+    # Sets pytest parameter-level Terragrunt binary version
     if "terragrunt_version" in metafunc.fixturenames:
         metafunc.parametrize(
             "terragrunt_version",

@@ -16,14 +16,14 @@ class TestBasePR(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": [null_provider_resource],
             },
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
         },
     }
@@ -35,28 +35,30 @@ class TestBasePR(test_integration.Integration):
 )
 class TestDeployPR(test_integration.Integration):
     """
-    Case covers a 5 node deployment with 2 modified directories. One of the deployments will be rejected causing
-    the directory with new provider resources to be rolled back. The purpose of this case is
-    to ensure that the new provider resources introduced from the previous PR are not rolled back
-    while the new provider resources introduced in this PR are rolled back.
+    Case covers a 5 node deployment with 2 modified directories. One of the
+    deployments will be rejected causing the directory with new provider
+    resources to be rolled back. The purpose of this case is to ensure that the
+    new provider resources introduced from the previous PR are not rolled back
+    while the new provider resources introduced in this PR are rolled back within
+    the downstream revert PR.
     """
 
     case = {
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/global": {
-                "actions": {"deploy": "approve", "rollback_providers": "approve"},
+                "actions": {"apply": "approve", "rollback_providers": "approve"},
                 "pr_files_content": [null_provider_resource],
             },
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": ['resource "null_resource" "baz" {}'],
             },
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "reject"}
+                "actions": {"apply": "reject"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
                 "sf_execution_exists": False
@@ -71,8 +73,9 @@ class TestDeployPR(test_integration.Integration):
 )
 class TestRevertPR(test_integration.Integration):
     """
-    Case covers a 5 node deployment containing no new modified directories other than the revert changes for the previous PR.
-    This case will create a revert PR that will contain the base ref version of the repo that was compared to the previous PR defined above.
+    Case covers a 5 node deployment containing no new modified directories other
+    than the revert changes for the previous PR. This case will create a PR to
+    revert the changes introduced within the previous PR.
     """
 
     case = {
@@ -80,19 +83,19 @@ class TestRevertPR(test_integration.Integration):
         "revert_ref": TestDeployPR.case["head_ref"],
         "executions": {
             "directory_dependency/dev-account/global": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/baz": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
-                "actions": {"deploy": "approve"}
+                "actions": {"apply": "approve"}
             },
         },
     }

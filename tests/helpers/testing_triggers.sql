@@ -104,8 +104,8 @@ LANGUAGE plpgsql AS $func$
             NEW.plan_role_arn := COALESCE(account_dim_ref.plan_role_arn, NEW.account_name || '-plan-role');
         END IF;
 
-        IF NEW.deploy_role_arn IS NULL THEN
-            NEW.deploy_role_arn := COALESCE(account_dim_ref.deploy_role_arn, NEW.account_name || '-deploy-role');
+        IF NEW.apply_role_arn IS NULL THEN
+            NEW.apply_role_arn := COALESCE(account_dim_ref.apply_role_arn, NEW.account_name || '-deploy-role');
         END IF;
 
         IF NEW.cfg_deps IS NULL THEN
@@ -155,8 +155,8 @@ LANGUAGE plpgsql AS $func$
             END;
         END IF;
 
-        IF NEW.deploy_command IS NULL THEN
-            NEW.deploy_command := CASE
+        IF NEW.apply_command IS NULL THEN
+            NEW.apply_command := CASE
                 WHEN NEW.is_rollback = 't' THEN 
                     'terragrunt destroy ' || '--terragrunt-working-dir ' || NEW.cfg_path || ' -auto-approve'
                 WHEN NEW.is_rollback = 'f' THEN 
@@ -187,7 +187,7 @@ WHEN (
     OR new.cfg_path IS NULL
     OR new.cfg_deps IS NULL
     OR new.plan_command IS NULL
-    OR new.deploy_command IS NULL
+    OR new.apply_command IS NULL
     OR new.new_providers IS NULL
     OR new.new_resources IS NULL
     OR new.pr_id IS NULL

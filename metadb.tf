@@ -55,12 +55,19 @@ locals {
           value = { stringValue = account.plan_role_arn }
         },
         {
-          name  = "deploy_role_arn"
-          value = { stringValue = account.deploy_role_arn }
+          name  = "apply_role_arn"
+          value = { stringValue = account.apply_role_arn }
         }
       ]
     ]), "\"", "\\\"")
   })
+}
+
+resource "aws_ssm_parameter" "metadb_ci_password" {
+  name        = "${local.metadb_name}_${var.metadb_ci_username}"
+  description = "Metadb password used by ECS tasks"
+  type        = "SecureString"
+  value       = var.metadb_ci_password
 }
 
 resource "aws_rds_cluster" "metadb" {

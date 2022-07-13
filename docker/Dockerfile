@@ -9,7 +9,6 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 SHELL ["/bin/bash", "-c"]
-
 WORKDIR /src/
 
 COPY install.sh ./install.sh
@@ -29,19 +28,20 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 SHELL ["/bin/bash", "-c"]
-
 WORKDIR /src/
 
 COPY --from=build /usr/local /usr/local
 COPY --from=build $VIRTUAL_ENV $VIRTUAL_ENV
+COPY src /src
 
 ENV PATH="/usr/local/.tfenv/bin:$PATH"
 # uses virtual env instead of system-wide packages
 ENV PATH="$VIRTUAL_ENV/bin:$VIRTUAL_ENV/lib/python3.9/site-packages:$PATH"
 
 RUN apt-get -y update \
-    && apt-get install -y git openssl curl unzip jq \
+    && apt-get install -y openssl git curl unzip jq \
     && ln -sf python3 /usr/local/bin/python \
+    && python3 -m pip install /src \
     && tfenv install ${TERRAFORM_VERSION} \
     && tfenv use ${TERRAFORM_VERSION} \
     && if [[ "$TERRAGRUNT_VERSION" == "latest" ]]; then \
@@ -49,5 +49,4 @@ RUN apt-get -y update \
         else tgswitch "$TERRAGRUNT_VERSION"; fi
 
 COPY entrypoint.sh /tmp/entrypoint.sh
-
 ENTRYPOINT ["bash", "/tmp/entrypoint.sh"]

@@ -17,12 +17,12 @@ class TestRejectRollbackProvider(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/bar": {
-                "actions": {"deploy": "approve", "rollback_providers": "reject"},
+                "actions": {"apply": "approve", "rollback_providers": "reject"},
                 "pr_files_content": [null_provider_resource],
                 "expect_failed_rollback_providers_cw_trigger_sf": True,
             },
             "directory_dependency/dev-account/us-west-2/env-one/foo": {
-                "actions": {"deploy": "reject"},
+                "actions": {"apply": "reject"},
                 "pr_files_content": [dummy_tf_output()],
             },
         },

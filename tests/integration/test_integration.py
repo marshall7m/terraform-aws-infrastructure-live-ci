@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 import github
 import git
+from tests.integration.conftest import mut_output
 import timeout_decorator
 import random
 import string
@@ -20,6 +21,8 @@ from tests.integration import utils
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+ecs = boto3.client("ecs")
+
 
 class Integration:
     executions = []
@@ -31,7 +34,7 @@ class Integration:
 
     @pytest.fixture(scope="module")
     def tf_destroy_commit_ids(self, mut_output):
-        """Creates a list of commit Ids to be used for the source version of the teardown Terragrunt destroy builds"""
+        """Creates a list of commit Ids to be used for the source version of the teardown Terragrunt destroy tasks"""
         commit_ids = [mut_output["base_branch"]]
 
         def _add(id=None):
@@ -40,6 +43,21 @@ class Integration:
             return commit_ids
 
         yield _add
+
+    @pytest.fixture(scope="class", autouse=True)
+    def set_scan_type(self, case_param, mut_output):
+        ssm = boto3.client("ssm")
+
+        scan_type = case_param.get("scan_type", "graph")
+        log.info(f"Case scan type: {scan_type}")
+
+        ssm.put_parameter(
+            Name=mut_output["scan_type_ssm_param_name"],
+            Value=scan_type,
+            Type="String",
+            Overwrite=True,
+        )
+        yield None
 
     @pytest.fixture(scope="class", autouse=True)
     def pr(
@@ -53,7 +71,7 @@ class Integration:
         tmp_path_factory,
         tf_destroy_commit_ids,
     ):
-        """Creates the PR used testing the CI flow. Current implementation creates all PR changes within one commit."""
+        """Creates the PR used for testing the CI flow. Current implementation creates all PR changes within one commit."""
         if "revert_ref" not in case_param:
             base_commit = repo.get_branch(mut_output["base_branch"])
             head_ref = repo.create_git_ref(
@@ -99,7 +117,7 @@ class Integration:
 
             if case_param.get("destroy_tf_resources_with_pr", False):
                 # set attribute if PR contains new Terraform provider blocks that require credentials so teardown
-                # Terragrunt destroy builds will have the provider blocks needed to destroy the provider resources
+                # Terragrunt destroy tasks will have the provider blocks needed to destroy the provider resources
                 tf_destroy_commit_ids(commit_id)
 
             yield {
@@ -110,71 +128,73 @@ class Integration:
             }
 
         else:
-            log.info(
-                f'Creating PR to revert changes from PR named: {case_param["revert_ref"]}'
-            )
-            dir = str(tmp_path_factory.mktemp("scenario-repo-revert"))
-
-            log.info(f'Creating revert branch: {case_param["head_ref"]}')
-            base_commit = repo.get_branch(mut_output["base_branch"])
-            head_ref = repo.create_git_ref(
-                ref="refs/heads/" + case_param["head_ref"], sha=base_commit.commit.sha
-            )
-
-            git_repo = git.Repo.clone_from(
-                f'https://oauth2:{os.environ["TF_VAR_testing_integration_github_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
-                dir,
-                branch=case_param["head_ref"],
-            )
-
             merge_commit = merge_pr()
-            log.debug(f"Merged Commits: {merge_commit}")
-            log.debug(
-                f'Reverting merge commit: {merge_commit[case_param["revert_ref"]].sha}'
-            )
-            git_repo.git.revert(
-                "-m",
-                "1",
-                "--no-commit",
-                str(merge_commit[case_param["revert_ref"]].sha),
-            )
-            git_repo.git.commit("-m", "Revert PR changes within PR case")
-            git_repo.git.push("origin")
 
-            log.debug("Creating PR")
-            pr = repo.create_pull(
-                title=f'Revert {case_param["revert_ref"]}',
-                body="Rollback PR",
-                base=mut_output["base_branch"],
-                head=case_param["head_ref"],
-            )
+            if case_param["revert_ref"] in merge_commit:
+                log.info(
+                    f'Creating PR to revert changes from PR named: {case_param["revert_ref"]}'
+                )
+                dir = str(tmp_path_factory.mktemp("scenario-repo-revert"))
 
-            yield {
-                "number": pr.number,
-                "head_commit_id": git_repo.head.object.hexsha,
-                "base_ref": mut_output["base_branch"],
-                "head_ref": case_param["head_ref"],
-            }
+                log.info(f'Creating revert branch: {case_param["head_ref"]}')
+                base_commit = repo.get_branch(mut_output["base_branch"])
+                head_ref = repo.create_git_ref(
+                    ref="refs/heads/" + case_param["head_ref"],
+                    sha=base_commit.commit.sha,
+                )
 
-        log.info(f"Removing PR head ref branch: {case_param['head_ref']}")
-        head_ref.delete()
+                git_repo = git.Repo.clone_from(
+                    f'https://oauth2:{os.environ["TF_VAR_testing_integration_github_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
+                    dir,
+                    branch=case_param["head_ref"],
+                )
 
-        log.info(f"Closing PR: #{pr.number}")
-        try:
-            pr.edit(state="closed")
-        except Exception:
-            log.info("PR is merged or already closed")
+                log.debug(f"Merged Commits: {merge_commit}")
+                log.debug(
+                    f'Reverting merge commit: {merge_commit[case_param["revert_ref"]].sha}'
+                )
+                git_repo.git.revert(
+                    "-m",
+                    "1",
+                    "--no-commit",
+                    str(merge_commit[case_param["revert_ref"]].sha),
+                )
+                git_repo.git.commit("-m", "Revert PR changes within PR case")
+                git_repo.git.push("origin")
+
+                log.debug("Creating PR")
+                pr = repo.create_pull(
+                    title=f'Revert {case_param["revert_ref"]}',
+                    body="Rollback PR",
+                    base=mut_output["base_branch"],
+                    head=case_param["head_ref"],
+                )
+
+                yield {
+                    "number": pr.number,
+                    "head_commit_id": git_repo.head.object.hexsha,
+                    "base_ref": mut_output["base_branch"],
+                    "head_ref": case_param["head_ref"],
+                }
+
+                log.info(f"Removing PR head ref branch: {case_param['head_ref']}")
+                head_ref.delete()
+
+                log.info(f"Closing PR: #{pr.number}")
+                try:
+                    pr.edit(state="closed")
+                except Exception:
+                    log.info("PR is merged or already closed")
+            else:
+                pytest.skip(f"PR to revert does not exist: {case_param['head_ref']}")
 
     @pytest.fixture(scope="module")
     def destroy_scenario_tf_resources(self, mut_output, tf_destroy_commit_ids):
         """
-        Starts a terra_run build for each AWS account and runs terragrunt run-all destroy
+        Starts a terra run task for each AWS account and runs terragrunt run-all destroy
         within each account-level root directory
         """
         yield None
-
-        cb = boto3.client("codebuild")
-
         log.info("Destroying Terraform provisioned resources from test repository")
 
         with aurora_data_api.connect(
@@ -185,7 +205,7 @@ class Integration:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                SELECT account_name, account_path, deploy_role_arn
+                SELECT account_name, account_path, apply_role_arn
                 FROM {mut_output["metadb_schema"]}.account_dim
                 """
                 )
@@ -201,114 +221,213 @@ class Integration:
                 accounts.append(record)
 
         log.debug(f"Accounts:\n{pformat(accounts)}")
-        log.info("Starting account-level terraform destroy builds")
+        log.info("Starting account-level terraform destroy tasks")
         # reversed so newer commits are destroyed first
         for source_version in reversed(tf_destroy_commit_ids()):
-            ids = []
+            task_arns = []
             log.debug(f"Source version: {source_version}")
             for account in accounts:
                 log.debug(f'Account Name: {account["account_name"]}')
-                response = cb.start_build(
-                    projectName=mut_output["codebuild_terra_run_name"],
-                    environmentVariablesOverride=[
-                        {
-                            "name": "TG_COMMAND",
-                            "type": "PLAINTEXT",
-                            "value": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["deploy_role_arn"]} -auto-approve',
+                task = ecs.run_task(
+                    cluster=mut_output["ecs_cluster_arn"],
+                    count=1,
+                    launchType="FARGATE",
+                    taskDefinition=mut_output["ecs_terra_run_task_definition_arn"],
+                    networkConfiguration={
+                        "awsvpcConfiguration": {
+                            "subnets": mut_output["ecs_private_subnet_ids"],
+                            "securityGroups": mut_output["ecs_security_group_ids"],
                         }
-                    ],
-                    sourceVersion=source_version,
+                    },
+                    overrides={
+                        "containerOverrides": [
+                            {
+                                "name": mut_output["ecs_terra_run_task_container_name"],
+                                "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["apply_role_arn"]} -auto-approve'.split(
+                                    " "
+                                ),
+                                "environment": [
+                                    {
+                                        "name": "SOURCE_VERSION",
+                                        "value": mut_output["base_branch"],
+                                    }
+                                ],
+                            }
+                        ],
+                        "taskRoleArn": mut_output["ecs_apply_role_arn"],
+                    },
                 )
+                log.debug(f"Run task response:\n{pformat(task)}")
 
-                ids.append(response["build"]["id"])
+                task_arns.append(task["tasks"][0]["containers"][0]["taskArn"])
 
-            log.info("Waiting on destroy builds to finish")
-            statuses = utils.get_build_finished_status(
-                mut_output["codebuild_terra_run_name"], ids=ids
-            )
+            log.info("Waiting on destroy tasks to finish")
+            statuses = []
+            while all([s == "STOPPED" for s in statuses]):
+                time.sleep(5)
+                response = ecs.describe_tasks(
+                    cluster=mut_output["ecs_cluster_arn"], tasks=task_arns
+                )
+                statuses = [
+                    task["containers"][0]["lastStatus"] for task in response["tasks"]
+                ]
+                log.debug(f"Statuses:\n{statuses}")
 
-            log.info(f"Finished Statuses:\n{statuses}")
+            if len(response["failures"]) > 0:
+                log.error("Cleanup ECS tasks failed")
+                log.error(response["failures"])
+
+    def get_finished_commit_status(self, context, repo, commit_id, wait=3):
+        state = None
+        log.info(f"Waiting for commit status check to finish: {context}")
+        while state in [None, "pending"]:
+            log.debug(f"Waiting {wait} seconds")
+            time.sleep(wait)
+            try:
+                status = [
+                    status
+                    for status in repo.get_commit(commit_id).get_statuses()
+                    if status.context == context
+                ][0]
+                state = status.state
+            except IndexError:
+                state = None
+
+            log.debug(f"Status state: {state}")
+
+        return status
 
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
     def test_merge_lock_pr_status(self, repo, mut_output, pr):
         """Assert PR's head commit ID has a successful merge lock status"""
-        wait = 3
-        merge_lock_status = None
-        while merge_lock_status in [None, "pending"]:
-            log.debug(f"Waiting {wait} seconds")
-            time.sleep(wait)
-            try:
-                merge_lock_status = [
-                    status
-                    for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
-                    if status.context == mut_output["merge_lock_status_check_name"]
-                ][0]
-            except IndexError:
-                merge_lock_status = None
+
+        status = self.get_finished_commit_status(
+            mut_output["merge_lock_status_check_name"], repo, pr["head_commit_id"]
+        )
 
         log.info("Assert PR head commit status is successful")
-        assert merge_lock_status.state == "success"
+        log.debug(f"Logs URL: {status.target_url}")
+        assert status.state == "success"
+
+    @pytest.fixture(scope="class")
+    def case_param_modified_dirs(self, case_param):
+        """
+        Returns a list of directory paths that contains added or modified files
+        from the testing class's case attribute
+        """
+        return {
+            path: cfg
+            for path, cfg in case_param["executions"].items()
+            if cfg.get("pr_files_content", False)
+        }
 
     @timeout_decorator.timeout(300)
     @pytest.mark.dependency()
-    def test_pr_plan_codebuild(self, mut_output, pr, case_param):
-        """Assert PR plan codebuild status matches it's expected status"""
+    def test_pr_plan_commit_status_created(
+        self, mut_output, pr, repo, case_param_modified_dirs
+    ):
+        """Assert PR plan tasks initial commit statuses were created"""
 
-        log.info("Giving build time to start")
-        time.sleep(5)
+        log.info("Waiting for all PR plan commit statuses to be created")
+        expected_count = len(case_param_modified_dirs)
+        log.debug(f"Expected count: {expected_count}")
 
-        status = utils.get_build_finished_status(
-            mut_output["codebuild_pr_plan_name"],
-            filters={"sourceVersion": f'pr/{pr["number"]}'},
-        )[0]
+        statuses = []
+        wait = 10
+        while len(statuses) != expected_count:
+            log.debug(f"Waiting {wait} seconds")
+            time.sleep(wait)
+            statuses = [
+                status
+                for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+                if status.context != mut_output["merge_lock_status_check_name"]
+            ]
 
-        if case_param.get("expect_failed_pr_plan", False):
-            log.info("Assert build failed")
-            assert status == "FAILED"
-        else:
-            log.info("Assert build succeeded")
-            assert status == "SUCCEEDED"
+        expected_status = "pending"
+        log.info(f"Assert plan commit statuses were set to {expected_status}")
+        for status in statuses:
+            log.debug(f"Context: {status.context}")
+            log.debug(f"Logs URL: {status.target_url}")
+            assert status.state == expected_status
+
+    @timeout_decorator.timeout(300)
+    @pytest.mark.dependency()
+    def test_pr_plan_commit_status_updated(
+        self, request, mut_output, pr, repo, case_param_modified_dirs
+    ):
+        """Assert PR plan tasks commit statuses were updated"""
+        depends(
+            request, [f"{request.cls.__name__}::test_pr_plan_commit_status_created"]
+        )
+        log.info("Waiting for all PR plan commit statuses to be updated")
+        expected_count = len(case_param_modified_dirs)
+        log.debug(f"Expected count: {expected_count}")
+
+        statuses = []
+        wait = 15
+        while len(statuses) != expected_count:
+            log.debug(f"Waiting {wait} seconds")
+            time.sleep(wait)
+            statuses = [
+                status
+                for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+                if status.context != mut_output["merge_lock_status_check_name"]
+                and status.state != "pending"
+            ]
+
+            log.debug(f"Finished count: {len(statuses)}")
+
+        log.info("Assert plan commit statuses were set to expected status")
+        for status in statuses:
+            expected_status = "success"
+            for path, cfg in case_param_modified_dirs.items():
+                # checks if the case directory's associated commit status is expected to fail
+                if re.match(f"Plan: {re.escape(path)}$", status.context) and cfg.get(
+                    "expect_failed_pr_plan", False
+                ):
+                    expected_status = "failure"
+                    break
+            log.debug(f"Expected status: {expected_status}")
+            log.debug(f"Context: {status.context}")
+            log.debug(f"Logs URL: {status.target_url}")
+            assert status.state == expected_status
 
     @timeout_decorator.timeout(30)
     @pytest.mark.dependency()
-    def test_pr_merge(self, request, mut_output, case_param, merge_pr, pr, repo):
-        """
-        Ensures that the PR status checks before merging are complete and then
-        merges the PR
-        """
+    def test_pr_merge(self, request, mut_output, merge_pr, pr, repo):
+        """Ensure that the PR merges without error"""
         depends(request, [f"{request.cls.__name__}::test_merge_lock_pr_status"])
-        depends(request, [f"{request.cls.__name__}::test_pr_plan_codebuild"])
-
-        log.info("Ensure all status checks are completed")
-        branch = repo.get_branch(branch=mut_output["base_branch"])
-        status_checks = branch.get_required_status_checks().contexts
-        log.debug(f"Status Checks Required: {status_checks}")
-        log.debug(
-            f"Branch protection enforced for admins: {branch.get_protection().enforce_admins}"
+        depends(
+            request, [f"{request.cls.__name__}::test_pr_plan_commit_status_updated"]
         )
-
-        statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
-        while statuses.totalCount != 3:
-            time.sleep(3)
-            statuses = repo.get_commit(pr["head_commit_id"]).get_statuses()
-            log.debug(f"Count: {statuses.totalCount}")
 
         log.info(f"Merging PR: #{pr['number']}")
         try:
             merge_pr(pr["base_ref"], pr["head_ref"])
         except Exception as e:
-            if case_param.get("expect_failed_pr_plan", False):
-                pytest.skip(
-                    "Skipping downstream tests since `expect_failed_pr_plan` is set to True"
-                )
-            else:
-                raise e
+            branch = repo.get_branch(branch=mut_output["base_branch"])
+            log.debug(
+                f"Branch protection enforced for admins: {branch.get_protection().enforce_admins}"
+            )
+            log.debug(
+                f"Status Checks Required: {branch.get_required_status_checks().contexts}"
+            )
+
+            merge_lock_status = {
+                status.context: status.state
+                for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+                if status.context == mut_output["merge_lock_status_check_name"]
+            }
+            log.debug(f"Merge Lock status: {merge_lock_status}")
+
+            log.error(e, exc_info=True)
+            raise e
 
     @timeout_decorator.timeout(600)
     @pytest.mark.dependency()
-    def test_create_deploy_stack_codebuild(self, request, case_param, mut_output, pr):
-        """Assert create deploy stack codebuild status matches it's expected status"""
+    def test_create_deploy_stack_task(self, request, repo, case_param, mut_output, pr):
+        """Assert create deploy stack status matches it's expected status"""
         depends(request, [f"{request.cls.__name__}::test_pr_merge"])
 
         # needed for the wait_for_lambda_invocation() start_time arg within the first test_trigger_sf iteration so
@@ -318,18 +437,17 @@ class Integration:
             datetime.now().timestamp() * 1000
         )
 
-        log.info("Giving build time to start")
-        time.sleep(5)
+        status = self.get_finished_commit_status(
+            mut_output["create_deploy_stack_status_check_name"],
+            repo,
+            pr["head_commit_id"],
+        )
+        log.debug(f"Logs URL: {status.target_url}")
 
-        status = utils.get_build_finished_status(
-            mut_output["codebuild_create_deploy_stack_name"],
-            filters={"sourceVersion": f'pr/{pr["number"]}'},
-        )[0]
-
-        # used for cases where rollback new provider resources executions were not executed beforehand so build is expected to fail
+        # used for cases where rollback new provider resources executions were not executed beforehand so task is expected to fail
         if case_param.get("expect_failed_create_deploy_stack", False):
-            log.info("Assert build failed")
-            assert status == "FAILED"
+            log.info("Assert task failed")
+            assert status.state == "failure"
 
             log.info(
                 f'Assert no execution records exists for commit_id: {pr["head_commit_id"]}'
@@ -356,8 +474,8 @@ class Integration:
                 "Skipping downstream tests since `expect_failed_create_deploy_stack` is set to True"
             )
         else:
-            log.info("Assert build succeeded")
-            assert status == "SUCCEEDED"
+            log.info("Assert task succeeded")
+            assert status.state == "success"
 
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
@@ -395,12 +513,10 @@ class Integration:
         """
         Assert that there are no errors within the latest invocation of the trigger Step Function Lambda
 
-        Depends on create deploy stack codebuild status to be successful to ensure that errors produce by
-        the Lambda function are not caused by the build
+        Depends on create deploy stack task status to be successful to ensure that errors produce by
+        the Lambda function are not caused by the task
         """
-        depends(
-            request, [f"{request.cls.__name__}::test_create_deploy_stack_codebuild"]
-        )
+        depends(request, [f"{request.cls.__name__}::test_create_deploy_stack_task"])
 
         if int(request.node.callspec.id) + 1 != len(request.cls.executions):
             # needed for the wait_for_lambda_invocation() start_time arg within the next test_trigger_sf iteration to
@@ -583,7 +699,7 @@ class Integration:
             request.cls.executions[int(request.node.callspec.id)]["action"] = (
                 case_param["executions"][record["cfg_path"]]
                 .get("actions", {})
-                .get("deploy", None)
+                .get("apply", None)
             )
 
         log.info("Putting record into request execution dict")
@@ -607,7 +723,7 @@ class Integration:
 
         sf = boto3.client("stepfunctions")
 
-        log.debug(f'Target Execution Status: {["status"]}')
+        log.debug(f'Target Execution Status: {record["status"]}')
         if record["status"] != "aborted":
             pytest.skip("Execution approval action is not set to `aborted`")
 
@@ -668,7 +784,7 @@ class Integration:
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_terra_run_plan_codebuild(self, request, mut_output):
+    def test_terra_run_plan(self, request, mut_output):
         """Assert terra run plan task within Step Function execution succeeded"""
         depends(
             request,
@@ -693,7 +809,7 @@ class Integration:
         depends(
             request,
             [
-                f"{request.cls.__name__}::test_terra_run_plan_codebuild[{request.node.callspec.id}]"
+                f"{request.cls.__name__}::test_terra_run_plan[{request.node.callspec.id}]"
             ],
         )
 
@@ -823,7 +939,7 @@ class Integration:
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_terra_run_deploy_codebuild(self, request, mut_output):
+    def test_terra_run_deploy(self, request, mut_output):
         """Assert terra run deploy task within Step Function execution succeeded"""
         depends(
             request,
@@ -840,11 +956,11 @@ class Integration:
             mut_output["state_machine_arn"], record["execution_id"]
         )
 
-        utils.assert_terra_run_status(execution_arn, "Deploy", "TaskSucceeded")
+        utils.assert_terra_run_status(execution_arn, "Apply", "TaskSucceeded")
 
     @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    # runs cleanup builds only if step function deploy task was executed
+    # runs cleanup tasks only if step function deploy task was executed
     @pytest.mark.usefixtures("destroy_scenario_tf_resources")
     def test_sf_execution_status(self, request, mut_output):
         """Assert Step Function execution succeeded"""
@@ -864,7 +980,7 @@ class Integration:
             depends(
                 request,
                 [
-                    f"{request.cls.__name__}::test_terra_run_deploy_codebuild[{request.node.callspec.id}]"
+                    f"{request.cls.__name__}::test_terra_run_deploy[{request.node.callspec.id}]"
                 ],
             )
         else:
@@ -897,7 +1013,7 @@ class Integration:
 
         elif case_param.get("expect_failed_create_deploy_stack", False):
             # merge lock should be unlocked if error is caught within
-            # build's update_executions_with_new_deploy_stack()
+            # task's update_executions_with_new_deploy_stack()
             log.info("Assert merge lock is unlocked")
             assert (
                 ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][

@@ -41,26 +41,31 @@ resource "null_resource" "this" {}
 
 dummy_configured_provider_resource = """
 terraform {
-    required_providers {
-        dummy = {
-        source = "nfx04/dummy"
-        version = "0.0.6"
-        }
+  required_providers {
+    dummy = {
+      source = "marshall7m/dummy"
+      version = "0.0.3"
     }
+  }
 }
 
 provider "dummy" {
-    name = "foo"
+  foo = "bar"
 }
 
-resource "dummy_thing" "this" {
-    name = "bar"
-}
+resource "dummy_resource" "this" {}
 """
 
 
 def toggle_trigger(conn, table, trigger, enable=False):
-    """Toggles the tables associated testing trigger that creates random defaults to prevent any null violations"""
+    """
+    Toggles the tables associated testing trigger that creates random defaults to prevent any null violations
+
+    Arguments:
+        conn: Database connection object
+        table: Table to insert the records into
+        enable: Enables the table's associated trigger
+    """
     with conn.cursor() as cur:
         log.debug("Creating triggers for table")
         cur.execute(
@@ -81,7 +86,14 @@ def toggle_trigger(conn, table, trigger, enable=False):
 
 
 def insert_records(conn, table, records, enable_defaults=None):
-    """Toggles table's associated trigger and inserts list of dictionaries or a single dictionary into the table"""
+    """
+    Toggles table's associated trigger and inserts list of dictionaries or a single dictionary into the table
+
+    Arguments:
+        conn: Database connection object
+        table: Table to insert the records into
+        enable_defaults: Enables the table's associated trigger that inputs default values
+    """
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         if type(records) == dict:
             records = [records]
@@ -120,7 +132,16 @@ def insert_records(conn, table, records, enable_defaults=None):
     return results
 
 
-def check_ses_sender_email_auth(email_address, send_verify_email=False):
+def check_ses_sender_email_auth(email_address: str, send_verify_email=False) -> bool:
+    """
+    Checks if AWS SES sender is authorized to send emails from it's address.
+    If not authorized, the function can send a verification email.
+
+    Arguments:
+        email_address: Sender email address
+        send_verify_email: Sends a verification email to the sender email address
+            where the sender can authenticate their email address
+    """
     ses = boto3.client("ses")
     verified = ses.list_verified_email_addresses()["VerifiedEmailAddresses"]
     if email_address in verified:

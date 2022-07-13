@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
+@pytest.mark.skip("See class case TODO")
 class TestDeployPR(test_integration.Integration):
     """
     Case covers a simple one node deployment that contains a new dummy
@@ -20,7 +21,7 @@ class TestDeployPR(test_integration.Integration):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"deploy": "approve"},
+                "actions": {"apply": "approve"},
                 "pr_files_content": [dummy_configured_provider_resource],
             }
         },
@@ -28,6 +29,7 @@ class TestDeployPR(test_integration.Integration):
     }
 
 
+@pytest.mark.skip("See upstream class case TODO")
 @pytest.mark.regex_dependency(
     f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestDeployPR::.+",
     allowed_outcomes=["passed", "skipped"],
@@ -35,45 +37,16 @@ class TestDeployPR(test_integration.Integration):
 class TestRevertPRWithoutProviderRollback(test_integration.Integration):
     """
     Case will merge a PR that will revert the changes from the upstream case's PR.
-    This case's associated create deploy stack Codebuild is expected to fail given
+    This case's associated create deploy stack task is expected to fail given
     that the reversion of the PR will remove not only the new dummy resource block
     but also it's respective dummy provider block that Terraform needs in order to destroy
-    the dummy resource. The build is specifically expected to fail when GRAPH_SCAN env var
-    is not set and the build uses `terragrunt run-all plan` to collect deployment directories
+    the dummy resource. The task is specifically expected to fail when SCAN_TYPE is set to `plan`
+    and uses `terragrunt run-all plan` to collect deployment directories
     rather than `terragrunt graph-dependencies`.
     """
 
-    @pytest.fixture(scope="class", autouse=True)
-    def unset_graph_scan(self, mut_output):
-        """
-        Removes GRAPH_SCAN env var from create deploy stack build project before
-        running class case
-        """
-        cb = boto3.client("codebuild")
-
-        log.info("Removing GRAPH_SCAN env var from create deploy stack build")
-        current = cb.batch_get_projects(
-            names=[mut_output["codebuild_create_deploy_stack_name"]]
-        )["projects"][0]
-        original = current["environment"]
-        current["environment"]["environmentVariables"] = [
-            env_var
-            for env_var in current["environment"]["environmentVariables"]
-            if env_var["name"] != "GRAPH_SCAN"
-        ]
-        cb.update_project(
-            name=mut_output["codebuild_create_deploy_stack_name"],
-            environment=current["environment"],
-        )
-
-        yield None
-
-        log.info("Adding GRAPH_SCAN env var back into create deploy stack build")
-        cb.update_project(
-            name=mut_output["codebuild_create_deploy_stack_name"], environment=original
-        )
-
     case = {
+        "scan_type": "plan",
         "head_ref": f"feature-{uuid.uuid4()}",
         "revert_ref": TestDeployPR.case["head_ref"],
         "expect_failed_create_deploy_stack": True,

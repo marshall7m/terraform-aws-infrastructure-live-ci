@@ -11,7 +11,7 @@ on:
     - .gitignore
     - LICENSE.md
     - README.md
-    - buildspecs/img/**
+    - docker/**
     - .github/workflows/build.yml
 
   push:
@@ -24,7 +24,7 @@ on:
       - .gitignore
       - LICENSE.md
       - README.md
-      - buildspecs/img/**
+      - docker/**
       - .github/workflows/build.yml
 
 env:
@@ -34,12 +34,15 @@ env:
 jobs:
   precommit:
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.8
+    container: ghcr.io/marshall7m/terrace:v0.1.10
     permissions:
       id-token: write
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
       - name: Hooks
         shell: bash
         run: |
@@ -48,10 +51,21 @@ jobs:
           pre-commit install
           pre-commit run --all-files
 
+      - name: Update README.md TOC
+        id: readme_toc
+        shell: bash
+        if: ${{ !env.ACT }}
+        run: gh-md-toc --no-backup README.md
+
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        if: ${{ !env.ACT }}
+        with:
+          commit_message: Auto update markdown TOC
+
   unit:
     needs: precommit
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.8
+    container: ghcr.io/marshall7m/terrace:v0.1.10
     services:
       postgres:
         image: postgres:10.14-alpine
@@ -129,14 +143,14 @@ jobs:
   integration:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.8
+    container: ghcr.io/marshall7m/terrace:v0.1.10
     permissions:
       id-token: write
       contents: read
     env:
       TF_VAR_testing_integration_github_token: ${{ secrets.TF_VAR_TESTING_INTEGRATION_GITHUB_TOKEN }}
-      TF_VAR_merge_lock_github_token_ssm_value: ${{ secrets.TF_VAR_MERGE_LOCK_GITHUB_TOKEN_SSM_VALUE }}
-      TF_VAR_github_webhook_validator_github_token_ssm_value: ${{ secrets.TF_VAR_GITHUB_WEBHOOK_VALIDATOR_GITHUB_TOKEN_SSM_VALUE }}
+      TF_VAR_registry_password: ${{ secrets.TF_VAR_TESTING_INTEGRATION_GITHUB_TOKEN }}
+      TF_VAR_github_token_ssm_value: ${{ secrets.TF_VAR_GITHUB_TOKEN_SSM_VALUE }}
       TF_VAR_testing_secondary_aws_account_id: ${{ secrets.TF_VAR_TESTING_SECONDARY_AWS_ACCOUNT_ID }}
       TF_VAR_approval_request_sender_email: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
     steps:
@@ -144,8 +158,8 @@ jobs:
       - name: mask sensitive
         run: |
           echo "::add-mask::$TF_VAR_testing_integration_github_token"
-          echo "::add-mask::$TF_VAR_merge_lock_github_token_ssm_value"
-          echo "::add-mask::$TF_VAR_github_webhook_validator_github_token_ssm_value"
+          echo "::add-mask::$TF_VAR_registry_password"
+          echo "::add-mask::$TF_VAR_github_token_ssm_value"
           echo "::add-mask::$TF_VAR_testing_secondary_aws_account_id"
           echo "::add-mask::$TF_VAR_approval_request_sender_email"
 
@@ -165,6 +179,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Docker
+        id: unit_install_docker
+        shell: bash
+        run: |
+          bash ./runner_install_docker.sh
 
       - name: Tests
         id: pytest_integration

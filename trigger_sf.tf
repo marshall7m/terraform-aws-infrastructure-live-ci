@@ -1,87 +1,81 @@
 locals {
   trigger_sf_function_name = "${var.prefix}-trigger-sf"
-  trigger_sf_dep_zip       = "${path.module}/trigger_sf_deps.zip"
-  trigger_sf_dep_dir       = "${path.module}/functions/trigger_sf/deps"
 }
-
-data "archive_file" "lambda_trigger_sf" {
-  type        = "zip"
-  source_dir  = "${path.module}/functions/trigger_sf"
-  output_path = "${path.module}/trigger_sf.zip"
-}
-
-resource "null_resource" "lambda_trigger_sf_deps" {
-  triggers = {
-    zip_hash = fileexists(local.trigger_sf_dep_zip) ? 0 : timestamp()
+data "aws_iam_policy_document" "trigger_sf" {
+  statement {
+    sid    = "StateMachineAccess"
+    effect = "Allow"
+    actions = [
+      "states:StartExecution",
+      "states:ListExecutions"
+    ]
+    resources = [local.state_machine_arn]
   }
-  provisioner "local-exec" {
-    command = "python3 -m pip install --upgrade pip && python3 -m pip install --upgrade --target ${local.trigger_sf_dep_dir}/python aurora-data-api==0.4.0 awscli==1.22.5 boto3==1.20.5"
+  statement {
+    sid       = "StateMachineExecutionAccess"
+    effect    = "Allow"
+    actions   = ["states:StopExecution"]
+    resources = ["arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:execution:${local.step_function_name}:*"]
   }
 }
 
-data "archive_file" "lambda_trigger_sf_deps" {
-  type        = "zip"
-  source_dir  = local.trigger_sf_dep_dir
-  output_path = local.trigger_sf_dep_zip
-  depends_on = [
-    null_resource.lambda_trigger_sf_deps
-  ]
+resource "aws_iam_policy" "trigger_sf" {
+  name        = "${local.trigger_sf_function_name}-sf-access"
+  description = "Allows Lambda function to start and stop executions for the specified Step Function machine(s)"
+  policy      = data.aws_iam_policy_document.trigger_sf.json
 }
 
 module "lambda_trigger_sf" {
-  source           = "github.com/marshall7m/terraform-aws-lambda?ref=v0.1.0"
-  filename         = data.archive_file.lambda_trigger_sf.output_path
-  source_code_hash = data.archive_file.lambda_trigger_sf.output_base64sha256
-  function_name    = local.trigger_sf_function_name
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.8"
-  vpc_config       = var.lambda_trigger_sf_vpc_config
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "3.3.1"
 
-  env_vars = {
-    GITHUB_MERGE_LOCK_SSM_KEY = aws_ssm_parameter.merge_lock.name
-    STATE_MACHINE_ARN         = local.state_machine_arn
-    PGUSER                    = var.metadb_ci_username
-    PGPORT                    = var.metadb_port
-    METADB_NAME               = local.metadb_name
-    METADB_CLUSTER_ARN        = aws_rds_cluster.metadb.arn
-    METADB_SECRET_ARN         = aws_secretsmanager_secret_version.ci_metadb_user.arn
+  function_name = local.trigger_sf_function_name
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.9"
+
+  source_path = [
+    {
+      path             = "${path.module}/functions/trigger_sf"
+      pip_requirements = true
+    }
+  ]
+
+  environment_variables = {
+    GITHUB_MERGE_LOCK_SSM_KEY    = aws_ssm_parameter.merge_lock.name
+    GITHUB_TOKEN_SSM_KEY         = local.github_token_ssm_key
+    COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_name
+    REPO_FULL_NAME               = data.github_repository.this.full_name
+    STATE_MACHINE_ARN            = local.state_machine_arn
+
+    PGUSER             = var.metadb_ci_username
+    PGPORT             = var.metadb_port
+    METADB_NAME        = local.metadb_name
+    METADB_CLUSTER_ARN = aws_rds_cluster.metadb.arn
+    METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
-  custom_role_policy_arns = [
+
+  allowed_triggers = {
+    StepFunctionFinishedEvent = {
+      principal  = "events.amazonaws.com"
+      source_arn = aws_cloudwatch_event_rule.sf_execution.arn
+    }
+  }
+
+  publish = true
+
+  attach_policies               = true
+  number_of_policies            = 6
+  role_force_detach_policies    = true
+  attach_cloudwatch_logs_policy = true
+  policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
-    aws_iam_policy.ci_metadb_access.arn
+    aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.commit_status_config.arn,
+    aws_iam_policy.trigger_sf.arn
   ]
-  statements = [
-    {
-      sid    = "StateMachineAccess"
-      effect = "Allow"
-      actions = [
-        "states:StartExecution",
-        "states:ListExecutions"
-      ]
-      resources = [local.state_machine_arn]
-    },
-    {
-      sid       = "StateMachineExecutionAccess"
-      effect    = "Allow"
-      actions   = ["states:StopExecution"]
-      resources = ["arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:execution:${local.step_function_name}:*"]
-    }
-  ]
-  allowed_to_invoke = [
-    {
-      statement_id = "StepFunctionFinishedEvent"
-      principal    = "events.amazonaws.com"
-      arn          = aws_cloudwatch_event_rule.sf_execution.arn
-    }
-  ]
-  lambda_layers = [
-    {
-      filename         = data.archive_file.lambda_trigger_sf_deps.output_path
-      name             = "${local.trigger_sf_function_name}-deps"
-      runtimes         = ["python3.8"]
-      source_code_hash = data.archive_file.lambda_trigger_sf_deps.output_base64sha256
-      description      = "Dependencies for lambda function: ${local.trigger_sf_function_name}"
-    }
-  ]
+  vpc_subnet_ids         = try(var.lambda_trigger_sf_vpc_config.subnet_ids, null)
+  vpc_security_group_ids = try(var.lambda_trigger_sf_vpc_config.security_group_ids, null)
+  attach_network_policy  = var.lambda_trigger_sf_vpc_config != null ? true : false
 }

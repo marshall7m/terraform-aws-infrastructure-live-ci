@@ -39,7 +39,7 @@ class TestCreateDeployStackRollback(test_integration.Integration):
 
         log.info("Creating deny policy")
         response = iam.create_policy(
-            PolicyName=f'{mut_output["codebuild_create_deploy_stack_name"]}-test-error',
+            PolicyName=f'{mut_output["ecs_create_deploy_stack_family"]}-test-error',
             PolicyDocument=json.dumps(
                 {
                     "Version": "2012-10-17",
@@ -56,10 +56,10 @@ class TestCreateDeployStackRollback(test_integration.Integration):
         )
 
         arn = response["Policy"]["Arn"]
-        role = iam_res.Role(mut_output["codebuild_create_deploy_stack_name"])
+        role = iam_res.Role(mut_output["ecs_create_deploy_stack_family"])
 
         log.debug(
-            f'Attaching policy to role: {mut_output["codebuild_create_deploy_stack_name"]}'
+            f'Attaching policy to role: {mut_output["ecs_create_deploy_stack_family"]}'
         )
         role.attach_policy(PolicyArn=arn)
 

@@ -2,13 +2,22 @@ import boto3
 import logging
 import json
 import os
+import re
+import urllib
 
 ses = boto3.client("ses")
 log = logging.getLogger(__name__)
 
 
+def aws_encode(value):
+    """Encodes value into AWS friendly URL component"""
+    value = urllib.parse.quote_plus(value)
+    value = re.sub(r"\+", " ", value)
+    return re.sub(r"%", "$", urllib.parse.quote_plus(value))
+
+
 def lambda_handler(event, context):
-    """Sends approval request email to email addresses asssociated with Terragrunt path."""
+    """Sends approval request email to email addresses asssociated with Terragrunt path"""
 
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
@@ -18,7 +27,8 @@ def lambda_handler(event, context):
     template_data = {
         "full_approval_api": event["ApprovalAPI"],
         "path": event["Path"],
-        "logs_url": event["LogsUrl"],
+        "logs_url": event["LogUrlPrefix"]
+        + aws_encode(event["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]),
         "execution_name": event["ExecutionName"],
         "account_name": event["AccountName"],
         "pr_id": event["PullRequestID"],
@@ -28,7 +38,8 @@ def lambda_handler(event, context):
 
     destinations = []
 
-    # need to create a separate destination object for each address since only the target address is interpolated into message template
+    # need to create a separate destination object for each address since only
+    # the target address is interpolated into message template
     for address in event["Voters"]:
         destinations.append(
             {
