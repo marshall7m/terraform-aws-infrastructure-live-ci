@@ -2,7 +2,9 @@ import boto3
 import logging
 import json
 import os
+import base64
 import sys
+from urllib import parse
 import aurora_data_api
 from pprint import pformat
 
@@ -20,12 +22,20 @@ def lambda_handler(event, context):
     Terragrunt path. If the minimum approval or rejection count is met,
     a successful task token is sent to associated AWS Step Function
     """
-    log.info(event)
+    log.info(f"Event:\n{pformat(event)}")
 
-    action = event["body"]["action"]
+    body = event["body"]
+    if event["isBase64Encoded"]:
+        log.info("Decoding request body")
+        body = base64.b64decode(body).decode("utf-8")
+
+    body = dict(parse.parse_qs(body))
+    log.debug(f"Parsed request body:\n{body}")
+
+    action = body["action"][0]
 
     try:
-        status = sf.describe_execution(executionArn=event["query"]["exId"])["status"]
+        status = sf.describe_execution(executionArn=event["queryStringParameters"]["exId"])["status"]
         if status == "RUNNING":
             log.info("Updating vote count")
             # TODO: If query execution time is too long and
@@ -44,8 +54,8 @@ def lambda_handler(event, context):
                         cur.execute(
                             f.read().format(
                                 action=action,
-                                recipient=event["body"]["recipient"],
-                                execution_id=event["query"]["ex"],
+                                recipient=body["recipient"][0],
+                                execution_id=event["queryStringParameters"]["ex"],
                             )
                         )
                         try:
@@ -63,7 +73,7 @@ def lambda_handler(event, context):
                             )
                         except TypeError:
                             raise ClientException(
-                                f'Record with execution ID: {event["query"]["ex"]} does not exist'  # noqa: E501
+                                f'Record with execution ID: {event["queryStringParameters"]["ex"]} does not exist'  # noqa: E501
                             )
             log.debug(f"Record:\n{pformat(record)}")
 
@@ -75,7 +85,7 @@ def lambda_handler(event, context):
 
                 log.info("Sending task token to Step Function Machine")
                 sf.send_task_success(
-                    taskToken=event["query"]["taskToken"],
+                    taskToken=event["queryStringParameters"]["taskToken"],
                     output=json.dumps(action),  # noqa: E501
                 )
 

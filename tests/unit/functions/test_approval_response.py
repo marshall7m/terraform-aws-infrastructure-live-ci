@@ -5,6 +5,7 @@ import sys
 import json
 from unittest.mock import patch
 from pprint import pformat
+import base64
 from tests.helpers.utils import insert_records
 from psycopg2 import sql
 
@@ -26,8 +27,9 @@ def lambda_handler(event=None, context=None):
     [
         pytest.param(
             {
-                "body": {"action": "approve", "recipient": "test-user"},
-                "query": {
+                "isBase64Encoded": True,
+                "body": base64.b64encode("action=approve&recipient=success%40simulator.amazonses.com"),
+                "queryStringParameters": {
                     "ex": "mock-run",
                     "exId": "mock-arn",
                     "taskToken": "mock-token",
@@ -45,8 +47,9 @@ def lambda_handler(event=None, context=None):
         ),
         pytest.param(
             {
-                "body": {"action": "approve", "recipient": "test-user"},
-                "query": {
+                "isBase64Encoded": True,
+                "body": base64.b64encode("action=approve&recipient=success%40simulator.amazonses.com"),
+                "queryStringParameters": {
                     "ex": "mock-run",
                     "exId": "mock-arn",
                     "taskToken": "mock-token",
@@ -64,8 +67,9 @@ def lambda_handler(event=None, context=None):
         ),
         pytest.param(
             {
-                "body": {"action": "approve", "recipient": "test-user"},
-                "query": {
+                "isBase64Encoded": True,
+                "body": base64.b64encode("action=approve&recipient=success%40simulator.amazonses.com"),
+                "queryStringParameters": {
                     "ex": "mock-run",
                     "exId": "mock-arn",
                     "taskToken": "mock-token",
@@ -84,8 +88,9 @@ def lambda_handler(event=None, context=None):
         ),
         pytest.param(
             {
-                "body": {"action": "approve", "recipient": "test-user"},
-                "query": {
+                "isBase64Encoded": True,
+                "body": base64.b64encode("action=approve&recipient=success%40simulator.amazonses.com"),
+                "queryStringParameters": {
                     "ex": "mock-run",
                     "exId": "mock-arn",
                     "taskToken": "mock-token",
@@ -99,8 +104,9 @@ def lambda_handler(event=None, context=None):
         ),
         pytest.param(
             {
-                "body": {"action": "approve", "recipient": "test-user"},
-                "query": {
+                "isBase64Encoded": True,
+                "body": base64.b64encode("action=approve&recipient=success%40simulator.amazonses.com"),
+                "queryStringParameters": {
                     "ex": "mock-run",
                     "exId": "mock-arn",
                     "taskToken": "mock-token",
@@ -141,7 +147,7 @@ def test_lambda_handler(
         cur.execute(
             sql.SQL(
                 "SELECT approval_voters, rejection_voters FROM executions WHERE execution_id = {}"
-            ).format(sql.Literal(event["query"]["ex"]))
+            ).format(sql.Literal(event["queryStringParameters"]["ex"]))
         )
         res = dict(cur.fetchone())
 
@@ -154,6 +160,6 @@ def test_lambda_handler(
 
     if expected_send_token:
         mock_sf.send_task_success.assert_called_with(
-            taskToken=event["query"]["taskToken"],
+            taskToken=event["queryStringParameters"]["taskToken"],
             output=json.dumps(event["body"]["action"]),
         )
