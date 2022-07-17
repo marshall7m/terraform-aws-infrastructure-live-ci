@@ -256,19 +256,17 @@ class TestWebhookReceiver:
         context = Context()
         lambda_handler(
             {
-                "requestPayload": {
-                    "body": json.dumps(
-                        {
-                            "pull_request": {
-                                "base": {"ref": "master"},
-                                "head": {"ref": "feature"},
-                                "number": 1,
-                                "merged": merged,
-                            },
-                            "repository": {"full_name": "user/repo"},
-                        }
-                    )
-                }
+                "body": json.dumps(
+                    {
+                        "pull_request": {
+                            "base": {"ref": "master"},
+                            "head": {"ref": "feature"},
+                            "number": 1,
+                            "merged": merged,
+                        },
+                        "repository": {"full_name": "user/repo"},
+                    }
+                )
             },
             context,
         )

@@ -264,7 +264,7 @@ def lambda_handler(event, context):
     """
 
     log.debug(f"Event:\n{pformat(event)}")
-    payload = json.loads(event["requestPayload"]["body"])
+    payload = json.loads(event["body"])
 
     token = ssm.get_parameter(
         Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
