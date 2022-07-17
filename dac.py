@@ -1,6 +1,5 @@
 from diagrams import Cluster, Diagram, Edge
 from diagrams.aws.database import Aurora
-from diagrams.aws.network import APIGateway
 from diagrams.aws.compute import LambdaFunction, Fargate
 from diagrams.aws.integration import StepFunctions
 from diagrams.aws.engagement import SimpleEmailServiceSesEmail
@@ -11,12 +10,10 @@ common_attr = {"fontsize": "25", "fontname": "Times bold"}
 
 
 with Diagram("terraform-aws-infrastructure-live", graph_attr=common_attr):
-    validator = LambdaFunction("2. Validate", labelloc="t", **common_attr)
     receiver = LambdaFunction("3. Receiver", **common_attr)
     create_deploy_stack = Fargate("6. Create Deploy Stack", **common_attr)
 
-    APIGateway("1. Webhook Payload", **common_attr) >> validator
-    validator >> receiver
+    receiver
     (
         receiver
         >> Edge(label="Open", color="cornflowerblue", style="bold", **common_attr)
