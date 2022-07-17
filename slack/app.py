@@ -38,7 +38,7 @@ def send_approval(channel: str, client: WebClient):
 
 
 @app.action("approve_button")
-def test_update_approved(ack):
+def test_update_approved(ack, say):
     ack
 def update_approved(event, client):
     """Updated execution thread's `Approved` section"""
