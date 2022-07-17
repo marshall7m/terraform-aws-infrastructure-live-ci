@@ -1,88 +1,31 @@
 locals {
-  webhook_receiver_name                  = "${var.prefix}-webhook-receiver"
-  trigger_pr_plan_name                   = "${var.prefix}-trigger-pr-plan"
-  github_webhook_validator_function_name = "${var.prefix}-webhook-validator"
+  webhook_receiver_name = "${var.prefix}-webhook-receiver"
+  trigger_pr_plan_name  = "${var.prefix}-trigger-pr-plan"
+  github_secret_ssm_key = "${local.webhook_receiver_name}-gh-secret"
 }
 
+resource "random_password" "github_webhook_secret" {
+  length = 24
+}
+resource "aws_ssm_parameter" "github_secret" {
+  name        = local.github_secret_ssm_key
+  description = "Secret value used to authenticate GitHub webhook requests"
+  type        = "SecureString"
+  value       = random_password.github_webhook_secret.result
+}
 
-module "github_webhook_validator" {
-  source = "github.com/marshall7m/terraform-aws-github-webhook?ref=v0.1.4"
+resource "github_repository_webhook" "this" {
+  repository = var.repo_name
 
-  deployment_triggers = {
-    approval = filesha1("${path.module}/approval.tf")
+  configuration {
+    url          = module.lambda_webhook_receiver.lambda_function_url
+    content_type = "json"
+    insecure_ssl = false
+    secret       = random_password.github_webhook_secret.result
   }
-  async_lambda_invocation = true
 
-  create_api       = false
-  api_id           = aws_api_gateway_rest_api.this.id
-  root_resource_id = aws_api_gateway_rest_api.this.root_resource_id
-  execution_arn    = aws_api_gateway_rest_api.this.execution_arn
-
-  stage_name    = var.api_stage_name
-  function_name = local.github_webhook_validator_function_name
-
-  github_secret_ssm_key = "${local.github_webhook_validator_function_name}-secret"
-
-  lambda_attach_async_event_policy = true
-  lambda_create_async_event_config = true
-  lambda_destination_on_success    = module.lambda_webhook_receiver.lambda_function_arn
-
-  repos = [
-    {
-      name                          = var.repo_name
-      is_private                    = true
-      create_github_token_ssm_param = false
-      github_token_ssm_param_arn    = local.github_token_arn
-      filter_groups = [
-        [
-          {
-            type    = "event"
-            pattern = "pull_request"
-          },
-          {
-            type    = "pr_action"
-            pattern = "(opened|edited|reopened)"
-          },
-          {
-            type    = "file_path"
-            pattern = var.file_path_pattern
-          },
-          {
-            type    = "base_ref"
-            pattern = var.base_branch
-          }
-        ],
-        [
-          {
-            type    = "event"
-            pattern = "pull_request"
-          },
-          {
-            type    = "pr_action"
-            pattern = "(closed)"
-          },
-          {
-            type    = "pull_request.merged"
-            pattern = "True"
-          },
-          {
-            type    = "file_path"
-            pattern = var.file_path_pattern
-          },
-          {
-            type    = "base_ref"
-            pattern = var.base_branch
-          }
-        ]
-      ]
-    }
-  ]
-  # approval api resources needs to be created before this module since the module manages the deployment of the api
-  depends_on = [
-    aws_api_gateway_resource.approval,
-    aws_api_gateway_integration.approval,
-    aws_api_gateway_method.approval
-  ]
+  active = true
+  events = ["pull_request"]
 }
 
 resource "aws_ssm_parameter" "merge_lock" {
@@ -157,6 +100,9 @@ module "lambda_webhook_receiver" {
   runtime       = "python3.9"
   timeout       = 120
 
+  authorization_type         = "NONE"
+  create_lambda_function_url = true
+
   source_path = [
     {
       path             = "${path.module}/functions/webhook_receiver"
@@ -187,13 +133,6 @@ module "lambda_webhook_receiver" {
     CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME   = local.create_deploy_stack_container_name
 
     ACCOUNT_DIM = jsonencode(var.account_parent_cfg)
-  }
-
-  allowed_triggers = {
-    WebhookValidator = {
-      principal  = "lambda.amazonaws.com"
-      source_arn = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:function:${local.github_webhook_validator_function_name}"
-    }
   }
 
   publish = true

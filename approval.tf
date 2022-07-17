@@ -4,127 +4,6 @@ locals {
   approval_logs          = "${var.prefix}-approval"
 }
 
-resource "aws_api_gateway_rest_api" "this" {
-  name        = local.approval_logs
-  description = "HTTP Endpoint backed by API Gateway that is used for handling GitHub webhook events and Step Function approvals"
-}
-
-resource "aws_api_gateway_resource" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
-  path_part   = "approval"
-}
-
-resource "aws_api_gateway_method" "approval" {
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  resource_id   = aws_api_gateway_resource.approval.id
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_method_settings" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  stage_name  = module.github_webhook_validator.api_stage_name
-  method_path = "*/*"
-
-  settings {
-    metrics_enabled    = true
-    logging_level      = "INFO"
-    data_trace_enabled = true
-  }
-}
-
-resource "aws_api_gateway_integration" "approval" {
-  rest_api_id             = aws_api_gateway_rest_api.this.id
-  resource_id             = aws_api_gateway_resource.approval.id
-  http_method             = aws_api_gateway_method.approval.http_method
-  integration_http_method = "POST"
-  type                    = "AWS"
-  uri                     = module.lambda_approval_response.lambda_function_invoke_arn
-
-  request_templates = {
-    # converts to key-value pairs (e.g. {'action': 'accept', 'comments': 'Reasoning for action\r\n'})
-    "application/x-www-form-urlencoded" = <<EOF
-{
-  "body": {
-    #foreach( $token in $input.path('$').split('&') )
-        #set( $keyVal = $token.split('=') )
-        #set( $keyValSize = $keyVal.size() )
-        #if( $keyValSize >= 1 )
-            #set( $key = $util.urlDecode($keyVal[0]) )
-            #if( $keyValSize >= 2 )
-                #set( $val = $util.urlDecode($keyVal[1]) )
-            #else
-                #set( $val = '' )
-            #end
-            "$key": "$util.escapeJavaScript($val)"#if($foreach.hasNext),#end
-        #end
-    #end
-    },
-  "query": {
-    #foreach($queryParam in $input.params().querystring.keySet())
-      #if ( $queryParam == "taskToken" )
-          "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam).replaceAll(" ", "+"))"
-      #else
-          "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam))" 
-      #end
-      #if($foreach.hasNext),#end
-    #end
-  }
-}
-  EOF
-  }
-}
-
-
-resource "aws_api_gateway_integration_response" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.approval.id
-  http_method = aws_api_gateway_method.approval.http_method
-
-  status_code = aws_api_gateway_method_response.response_200.status_code
-
-  depends_on = [
-    aws_api_gateway_integration.approval
-  ]
-}
-
-resource "aws_api_gateway_method_response" "response_200" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.approval.id
-  http_method = aws_api_gateway_method.approval.http_method
-
-  status_code = "200"
-}
-
-resource "aws_api_gateway_account" "approval" {
-  cloudwatch_role_arn = module.agw_role.role_arn
-}
-
-module "agw_role" {
-  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-
-  role_name        = local.approval_logs
-  trusted_services = ["apigateway.amazonaws.com"]
-
-  statements = [
-    {
-      sid    = "CloudWatchAccess"
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams",
-        "logs:PutLogEvents",
-        "logs:GetLogEvents",
-        "logs:FilterLogEvents"
-      ]
-      resources = ["*"]
-    }
-  ]
-}
-
 data "aws_iam_policy_document" "lambda_approval_request" {
   statement {
     sid    = "SESAccess"
@@ -224,12 +103,8 @@ module "lambda_approval_response" {
     METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
 
-  allowed_triggers = {
-    APIGatewayInvokeAccess = {
-      service    = "apigateway"
-      source_arn = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
-    }
-  }
+  authorization_type         = "NONE"
+  create_lambda_function_url = true
 
   publish = true
 

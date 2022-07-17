@@ -121,8 +121,8 @@ output "step_function_name" {
 }
 
 output "approval_url" {
-  description = "API URL used for requesting deployment approvals"
-  value       = local.approval_url
+  description = "Lambda Function URL used for casting deployment approval votes"
+  value       = module.lambda_approval_response.lambda_function_url
 }
 
 output "approval_request_log_group_name" {
@@ -135,9 +135,9 @@ output "approval_request_function_name" {
   value       = module.lambda_approval_request.lambda_function_name
 }
 
-output "merge_lock_github_webhook_id" {
-  description = "GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda Function"
-  value       = module.github_webhook_validator.webhook_ids[var.repo_name]
+output "github_webhook_id" {
+  description = "GitHub webhook ID used for sending pull request activity to the Lambda Receiver Function"
+  value       = github_repository_webhook.this.id
 }
 
 output "merge_lock_status_check_name" {

@@ -10,8 +10,8 @@ output "state_machine_name" {
   value = module.mut_infrastructure_live_ci.step_function_name
 }
 
-output "merge_lock_github_webhook_id" {
-  value     = module.mut_infrastructure_live_ci.merge_lock_github_webhook_id
+output "github_webhook_id" {
+  value     = module.mut_infrastructure_live_ci.github_webhook_id
   sensitive = true
 }
 
