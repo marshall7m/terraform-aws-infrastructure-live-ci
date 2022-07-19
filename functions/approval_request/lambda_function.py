@@ -5,7 +5,9 @@ import os
 import re
 import urllib
 
+
 ses = boto3.client("ses")
+ssm = boto3.client("ssm")
 log = logging.getLogger(__name__)
 
 
@@ -24,8 +26,16 @@ def lambda_handler(event, context):
 
     log.debug(f"Lambda Event: {event}")
 
+    approval_user = json.loads(ssm.get_parameter(Name=os.environ["APPROVAL_MACHINE_USER_CREDS_SSM_KEY"])["Parameter"]["Value"])
+
     template_data = {
-        "full_approval_api": event["ApprovalAPI"],
+        "full_approval_api": create_aws_v4_sig(
+            event["ApprovalAPI"],
+            approval_user["id"],
+            approval_user["secret"],
+            method="POST",
+            unsigned_payload=True
+        ),
         "path": event["Path"],
         "logs_url": event["LogUrlPrefix"]
         + aws_encode(event["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]),
