@@ -9,12 +9,12 @@ import aurora_data_api
 from pprint import pformat
 
 sf = boto3.client("stepfunctions")
+ssm = boto3.client("ssm")
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
-
 
 def lambda_handler(event, context):
     """
@@ -102,5 +102,10 @@ def lambda_handler(event, context):
 
 class ClientException(Exception):
     """Wraps around client-related errors"""
+
+    pass
+
+class ServerException(Exception):
+    """Wraps around server-related errors"""
 
     pass
