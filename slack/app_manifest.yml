@@ -2,19 +2,23 @@ _metadata:
   major_version: 1
   minor_version: 1
 display_information:
-  name: Infrastructure Approval
+  name: Test Approval
   description: Posts Infrastructure Approval requests to specified Slack channel
   background_color: "#0000AA"
 settings:
   socket_mode_enabled: false
   interactivity:
     is_enabled: true
-    request_url: {}
+    request_url: null
 features:
-  bot_user: Infra-Bot
-    display_name: Infra-Bot
+  bot_user:
+    display_name: Approval-Bot
 oauth_config:
   scopes:
     bot:
       - incoming-webhook
       - chat:write
+      - channels:manage
+      - groups:write
+      - im:write
+      - mpim:write
