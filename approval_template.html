@@ -3,7 +3,7 @@
 <h3>Execution ID: {{execution_name}}</h3>
 <h3>Terraform Plan Logs: {{logs_url}}</h3>
 
-<form action="{{full_approval_api}}" method="post">
+<form action="{{full_approval_url}}" method="post" enctype="application/json">
    <label for="action">Choose an action:</label>
    <select name="action" id="action">
       <option value="approve">Approve</option>
@@ -11,5 +11,6 @@
    </select>
    <br><br>
    <input type="hidden" id="recipient" name="recipient" value="{{email_address}}">
+   <input type="hidden" id="signature" name="X-SES-Signature" value="{{signature}}">
    <input type="submit" value="Submit" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
 </form>
