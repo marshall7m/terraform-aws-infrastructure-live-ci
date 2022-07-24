@@ -6,6 +6,7 @@ import boto3
 import aurora_data_api
 from pprint import pformat
 import github
+from common.utils import ClientException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -253,9 +254,3 @@ def lambda_handler(event, context):
     except Exception as e:
         log.error(e, exc_info=True)
         return {"statusCode": 500, "message": "Invocation was unsuccessful"}
-
-
-class ClientException(Exception):
-    """Wraps around client-related errors"""
-
-    pass

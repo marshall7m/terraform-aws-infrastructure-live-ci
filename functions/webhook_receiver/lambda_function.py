@@ -6,17 +6,16 @@ import github
 import urllib
 import re
 import fnmatch
+import hashlib
+import hmac
 from pprint import pformat
+from common.utils import ServerException, ClientException
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ssm = boto3.client("ssm")
 ecs = boto3.client("ecs")
-
-
-class ServerException(Exception):
-    pass
 
 
 def aws_encode(value):
@@ -26,12 +25,59 @@ def aws_encode(value):
     return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
 
-class Invoker:
-    def __init__(self, token, repo_full_name, base_ref, head_ref, logs_url):
-        """
+def validate_sig(header_sig: str, payload: str) -> None:
+    """
+    Validates incoming request's sha256 value
 
+    Arguments:
+    header_sig: Github webhook's `X-Hub-Signature-256` header value
+    payload: Github webhook payload. Must be in string version in order
+        to accurately generate the expected signature
+    """
+    try:
+        github_secret = ssm.get_parameter(
+            Name=os.environ["GITHUB_WEBHOOK_SECRET_SSM_KEY"], WithDecryption=True
+        )["Parameter"]["Value"]
+    except Exception:
+        raise ServerException("Internal server error")
+
+    try:
+        sha, sig = header_sig.split("=")
+    except ValueError:
+        raise ClientException("Signature not signed with sha256 (e.g. sha256=123456)")
+
+    if sha != "sha256":
+        raise ClientException("Signature not signed with sha256 (e.g. sha256=123456)")
+
+    # creates sha256 value using the Github secret associated with the repo's webhook  and the request payload
+    expected_sig = hmac.new(
+        bytes(str(github_secret), "utf-8"), bytes(str(payload), "utf-8"), hashlib.sha256
+    ).hexdigest()
+
+    log.debug(f"Expected signature: {expected_sig}")
+    log.debug(f"Actual signature: {sig}")
+
+    authorized = hmac.compare_digest(str(sig), str(expected_sig))
+
+    if not authorized:
+        raise ClientException("Header signature and expected signature do not match")
+
+
+class Invoker:
+    def __init__(
+        self,
+        token: str,
+        repo_full_name: str,
+        base_ref: str,
+        head_ref: str,
+        logs_url: str
+    ):
+        """
+        Runs the appropriate logic for the GitHub event
 
         Arguments:
+            token: GitHub token used to retrieve GitHub data about the repo
+            repo_full_name: GitHub repository full name (e.g. owner/name)
             base_ref: PR base ref
             head_ref: PR head ref
             logs_url: Cloudwatch log group stream associated with AWS Lambda
@@ -75,13 +121,14 @@ class Invoker:
         else:
             raise ServerException(f"Invalid merge lock value: {merge_lock}")
 
-    def trigger_pr_plan(self, send_commit_status) -> None:
+    def trigger_pr_plan(self, send_commit_status: bool) -> None:
         """
         Runs the PR Terragrunt plan ECS task for every added or modified Terragrunt
         directory
 
         Arguments:
-            send_commit_status: Send a pending commit status for each of the PR plan ECS task
+            send_commit_status: Send a pending commit status for each of the
+                PR plan ECS task
         """
 
         log.info("Getting diff files")
@@ -197,7 +244,7 @@ class Invoker:
 
     def trigger_create_deploy_stack(
         self,
-        pr_id,
+        pr_id: str,
         send_commit_status: bool,
     ) -> None:
         """
@@ -264,6 +311,20 @@ def lambda_handler(event, context):
     """
 
     log.debug(f"Event:\n{pformat(event)}")
+
+    try:
+        validate_sig(event["headers"]["X-Hub-Signature-256"], event["body"])
+    except ClientException as e:
+        logging.error(e, exc_info=True)
+        return {
+            "statusCode": 401,
+            "body": str(e),
+            "headers": {
+                "content-type": "application/json"
+            },
+            "isBase64Encoded": False
+        }
+
     payload = json.loads(event["body"])
 
     token = ssm.get_parameter(
@@ -296,3 +357,12 @@ def lambda_handler(event, context):
             str(payload["pull_request"]["number"]),
             commit_status_config["CreateDeployStack"],
         )
+
+    return {
+        "statusCode": 200,
+        "body": "Webhook event was successfully processed",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "isBase64Encoded": False
+    }
