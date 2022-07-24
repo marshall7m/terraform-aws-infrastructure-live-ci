@@ -35,7 +35,7 @@ def testing_template():
     [
         pytest.param(
             {
-                "ApprovalAPI": "mock-api",
+                "ApprovalURL": "mock-url",
                 "Voters": ["success@simulator.amazonses.com"],
                 "Path": "test/foo",
                 "AccountName": "mock-account",
@@ -51,7 +51,7 @@ def testing_template():
         ),
         pytest.param(
             {
-                "ApprovalAPI": "mock-api",
+                "ApprovalURL": "mock-url",
                 "Voters": ["success@simulator.amazonses.com"],
                 "Path": "test/foo",
                 "AccountName": "mock-account",

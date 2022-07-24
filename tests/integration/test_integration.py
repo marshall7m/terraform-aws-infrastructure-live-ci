@@ -875,7 +875,7 @@ class Integration:
                 payload = json.loads(event["taskScheduledEventDetails"]["parameters"])[
                     "Payload"
                 ]
-                approval_url = payload["ApprovalAPI"]
+                approval_url = payload["ApprovalURL"]
                 voter = payload["Voters"][0]
 
         log.debug(f"Approval URL: {approval_url}")
