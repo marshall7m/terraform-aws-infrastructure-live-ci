@@ -2,20 +2,11 @@ import boto3
 import logging
 import json
 import os
-import re
-import urllib
-
+from common.utils import ServerException, aws_encode, get_email_approval_sig
 
 ses = boto3.client("ses")
 ssm = boto3.client("ssm")
 log = logging.getLogger(__name__)
-
-
-def aws_encode(value):
-    """Encodes value into AWS friendly URL component"""
-    value = urllib.parse.quote_plus(value)
-    value = re.sub(r"\+", " ", value)
-    return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
 
 def lambda_handler(event, context):
@@ -29,13 +20,7 @@ def lambda_handler(event, context):
     approval_user = json.loads(ssm.get_parameter(Name=os.environ["APPROVAL_MACHINE_USER_CREDS_SSM_KEY"])["Parameter"]["Value"])
 
     template_data = {
-        "full_approval_api": create_aws_v4_sig(
-            event["ApprovalAPI"],
-            approval_user["id"],
-            approval_user["secret"],
-            method="POST",
-            unsigned_payload=True
-        ),
+        "full_approval_url": event["ApprovalURL"],
         "path": event["Path"],
         "logs_url": event["LogUrlPrefix"]
         + aws_encode(event["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]),
@@ -54,7 +39,10 @@ def lambda_handler(event, context):
         destinations.append(
             {
                 "Destination": {"ToAddresses": [address]},
-                "ReplacementTemplateData": json.dumps({"email_address": address}),
+                "ReplacementTemplateData": json.dumps({
+                    "email_address": address,
+                    "signature": get_email_approval_sig(event["ApprovalURL"], "POST", address)
+                }),
             }
         )
     log.debug(f"Destinations\n {destinations}")
@@ -69,10 +57,7 @@ def lambda_handler(event, context):
         )
     except Exception as e:
         log.error(e, exc_info=True)
-        return {
-            "statusCode": 500,
-            "message": "Unable to send emails",
-        }
+        raise ServerException("Unable to send emails")
 
     log.debug(f"Response:\n{response}")
     failed_count = 0
