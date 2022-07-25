@@ -1,111 +1,62 @@
-import boto3
 import logging
 import json
-import os
-import base64
 import sys
-from urllib import parse
-import aurora_data_api
 from pprint import pformat
-
-sf = boto3.client("stepfunctions")
-ssm = boto3.client("ssm")
+from approval_response.app import App, ApprovalHandler
+from common.utils import aws_response, ClientException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-def lambda_handler(event, context):
-    """
-    Updates the approval or rejection count associated with the
-    Terragrunt path. If the minimum approval or rejection count is met,
-    a successful task token is sent to associated AWS Step Function
-    """
-    log.info(f"Event:\n{pformat(event)}")
 
-    body = event["body"]
-    if event["isBase64Encoded"]:
-        log.info("Decoding request body")
-        body = base64.b64decode(body).decode("utf-8")
+app = App()
 
-    body = dict(parse.parse_qs(body))
-    log.debug(f"Parsed request body:\n{body}")
-
-    action = body["action"][0]
+@app.vote(method="post", path="/ses")
+@app.validate_ses_request
+def ses_approve(event):
+    try:
+        execution_id = event["queryStringParameters"]["exId"],
+        action = event["body"]["action"],
+        voter = event["body"]["recipient"],
+        task_token = event["queryStringParameters"]["taskToken"]
+    except KeyError as e:
+        return aws_response(status_code=400, response=f"Request contains invalid field: {e.args[0]}")
 
     try:
-        status = sf.describe_execution(executionArn=event["queryStringParameters"]["exId"])["status"]
-        if status == "RUNNING":
-            log.info("Updating vote count")
-            # TODO: If query execution time is too long and
-            #  causes downstream timeouts, invoke async lambda with
-            #  query and return submission response from this function
-            with aurora_data_api.connect(
-                aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
-                secret_arn=os.environ["METADB_SECRET_ARN"],
-                database=os.environ["METADB_NAME"],
-            ) as conn:
-                with conn.cursor() as cur:
-                    with open(
-                        f"{os.path.dirname(os.path.realpath(__file__))}/update_vote.sql",  # noqa: E501
-                        "r",
-                    ) as f:
-                        cur.execute(
-                            f.read().format(
-                                action=action,
-                                recipient=body["recipient"][0],
-                                execution_id=event["queryStringParameters"]["ex"],
-                            )
-                        )
-                        try:
-                            record = dict(
-                                zip(
-                                    [
-                                        "status",
-                                        "approval_voters",
-                                        "min_approval_count",
-                                        "rejection_voters",
-                                        "min_rejection_count",
-                                    ],
-                                    list(cur.fetchone()),
-                                )
-                            )
-                        except TypeError:
-                            raise ClientException(
-                                f'Record with execution ID: {event["queryStringParameters"]["ex"]} does not exist'  # noqa: E501
-                            )
-            log.debug(f"Record:\n{pformat(record)}")
-
-            if (
-                len(record["approval_voters"]) == record["min_approval_count"]
-                or len(record["rejection_voters"]) == record["min_rejection_count"]
-            ):
-                log.info("Voter count meets requirement")
-
-                log.info("Sending task token to Step Function Machine")
-                sf.send_task_success(
-                    taskToken=event["queryStringParameters"]["taskToken"],
-                    output=json.dumps(action),  # noqa: E501
-                )
-
-            return {"statusCode": 200, "message": "Your choice has been submitted"}
-        else:
-            return {
-                "statusCode": 410,
-                "message": f"Approval submissions are not available anymore -- Execution Status: {status}",  # noqa: E501
-            }
+        response = app.update_vote(
+            execution_id=execution_id,
+            action=action,
+            voter=voter,
+            task_token=task_token
+        )
+    except ClientException as e:
+        response = {
+            "statusCode": 400,
+            "body": e
+        }
     except Exception as e:
         log.error(e, exc_info=True)
-        return {"statusCode": 500, "message": "Error while processing approval action"}
+        response = {
+            "statusCode": 500,
+            "body": "Internal server error -- Unable to process vote"
+        }
+    finally:
+        print(response)
+        return aws_response(response)
 
 
-class ClientException(Exception):
-    """Wraps around client-related errors"""
+def lambda_handler(event, context):
+    """
+    Handler will direct the request to the approriate function by the event's 
+    method and path
+    """
+    log.info(f"Event:\n{pformat(event)}")
+    try:
+        event["body"] = json.loads(event["body"])
+    except json.decoder.JSONDecodeError:
+        aws_response(status_code="400", body="Request body is not a valid JSON string")
 
-    pass
-
-class ServerException(Exception):
-    """Wraps around server-related errors"""
-
-    pass
+    handler = ApprovalHandler(app=app)
+    return handler.handle(event, context)
