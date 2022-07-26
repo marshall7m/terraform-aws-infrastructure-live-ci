@@ -4,6 +4,22 @@ import re
 import urllib
 import boto3
 import os
+import logging
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
+
+
+class ClientException(Exception):
+    """Wraps around client-related errors"""
+
+    pass
+
+
+class ServerException(Exception):
+    """Wraps around server-related errors"""
+
+    pass
 
 
 def aws_encode(value):
@@ -12,19 +28,38 @@ def aws_encode(value):
     value = re.sub(r"\+", " ", value)
     return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
-class ClientException(Exception):
-    """Wraps around client-related errors"""
 
-    pass
+def aws_response(
+    response, status_code=200, content_type="application/json", isBase64Encoded=False
+):
+    if isinstance(response, str):
+        return {
+            "statusCode": status_code,
+            "body": response,
+            "headers": {"content-type": content_type},
+            "isBase64Encoded": isBase64Encoded,
+        }
 
-class ServerException(Exception):
-    """Wraps around server-related errors"""
+    elif isinstance(response, dict):
+        return {
+            "statusCode": response.get("statusCode", status_code),
+            "body": response.get("body", ""),
+            "headers": {"content-type": response.get("content-type", content_type)},
+            "isBase64Encoded": response.get("isBase64Encoded", isBase64Encoded),
+        }
 
-    pass
+    elif isinstance(response, Exception):
+        return {
+            "statusCode": 500,
+            "body": str(response),
+            "headers": {"content-type": content_type},
+            "isBase64Encoded": isBase64Encoded,
+        }
 
 
-def get_email_approval_sig(function_uri, method, recipient):
-    ssm = boto3.client('ssm')
+def get_email_approval_sig(function_uri: str, method: str, recipient: str) -> str:
+
+    ssm = boto3.client("ssm")
 
     secret = ssm.get_parameter(
         Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
