@@ -3,26 +3,17 @@ import logging
 import json
 import os
 import github
-import urllib
-import re
 import fnmatch
 import hashlib
 import hmac
 from pprint import pformat
-from common.utils import ServerException, ClientException
+from common.utils import ServerException, ClientException, aws_encode, aws_response
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ssm = boto3.client("ssm")
 ecs = boto3.client("ecs")
-
-
-def aws_encode(value):
-    """Encodes value into AWS friendly URL component"""
-    value = urllib.parse.quote_plus(value)
-    value = re.sub(r"\+", " ", value)
-    return re.sub(r"%", "$", urllib.parse.quote_plus(value))
 
 
 def validate_sig(header_sig: str, payload: str) -> None:
@@ -70,7 +61,7 @@ class Invoker:
         repo_full_name: str,
         base_ref: str,
         head_ref: str,
-        logs_url: str
+        logs_url: str,
     ):
         """
         Runs the appropriate logic for the GitHub event
@@ -316,14 +307,7 @@ def lambda_handler(event, context):
         validate_sig(event["headers"]["X-Hub-Signature-256"], event["body"])
     except ClientException as e:
         logging.error(e, exc_info=True)
-        return {
-            "statusCode": 401,
-            "body": str(e),
-            "headers": {
-                "content-type": "application/json"
-            },
-            "isBase64Encoded": False
-        }
+        return aws_response(response=str(e), status_code=401)
 
     payload = json.loads(event["body"])
 
@@ -358,11 +342,6 @@ def lambda_handler(event, context):
             commit_status_config["CreateDeployStack"],
         )
 
-    return {
-        "statusCode": 200,
-        "body": "Webhook event was successfully processed",
-        "headers": {
-            "content-type": "application/json"
-        },
-        "isBase64Encoded": False
-    }
+    return aws_response(
+        response="Webhook event was successfully processed", status_code=200
+    )
