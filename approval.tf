@@ -31,11 +31,6 @@ data "aws_iam_policy_document" "lambda_approval_request" {
     actions   = ["ssm:DescribeParameters"]
     resources = ["*"]
   }
-  statement {
-    effect = "Allow"
-    actions = "ssm:GetParameter"
-    resources = [aws_ssm_parameter.approval_user.arn]
-  }
 }
 
 resource "aws_iam_policy" "lambda_approval_request" {
@@ -52,12 +47,17 @@ module "lambda_approval_request" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
 
-  source_path = "${path.module}/functions/approval_request"
+  source_path = [
+    "${path.module}/functions/approval_request",
+    {
+      path          = "${path.module}/functions/common"
+      prefix_in_zip = "common"
+    }
+  ]
 
   environment_variables = {
     SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
     SES_TEMPLATE         = aws_ses_template.approval.name
-    APPROVAL_MACHINE_USER_CREDS_SSM_KEY = aws_ssm_parameter.approval_user.name
   }
 
   publish = true
@@ -105,6 +105,10 @@ module "lambda_approval_response" {
     {
       path             = "${path.module}/functions/approval_response"
       pip_requirements = true
+    },
+    {
+      path          = "${path.module}/functions/common"
+      prefix_in_zip = "common"
     }
   ]
   timeout = 180
@@ -165,41 +169,4 @@ resource "aws_ses_template" "approval" {
   name    = local.approval_request_name
   subject = "${local.step_function_name} - Need Approval for Path: {{path}}"
   html    = file("${path.module}/approval_template.html")
-}
-
-resource "aws_iam_user" "approval" {
-  name = "${var.prefix}-approval-machine-user"
-}
-
-resource "aws_iam_access_key" "approval" {
-  user    = aws_iam_user.approval.name
-}
-
-data "aws_iam_policy_document" "approval" {
-  statement {
-    effect = "Allow"
-    actions = ["lambda:InvokeFunctionUrl"]
-    resources = [module.lambda_approval_response.lambda_function_arn]
-    condition {
-      test = "StringEquals"
-      variable = "lambda:FunctionUrlAuthType"
-      values = ["AWS_IAM"]
-    }
-  }
-}
-
-resource "aws_iam_user_policy" "approval" {
-  name = aws_iam_user.approval.name
-  user = aws_iam_user.approval.name
-
-  policy = data.aws_iam_policy_document.approval.json
-}
-
-resource "aws_ssm_parameter" "approval_user" {
-  name = "${aws_iam_user.approva.name}-creds"
-  type = "SecureString"
-  value = jsonencode({
-    id = aws_iam_access_key.approval.id
-    secret = aws_iam_access_key.approval.secret
-  })
 }
