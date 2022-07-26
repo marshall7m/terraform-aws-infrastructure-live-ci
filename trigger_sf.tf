@@ -37,6 +37,10 @@ module "lambda_trigger_sf" {
     {
       path             = "${path.module}/functions/trigger_sf"
       pip_requirements = true
+    },
+    {
+      path          = "${path.module}/functions/common"
+      prefix_in_zip = "common"
     }
   ]
 

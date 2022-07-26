@@ -1,14 +1,14 @@
 locals {
-  webhook_receiver_name = "${var.prefix}-webhook-receiver"
-  trigger_pr_plan_name  = "${var.prefix}-trigger-pr-plan"
-  github_secret_ssm_key = "${local.webhook_receiver_name}-gh-secret"
+  webhook_receiver_name         = "${var.prefix}-webhook-receiver"
+  trigger_pr_plan_name          = "${var.prefix}-trigger-pr-plan"
+  github_webhook_secret_ssm_key = "${local.webhook_receiver_name}-gh-secret"
 }
 
 resource "random_password" "github_webhook_secret" {
   length = 24
 }
-resource "aws_ssm_parameter" "github_secret" {
-  name        = local.github_secret_ssm_key
+resource "aws_ssm_parameter" "github_webhook_secret" {
+  name        = local.github_webhook_secret_ssm_key
   description = "Secret value used to authenticate GitHub webhook requests"
   type        = "SecureString"
   value       = random_password.github_webhook_secret.result
@@ -107,12 +107,17 @@ module "lambda_webhook_receiver" {
     {
       path             = "${path.module}/functions/webhook_receiver"
       pip_requirements = true
+    },
+    {
+      path          = "${path.module}/functions/common"
+      prefix_in_zip = "common"
     }
   ]
 
   environment_variables = {
-    GITHUB_TOKEN_SSM_KEY         = local.github_token_ssm_key
-    COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_name
+    GITHUB_TOKEN_SSM_KEY          = local.github_token_ssm_key
+    GITHUB_WEBHOOK_SECRET_SSM_KEY = aws_ssm_parameter.github_webhook_secret.name
+    COMMIT_STATUS_CONFIG_SSM_KEY  = local.commit_status_config_name
 
     ECS_CLUSTER_ARN = aws_ecs_cluster.this.arn
     ECS_NETWORK_CONFIG = jsonencode({

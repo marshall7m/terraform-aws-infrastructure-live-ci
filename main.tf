@@ -92,7 +92,7 @@ resource "aws_sfn_state_machine" "this" {
             }
             "Voters.$"        = "$.voters"
             "Path.$"          = "$.cfg_path"
-            "ApprovalURL.$"   = "States.Format('${module.lambda_approval_response.lambda_function_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
+            "ApprovalURL.$"   = "States.Format('${module.lambda_approval_response.lambda_function_url}ses?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
             "ExecutionName.$" = "$$.Execution.Name"
             "AccountName.$"   = "$.account_name"
             "PullRequestID.$" = "$.pr_id"
