@@ -6,10 +6,16 @@ import logging
 import json
 from pprint import pformat
 from functools import wraps
-from common.utils import ClientException, ServerException, get_email_approval_sig, aws_response
+from common.utils import (
+    ClientException,
+    ServerException,
+    get_email_approval_sig,
+    aws_response,
+)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
 
 class App(object):
     def __init__(self):
@@ -30,8 +36,9 @@ class App(object):
         authorized = hmac.compare_digest(str(actual_sig), str(expected_sig))
 
         if not authorized:
-            raise ClientException("Header signature and expected signature do not match")
-    
+            raise ClientException(
+                "Header signature and expected signature do not match"
+            )
 
     def voter_count_met(self, task_token, action):
         log.info("Sending task token to Step Function Machine")
@@ -40,8 +47,7 @@ class App(object):
             output=json.dumps(action),  # noqa: E501
         )
 
-        #TODO: add logic to send notifactions to users who subscribe to approval count met event
-        
+        # TODO: add logic to send notifactions to users who subscribe to approval count met event
 
     def update_vote(self, execution_id: str, action: str, voter: str, task_token: str):
         status = self.sf.describe_execution(executionArn=execution_id)["status"]
@@ -68,8 +74,10 @@ class App(object):
                             )
                         )
                         results = cur.fetchone()
-                        if results == None:
-                            raise ClientException(f'Record with execution ID: {execution_id} does not exist')
+                        if results is None:
+                            raise ClientException(
+                                f"Record with execution ID: {execution_id} does not exist"
+                            )
                         try:
                             record = dict(
                                 zip(
@@ -84,8 +92,10 @@ class App(object):
                                 )
                             )
                         except TypeError as e:
-                            if results == None:
-                                raise ClientException(f'Record with execution ID: {execution_id} does not exist')
+                            if results is None:
+                                raise ClientException(
+                                    f"Record with execution ID: {execution_id} does not exist"
+                                )
                             else:
                                 raise e
 
@@ -95,17 +105,22 @@ class App(object):
                 or len(record["rejection_voters"]) == record["min_rejection_count"]
             ):
                 log.info("Voter count meets requirement")
-                self.voter_count_met(task_token, action)                
+                self.voter_count_met(task_token, action)
         else:
-            raise ClientException(f"Approval submissions are not available anymore -- Execution Status: {status}")
-
+            raise ClientException(
+                f"Approval submissions are not available anymore -- Execution Status: {status}"
+            )
 
     def validate_ses_request(self, func):
         @wraps(func)
         def decorater(event):
             try:
-                actual_sig = event.get('X-SES-Signature-256')
-                expected_sig = get_email_approval_sig(event.get('domainName', ""), event.get('requestContext', {}).get('http', {}).get('method', ""), event.get('body', {}).get('recipient', ""))
+                actual_sig = event.get("X-SES-Signature-256")
+                expected_sig = get_email_approval_sig(
+                    event.get("domainName", ""),
+                    event.get("requestContext", {}).get("http", {}).get("method", ""),
+                    event.get("body", {}).get("recipient", ""),
+                )
             except ServerException as e:
                 return aws_response(response=e)
 
@@ -114,12 +129,13 @@ class App(object):
             except ClientException as e:
                 return aws_response(status_code=401, response=str(e))
             return func(event)
-        return decorater
 
+        return decorater
 
     def vote(self, method, path):
         def __call__(func, *args, **kwargs):
             self.listeners[path] = {method.upper(): func}
+
         return __call__
 
 
@@ -128,12 +144,11 @@ class ApprovalHandler(object):
         self.app = app
         self.app_listeners = self.app.listeners
 
-
     def handle(self, event, context):
         method = event.get("requestContext", {}).get("http", {}).get("method")
         if method is None:
             method = event.get("requestContext", {}).get("httpMethod")
-        
+
         path = event.get("requestContext", {}).get("http", {}).get("path")
         if path is None:
             path = event.get("rawPath")
@@ -145,6 +160,5 @@ class ApprovalHandler(object):
             func = self.app_listeners[path][method]
         except KeyError:
             return aws_response(status_code=404, response="Not Found")
-        
-        return func(event)
 
+        return func(event)

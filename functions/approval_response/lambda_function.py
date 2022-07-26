@@ -13,34 +13,31 @@ log.setLevel(logging.DEBUG)
 
 app = App()
 
+
 @app.vote(method="post", path="/ses")
 @app.validate_ses_request
 def ses_approve(event):
     try:
-        execution_id = event["queryStringParameters"]["exId"],
-        action = event["body"]["action"],
-        voter = event["body"]["recipient"],
+        execution_id = (event["queryStringParameters"]["exId"],)
+        action = (event["body"]["action"],)
+        voter = (event["body"]["recipient"],)
         task_token = event["queryStringParameters"]["taskToken"]
     except KeyError as e:
-        return aws_response(status_code=400, response=f"Request contains invalid field: {e.args[0]}")
+        return aws_response(
+            status_code=400, response=f"Request contains invalid field: {e.args[0]}"
+        )
 
     try:
         response = app.update_vote(
-            execution_id=execution_id,
-            action=action,
-            voter=voter,
-            task_token=task_token
+            execution_id=execution_id, action=action, voter=voter, task_token=task_token
         )
     except ClientException as e:
-        response = {
-            "statusCode": 400,
-            "body": e
-        }
+        response = {"statusCode": 400, "body": e}
     except Exception as e:
         log.error(e, exc_info=True)
         response = {
             "statusCode": 500,
-            "body": "Internal server error -- Unable to process vote"
+            "body": "Internal server error -- Unable to process vote",
         }
     finally:
         print(response)
@@ -49,7 +46,7 @@ def ses_approve(event):
 
 def lambda_handler(event, context):
     """
-    Handler will direct the request to the approriate function by the event's 
+    Handler will direct the request to the approriate function by the event's
     method and path
     """
     log.info(f"Event:\n{pformat(event)}")
