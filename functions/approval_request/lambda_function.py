@@ -2,7 +2,7 @@ import boto3
 import logging
 import json
 import os
-from common.utils import ServerException, aws_encode, get_email_approval_sig
+from common.utils import aws_encode, get_email_approval_sig
 
 ses = boto3.client("ses")
 ssm = boto3.client("ssm")
@@ -16,8 +16,6 @@ def lambda_handler(event, context):
     log.setLevel(logging.DEBUG)
 
     log.debug(f"Lambda Event: {event}")
-
-    approval_user = json.loads(ssm.get_parameter(Name=os.environ["APPROVAL_MACHINE_USER_CREDS_SSM_KEY"])["Parameter"]["Value"])
 
     template_data = {
         "full_approval_url": event["ApprovalURL"],
@@ -39,25 +37,25 @@ def lambda_handler(event, context):
         destinations.append(
             {
                 "Destination": {"ToAddresses": [address]},
-                "ReplacementTemplateData": json.dumps({
-                    "email_address": address,
-                    "signature": get_email_approval_sig(event["ApprovalURL"], "POST", address)
-                }),
+                "ReplacementTemplateData": json.dumps(
+                    {
+                        "email_address": address,
+                        "signature": get_email_approval_sig(
+                            event["ApprovalURL"], "POST", address
+                        ),
+                    }
+                ),
             }
         )
     log.debug(f"Destinations\n {destinations}")
 
     log.info("Sending bulk email")
-    try:
-        response = ses.send_bulk_templated_email(
-            Template=os.environ["SES_TEMPLATE"],
-            Source=os.environ["SENDER_EMAIL_ADDRESS"],
-            DefaultTemplateData=json.dumps(template_data),
-            Destinations=destinations,
-        )
-    except Exception as e:
-        log.error(e, exc_info=True)
-        raise ServerException("Unable to send emails")
+    response = ses.send_bulk_templated_email(
+        Template=os.environ["SES_TEMPLATE"],
+        Source=os.environ["SENDER_EMAIL_ADDRESS"],
+        DefaultTemplateData=json.dumps(template_data),
+        Destinations=destinations,
+    )
 
     log.debug(f"Response:\n{response}")
     failed_count = 0
