@@ -6,7 +6,6 @@ from unittest.mock import patch
 import boto3
 import uuid
 from functions.approval_request.lambda_function import lambda_handler
-from tests.helpers.utils import check_ses_sender_email_auth
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -30,66 +29,41 @@ def testing_template():
     ses.delete_template(TemplateName=name)
 
 
+event = {
+    "ApprovalURL": "mock-url",
+    "Voters": ["success@simulator.amazonses.com"],
+    "Path": "test/foo",
+    "AccountName": "mock-account",
+    "ExecutionName": "run-123",
+    "PullRequestID": "1",
+    "LogUrlPrefix": "mock-log-prefix",
+    "LogStreamPrefix": "mock-stream-prefix",
+    "PlanTaskArn": "mock-arn",
+}
+
+
+@patch.dict(os.environ, {"EMAIL_APPROVAL_SECRET_SSM_KEY": "mock-key"})
 @pytest.mark.parametrize(
-    "event,sender,expected_status_code",
+    "mock_send_bulk_templated_email, expected_status_code",
     [
         pytest.param(
-            {
-                "ApprovalURL": "mock-url",
-                "Voters": ["success@simulator.amazonses.com"],
-                "Path": "test/foo",
-                "AccountName": "mock-account",
-                "ExecutionName": "run-123",
-                "PullRequestID": "1",
-                "LogUrlPrefix": "mock-log-prefix",
-                "LogStreamPrefix": "mock-stream-prefix",
-                "PlanTaskArn": "mock-arn",
-            },
-            os.environ["TF_VAR_approval_request_sender_email"],
             200,
-            id="successful_request",
-        ),
-        pytest.param(
-            {
-                "ApprovalURL": "mock-url",
-                "Voters": ["success@simulator.amazonses.com"],
-                "Path": "test/foo",
-                "AccountName": "mock-account",
-                "ExecutionName": "run-123",
-                "PullRequestID": "1",
-                "LogUrlPrefix": "mock-log-prefix",
-                "LogStreamPrefix": "mock-stream-prefix",
-                "PlanTaskArn": "mock-arn",
-            },
-            "invalid_sender@non-existent-email.com",
-            500,
-            id="invalid_sender",
+            id="success",
         ),
     ],
 )
 @pytest.mark.usefixtures("mock_conn")
-def test_lambda_handler(testing_template, event, sender, expected_status_code):
-    with patch.dict(
-        os.environ,
-        {
-            "SES_TEMPLATE": testing_template,
-            "SENDER_EMAIL_ADDRESS": sender,
-        },
-    ):
-        log.info("Checking if sender email address is authorized to send emails")
-        if (
-            os.environ["SENDER_EMAIL_ADDRESS"]
-            == os.environ["TF_VAR_approval_request_sender_email"]
-        ):
-            if not check_ses_sender_email_auth(
-                os.environ["SENDER_EMAIL_ADDRESS"], send_verify_email=True
-            ):
-                pytest.fail(
-                    f"{os.environ['SENDER_EMAIL_ADDRESS']} is not verified to send emails via SES"
-                )
+@patch("boto3.client")
+def test_lambda_handler(
+    mock_boto_client, mock_send_bulk_templated_email, expected_status_code
+):
+    mock_boto_client.return_value = mock_boto_client
+    mock_boto_client.send_bulk_templated_email.return_value = (
+        mock_send_bulk_templated_email
+    )
 
-        log.info("Running Lambda Function")
-        response = lambda_handler(event, {})
+    log.info("Running Lambda Function")
+    response = lambda_handler(event, {})
 
     log.debug(f"Response:\n{response}")
 
