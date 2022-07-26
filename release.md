@@ -4,7 +4,7 @@
 
 
 Function URL security risks:
-    - Given the function URL is public, if an attacker get a hold on the correct URL, the attack can execute an DDOS attack using the URL and max out the reserved concurrency limit for the Lambda Function resulting in high execution cost
+    - Given the function URL is public, if an attacker get a hold on the correct URL, the attack can execute an DDOS attack using the URL and max out the reserved concurrency limit for the Lambda Function resulting in higher execution cost
         Possible Solutions:
             - Have a Cloudwatch alarm notify when the Lambda function invocation count passes a specified threshold over a duration of time
             - Have a script that automatically creates a new Lambda URL and updates the URL for the webhook source
