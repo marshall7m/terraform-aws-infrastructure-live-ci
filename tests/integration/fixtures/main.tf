@@ -16,14 +16,6 @@ locals {
   ])
 }
 
-provider "aws" {
-  alias = "secondary"
-  assume_role {
-    role_arn     = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/cross-account-admin-access"
-    session_name = "${local.mut_id}-testing"
-  }
-}
-
 data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
@@ -67,38 +59,6 @@ resource "aws_s3_bucket_versioning" "testing_tf_state" {
   }
 }
 
-data "aws_iam_policy_document" "testing_tf_state" {
-  statement {
-    actions = [
-      "s3:PutObject",
-      "s3:GetObject",
-      "s3:PutObjectAcl",
-    ]
-    resources = ["${aws_s3_bucket.testing_tf_state.arn}/*"]
-    principals {
-      type        = "AWS"
-      identifiers = ["arn:aws:iam::${var.testing_secondary_aws_account_id}:root"]
-    }
-  }
-  statement {
-    effect = "Allow"
-    actions = [
-      "s3:GetBucketLocation",
-      "s3:ListBucket",
-      "s3:GetBucketVersioning"
-    ]
-    resources = [aws_s3_bucket.testing_tf_state.arn]
-    principals {
-      type        = "AWS"
-      identifiers = ["arn:aws:iam::${var.testing_secondary_aws_account_id}:root"]
-    }
-  }
-}
-
-resource "aws_s3_bucket_policy" "testing_tf_state" {
-  bucket = aws_s3_bucket.testing_tf_state.id
-  policy = data.aws_iam_policy_document.testing_tf_state.json
-}
 
 resource "random_string" "mut" {
   length  = 8
@@ -128,29 +88,6 @@ module "deploy_role" {
   role_name               = local.deploy_role_name
   trusted_entities        = [module.mut_infrastructure_live_ci.ecs_apply_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
-}
-
-module "secondary_plan_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-  role_name = local.plan_role_name
-  trusted_entities = [
-    module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn,
-    module.mut_infrastructure_live_ci.ecs_plan_role_arn
-  ]
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
-  providers = {
-    aws = aws.secondary
-  }
-}
-
-module "secondary_deploy_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-  role_name               = local.deploy_role_name
-  trusted_entities        = [module.mut_infrastructure_live_ci.ecs_apply_role_arn]
-  custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
-  providers = {
-    aws = aws.secondary
-  }
 }
 
 data "aws_iam_policy_document" "trigger_sf_tf_state_access" {
@@ -432,8 +369,8 @@ module "mut_infrastructure_live_ci" {
       voters              = ["success@simulator.amazonses.com"]
       min_approval_count  = 1
       min_rejection_count = 1
-      plan_role_arn       = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/${local.plan_role_name}"
-      apply_role_arn      = "arn:aws:iam::${var.testing_secondary_aws_account_id}:role/${local.deploy_role_name}"
+      plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
+      apply_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.deploy_role_name}"
     }
   ]
 

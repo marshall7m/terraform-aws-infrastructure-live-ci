@@ -71,12 +71,8 @@ output "base_branch" {
   value = module.mut_infrastructure_live_ci.base_branch
 }
 
-output "primary_test_plan_role_arn" {
+output "plan_role_arn" {
   value = module.plan_role.role_arn
-}
-
-output "secondary_test_plan_role_arn" {
-  value = module.secondary_plan_role.role_arn
 }
 
 output "ecs_cluster_arn" {

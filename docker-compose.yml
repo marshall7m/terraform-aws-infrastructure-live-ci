@@ -36,7 +36,6 @@ services:
       - AWS_SESSION_EXPIRATION
       - UNTIL_AWS_EXP=30m
       - TF_VAR_testing_unit_github_token
-      - TF_VAR_approval_request_sender_email
       - PGUSER=postgres
       - PGPASSWORD=postgres
       - PGDATABASE=postgres
@@ -66,7 +65,6 @@ services:
       - TF_VAR_testing_integration_github_token
       - TF_VAR_registry_password
       - TF_VAR_github_token_ssm_value
-      - TF_VAR_testing_secondary_aws_account_id
       - TF_VAR_approval_request_sender_email
       - UNTIL_AWS_EXP=1h
       - ADDITIONAL_PATH
