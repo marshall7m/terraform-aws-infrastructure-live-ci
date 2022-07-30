@@ -1,5 +1,4 @@
 import aurora_data_api
-import hmac
 import os
 import boto3
 import logging
@@ -11,6 +10,7 @@ from common.utils import (
     ServerException,
     get_email_approval_sig,
     aws_response,
+    validate_sig,
 )
 
 log = logging.getLogger(__name__)
@@ -22,23 +22,6 @@ class App(object):
         self.sf = boto3.client("stepfunctions")
 
         self.listeners = {}
-
-    def validate_sig(self, actual_sig: str, expected_sig: str):
-        """
-        Authenticates request by comparing the request's SHA256
-        signature value to the expected SHA-256 value
-        """
-
-        log.info("Authenticating approval request")
-        log.debug(f"Actual: {actual_sig}")
-        log.debug(f"Expected: {expected_sig}")
-
-        authorized = hmac.compare_digest(str(actual_sig), str(expected_sig))
-
-        if not authorized:
-            raise ClientException(
-                "Header signature and expected signature do not match"
-            )
 
     def voter_count_met(self, task_token, action):
         log.info("Sending task token to Step Function Machine")
@@ -125,7 +108,7 @@ class App(object):
                 return aws_response(response=e)
 
             try:
-                self.validate_sig(actual_sig, expected_sig)
+                validate_sig(actual_sig, expected_sig)
             except ClientException as e:
                 return aws_response(status_code=401, response=str(e))
             return func(event)
