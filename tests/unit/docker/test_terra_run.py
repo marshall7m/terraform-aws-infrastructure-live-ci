@@ -1,4 +1,4 @@
-from functions.webhook_receiver.lambda_function import ServerException
+from docker.src.common.utils import ServerException
 import pytest
 import os
 import logging
@@ -7,20 +7,13 @@ from subprocess import CalledProcessError
 import json
 from unittest.mock import patch, call
 from tests.helpers.utils import null_provider_resource, insert_records
-
-# adds ecs src to PATH
-# prevents import errs within src files that are caused by src import paths being relative to it's own setup
-sys.path.append(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    + "/docker/src"
-)
-from docker.src.terra_run.run import (  # noqa: E402
+from docker.src.terra_run.run import (
     update_new_resources,
     get_new_provider_resources,
     main,
-)  # noqa: E402
-from docker.src.common.utils import subprocess_run  # noqa: E402
-from tests.unit.docker.conftest import mock_subprocess_run  # noqa: E402
+)
+from docker.src.common.utils import subprocess_run
+from tests.unit.docker.conftest import mock_subprocess_run
 from psycopg2 import sql  # noqa: E402
 
 log = logging.getLogger(__name__)
