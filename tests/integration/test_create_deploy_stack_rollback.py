@@ -47,7 +47,7 @@ class TestCreateDeployStackRollback(test_integration.Integration):
                         {
                             "Effect": "Deny",
                             "Action": "sts:AssumeRole",
-                            "Resource": mut_output["secondary_test_plan_role_arn"],
+                            "Resource": mut_output["plan_role_arn"],
                         }
                     ],
                 }
