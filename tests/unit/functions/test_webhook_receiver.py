@@ -248,7 +248,7 @@ def test_handler_invalid_headers():
     pass
 
 
-@patch.dict(os.environ, {"SOURCE_BRANCH_REF": "master", "FILE_PATH_PATTERN": ".+.tf"})
+@patch.dict(os.environ, {"BASE_BRANCH": "master", "FILE_PATH_PATTERN": ".+.tf"})
 @patch("functions.webhook_receiver.lambda_function.validate_sig")
 def test_handle_invalid_sig(mock_validate_sig):
 

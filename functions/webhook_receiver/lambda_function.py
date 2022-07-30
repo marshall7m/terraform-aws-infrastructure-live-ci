@@ -110,7 +110,7 @@ class InvokerHandler(object):
 app = Invoker()
 
 common_filters = {
-    "body.pull_request.base.ref": "regex:" + os.environ.get("SOURCE_BRANCH_REF", ""),
+    "body.pull_request.base.ref": "regex:" + os.environ.get("BASE_BRANCH", ""),
     "file_paths": "regex:" + os.environ.get("FILE_PATH_PATTERN", ""),
 }
 
