@@ -1,12 +1,11 @@
 import os
 import logging
-import logging
 import fnmatch
 import collections
 import boto3
 import json
 from pprint import pformat
-from common.utils import aws_encode
+from common.utils import aws_encode, ServerException
 
 ssm = boto3.client("ssm")
 ecs = boto3.client("ecs")
@@ -16,18 +15,11 @@ log.setLevel(logging.DEBUG)
 
 
 class Invoker:
-
-    def __init__(
-        self,
-        token=None,
-        commit_status_config=None,
-        gh=None
-    ):
+    def __init__(self, token=None, commit_status_config=None, gh=None):
         self.listeners = collections.defaultdict(list)
         self.token = token
         self.commit_status_config = commit_status_config
         self.gh = gh
-
 
     def merge_lock(self, repo_full_name, head_ref, logs_url):
         """Creates a PR commit status that shows the current merge lock status"""
@@ -66,7 +58,7 @@ class Invoker:
         head_ref,
         head_sha,
         logs_url,
-        send_commit_status: bool
+        send_commit_status: bool,
     ) -> None:
         """
         Runs the PR Terragrunt plan ECS task for every added or modified Terragrunt
@@ -76,13 +68,15 @@ class Invoker:
             send_commit_status: Send a pending commit status for each of the
                 PR plan ECS task
         """
-        
+
         log.info("Getting diff files")
         diff_paths = list(
             set(
                 [
                     f.filename
-                    for f in self.gh.get_repo(repo_full_name).compare(base_ref, head_ref).files
+                    for f in self.gh.get_repo(repo_full_name)
+                    .compare(base_ref, head_ref)
+                    .files
                     if f.status in ["added", "modified"]
                 ]
             )
@@ -188,9 +182,10 @@ class Invoker:
                 log.info(
                     "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
                 )
+
     def get_logs_url(event, context):
         return f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'
-    
+
     def trigger_create_deploy_stack(
         self,
         repo_full_name,
@@ -199,7 +194,7 @@ class Invoker:
         head_sha,
         pr_id,
         logs_url,
-        send_commit_status
+        send_commit_status,
     ) -> None:
         """
         Runs the Create Deploy Stack ECS task
@@ -260,9 +255,8 @@ class Invoker:
 
     def hook(self, event_type, filter_groups):
         def __call__(func, *args, **kwargs):
-            self.listeners[event_type].append({
-                "function": func,
-                "filter_groups": filter_groups
-            })
+            self.listeners[event_type].append(
+                {"function": func, "filter_groups": filter_groups}
+            )
 
         return __call__

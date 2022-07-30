@@ -167,8 +167,8 @@ module "lambda_webhook_receiver" {
     GITHUB_TOKEN_SSM_KEY          = local.github_token_ssm_key
     GITHUB_WEBHOOK_SECRET_SSM_KEY = aws_ssm_parameter.github_webhook_secret.name
     COMMIT_STATUS_CONFIG_SSM_KEY  = local.commit_status_config_name
-    FILE_PATH_PATTERN = var.file_path_pattern
-    BASE_BRANCH = var.base_branch
+    FILE_PATH_PATTERN             = var.file_path_pattern
+    BASE_BRANCH                   = var.base_branch
 
     ECS_CLUSTER_ARN = aws_ecs_cluster.this.arn
     ECS_NETWORK_CONFIG = jsonencode({
