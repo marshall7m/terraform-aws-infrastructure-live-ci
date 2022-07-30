@@ -41,7 +41,6 @@ services:
       - PGDATABASE=postgres
       - PGHOST=postgres
       - PGPORT=5432
-      - ADDITIONAL_PYTHONPATH=/src/functions
     entrypoint: ["/bin/bash", "entrypoint.sh"]
     profiles: ["unit"]
     depends_on:
