@@ -5,13 +5,14 @@ from pprint import pformat
 import github
 import boto3
 import re
-from common.utils import (
+
+from ..common.utils import (
     ClientException,
     aws_response,
     validate_sig,
 )
 import request_filter_groups
-from webhook_receiver.invoker import Invoker
+from .invoker import Invoker
 from request_filter_groups import RequestFilter
 
 

@@ -5,7 +5,7 @@ import logging
 import json
 from pprint import pformat
 from functools import wraps
-from common.utils import (
+from ..common.utils import (
     ClientException,
     ServerException,
     get_email_approval_sig,

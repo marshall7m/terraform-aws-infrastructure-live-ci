@@ -2,7 +2,8 @@ import boto3
 import logging
 import json
 import os
-from common.utils import aws_encode, get_email_approval_sig
+
+from ..common.utils import aws_encode, get_email_approval_sig
 
 ses = boto3.client("ses")
 ssm = boto3.client("ssm")

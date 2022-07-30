@@ -6,7 +6,6 @@ from unittest.mock import patch, Mock
 import uuid
 from tests.helpers.utils import dummy_tf_output
 from functions.webhook_receiver.invoker import Invoker
-from tests.unit.conftest import ServerException
 from functions.webhook_receiver.lambda_function import InvokerHandler, ClientException
 
 
@@ -110,7 +109,7 @@ class TestInvoker:
                     "directory_dependency/dev-account/us-west-2/env-one/doo",
                     "directory_dependency/dev-account/global",
                 ],
-                ServerException("Invalid task"),
+                Exception("Invalid task"),
                 id="failure_state",
             ),
         ],
@@ -189,7 +188,7 @@ class TestInvoker:
         "expected_status,run_task_side_effect",
         [
             pytest.param("pending", None, id="success"),
-            pytest.param("failure", ServerException("Invalid task"), id="failure"),
+            pytest.param("failure", Exception("Invalid task"), id="failure"),
         ],
     )
     @patch("functions.webhook_receiver.invoker.ecs")

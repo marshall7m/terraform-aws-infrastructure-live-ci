@@ -2,8 +2,8 @@ import logging
 import json
 import sys
 from pprint import pformat
-from approval_response.app import App, ApprovalHandler
-from common.utils import aws_response, ClientException
+from .app import App, ApprovalHandler
+from ..common.utils import aws_response, ClientException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)

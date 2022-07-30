@@ -10,7 +10,9 @@ import json
 from typing import List
 from collections import defaultdict
 import fnmatch
-from common.utils import (
+import sys
+
+from ..common.utils import (
     subprocess_run,
     TerragruntException,
     ClientException,
