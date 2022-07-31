@@ -1,2 +1,2 @@
 PyGithub==1.54.1
-request_filter_groups==0.0.3
+request_filter_groups==0.0.4
