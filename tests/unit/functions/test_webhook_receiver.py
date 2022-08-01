@@ -260,7 +260,7 @@ def test_handle_invalid_sig(mock_validate_sig):
     invoker = InvokerHandler(app=app)
     response = invoker.handle(
         {
-            "headers": {"X-Hub-Signature": "invalid", "X-Github-Event": event_type},
+            "headers": {"x-hub-signature-256": "invalid", "x-github-event": event_type},
             "body": json.dumps({"foo": "bar"}),
         },
         {},
@@ -282,7 +282,7 @@ def test_handle_invalid_event(mock_validate_sig):
     invoker = InvokerHandler(app=app)
     response = invoker.handle(
         {
-            "headers": {"X-Hub-Signature": "valid", "X-Github-Event": event_type},
+            "headers": {"x-hub-signature-256": "valid", "x-github-event": event_type},
             "body": json.dumps({"foo": "bar"}),
         },
         {},
@@ -307,7 +307,10 @@ def test_handle_invalid_file_paths(mock_validate_sig):
 
         response = invoker.handle(
             {
-                "headers": {"X-Hub-Signature": "valid", "X-Github-Event": event_type},
+                "headers": {
+                    "x-hub-signature-256": "valid",
+                    "x-github-event": event_type,
+                },
                 "body": json.dumps({"foo": "bar"}),
             },
             {},
@@ -332,7 +335,10 @@ def test_handle_success(mock_validate_sig):
 
         response = invoker.handle(
             {
-                "headers": {"X-Hub-Signature": "valid", "X-Github-Event": event_type},
+                "headers": {
+                    "x-hub-signature-256": "valid",
+                    "x-github-event": event_type,
+                },
                 "body": json.dumps({"foo": "bar"}),
             },
             {},
