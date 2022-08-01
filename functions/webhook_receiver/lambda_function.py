@@ -4,17 +4,19 @@ import os
 from pprint import pformat
 import github
 import boto3
+import hmac
+import hashlib
 import re
-
-from ..common.utils import (
+import sys
+from request_filter_groups import RequestFilter, ValidationError
+sys.path.append(os.path.dirname(__file__) + "/..")
+sys.path.append(os.path.dirname(__file__))
+from invoker import Invoker
+from common.utils import (
     ClientException,
     aws_response,
     validate_sig,
 )
-import request_filter_groups
-from .invoker import Invoker
-from request_filter_groups import RequestFilter
-
 
 ssm = boto3.client("ssm")
 
@@ -23,8 +25,9 @@ log.setLevel(logging.DEBUG)
 
 
 class InvokerHandler(object):
-    def __init__(self, app):
+    def __init__(self, app, secret):
         self.app = app
+        self.secret = secret
         self.app_listeners = self.app.listeners
 
     def _get_header(self, key, request):
@@ -56,21 +59,25 @@ class InvokerHandler(object):
                 event,
                 [
                     {
-                        "headers.X-Github-Event": f"required|regex:({'|'.join(self.app_listeners.keys())})",
-                        "headers.X-Hub-Signature": "required|string",
+                        "headers.x-github-event": f"required|regex:({'|'.join(self.app_listeners.keys())})",
+                        "headers.x-hub-signature-256": "required|regex:^sha256=.+$",
                         "body": "required",
                     }
                 ],
             )
-        except request_filter_groups.ValidationError as e:
+        except ValidationError as e:
             return aws_response(status_code=422, response=str(e))
 
-        event_type = event["headers"]["X-Github-Event"]
+        event_type = event["headers"]["x-github-event"]
         log.debug(f"GitHub event: {event_type}")
 
         log.info("Validating request signature")
+        expected_sig = hmac.new(
+            bytes(str(self.secret), "utf-8"), bytes(str(event["body"]), "utf-8"), hashlib.sha256
+        ).hexdigest()
+
         try:
-            validate_sig(event["headers"]["X-Hub-Signature"], event["body"])
+            validate_sig(event["headers"]["x-hub-signature-256"].split("=", 1)[1], expected_sig)
         except ClientException as e:
             log.error(e, exc_info=True)
             return aws_response(status_code=402, response=str(e))
@@ -85,7 +92,7 @@ class InvokerHandler(object):
             log.info("Validating request content")
             try:
                 RequestFilter.validate(event, handler["filter_groups"])
-            except request_filter_groups.ValidationError as e:
+            except ValidationError as e:
                 log.debug("Invalid request content")
                 log.debug(f"Error:\n{e}")
                 continue
@@ -173,6 +180,10 @@ def lambda_handler(event, context):
         Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
     )["Parameter"]["Value"]
 
+    secret = ssm.get_parameter(
+        Name=os.environ["GITHUB_WEBHOOK_SECRET_SSM_KEY"], WithDecryption=True
+    )["Parameter"]["Value"]
+
     app.gh = github.Github(token)
 
     app.commit_status_config = json.loads(
@@ -181,5 +192,5 @@ def lambda_handler(event, context):
         ]
     )
 
-    invoker = InvokerHandler(app=app)
+    invoker = InvokerHandler(app=app, secret=secret)
     invoker.handle(event, context)
