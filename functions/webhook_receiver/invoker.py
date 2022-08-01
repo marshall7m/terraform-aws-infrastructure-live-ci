@@ -6,8 +6,9 @@ import boto3
 import json
 from pprint import pformat
 import sys
+
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import aws_encode, ServerException
+from common.utils import aws_encode, ServerException  # noqa E402
 
 ssm = boto3.client("ssm")
 ecs = boto3.client("ecs")

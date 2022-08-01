@@ -43,9 +43,9 @@ data "aws_iam_policy_document" "webhook_receiver" {
   }
 
   statement {
-    sid       = "SSMParamAccess"
-    effect    = "Allow"
-    actions   = ["ssm:GetParameter"]
+    sid     = "SSMParamAccess"
+    effect  = "Allow"
+    actions = ["ssm:GetParameter"]
     resources = [
       aws_ssm_parameter.merge_lock.arn,
       aws_ssm_parameter.github_webhook_secret.arn

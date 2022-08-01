@@ -10,7 +10,6 @@ import json
 from typing import List
 from collections import defaultdict
 import fnmatch
-import sys
 
 from ..common.utils import (
     subprocess_run,

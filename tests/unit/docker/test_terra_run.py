@@ -2,7 +2,6 @@ from docker.src.common.utils import ServerException
 import pytest
 import os
 import logging
-import sys
 from subprocess import CalledProcessError
 import json
 from unittest.mock import patch, call

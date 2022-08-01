@@ -9,10 +9,11 @@ import hashlib
 import re
 import sys
 from request_filter_groups import RequestFilter, ValidationError
+
 sys.path.append(os.path.dirname(__file__) + "/..")
 sys.path.append(os.path.dirname(__file__))
-from invoker import Invoker
-from common.utils import (
+from invoker import Invoker  # noqa E402
+from common.utils import (  # noqa E402
     ClientException,
     aws_response,
     validate_sig,
@@ -73,11 +74,15 @@ class InvokerHandler(object):
 
         log.info("Validating request signature")
         expected_sig = hmac.new(
-            bytes(str(self.secret), "utf-8"), bytes(str(event["body"]), "utf-8"), hashlib.sha256
+            bytes(str(self.secret), "utf-8"),
+            bytes(str(event["body"]), "utf-8"),
+            hashlib.sha256,
         ).hexdigest()
 
         try:
-            validate_sig(event["headers"]["x-hub-signature-256"].split("=", 1)[1], expected_sig)
+            validate_sig(
+                event["headers"]["x-hub-signature-256"].split("=", 1)[1], expected_sig
+            )
         except ClientException as e:
             log.error(e, exc_info=True)
             return aws_response(status_code=402, response=str(e))

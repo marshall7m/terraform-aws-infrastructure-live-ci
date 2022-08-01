@@ -4,7 +4,6 @@ import os
 import logging
 from unittest.mock import patch
 import uuid
-import sys
 import git
 import json
 from tests.helpers.utils import dummy_configured_provider_resource
