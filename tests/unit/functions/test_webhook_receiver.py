@@ -257,10 +257,13 @@ def test_handle_invalid_sig(mock_validate_sig):
     event_type = "pull_request"
     app.listeners[event_type] = [{"function": func}]
 
-    invoker = InvokerHandler(app=app)
+    invoker = InvokerHandler(app=app, secret="mock-secret")
     response = invoker.handle(
         {
-            "headers": {"x-hub-signature-256": "invalid", "x-github-event": event_type},
+            "headers": {
+                "x-hub-signature-256": "sha256=invalid",
+                "x-github-event": event_type,
+            },
             "body": json.dumps({"foo": "bar"}),
         },
         {},
@@ -279,10 +282,13 @@ def test_handle_invalid_event(mock_validate_sig):
         {"function": func, "filter_groups": [{"A": "regex:bar"}]}
     ]
 
-    invoker = InvokerHandler(app=app)
+    invoker = InvokerHandler(app=app, secret="mock-secret")
     response = invoker.handle(
         {
-            "headers": {"x-hub-signature-256": "valid", "x-github-event": event_type},
+            "headers": {
+                "x-hub-signature-256": "sha256=123",
+                "x-github-event": event_type,
+            },
             "body": json.dumps({"foo": "bar"}),
         },
         {},
@@ -301,14 +307,14 @@ def test_handle_invalid_file_paths(mock_validate_sig):
         {"function": func, "filter_groups": [{"body.foo": "regex:bar"}]}
     ]
 
-    invoker = InvokerHandler(app=app)
+    invoker = InvokerHandler(app=app, secret="mock-secret")
     with patch.object(invoker, "validate_file_paths") as mock_validate_file_paths:
         mock_validate_file_paths.return_value = False
 
         response = invoker.handle(
             {
                 "headers": {
-                    "x-hub-signature-256": "valid",
+                    "x-hub-signature-256": "sha256=123",
                     "x-github-event": event_type,
                 },
                 "body": json.dumps({"foo": "bar"}),
@@ -329,14 +335,14 @@ def test_handle_success(mock_validate_sig):
         {"function": func, "filter_groups": [{"body.foo": "regex:bar"}]}
     ]
 
-    invoker = InvokerHandler(app=app)
+    invoker = InvokerHandler(app=app, secret="mock-secret")
     with patch.object(invoker, "validate_file_paths") as mock_validate_file_paths:
         mock_validate_file_paths.return_value = True
 
         response = invoker.handle(
             {
                 "headers": {
-                    "x-hub-signature-256": "valid",
+                    "x-hub-signature-256": "sha256=123",
                     "x-github-event": event_type,
                 },
                 "body": json.dumps({"foo": "bar"}),
@@ -350,7 +356,7 @@ def test_handle_success(mock_validate_sig):
 
 @pytest.mark.parametrize("pattern, expected", [(".*\\.tf", True), (".*\\.py", False)])
 def test_validate_file_paths(repo, pr, gh, pattern, expected):
-    invoker = InvokerHandler(app=Mock())
+    invoker = InvokerHandler(app=Mock(), secret="mock-secret")
     invoker.gh = gh
     is_valid = invoker.validate_file_paths(
         "pull_request",
