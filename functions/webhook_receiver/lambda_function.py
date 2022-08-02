@@ -60,7 +60,8 @@ class InvokerHandler(object):
                 event,
                 [
                     {
-                        "headers.x-github-event": f"required|regex:({'|'.join(self.app_listeners.keys())})",
+                        "headers.x-github-event": ["required"]
+                        + [f"regex:^{event}$" for event in self.app_listeners.keys()],
                         "headers.x-hub-signature-256": "required|regex:^sha256=.+$",
                         "body": "required",
                     }
@@ -123,8 +124,8 @@ class InvokerHandler(object):
 app = Invoker()
 
 common_filters = {
-    "body.pull_request.base.ref": "regex:" + os.environ.get("BASE_BRANCH", ""),
-    "file_paths": "regex:" + os.environ.get("FILE_PATH_PATTERN", ""),
+    "body.pull_request.base.ref": "regex:^" + os.environ.get("BASE_BRANCH", "") + "$",
+    "file_paths": "regex:^" + os.environ.get("FILE_PATH_PATTERN", "") + "$",
 }
 
 
@@ -134,7 +135,9 @@ common_filters = {
         {
             **{
                 "body.pull_request.merged": False,
-                "body.action": "regex:(opened|edited|reopened)",
+                "body.action": [
+                    f"regex:^{action}$" for action in ["opened", "edited", "reopened"]
+                ],
             },
             **common_filters,
         }
@@ -160,7 +163,7 @@ def open_pr(event, context):
     event_type="pull_request",
     filter_groups=[
         {
-            **{"body.pull_request.merged": True, "body.action": "regex:(closed)"},
+            **{"body.pull_request.merged": True, "body.action": "regex:^closed$"},
             **common_filters,
         }
     ],
