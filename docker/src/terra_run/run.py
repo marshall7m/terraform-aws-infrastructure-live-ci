@@ -6,7 +6,9 @@ import json
 from typing import List
 import aurora_data_api
 import ast
-from ..common.utils import subprocess_run, send_commit_status, ServerException
+
+sys.path.append(os.path.dirname(__file__) + "/..")
+from common.utils import subprocess_run, send_commit_status, ServerException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)

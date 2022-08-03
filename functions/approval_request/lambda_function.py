@@ -2,8 +2,10 @@ import boto3
 import logging
 import json
 import os
+import sys
 
-from ..common.utils import aws_encode, get_email_approval_sig
+sys.path.append(os.path.dirname(__file__) + "/..")
+from common.utils import aws_encode, get_email_approval_sig  # noqa : E402
 
 ses = boto3.client("ses")
 ssm = boto3.client("ssm")

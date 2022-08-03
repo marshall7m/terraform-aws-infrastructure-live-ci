@@ -11,7 +11,8 @@ from typing import List
 from collections import defaultdict
 import fnmatch
 
-from ..common.utils import (
+sys.path.append(os.path.dirname(__file__) + "/..")
+from common.utils import (
     subprocess_run,
     TerragruntException,
     ClientException,

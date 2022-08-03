@@ -6,7 +6,9 @@ import boto3
 import aurora_data_api
 from pprint import pformat
 import github
-from ..common.utils import ClientException
+
+sys.path.append(os.path.dirname(__file__) + "/..")
+from common.utils import ClientException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)

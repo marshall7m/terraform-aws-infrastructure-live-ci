@@ -5,7 +5,10 @@ import logging
 import json
 from pprint import pformat
 from functools import wraps
-from ..common.utils import (
+import sys
+
+sys.path.append(os.path.dirname(__file__) + "/..")
+from common.utils import (
     ClientException,
     ServerException,
     get_email_approval_sig,
@@ -98,7 +101,7 @@ class App(object):
         @wraps(func)
         def decorater(event):
             try:
-                actual_sig = event.get("X-SES-Signature-256")
+                actual_sig = (event.get("body", {}).get("X-SES-Signature-256", ""),)
                 expected_sig = get_email_approval_sig(
                     event.get("domainName", ""),
                     event.get("requestContext", {}).get("http", {}).get("method", ""),
