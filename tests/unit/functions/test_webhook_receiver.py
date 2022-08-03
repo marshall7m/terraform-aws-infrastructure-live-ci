@@ -299,6 +299,7 @@ def test_handle_invalid_event(mock_validate_sig):
 
 
 @patch("functions.webhook_receiver.lambda_function.validate_sig")
+@patch.dict(os.environ, {"FILE_PATH_PATTERN": "mock-pattern"})
 def test_handle_invalid_file_paths(mock_validate_sig):
     app = Invoker()
     func = Mock()
