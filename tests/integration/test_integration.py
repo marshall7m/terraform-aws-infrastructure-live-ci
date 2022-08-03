@@ -4,6 +4,7 @@ import logging
 import json
 import time
 from datetime import datetime
+from functions.common.utils import get_email_approval_sig
 import github
 import git
 from tests.integration.conftest import mut_output
@@ -884,6 +885,9 @@ class Integration:
         body = {
             "action": request.cls.executions[int(request.node.callspec.id)]["action"],
             "recipient": voter,
+            "X-SES-Signature-256": get_email_approval_sig(
+                payload["ApprovalURL"], "POST", voter
+            ),
         }
 
         log.debug(f"Request Body:\n{body}")
