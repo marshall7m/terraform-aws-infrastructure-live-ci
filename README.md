@@ -499,7 +499,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_ecs_vpc_id"></a> [ecs\_vpc\_id](#input\_ecs\_vpc\_id) | AWS VPC ID to host the ECS container instances within.<br>The VPC should be associated with the subnet IDs specified under `var.ecs_private_subnet_ids` | `string` | n/a | yes |
 | <a name="input_enable_branch_protection"></a> [enable\_branch\_protection](#input\_enable\_branch\_protection) | Determines if the branch protection rule is created. If the repository is private (most likely), the GitHub account associated with<br>the GitHub provider must be registered as a GitHub Pro, GitHub Team, GitHub Enterprise Cloud, or GitHub Enterprise Server account. See here for details: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/about-protected-branches | `bool` | `true` | no |
 | <a name="input_enforce_admin_branch_protection"></a> [enforce\_admin\_branch\_protection](#input\_enforce\_admin\_branch\_protection) | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
-| <a name="input_file_path_pattern"></a> [file\_path\_pattern](#input\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
+| <a name="input_file_path_pattern"></a> [file\_path\_pattern](#input\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$\n"` | no |
 | <a name="input_github_token_ssm_description"></a> [github\_token\_ssm\_description](#input\_github\_token\_ssm\_description) | Github token SSM parameter description | `string` | `"Github token used by Merge Lock Lambda Function"` | no |
 | <a name="input_github_token_ssm_key"></a> [github\_token\_ssm\_key](#input\_github\_token\_ssm\_key) | AWS SSM Parameter Store key for sensitive Github personal token used by the Merge Lock Lambda Function | `string` | `null` | no |
 | <a name="input_github_token_ssm_tags"></a> [github\_token\_ssm\_tags](#input\_github\_token\_ssm\_tags) | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
@@ -658,6 +658,15 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - Management of a GitHub Personal Access Token (PAT). The user will need to refresh the GitHub token value when the expiration date is close.
   - Possibly create a GitHub machine user and add as a collaborator to the repo to remove the need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
 
+### Think About...
+
+- Decouple Docker runner image and place into a separate repository
+  - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
+  - Would require docker scripts to be cloud-agnostic which means replacing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
+- Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
+- Dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
+
+
 ## TODO:
 ### Features:
 
@@ -679,12 +688,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)
 
-### Think About...
-
-- Decouple Docker runner image and place into a separate repository
-  - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
-  - Would require docker scripts to be cloud-agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
-- Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
-- Dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
-
-
+- Mover core logic from handler to separate class within approval request
+- group ssm parameter via /var.prefix/param_name
+- use sns for sending approval requests/notifications
