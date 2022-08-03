@@ -79,7 +79,6 @@ def validate_sig(actual_sig: str, expected_sig: str):
     signature value to the expected SHA-256 value
     """
 
-    log.info("Authenticating approval request")
     log.debug(f"Actual: {actual_sig}")
     log.debug(f"Expected: {expected_sig}")
 
