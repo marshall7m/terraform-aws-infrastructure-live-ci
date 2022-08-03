@@ -15,8 +15,10 @@ sys.path.append(os.path.dirname(__file__))
 from invoker import Invoker  # noqa E402
 from common.utils import (  # noqa E402
     ClientException,
+    ServerException,
     aws_response,
     validate_sig,
+    aws_encode,
 )
 
 ssm = boto3.client("ssm")
@@ -25,11 +27,18 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
+def get_logs_url(context):
+    return f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'
+
+
 class InvokerHandler(object):
-    def __init__(self, app, secret):
+    def __init__(self, app, secret, token, commit_status_config={}):
         self.app = app
         self.secret = secret
         self.app_listeners = self.app.listeners
+        self.gh = github.Github(token)
+        self.app.gh = self.gh
+        self.app.commit_status_config = commit_status_config
 
     def _get_header(self, key, request):
         """Return message header if exists or returns client exception"""
@@ -45,10 +54,13 @@ class InvokerHandler(object):
             file_paths = [
                 path.filename
                 for path in repo.compare(
-                    event["body"]["pull_request"]["base"]["ref"],
-                    event["body"]["pull_request"]["head"]["ref"],
+                    event["body"]["pull_request"]["base"]["sha"],
+                    event["body"]["pull_request"]["head"]["sha"],
                 ).files
             ]
+        else:
+            raise ServerException(f"Event type is not supported: {event_type}")
+        log.debug(f"File paths:\n{file_paths}")
 
         valid = any([re.search(pattern, f) for f in file_paths])
 
@@ -103,17 +115,22 @@ class InvokerHandler(object):
                 log.debug(f"Error:\n{e}")
                 continue
 
-            log.info("Validating event file path changes")
-            valid_file_path = self.validate_file_paths(
-                event_type,
-                event,
-            )
-            if not valid_file_path:
-                log.debug("PR does not contain valid file path changes")
-                continue
+            if os.environ.get("FILE_PATH_PATTERN"):
+                log.info("Validating event file path changes")
+                valid_file_path = self.validate_file_paths(
+                    event_type, event, os.environ.get("FILE_PATH_PATTERN")
+                )
+
+                if not valid_file_path:
+                    log.debug("PR does not contain valid file path changes")
+                    continue
+            else:
+                log.info(
+                    "$FILE_PATH_PATTERN is not found -- skipping file path validation"
+                )
 
             log.info("Running handler")
-            handler["function"](event)
+            handler["function"](event, context)
 
         # TODO: create response for when no handlers were executed?
         return aws_response(
@@ -125,8 +142,12 @@ app = Invoker()
 
 common_filters = {
     "body.pull_request.base.ref": "regex:^" + os.environ.get("BASE_BRANCH", "") + "$",
-    "file_paths": "regex:^" + os.environ.get("FILE_PATH_PATTERN", "") + "$",
 }
+
+
+def rule_not_true(x):
+    """Workaround to Validator not having negative rules"""
+    return x != True  # noqa : 712
 
 
 @app.hook(
@@ -134,10 +155,9 @@ common_filters = {
     filter_groups=[
         {
             **{
-                "body.pull_request.merged": False,
-                "body.action": [
-                    f"regex:^{action}$" for action in ["opened", "edited", "reopened"]
-                ],
+                "body.pull_request.merged": rule_not_true,
+                "body.action": lambda x: re.search("(opened|edited|reopened)", x)
+                != None,  # noqa : 711
             },
             **common_filters,
         }
@@ -147,15 +167,15 @@ def open_pr(event, context):
     app.merge_lock(
         event["body"]["repository"]["full_name"],
         event["body"]["pull_request"]["head"]["ref"],
-        app.get_logs_url(event, context),
+        get_logs_url(context),
     )
     app.trigger_pr_plan(
         event["body"]["repository"]["full_name"],
         event["body"]["pull_request"]["base"]["ref"],
         event["body"]["pull_request"]["head"]["ref"],
         event["body"]["pull_request"]["head"]["sha"],
-        app.get_logs_url(event, context),
-        app.commit_status_config["PrPlan"],
+        get_logs_url(context),
+        app.commit_status_config.get("PrPlan"),
     )
 
 
@@ -163,7 +183,7 @@ def open_pr(event, context):
     event_type="pull_request",
     filter_groups=[
         {
-            **{"body.pull_request.merged": True, "body.action": "regex:^closed$"},
+            **{"body.pull_request.merged": "accepted", "body.action": "regex:^closed$"},
             **common_filters,
         }
     ],
@@ -176,8 +196,8 @@ def merged_pr(event, context):
         event["body"]["pull_request"]["head"]["ref"],
         event["body"]["pull_request"]["head"]["sha"],
         event["body"]["pull_request"]["number"],
-        app.get_logs_url(event, context),
-        app.commit_status_config["CreateDeployStack"],
+        get_logs_url(context),
+        app.commit_status_config.get("CreateDeployStack"),
     )
 
 
@@ -192,13 +212,13 @@ def lambda_handler(event, context):
         Name=os.environ["GITHUB_WEBHOOK_SECRET_SSM_KEY"], WithDecryption=True
     )["Parameter"]["Value"]
 
-    app.gh = github.Github(token)
-
-    app.commit_status_config = json.loads(
+    commit_status_config = json.loads(
         ssm.get_parameter(Name=os.environ["COMMIT_STATUS_CONFIG_SSM_KEY"])["Parameter"][
             "Value"
         ]
     )
 
-    invoker = InvokerHandler(app=app, secret=secret)
+    invoker = InvokerHandler(
+        app=app, secret=secret, token=token, commit_status_config=commit_status_config
+    )
     invoker.handle(event, context)
