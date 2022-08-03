@@ -6,6 +6,7 @@ import boto3
 import json
 from pprint import pformat
 import sys
+import github
 
 sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import aws_encode, ServerException  # noqa E402
@@ -18,11 +19,13 @@ log.setLevel(logging.DEBUG)
 
 
 class Invoker:
-    def __init__(self, token=None, commit_status_config=None, gh=None):
+    def __init__(self, token=None, commit_status_config=None):
         self.listeners = collections.defaultdict(list)
-        self.token = token
         self.commit_status_config = commit_status_config
-        self.gh = gh
+        if token:
+            self.gh = github.Github(token)
+        else:
+            self.gh = github.Github()
 
     def merge_lock(self, repo_full_name, head_ref, logs_url):
         """Creates a PR commit status that shows the current merge lock status"""
@@ -186,9 +189,6 @@ class Invoker:
                     "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
                 )
 
-    def get_logs_url(event, context):
-        return f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'
-
     def trigger_create_deploy_stack(
         self,
         repo_full_name,
@@ -226,7 +226,7 @@ class Invoker:
                             "environment": [
                                 {"name": "BASE_REF", "value": base_ref},
                                 {"name": "HEAD_REF", "value": head_ref},
-                                {"name": "PR_ID", "value": pr_id},
+                                {"name": "PR_ID", "value": str(pr_id)},
                                 {"name": "COMMIT_ID", "value": head_sha},
                             ],
                         }
