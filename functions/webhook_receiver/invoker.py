@@ -11,9 +11,6 @@ import github
 sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import aws_encode, ServerException  # noqa E402
 
-ssm = boto3.client("ssm")
-ecs = boto3.client("ecs")
-
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
@@ -29,6 +26,7 @@ class Invoker:
 
     def merge_lock(self, repo_full_name, head_ref, logs_url):
         """Creates a PR commit status that shows the current merge lock status"""
+        ssm = boto3.client("ssm")
         merge_lock = ssm.get_parameter(Name=os.environ["MERGE_LOCK_SSM_KEY"])[
             "Parameter"
         ]["Value"]
@@ -74,6 +72,7 @@ class Invoker:
             send_commit_status: Send a pending commit status for each of the
                 PR plan ECS task
         """
+        ecs = boto3.client("ecs")
 
         log.info("Getting diff files")
         diff_paths = list(
@@ -183,7 +182,7 @@ class Invoker:
                     log.debug(f"Status data:\n{pformat(status_data)}")
                     if send_commit_status:
                         head = self.gh.get_repo(repo_full_name).get_branch(head_ref)
-                        head.commit.create_status(**status_data)
+                        log.debug(head.commit.create_status(**status_data))
             else:
                 log.info(
                     "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
@@ -206,6 +205,8 @@ class Invoker:
             pr_id: PR ID or also referred to as PR number
             send_commit_status: Send a pending commit status for each of the PR plan ECS task
         """
+        ecs = boto3.client("ecs")
+
         log_options = ecs.describe_task_definition(
             taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"]
         )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"]["options"]
