@@ -31,12 +31,30 @@ data "aws_iam_policy_document" "lambda_approval_request" {
     actions   = ["ssm:DescribeParameters"]
     resources = ["*"]
   }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter"
+    ]
+    resources = [aws_ssm_parameter.email_approval_secret.arn]
+  }
 }
 
 resource "aws_iam_policy" "lambda_approval_request" {
   name        = "${local.approval_request_name}-ses-access"
   description = "Allows Lambda function to send SES emails to and from defined email addresses"
   policy      = data.aws_iam_policy_document.lambda_approval_request.json
+}
+
+resource "random_password" "email_approval_secret" {
+  length = 24
+}
+
+resource "aws_ssm_parameter" "email_approval_secret" {
+  name  = "${var.prefix}-email-approval-secret"
+  type  = "SecureString"
+  value = random_password.email_approval_secret.result
 }
 
 module "lambda_approval_request" {
@@ -56,8 +74,9 @@ module "lambda_approval_request" {
   ]
 
   environment_variables = {
-    SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
-    SES_TEMPLATE         = aws_ses_template.approval.name
+    SENDER_EMAIL_ADDRESS          = var.approval_request_sender_email
+    SES_TEMPLATE                  = aws_ses_template.approval.name
+    EMAIL_APPROVAL_SECRET_SSM_KEY = aws_ssm_parameter.email_approval_secret.name
   }
 
   publish = true
@@ -118,7 +137,7 @@ module "lambda_approval_response" {
     METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
 
-  authorization_type         = "AWS_IAM"
+  authorization_type         = "NONE"
   create_lambda_function_url = true
 
   publish = true
