@@ -21,7 +21,6 @@ from common.utils import (  # noqa E402
     aws_encode,
 )
 
-ssm = boto3.client("ssm")
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -49,6 +48,7 @@ class InvokerHandler(object):
             return aws_response(status_code=400, response="Missing header: " + key)
 
     def validate_file_paths(self, event_type, event, pattern):
+
         repo = self.gh.get_repo(event["body"]["repository"]["full_name"])
         if event_type == "pull_request":
             file_paths = [
@@ -203,6 +203,7 @@ def merged_pr(event, context):
 
 def lambda_handler(event, context):
     log.debug(f"Event:\n{pformat(event)}")
+    ssm = boto3.client("ssm")
 
     token = ssm.get_parameter(
         Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
