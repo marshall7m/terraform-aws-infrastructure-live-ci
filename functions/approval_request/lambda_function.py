@@ -10,18 +10,14 @@ from common.utils import aws_encode, get_email_approval_sig  # noqa : E402
 ses = boto3.client("ses")
 ssm = boto3.client("ssm")
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 
 def lambda_handler(event, context):
     """Sends approval request email to email addresses asssociated with Terragrunt path"""
-
-    log = logging.getLogger(__name__)
-    log.setLevel(logging.DEBUG)
-
     log.debug(f"Lambda Event: {event}")
 
     template_data = {
-        "full_approval_url": event["ApprovalURL"],
         "path": event["Path"],
         "logs_url": event["LogUrlPrefix"]
         + aws_encode(event["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]),
@@ -36,16 +32,24 @@ def lambda_handler(event, context):
 
     # need to create a separate destination object for each address since only
     # the target address is interpolated into message template
+    ssm = boto3.client("ssm")
+
+    secret = ssm.get_parameter(
+        Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
+    )["Parameter"]["Value"]
+
     for address in event["Voters"]:
         destinations.append(
             {
                 "Destination": {"ToAddresses": [address]},
                 "ReplacementTemplateData": json.dumps(
                     {
-                        "email_address": address,
-                        "signature": get_email_approval_sig(
-                            event["ApprovalURL"], "POST", address
+                        "full_approval_url": event["ApprovalURL"]
+                        + "&X-SES-Signature-256="
+                        + get_email_approval_sig(
+                            secret, event["ApprovalURL"], "POST", address
                         ),
+                        "email_address": address,
                     }
                 ),
             }

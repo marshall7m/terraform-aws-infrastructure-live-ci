@@ -2,8 +2,6 @@ import hashlib
 import hmac
 import re
 import urllib
-import boto3
-import os
 import logging
 
 log = logging.getLogger(__name__)
@@ -57,14 +55,9 @@ def aws_response(
         }
 
 
-def get_email_approval_sig(function_uri: str, method: str, recipient: str) -> str:
-
-    ssm = boto3.client("ssm")
-
-    secret = ssm.get_parameter(
-        Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
-    )["Parameter"]["Value"]
-
+def get_email_approval_sig(
+    secret, function_uri: str, method: str, recipient: str
+) -> str:
     data = function_uri + method + recipient
     sig = hmac.new(
         bytes(str(secret), "utf-8"), bytes(str(data), "utf-8"), hashlib.sha256

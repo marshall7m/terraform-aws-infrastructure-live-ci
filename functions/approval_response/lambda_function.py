@@ -58,7 +58,9 @@ def lambda_handler(event, context):
     try:
         event["body"] = json.loads(event["body"])
     except json.decoder.JSONDecodeError:
-        aws_response(status_code="400", body="Request body is not a valid JSON string")
+        aws_response(
+            status_code="400", response="Request body is not a valid JSON string"
+        )
 
     handler = ApprovalHandler(app=app)
     return handler.handle(event, context)

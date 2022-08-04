@@ -10,7 +10,6 @@ import sys
 sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import (
     ClientException,
-    ServerException,
     get_email_approval_sig,
     aws_response,
     validate_sig,
@@ -100,15 +99,21 @@ class App(object):
     def validate_ses_request(self, func):
         @wraps(func)
         def decorater(event):
-            try:
-                actual_sig = (event.get("body", {}).get("X-SES-Signature-256", ""),)
-                expected_sig = get_email_approval_sig(
-                    event.get("domainName", ""),
-                    event.get("requestContext", {}).get("http", {}).get("method", ""),
-                    event.get("body", {}).get("recipient", ""),
-                )
-            except ServerException as e:
-                return aws_response(response=e)
+            ssm = boto3.client("ssm")
+
+            secret = ssm.get_parameter(
+                Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
+            )["Parameter"]["Value"]
+
+            actual_sig = (
+                event.get("queryStringParameters", {}).get("X-SES-Signature-256", ""),
+            )
+            expected_sig = get_email_approval_sig(
+                secret,
+                event.get("domainName", ""),
+                event.get("requestContext", {}).get("http", {}).get("method", ""),
+                event.get("body", {}).get("recipient", ""),
+            )
 
             try:
                 validate_sig(actual_sig, expected_sig)
