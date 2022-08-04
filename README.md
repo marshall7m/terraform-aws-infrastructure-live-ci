@@ -558,6 +558,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
+| <a name="output_email_approval_secret"></a> [email\_approval\_secret](#output\_email\_approval\_secret) | Secret value used for authenticating email approval responses |
 | <a name="output_github_webhook_id"></a> [github\_webhook\_id](#output\_github\_webhook\_id) | GitHub webhook ID used for sending pull request activity to the Lambda Receiver Function |
 | <a name="output_lambda_trigger_sf_arn"></a> [lambda\_trigger\_sf\_arn](#output\_lambda\_trigger\_sf\_arn) | ARN of the Lambda Function used for triggering Step Function execution(s) |
 | <a name="output_merge_lock_ssm_key"></a> [merge\_lock\_ssm\_key](#output\_merge\_lock\_ssm\_key) | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
@@ -677,15 +678,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
 - [ ] Use AWS SQS with Exactly-Once Processing to create a queue of pr tf plan tasks to run
   - User can then set a time range (such as after hours) that the PR plans are run so that the plan tasks are not run for every PR update event
-
-- [ ] change approval request to call sub module to send ses instead of being in main lambda_handler
-- [ ] Change structure of test dir:
-  - tests/e2e
-    - previously integration
-  - tests/functional
-    - calls remote services
-  - tests/unit/functions/<function>
-    - uses mocking for remote services/dependencies
 ### Improvements:
 
 - [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)

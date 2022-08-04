@@ -126,3 +126,8 @@ output "ecs_apply_role_arn" {
 output "ecs_plan_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_plan_role_arn
 }
+
+output "email_approval_secret" {
+  sensitive = true
+  value     = module.mut_infrastructure_live_ci.email_approval_secret
+}

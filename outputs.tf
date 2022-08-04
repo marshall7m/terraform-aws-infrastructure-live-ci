@@ -166,3 +166,8 @@ output "trigger_sf_function_name" {
 }
 
 
+output "email_approval_secret" {
+  description = "Secret value used for authenticating email approval responses"
+  sensitive   = true
+  value       = random_password.email_approval_secret.result
+}
