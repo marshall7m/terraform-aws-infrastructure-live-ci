@@ -105,6 +105,19 @@ data "aws_iam_policy_document" "approval_response" {
     actions   = ["states:DescribeExecution"]
     resources = ["*"]
   }
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter"
+    ]
+    resources = [aws_ssm_parameter.email_approval_secret.arn]
+  }
 }
 resource "aws_iam_policy" "approval_response" {
   name        = "${local.approval_response_name}-sf-access"
@@ -132,9 +145,10 @@ module "lambda_approval_response" {
   ]
   timeout = 180
   environment_variables = {
-    METADB_NAME        = local.metadb_name
-    METADB_CLUSTER_ARN = aws_rds_cluster.metadb.arn
-    METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
+    METADB_NAME                   = local.metadb_name
+    METADB_CLUSTER_ARN            = aws_rds_cluster.metadb.arn
+    METADB_SECRET_ARN             = aws_secretsmanager_secret_version.ci_metadb_user.arn
+    EMAIL_APPROVAL_SECRET_SSM_KEY = aws_ssm_parameter.email_approval_secret.name
   }
 
   authorization_type         = "NONE"
