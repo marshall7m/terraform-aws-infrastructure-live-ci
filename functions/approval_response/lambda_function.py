@@ -1,5 +1,4 @@
 import logging
-import json
 import sys
 from pprint import pformat
 import os
@@ -23,7 +22,7 @@ app = App()
 @app.validate_ses_request
 def ses_approve(event):
     try:
-        execution_id = (event["queryStringParameters"]["exId"],)
+        execution_id = (event["queryStringParameters"]["ex"],)
         action = (event["body"]["action"],)
         voter = (event["body"]["recipient"],)
         task_token = event["queryStringParameters"]["taskToken"]
@@ -55,12 +54,8 @@ def lambda_handler(event, context):
     method and path
     """
     log.info(f"Event:\n{pformat(event)}")
-    try:
-        event["body"] = json.loads(event["body"])
-    except json.decoder.JSONDecodeError:
-        aws_response(
-            status_code="400", response="Request body is not a valid JSON string"
-        )
 
     handler = ApprovalHandler(app=app)
-    return handler.handle(event, context)
+    response = handler.handle(event, context)
+    log.debug(f"Response:\n{response}")
+    return response

@@ -13,7 +13,7 @@ log.setLevel(logging.DEBUG)
 
 event = {
     "domainName": "url-id.lambda-url.us-west-2.on.aws",
-    "queryStringParameters": {"taskToken": "token-123", "exId": "run-123"},
+    "queryStringParameters": {"taskToken": "token-123", "ex": "run-123"},
     "body": {
         "X-SES-Signature-256": "foo",
         "action": "approve",
