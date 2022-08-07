@@ -10,8 +10,6 @@ sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import aws_response, ClientException
 
 log = logging.getLogger(__name__)
-stream = logging.StreamHandler(sys.stdout)
-log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
 
@@ -22,18 +20,11 @@ app = App()
 @app.validate_ses_request
 def ses_approve(event):
     try:
-        execution_id = (event["queryStringParameters"]["ex"],)
-        action = (event["body"]["action"],)
-        voter = (event["body"]["recipient"],)
-        task_token = event["queryStringParameters"]["taskToken"]
-    except KeyError as e:
-        return aws_response(
-            status_code=400, response=f"Request contains invalid field: {e.args[0]}"
-        )
-
-    try:
         response = app.update_vote(
-            execution_id=execution_id, action=action, voter=voter, task_token=task_token
+            execution_arn=event["queryStringParameters"]["exArn"],
+            action=event["queryStringParameters"]["action"],
+            voter=event["queryStringParameters"]["recipient"],
+            task_token=event["queryStringParameters"]["taskToken"],
         )
     except ClientException as e:
         response = {"statusCode": 400, "body": e}
@@ -44,7 +35,6 @@ def ses_approve(event):
             "body": "Internal server error -- Unable to process vote",
         }
     finally:
-        print(response)
         return aws_response(response)
 
 
