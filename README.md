@@ -579,7 +579,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_trigger_sf_function_name"></a> [trigger\_sf\_function\_name](#output\_trigger\_sf\_function\_name) | Name of the Lambda Function used for triggering Step Function execution(s) |
 | <a name="output_trigger_sf_log_group_name"></a> [trigger\_sf\_log\_group\_name](#output\_trigger\_sf\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
- 
+
 ## Deploy the Terraform Module
 
 ### CLI Requirements
@@ -603,7 +603,7 @@ For a demo of the module that will automatically clean up any resources created,
 6. Run `terraform apply` and enter `yes` to the approval prompt
 7. Refill coffee and wait for resources to be created
 8. Go to the `var.approval_request_sender_email` email address. Find the AWS SES verification email (subject should be something like "Amazon Web Services – Email Address Verification Request in region US West (Oregon)") and click on the verification link.
-8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in the Terraform configuration's tfstate file
+8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in a Terraform configuration's tfstate file
 9. Merge the PR
 10. Wait for the approval email to be sent to the voter's email address
 11. Login into the voter's email address and open the approval request email (subject should be something like "${var.step_function_name} - Need Approval for Path: {{path}}")
@@ -682,6 +682,10 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)
 
-- Mover core logic from handler to separate class within approval request
+- Mover core logic from handler to separate class within approval request 
+- Mover core logic from handler to separate class within trigger_sf
 - group ssm parameter via /var.prefix/param_name
 - use sns for sending approval requests/notifications
+- try binpack placement strategy for cpu utilization pass 60% threshold
+
+- create custom python logging for functions and tf cmds to remove timestamp and other 
