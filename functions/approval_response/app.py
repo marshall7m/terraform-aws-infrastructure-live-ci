@@ -6,6 +6,7 @@ import json
 from pprint import pformat
 from functools import wraps
 import sys
+from request_filter_groups import RequestFilter, ValidationError
 
 sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import (
@@ -13,6 +14,7 @@ from common.utils import (
     get_email_approval_sig,
     aws_response,
     validate_sig,
+    aws_decode,
 )
 
 log = logging.getLogger(__name__)
@@ -21,21 +23,24 @@ log.setLevel(logging.DEBUG)
 
 class App(object):
     def __init__(self):
-        self.sf = boto3.client("stepfunctions")
-
         self.listeners = {}
 
     def voter_count_met(self, task_token, action):
         log.info("Sending task token to Step Function Machine")
-        self.sf.send_task_success(
+        sf = boto3.client("stepfunctions")
+        sf.send_task_success(
             taskToken=task_token,
             output=json.dumps(action),  # noqa: E501
         )
 
         # TODO: add logic to send notifactions to users who subscribe to approval count met event
 
-    def update_vote(self, execution_id: str, action: str, voter: str, task_token: str):
-        status = self.sf.describe_execution(executionArn=execution_id)["status"]
+    def update_vote(self, execution_arn: str, action: str, voter: str, task_token: str):
+        sf = boto3.client("stepfunctions")
+        execution = sf.describe_execution(executionArn=execution_arn)
+        status = execution["status"]
+        execution_id = execution["name"]
+
         if status == "RUNNING":
             log.info("Updating vote count")
             # TODO: If query execution time is too long and
@@ -63,26 +68,18 @@ class App(object):
                             raise ClientException(
                                 f"Record with execution ID: {execution_id} does not exist"
                             )
-                        try:
-                            record = dict(
-                                zip(
-                                    [
-                                        "status",
-                                        "approval_voters",
-                                        "min_approval_count",
-                                        "rejection_voters",
-                                        "min_rejection_count",
-                                    ],
-                                    list(results),
-                                )
+                        record = dict(
+                            zip(
+                                [
+                                    "status",
+                                    "approval_voters",
+                                    "min_approval_count",
+                                    "rejection_voters",
+                                    "min_rejection_count",
+                                ],
+                                list(results),
                             )
-                        except TypeError as e:
-                            if results is None:
-                                raise ClientException(
-                                    f"Record with execution ID: {execution_id} does not exist"
-                                )
-                            else:
-                                raise e
+                        )
 
             log.debug(f"Record:\n{pformat(record)}")
             if (
@@ -91,6 +88,9 @@ class App(object):
             ):
                 log.info("Voter count meets requirement")
                 self.voter_count_met(task_token, action)
+                return aws_response(
+                    status_code=200, response="Your choice has been submitted"
+                )
         else:
             raise ClientException(
                 f"Approval submissions are not available anymore -- Execution Status: {status}"
@@ -99,20 +99,42 @@ class App(object):
     def validate_ses_request(self, func):
         @wraps(func)
         def decorater(event):
+            try:
+                RequestFilter.validate(
+                    event,
+                    [
+                        {
+                            "queryStringParameters.ex": "required|string",
+                            "queryStringParameters.recipient": "required|string",
+                            "queryStringParameters.action": "required|string",
+                            "queryStringParameters.exArn": "required|string",
+                            "queryStringParameters.taskToken": "required|string",
+                            "queryStringParameters.X-SES-Signature-256": "required|string",
+                            "requestContext.http": "required",
+                        }
+                    ],
+                )
+            except ValidationError as e:
+                return aws_response(status_code=422, response=str(e))
+
             ssm = boto3.client("ssm")
 
             secret = ssm.get_parameter(
                 Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
             )["Parameter"]["Value"]
 
-            actual_sig = (
-                event.get("queryStringParameters", {}).get("X-SES-Signature-256", ""),
+            event["queryStringParameters"] = {
+                k: aws_decode(v) for k, v in event["queryStringParameters"].items()
+            }
+
+            actual_sig = event.get("queryStringParameters", {}).get(
+                "X-SES-Signature-256", ""
             )
             expected_sig = get_email_approval_sig(
                 secret,
-                event.get("domainName", ""),
-                event.get("requestContext", {}).get("http", {}).get("method", ""),
-                event.get("body", {}).get("recipient", ""),
+                event.get("queryStringParameters", {}).get("ex", ""),
+                aws_decode(event.get("queryStringParameters", {}).get("recipient", "")),
+                event.get("queryStringParameters", {}).get("action", ""),
             )
 
             try:
