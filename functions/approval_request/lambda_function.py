@@ -20,6 +20,7 @@ def get_ses_urls(event, secret, recipient):
         "exArn": event["ExecutionArn"],
         "sm": event["StateMachineArn"],
         "recipient": recipient,
+        "taskToken": event["TaskToken"],
     }
     actions = ["approve", "reject"]
     urls = {}
