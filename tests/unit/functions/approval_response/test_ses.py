@@ -13,11 +13,13 @@ log.setLevel(logging.DEBUG)
 
 event = {
     "domainName": "url-id.lambda-url.us-west-2.on.aws",
-    "queryStringParameters": {"taskToken": "token-123", "ex": "run-123"},
-    "body": {
-        "X-SES-Signature-256": "foo",
+    "queryStringParameters": {
+        "taskToken": "token-123",
+        "ex": "run-123",
+        "recipient": "user-123",
+        "exArn": "arn-123",
         "action": "approve",
-        "recipient": "voter-123",
+        "X-SES-Signature-256": "sig-123",
     },
     "requestContext": {
         "http": {
@@ -44,7 +46,7 @@ event = {
             },
             None,
             True,
-            400,
+            422,
             id="invalid_request_fields",
         ),
         pytest.param(event, ClientException(), True, 400, id="client_error"),

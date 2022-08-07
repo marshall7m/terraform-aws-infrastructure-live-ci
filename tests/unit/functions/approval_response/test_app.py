@@ -97,7 +97,10 @@ def test_update_vote(
     expect_send_task_token,
 ):
     mock_boto_client.return_value = mock_boto_client
-    mock_boto_client.describe_execution.return_value = {"status": status}
+    mock_boto_client.describe_execution.return_value = {
+        "status": status,
+        "name": "run-123",
+    }
 
     if record != {}:
         log.info("Creating test record")
