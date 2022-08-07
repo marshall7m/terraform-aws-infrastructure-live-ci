@@ -3,8 +3,10 @@
 <h3>Execution ID: {{execution_name}}</h3>
 <h3>Terraform Plan Logs: {{logs_url}}</h3>
 
-<form method="post" enctype="application/json" onSubmit="return confirm('Do you want to submit?') ">
-   [fields]
-   <input type="submit" value="Submit" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;" formaction="{{approve_url}}">
-   <input type="submit" value="Submit" style="background-color:green;color:white;padding:5px;font-size:18px;border:none;padding:8px;" formaction="{{reject_url}}">
+<form method="post" action="{{approve_url}}" enctype="application/json" formtarget="_blank">
+   <input type="submit" value="Approve" style="background-color:green;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
+</form>
+
+<form method="post" action="{{reject_url}}" enctype="application/json" formtarget="_blank">
+   <input type="submit" value="Reject" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
 </form>
