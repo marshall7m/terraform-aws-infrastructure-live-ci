@@ -7,8 +7,6 @@ import sys
 sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import aws_encode, get_email_approval_sig  # noqa : E402
 
-ses = boto3.client("ses")
-ssm = boto3.client("ssm")
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
@@ -49,6 +47,9 @@ def lambda_handler(event, context):
     """Sends approval request email to email addresses asssociated with Terragrunt path"""
     log.debug(f"Lambda Event: {event}")
 
+    ssm = boto3.client("ssm")
+    ses = boto3.client("ses")
+
     template_data = {
         "path": event["Path"],
         "logs_url": event["LogUrlPrefix"]
@@ -62,9 +63,8 @@ def lambda_handler(event, context):
 
     destinations = []
 
-    # need to create a separate destination object for each address since only
-    # the target address is interpolated into message template
-    ssm = boto3.client("ssm")
+    # need to create a separate destination object for each address since the
+    # address is used to validate the request
 
     secret = ssm.get_parameter(
         Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
