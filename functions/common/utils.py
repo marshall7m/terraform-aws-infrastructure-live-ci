@@ -1,8 +1,10 @@
 import hashlib
 import hmac
 import re
+import urllib.parse
 import urllib
 import logging
+
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -25,6 +27,13 @@ def aws_encode(value):
     value = urllib.parse.quote_plus(value)
     value = re.sub(r"\+", " ", value)
     return re.sub(r"%", "$", urllib.parse.quote_plus(value))
+
+
+def aws_decode(value):
+    """Decodes AWS friendly URL component"""
+    value = urllib.parse.unquote_plus(re.sub(r"\$", "%", value))
+    value = re.sub(r"\s", "+", value)
+    return urllib.parse.unquote_plus(value)
 
 
 def aws_response(
