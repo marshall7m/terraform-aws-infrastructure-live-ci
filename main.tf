@@ -90,15 +90,18 @@ resource "aws_sfn_state_machine" "this" {
               "AwaitingApprovals.$" = "$.voters"
               "TaskToken.$"         = "$$.Task.Token"
             }
-            "Voters.$"        = "$.voters"
-            "Path.$"          = "$.cfg_path"
-            "ApprovalURL.$"   = "States.Format('${module.lambda_approval_response.lambda_function_url}ses?ex={}&exArn={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
-            "ExecutionName.$" = "$$.Execution.Name"
-            "AccountName.$"   = "$.account_name"
-            "PullRequestID.$" = "$.pr_id"
-            "PlanTaskArn.$"   = "$.PlanOutput.PlanTaskArn"
-            "LogUrlPrefix"    = local.log_url_prefix
-            "LogStreamPrefix" = local.log_stream_prefix
+            "Voters.$"          = "$.voters"
+            "Path.$"            = "$.cfg_path"
+            "ApprovalURL"       = module.lambda_approval_response.lambda_function_url
+            "ExecutionArn.$"    = "$$.Execution.Id"
+            "StateMachineArn.$" = "$$.StateMachine.Id"
+            "TaskToken.$"       = "$$.Task.Token"
+            "ExecutionName.$"   = "$$.Execution.Name"
+            "AccountName.$"     = "$.account_name"
+            "PullRequestID.$"   = "$.pr_id"
+            "PlanTaskArn.$"     = "$.PlanOutput.PlanTaskArn"
+            "LogUrlPrefix"      = local.log_url_prefix
+            "LogStreamPrefix"   = local.log_stream_prefix
           }
         }
         Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"

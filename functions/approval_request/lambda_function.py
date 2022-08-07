@@ -13,6 +13,37 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
+def get_ses_urls(event, secret, recipient):
+    resource_path = "ses"
+    common_params = {
+        "ex": event["ExecutionName"],
+        "exArn": event["ExecutionArn"],
+        "sm": event["StateMachineArn"],
+        "recipient": recipient,
+    }
+    actions = ["approve", "reject"]
+    urls = {}
+
+    for action in actions:
+        query_params = {
+            **common_params,
+            **{
+                "action": action,
+                "X-SES-Signature-256": get_email_approval_sig(
+                    secret, event["ExecutionName"], recipient, action
+                ),
+            },
+        }
+        urls[action] = (
+            event["ApprovalURL"]
+            + resource_path
+            + "?"
+            + "&".join([f"{k}={aws_encode(v)}" for k, v in query_params.items()])
+        )
+
+    return urls
+
+
 def lambda_handler(event, context):
     """Sends approval request email to email addresses asssociated with Terragrunt path"""
     log.debug(f"Lambda Event: {event}")
@@ -39,17 +70,14 @@ def lambda_handler(event, context):
     )["Parameter"]["Value"]
 
     for address in event["Voters"]:
+        urls = get_ses_urls(event, secret, address)
         destinations.append(
             {
                 "Destination": {"ToAddresses": [address]},
                 "ReplacementTemplateData": json.dumps(
                     {
-                        "full_approval_url": event["ApprovalURL"]
-                        + "&X-SES-Signature-256="
-                        + get_email_approval_sig(
-                            secret, event["ApprovalURL"], "POST", address
-                        ),
-                        "email_address": address,
+                        "approve_url": urls["approve"],
+                        "reject_url": urls["reject"],
                     }
                 ),
             }
