@@ -76,20 +76,6 @@ resource "aws_sfn_state_machine" "this" {
         Parameters = {
           FunctionName = module.lambda_approval_request.lambda_function_arn
           Payload = {
-            "PathApproval" = {
-              "Approval" = {
-                "Required.$" = "$.min_approval_count"
-                Count        = 0
-                Voters       = []
-              },
-              "Rejection" = {
-                "Required.$" = "$.min_rejection_count"
-                "Count"      = 0
-                "Voters"     = []
-              },
-              "AwaitingApprovals.$" = "$.voters"
-              "TaskToken.$"         = "$$.Task.Token"
-            }
             "Voters.$"          = "$.voters"
             "Path.$"            = "$.cfg_path"
             "ApprovalURL"       = module.lambda_approval_response.lambda_function_url
