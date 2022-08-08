@@ -891,11 +891,11 @@ class Integration:
                 mut_output["email_approval_secret"],
                 record["execution_id"],
                 voter,
-                "approve",
+                request.cls.executions[int(request.node.callspec.id)]["action"],
             ),
             "taskToken": task_token,
             "recipient": voter,
-            "action": "approve",
+            "action": request.cls.executions[int(request.node.callspec.id)]["action"],
             "ex": record["execution_id"],
             "exArn": execution_arn,
         }
