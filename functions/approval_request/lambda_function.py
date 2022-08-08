@@ -11,7 +11,15 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-def get_ses_urls(event, secret, recipient):
+def get_ses_urls(event: dict, secret: str, recipient: str) -> dict:
+    """
+    Returns mapping of approval actions and their respective URL
+
+    Arguments:
+        event: Lambda Function event
+        secret: Secret value used for generating authentification signature
+        recipient: Email address that will receive the approval URL
+    """
     resource_path = "ses"
     common_params = {
         "ex": event["ExecutionName"],
@@ -63,13 +71,13 @@ def lambda_handler(event, context):
 
     destinations = []
 
-    # need to create a separate destination object for each address since the
-    # address is used to validate the request
-
+    # secret used for generating signature query param
     secret = ssm.get_parameter(
         Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
     )["Parameter"]["Value"]
 
+    # need to create a separate destination object for each address since the
+    # approval URL is specifc to the address
     for address in event["Voters"]:
         urls = get_ses_urls(event, secret, address)
         destinations.append(

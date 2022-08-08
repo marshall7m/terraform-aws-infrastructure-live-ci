@@ -25,16 +25,6 @@ class App(object):
     def __init__(self):
         self.listeners = {}
 
-    def voter_count_met(self, task_token, action):
-        log.info("Sending task token to Step Function Machine")
-        sf = boto3.client("stepfunctions")
-        sf.send_task_success(
-            taskToken=task_token,
-            output=json.dumps(action),  # noqa: E501
-        )
-
-        # TODO: add logic to send notifactions to users who subscribe to approval count met event
-
     def update_vote(self, execution_arn: str, action: str, voter: str, task_token: str):
         sf = boto3.client("stepfunctions")
         execution = sf.describe_execution(executionArn=execution_arn)
@@ -43,7 +33,7 @@ class App(object):
 
         if status == "RUNNING":
             log.info("Updating vote count")
-            # TODO: If query execution time is too long and
+            # NOTE: If query execution time is too long and
             #  causes downstream timeouts, invoke async lambda with
             #  query and return submission response from this function
             with aurora_data_api.connect(
@@ -87,7 +77,11 @@ class App(object):
                 or len(record["rejection_voters"]) == record["min_rejection_count"]
             ):
                 log.info("Voter count meets requirement")
-                self.voter_count_met(task_token, action)
+                log.info("Sending task token to Step Function Machine")
+                sf.send_task_success(
+                    taskToken=task_token,
+                    output=json.dumps(action),
+                )
                 return aws_response(
                     status_code=200, response="Your choice has been submitted"
                 )
@@ -141,12 +135,14 @@ class App(object):
                 validate_sig(actual_sig, expected_sig)
             except ClientException as e:
                 return aws_response(status_code=401, response=str(e))
+
             return func(event)
 
         return decorater
 
     def vote(self, method, path):
         def __call__(func, *args, **kwargs):
+            """Collects view functions by resource path and method"""
             self.listeners[path] = {method.upper(): func}
 
         return __call__

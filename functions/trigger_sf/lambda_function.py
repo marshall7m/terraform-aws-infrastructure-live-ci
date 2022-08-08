@@ -178,6 +178,7 @@ def _start_sf_executions(cur) -> None:
     if "DRY_RUN" in os.environ:
         log.info("DRY_RUN was set -- skip starting sf executions")
     else:
+        # TODO: replace built-in `id` var (use id_ ?)
         for id in ids:
             log.info(f"Execution ID: {id}")
 

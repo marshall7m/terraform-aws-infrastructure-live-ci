@@ -65,9 +65,17 @@ def aws_response(
 
 
 def get_email_approval_sig(
-    secret, function_uri: str, method: str, recipient: str
+    secret, execution_id: str, recipient: str, action: str
 ) -> str:
-    data = function_uri + method + recipient
+    """
+    Returns signature used to authenticate AWS SES approval requests
+
+    Arguments:
+        execution_id: Step Function execution ID
+        recipient: Email address associated with the approval request
+        action: Approval action (e.g. approve, reject)
+    """
+    data = execution_id + recipient + action
     sig = hmac.new(
         bytes(str(secret), "utf-8"), bytes(str(data), "utf-8"), hashlib.sha256
     ).hexdigest()
