@@ -94,55 +94,6 @@ resource "aws_iam_policy" "webhook_receiver" {
   policy = data.aws_iam_policy_document.webhook_receiver.json
 }
 
-resource "aws_ssm_parameter" "webhook_filter_groups" {
-  name = "${local.webhook_receiver_name}-filter-groups"
-  type = "String"
-  value = jsonencode(
-    [
-      [
-        {
-          type    = "event"
-          pattern = "pull_request"
-        },
-        {
-          type    = "pr_action"
-          pattern = "(opened|edited|reopened)"
-        },
-        {
-          type    = "file_path"
-          pattern = var.file_path_pattern
-        },
-        {
-          type    = "base_ref"
-          pattern = var.base_branch
-        }
-      ],
-      [
-        {
-          type    = "event"
-          pattern = "pull_request"
-        },
-        {
-          type    = "pr_action"
-          pattern = "(closed)"
-        },
-        {
-          type    = "pull_request.merged"
-          pattern = "True"
-        },
-        {
-          type    = "file_path"
-          pattern = var.file_path_pattern
-        },
-        {
-          type    = "base_ref"
-          pattern = var.base_branch
-        }
-      ]
-    ]
-  )
-}
-
 module "lambda_webhook_receiver" {
   source  = "terraform-aws-modules/lambda/aws"
   version = "3.3.1"
