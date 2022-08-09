@@ -2,7 +2,7 @@ import uuid
 import logging
 import os
 import pytest
-from tests.e2e import test_integration
+from tests.e2e import base_e2e
 from tests.helpers.utils import dummy_configured_provider_resource, dummy_tf_output
 
 log = logging.getLogger(__name__)

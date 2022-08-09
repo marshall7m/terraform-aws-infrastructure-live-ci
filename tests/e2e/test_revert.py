@@ -1,4 +1,4 @@
-from tests.e2e import test_integration
+from tests.e2e import base_e2e
 import uuid
 from tests.helpers.utils import null_provider_resource
 import os

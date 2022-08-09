@@ -1,4 +1,4 @@
-from tests.e2e import test_integration
+from tests.e2e import base_e2e
 from tests.helpers.utils import dummy_tf_output
 import uuid
 import logging

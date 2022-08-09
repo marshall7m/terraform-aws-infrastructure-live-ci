@@ -4,7 +4,7 @@ import os
 import pytest
 import boto3
 from tests.helpers.utils import dummy_configured_provider_resource
-from tests.e2e import test_integration
+from tests.e2e import base_e2e
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
