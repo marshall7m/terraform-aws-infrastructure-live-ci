@@ -4,7 +4,7 @@ import logging
 import json
 import time
 from datetime import datetime
-from functions.common.utils import get_email_approval_sig, aws_encode
+from functions.common_lambda.utils import get_email_approval_sig, aws_encode
 import github
 import git
 from tests.integration.conftest import mut_output
