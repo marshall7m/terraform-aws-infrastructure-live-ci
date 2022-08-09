@@ -1,9 +1,9 @@
-from tests.integration import test_integration
+from tests.e2e import test_integration
 import uuid
 from tests.helpers.utils import dummy_tf_output, null_provider_resource
 
 
-class TestRejectRollbackProvider(test_integration.Integration):
+class TestRejectRollbackProvider(base_e2e.E2E):
     """
     Case covers a simple 2 node deployment with each having no account-level dependencies and
     the second deployment having a dependency on the first one.

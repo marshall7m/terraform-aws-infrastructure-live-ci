@@ -248,7 +248,7 @@ def abort_hanging_sf_executions(mut_output):
         sf.stop_execution(
             executionArn=arn,
             error="IntegrationTestsError",
-            cause="Failed integrations tests prevented execution from finishing",
+            cause="Failed tests prevented execution from finishing",
         )
 
 

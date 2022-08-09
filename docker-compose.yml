@@ -46,7 +46,7 @@ services:
     depends_on:
       - postgres
 
-  integration:
+  e2e:
     stdin_open: true
     tty: true
     image: ghcr.io/marshall7m/terrace:v0.1.11

@@ -300,7 +300,7 @@ module "mut_infrastructure_live_ci" {
   enforce_admin_branch_protection = false
 
   # send all commit statuses so that the commit statuse state
-  # can be used for integration testing assertions
+  # can be used for e2e testing assertions
   # eliminates need to try pin point the exact task instance via parsing
   # with boto3 ecs list command
   # the commit status state is a valid reflection of if the process succeeded or not

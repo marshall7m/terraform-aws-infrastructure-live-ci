@@ -203,7 +203,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  
 Let us say a PR introduces a new provider and resource block. The PR is merged and the deployment associated with the new provider resource succeeds. For some reason, a downstream deployment fails and the entire PR needs to be reverted. The revert PR is created and merged. The directory containing the new provider resource will be non-existent within the revert PR although the terraform state file associated with the directory will still contain the new provider resources. Given that the provider block and its associated provider credentials are gone, Terraform will output an error when trying to initialize the directory within the deployment flow. This type of scenario is also referenced in this [StackOverflow post](https://stackoverflow.com/a/57829202/12659025).
  
-To handle this scenario, the CI pipeline will document which directories define new provider resources within the metadb. After every deployment, any new provider resources that were deployed will also be documented. If any deployment flow fails, the CI pipeline will start Step Function executions for every directory that contains new providers with `-target` flags to destroy the new provider resources. To see it in action, run the [test_rollback_providers.py](./tests/integration/test_rollback_providers.py) test.
+To handle this scenario, the CI pipeline will document which directories define new provider resources within the metadb. After every deployment, any new provider resources that were deployed will also be documented. If any deployment flow fails, the CI pipeline will start Step Function executions for every directory that contains new providers with `-target` flags to destroy the new provider resources. To see it in action, run the [test_rollback_providers.py](./tests/e2e/test_rollback_providers.py) test.
 
 ## Infrastructure Repository Requirements
  
@@ -626,13 +626,13 @@ The steps below will set up a testing Docker environment for running tests.
 
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
-3. Ensure that the environment variables from the `docker-compose.yml` file's `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/integration/variables.tf` files.
-4. Run `docker-compose run --rm unit /bin/bash` to set up a docker environment for unit testing or run `docker-compose run --rm integration /bin/bash` to set up a docker environment for integration testing. The command will create an interactive shell within the docker container.
+3. Ensure that the environment variables from the `docker-compose.yml` file's `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/e2e/variables.tf` files.
+4. Run `docker-compose run --rm unit /bin/bash` to set up a docker environment for unit testing or run `docker-compose run --rm e2e /bin/bash` to set up a docker environment for e2e testing. The command will create an interactive shell within the docker container.
 5. Run tests within the `tests` directory
 
 ```
 NOTE: All Terraform resources will automatically be deleted during the PyTest session cleanup. If the provisioned resources are needed after the PyTest execution,
-use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destroy`). BEWARE: If the resources are left alive after the tests, the AWS account may incur additional charges.
+use the `--skip-tf-destroy` flag (e.g. `pytest tests/e2e --skip-tf-destroy`). BEWARE: If the resources are left alive after the tests, the AWS account may incur additional charges.
 ```
 
 ### Local GitHub Actions Workflow
@@ -650,7 +650,7 @@ The steps below will run the GitHub Actions workflow via [act](https://github.co
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
 3. Run the following command: `act push`. This will run the GitHub workflow logic for push events
-4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the unit testing [variables.tf](./tests/unit/tf-module-defaults/fixtures/variables.tf) and integration testing [variables.tf](./tests/integration/fixtures/variables.tf) file.
+4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the unit testing [variables.tf](./tests/unit/tf-module-defaults/fixtures/variables.tf) and e2e testing [variables.tf](./tests/e2e/fixtures/variables.tf) file.
 
 ```
 NOTE: All Terraform resources will automatically be deleted during the PyTest session cleanup
@@ -665,7 +665,7 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - Decouple Docker runner image and place into a separate repository
   - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
-  - Would require docker scripts to be cloud-agnostic which means replacing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
+  - Would require docker scripts to be cloud-agnostic which means replacing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run e2e testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
 - Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
 - Dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
 
@@ -682,10 +682,9 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)
 
-- Mover core logic from handler to separate class within approval request 
-- Mover core logic from handler to separate class within trigger_sf
 - group ssm parameter via /var.prefix/param_name
 - use sns for sending approval requests/notifications
-- try binpack placement strategy for cpu utilization pass 60% threshold
-
 - create custom python logging for functions and tf cmds to remove timestamp and other 
+
+- create an sns topic for failed terraform runs that notifies users
+- 

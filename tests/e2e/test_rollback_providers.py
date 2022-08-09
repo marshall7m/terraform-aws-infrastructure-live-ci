@@ -2,14 +2,14 @@ import uuid
 import logging
 import os
 import pytest
-from tests.integration import test_integration
+from tests.e2e import test_integration
 from tests.helpers.utils import dummy_configured_provider_resource, dummy_tf_output
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-class TestDeployPR(test_integration.Integration):
+class TestDeployPR(base_e2e.E2E):
     """
     Case covers a simple 2 node deployment with each having no account-level dependencies and
     the second deployment having a dependency on the first one.
@@ -42,7 +42,7 @@ class TestDeployPR(test_integration.Integration):
     f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestDeployPR::.+",
     allowed_outcomes=["passed", "skipped"],
 )
-class TestRevertPR(test_integration.Integration):
+class TestRevertPR(base_e2e.E2E):
     """
     Case will merge a PR that will revert the changes from the upstream case's PR. The case covers the same 2 node deployment as above
     but using the base ref version of the above PR.

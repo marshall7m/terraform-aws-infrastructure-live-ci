@@ -141,7 +141,7 @@ jobs:
         run: |
           docker compose run unit pytest -vv tests/unit
 
-  integration:
+  e2e:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
     container: ghcr.io/marshall7m/terrace:v0.1.11
@@ -191,4 +191,4 @@ jobs:
         run: |
           source $VIRTUAL_ENV/bin/activate
           python3 -m pip install -e ".[integration]"
-          pytest -vv tests/integration
+          pytest -vv tests/e2e

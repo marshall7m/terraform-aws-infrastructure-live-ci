@@ -1,9 +1,9 @@
-from tests.integration import test_integration
+from tests.e2e import test_integration
 from tests.helpers.utils import dummy_tf_output
 import uuid
 
 
-class TestSucceededDeployment(test_integration.Integration):
+class TestSucceededDeployment(base_e2e.E2E):
     """
     Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
     See the account_dim table to see the account dependency testing layout.
@@ -28,7 +28,7 @@ class TestSucceededDeployment(test_integration.Integration):
     }
 
 
-class TestRejectedDeployment(test_integration.Integration):
+class TestRejectedDeployment(base_e2e.E2E):
     """
     Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
     See the account_dim table to see the account dependency testing layout.

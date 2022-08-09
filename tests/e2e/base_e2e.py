@@ -7,7 +7,7 @@ from datetime import datetime
 from functions.common_lambda.utils import get_email_approval_sig, aws_encode
 import github
 import git
-from tests.integration.conftest import mut_output
+from tests.e2e.conftest import mut_output
 import timeout_decorator
 import random
 import string
@@ -17,7 +17,7 @@ import aurora_data_api
 import boto3
 from pprint import pformat
 import requests
-from tests.integration import utils
+from tests.e2e import utils
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -25,7 +25,7 @@ log.setLevel(logging.DEBUG)
 ecs = boto3.client("ecs")
 
 
-class Integration:
+class E2E:
     executions = []
 
     @pytest.fixture(scope="class")
