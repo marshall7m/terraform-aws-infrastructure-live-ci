@@ -112,7 +112,7 @@ module "lambda_webhook_receiver" {
       pip_requirements = true
     },
     {
-      path          = "${path.module}/functions/common"
+      path          = "${path.module}/functions/common_lambda"
       prefix_in_zip = "common"
     }
   ]

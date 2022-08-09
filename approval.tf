@@ -68,7 +68,7 @@ module "lambda_approval_request" {
   source_path = [
     "${path.module}/functions/approval_request",
     {
-      path          = "${path.module}/functions/common"
+      path          = "${path.module}/functions/common_lambda"
       prefix_in_zip = "common"
     }
   ]
@@ -139,7 +139,7 @@ module "lambda_approval_response" {
       pip_requirements = true
     },
     {
-      path          = "${path.module}/functions/common"
+      path          = "${path.module}/functions/common_lambda"
       prefix_in_zip = "common"
     }
   ]
