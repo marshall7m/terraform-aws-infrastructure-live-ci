@@ -18,6 +18,9 @@ event = {
     "Path": "test/foo",
     "AccountName": "mock-account",
     "ExecutionName": "run-123",
+    "ExecutionArn": "mock-execution-arn",
+    "StateMachineArn": "mock-state-machine-arn",
+    "TaskToken": "mock-token",
     "PullRequestID": "1",
     "LogUrlPrefix": "mock-log-prefix",
     "LogStreamPrefix": "mock-stream-prefix",
@@ -48,13 +51,12 @@ event = {
     os.environ,
     {"SES_TEMPLATE": "mock-template", "SENDER_EMAIL_ADDRESS": "user@invalid.com"},
 )
-@patch("functions.approval_request.lambda_function.ses")
 @patch("boto3.client")
-def test_lambda_handler(mock_ssm, mock_ses, mock_statuses, expected_status_code):
-    send_return_value = {"Status": [{"Status": status} for status in mock_statuses]}
-    mock_ses.send_bulk_templated_email.return_value = send_return_value
-
+def test_lambda_handler(mock_ssm, mock_statuses, expected_status_code):
     mock_ssm.return_value = mock_ssm
+
+    send_return_value = {"Status": [{"Status": status} for status in mock_statuses]}
+    mock_ssm.send_bulk_templated_email.return_value = send_return_value
     mock_ssm.get_parameter.return_value = {"Parameter": {"Value": "foo"}}
 
     log.info("Running Lambda Function")
