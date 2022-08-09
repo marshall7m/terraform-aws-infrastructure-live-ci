@@ -9,7 +9,7 @@ import sys
 import github
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import aws_encode, ServerException  # noqa E402
+from common_lambda.utils import aws_encode, ServerException  # noqa E402
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)

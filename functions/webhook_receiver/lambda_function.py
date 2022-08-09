@@ -13,7 +13,7 @@ from request_filter_groups import RequestFilter, ValidationError
 sys.path.append(os.path.dirname(__file__) + "/..")
 sys.path.append(os.path.dirname(__file__))
 from invoker import Invoker  # noqa E402
-from common.utils import (  # noqa E402
+from common_lambda.utils import (  # noqa E402
     ClientException,
     ServerException,
     aws_response,

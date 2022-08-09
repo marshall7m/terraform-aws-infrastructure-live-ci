@@ -9,7 +9,7 @@ import sys
 from request_filter_groups import RequestFilter, ValidationError
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import (
+from common_lambda.utils import (
     ClientException,
     get_email_approval_sig,
     aws_response,

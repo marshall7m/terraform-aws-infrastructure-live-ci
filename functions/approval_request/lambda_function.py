@@ -5,7 +5,7 @@ import os
 import sys
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import aws_encode, get_email_approval_sig  # noqa : E402
+from common_lambda.utils import aws_encode, get_email_approval_sig  # noqa : E402
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)

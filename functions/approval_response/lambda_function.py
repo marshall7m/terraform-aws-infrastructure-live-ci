@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(__file__))
 from app import App, ApprovalHandler
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import aws_response, ClientException
+from common_lambda.utils import aws_response, ClientException
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)

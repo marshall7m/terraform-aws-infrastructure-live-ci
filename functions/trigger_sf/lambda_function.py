@@ -8,7 +8,7 @@ from pprint import pformat
 import github
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import ClientException
+from common_lambda.utils import ClientException
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
