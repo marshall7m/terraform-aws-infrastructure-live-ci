@@ -113,7 +113,7 @@ module "lambda_webhook_receiver" {
     },
     {
       path          = "${path.module}/functions/common_lambda"
-      prefix_in_zip = "common"
+      prefix_in_zip = "common_lambda"
     }
   ]
 

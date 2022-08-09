@@ -69,7 +69,7 @@ module "lambda_approval_request" {
     "${path.module}/functions/approval_request",
     {
       path          = "${path.module}/functions/common_lambda"
-      prefix_in_zip = "common"
+      prefix_in_zip = "common_lambda"
     }
   ]
 
@@ -140,7 +140,7 @@ module "lambda_approval_response" {
     },
     {
       path          = "${path.module}/functions/common_lambda"
-      prefix_in_zip = "common"
+      prefix_in_zip = "common_lambda"
     }
   ]
   timeout = 180

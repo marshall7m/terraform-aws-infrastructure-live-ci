@@ -40,7 +40,7 @@ module "lambda_trigger_sf" {
     },
     {
       path          = "${path.module}/functions/common_lambda"
-      prefix_in_zip = "common"
+      prefix_in_zip = "common_lambda"
     }
   ]
 
