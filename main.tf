@@ -3,7 +3,6 @@ locals {
   cloudwatch_event_rule_name = "${local.step_function_name}-finished-execution"
   state_machine_arn          = "arn:aws:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:stateMachine:${local.step_function_name}"
   cw_event_terra_run_rule    = "${local.terra_run_family}-rule"
-  approval_url               = "${module.github_webhook_validator.deployment_invoke_url}${module.github_webhook_validator.api_stage_name}${aws_api_gateway_resource.approval.path}"
 
   log_url_prefix    = "https://${data.aws_region.current.name}.console.aws.amazon.com/cloudwatch/home?region=${data.aws_region.current.name}#logsV2:log-groups/log-group/${aws_cloudwatch_log_group.ecs_tasks.name}/log-events/"
   log_stream_prefix = "${local.terra_run_logs_prefix}/${local.terra_run_container_name}/"
@@ -77,29 +76,18 @@ resource "aws_sfn_state_machine" "this" {
         Parameters = {
           FunctionName = module.lambda_approval_request.lambda_function_arn
           Payload = {
-            "PathApproval" = {
-              "Approval" = {
-                "Required.$" = "$.min_approval_count"
-                Count        = 0
-                Voters       = []
-              },
-              "Rejection" = {
-                "Required.$" = "$.min_rejection_count"
-                "Count"      = 0
-                "Voters"     = []
-              },
-              "AwaitingApprovals.$" = "$.voters"
-              "TaskToken.$"         = "$$.Task.Token"
-            }
-            "Voters.$"        = "$.voters"
-            "Path.$"          = "$.cfg_path"
-            "ApprovalAPI.$"   = "States.Format('${local.approval_url}?ex={}&exId={}&sm={}&taskToken={}', $$.Execution.Name, $$.Execution.Id, $$.StateMachine.Id, $$.Task.Token)"
-            "ExecutionName.$" = "$$.Execution.Name"
-            "AccountName.$"   = "$.account_name"
-            "PullRequestID.$" = "$.pr_id"
-            "PlanTaskArn.$"   = "$.PlanOutput.PlanTaskArn"
-            "LogUrlPrefix"    = local.log_url_prefix
-            "LogStreamPrefix" = local.log_stream_prefix
+            "Voters.$"          = "$.voters"
+            "Path.$"            = "$.cfg_path"
+            "ApprovalURL"       = module.lambda_approval_response.lambda_function_url
+            "ExecutionArn.$"    = "$$.Execution.Id"
+            "StateMachineArn.$" = "$$.StateMachine.Id"
+            "TaskToken.$"       = "$$.Task.Token"
+            "ExecutionName.$"   = "$$.Execution.Name"
+            "AccountName.$"     = "$.account_name"
+            "PullRequestID.$"   = "$.pr_id"
+            "PlanTaskArn.$"     = "$.PlanOutput.PlanTaskArn"
+            "LogUrlPrefix"      = local.log_url_prefix
+            "LogStreamPrefix"   = local.log_stream_prefix
           }
         }
         Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"

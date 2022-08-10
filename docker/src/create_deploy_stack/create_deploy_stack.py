@@ -10,6 +10,8 @@ import json
 from typing import List
 from collections import defaultdict
 import fnmatch
+
+sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import (
     subprocess_run,
     TerragruntException,

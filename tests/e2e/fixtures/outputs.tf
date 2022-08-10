@@ -10,8 +10,8 @@ output "state_machine_name" {
   value = module.mut_infrastructure_live_ci.step_function_name
 }
 
-output "merge_lock_github_webhook_id" {
-  value     = module.mut_infrastructure_live_ci.merge_lock_github_webhook_id
+output "github_webhook_id" {
+  value     = module.mut_infrastructure_live_ci.github_webhook_id
   sensitive = true
 }
 
@@ -71,12 +71,8 @@ output "base_branch" {
   value = module.mut_infrastructure_live_ci.base_branch
 }
 
-output "primary_test_plan_role_arn" {
+output "plan_role_arn" {
   value = module.plan_role.role_arn
-}
-
-output "secondary_test_plan_role_arn" {
-  value = module.secondary_plan_role.role_arn
 }
 
 output "ecs_cluster_arn" {
@@ -129,4 +125,9 @@ output "ecs_apply_role_arn" {
 
 output "ecs_plan_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_plan_role_arn
+}
+
+output "email_approval_secret" {
+  sensitive = true
+  value     = module.mut_infrastructure_live_ci.email_approval_secret
 }

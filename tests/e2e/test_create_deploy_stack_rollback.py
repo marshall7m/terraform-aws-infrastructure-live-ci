@@ -1,4 +1,4 @@
-from tests.integration import test_integration
+from tests.e2e import base_e2e
 from tests.helpers.utils import dummy_tf_output
 import uuid
 import logging
@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-class TestCreateDeployStackRollback(test_integration.Integration):
+class TestCreateDeployStackRollback(base_e2e.E2E):
     """
     Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
     See the account_dim table to see the account dependency testing layout.
@@ -47,7 +47,7 @@ class TestCreateDeployStackRollback(test_integration.Integration):
                         {
                             "Effect": "Deny",
                             "Action": "sts:AssumeRole",
-                            "Resource": mut_output["secondary_test_plan_role_arn"],
+                            "Resource": mut_output["plan_role_arn"],
                         }
                     ],
                 }

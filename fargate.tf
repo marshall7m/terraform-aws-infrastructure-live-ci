@@ -76,7 +76,7 @@ locals {
 }
 
 resource "aws_ssm_parameter" "scan_type" {
-  name  = "${local.create_deploy_stack_container_name}-scan-type"
+  name  = "${local.create_deploy_stack_family}-scan-type"
   type  = "String"
   value = var.create_deploy_stack_scan_type
 }

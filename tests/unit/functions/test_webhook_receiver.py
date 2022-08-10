@@ -2,65 +2,41 @@ import logging
 import pytest
 import os
 import json
-from unittest.mock import patch
-import uuid
-from tests.helpers.utils import dummy_tf_output
-from functions.webhook_receiver.lambda_function import Invoker, lambda_handler
-from tests.unit.conftest import ServerException
-
-log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
-
-
-def pytest_generate_tests(metafunc):
-    # creates a dummy remote repo using the following parametrized value
-    if "repo" in metafunc.fixturenames:
-        metafunc.parametrize(
-            "repo",
-            [
-                f"mut-terraform-aws-infrastructure-{os.path.splitext(os.path.basename(__file__))[0]}"
-            ],
-            scope="module",
-            indirect=True,
-        )
-
-    if "pr" in metafunc.fixturenames:
-        # each test uses the same dummy PR event
-        metafunc.parametrize(
-            "pr",
-            [
-                (
-                    {
-                        "base_ref": "master",
-                        "head_ref": f"feature-{uuid.uuid4()}",
-                        "changes": {
-                            "directory_dependency/dev-account/us-west-2/env-one/doo/a.tf": dummy_tf_output(),
-                            "directory_dependency/dev-account/us-west-2/env-one/doo/b.tf": dummy_tf_output(),
-                            "directory_dependency/dev-account/global/a.tf": dummy_tf_output(),
-                            "directory_dependency/shared-services-account/global/a.txt": "",
-                        },
-                        "commit_message": "Adding testing files",
-                    },
-                )
-            ],
-            indirect=True,
-        )
-
-
-@pytest.fixture
-def invoker(repo, pr):
-    """Returns instance of Invoker class"""
-    return Invoker(
-        os.environ["TF_VAR_testing_unit_github_token"],
-        repo.full_name,
-        pr["base_ref"],
-        pr["head_ref"],
-        repo.clone_url,
-    )
+from unittest.mock import patch, Mock
+from functions.webhook_receiver.invoker import Invoker
+from functions.webhook_receiver.lambda_function import InvokerHandler, ClientException
 
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+
+class MockCompareFile:
+    def __init__(self, filename, status="added"):
+        self.filename = filename
+        self.status = status
+
+
+compare_files = [MockCompareFile("foo/a.tf"), MockCompareFile("bar/b.tf")]
+
+
+@pytest.fixture()
+def app():
+    return Invoker()
+
+
+@pytest.fixture()
+def handler(app):
+    return InvokerHandler(app=app, secret="mock-secret", token=None)
+
+
+def assert_commit_status_state(mock_gh, expected_state):
+    commit_states = [
+        call.kwargs["state"]
+        for call in mock_gh.get_repo.return_value.get_branch.return_value.commit.create_status.call_args_list
+    ]
+    for state in commit_states:
+        assert state == expected_state
 
 
 @patch.dict(
@@ -70,20 +46,21 @@ log.setLevel(logging.DEBUG)
         "ECS_NETWORK_CONFIG": "{}",
     },
 )
+@patch("boto3.client")
+@patch("github.Github.get_repo")
 @pytest.mark.usefixtures("aws_credentials")
-@patch("functions.webhook_receiver.lambda_function.ecs")
-class TestWebhookReceiver:
+class TestInvoker:
     @patch.dict(
         os.environ,
         {
             "ACCOUNT_DIM": json.dumps(
                 [
                     {
-                        "path": "directory_dependency/dev-account",
+                        "path": "foo",
                         "plan_role_arn": "test-plan-role",
                     },
                     {
-                        "path": "directory_dependency/shared-services-account",
+                        "path": "bar",
                         "plan_role_arn": "test-plan-role",
                     },
                 ]
@@ -111,17 +88,16 @@ class TestWebhookReceiver:
                     "directory_dependency/dev-account/us-west-2/env-one/doo",
                     "directory_dependency/dev-account/global",
                 ],
-                ServerException("Invalid task"),
+                Exception("Invalid task"),
                 id="failure_state",
             ),
         ],
     )
     def test_trigger_pr_plan(
         self,
-        mock_ecs,
-        repo,
-        pr,
-        invoker,
+        mock_gh,
+        mock_boto_client,
+        app,
         expected_plan_dirs,
         expected_state,
         run_task_side_effect,
@@ -135,7 +111,12 @@ class TestWebhookReceiver:
         the commit status for every pr plan task to `failure` and `success` if
         not.
         """
-        mock_ecs.describe_task_definition.return_value = {
+
+        mock_gh.get_repo.return_value.compare.return_value.files = compare_files
+        app.gh = mock_gh
+
+        mock_boto_client.return_value = mock_boto_client
+        mock_boto_client.describe_task_definition.return_value = {
             "taskDefinition": {
                 "containerDefinitions": [
                     {
@@ -150,24 +131,31 @@ class TestWebhookReceiver:
             }
         }
 
-        mock_ecs.run_task.return_value = {
+        mock_boto_client.run_task.return_value = {
             "tasks": [{"containers": [{"taskArn": "arn/task-id"}]}]
         }
 
-        mock_ecs.run_task.side_effect = run_task_side_effect
-        repo.get_branch("master").edit_protection(contexts=["foo"])
+        mock_boto_client.run_task.side_effect = run_task_side_effect
 
-        invoker.trigger_pr_plan(True)
+        app.trigger_pr_plan(
+            "mock-repo",
+            "master",
+            "feature-123",
+            "commit-123",
+            "https://localhost",
+            True,
+        )
 
         log.info("Assert ECS run_task() cmd ran for every expected directory")
-        assert len(mock_ecs.run_task.call_args_list) == len(expected_plan_dirs)
+        assert len(mock_boto_client.run_task.call_args_list) == len(expected_plan_dirs)
 
         log.info("Assert PR commit states are valid")
-        states = [
-            status.state
-            for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
+        commit_states = [
+            call.kwargs["state"]
+            for call in mock_gh.get_repo.return_value.get_branch.return_value.commit.create_status.call_args_list
         ]
-        for state in states:
+
+        for state in commit_states:
             assert state == expected_state
 
     @patch.dict(
@@ -179,14 +167,14 @@ class TestWebhookReceiver:
         },
     )
     @pytest.mark.parametrize(
-        "expected_status,run_task_side_effect",
+        "expected_state,run_task_side_effect",
         [
             pytest.param("pending", None, id="success"),
-            pytest.param("failure", ServerException("Invalid task"), id="failure"),
+            pytest.param("failure", Exception("Invalid task"), id="failure"),
         ],
     )
     def test_trigger_create_deploy_stack(
-        self, mock_ecs, invoker, repo, pr, run_task_side_effect, expected_status
+        self, mock_gh, mock_boto_client, app, run_task_side_effect, expected_state
     ):
         """
         Setups a PR within a dummy GitHub repo that contains added .hcl/.tf files.
@@ -194,11 +182,12 @@ class TestWebhookReceiver:
         If the side effect raises an exception, the Lambda Function is expected
         to set the commit status for the task to `failure` and `success` if not.
         """
-        mock_ecs.run_task.return_value = {
+        mock_boto_client.return_value = mock_boto_client
+        mock_boto_client.run_task.return_value = {
             "tasks": [{"containers": [{"taskArn": "arn/task-id"}]}]
         }
 
-        mock_ecs.describe_task_definition.return_value = {
+        mock_boto_client.describe_task_definition.return_value = {
             "taskDefinition": {
                 "containerDefinitions": [
                     {
@@ -213,70 +202,142 @@ class TestWebhookReceiver:
             }
         }
 
-        mock_ecs.run_task.side_effect = run_task_side_effect
-        invoker.trigger_create_deploy_stack("1", True)
-
-        log.info("Assert ECS run_task() cmd ran once")
-        assert len(mock_ecs.run_task.call_args_list) == 1
-
-        log.info(f"Assert commit status is {expected_status}")
-        states = [
-            status.state
-            for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
-        ]
-
-        assert states == [expected_status]
-
-    @patch.dict(
-        os.environ,
-        {
-            "GITHUB_TOKEN_SSM_KEY": "mock-ssm-token-key",
-            "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        },
-    )
-    @pytest.mark.parametrize(
-        "merged", [pytest.param(True, id="merged"), pytest.param(False, id="open")]
-    )
-    @patch("functions.webhook_receiver.lambda_function.ssm")
-    @patch("functions.webhook_receiver.lambda_function.Invoker")
-    def test_lambda_handler(self, mock_invoker, mock_ssm, mock_ecs, merged):
-        """Ensures that the correct Invoker method is called for the given GitHub event"""
-        mock_ssm.get_parameter.return_value = {
-            "Parameter": {
-                "Value": json.dumps({"PrPlan": True, "CreateDeployStack": True})
-            }
-        }
-
-        # mock lambda_handler context object
-        class Context:
-            def __init__(self):
-                self.log_group_name = "test-group"
-                self.log_stream_name = "test-stream"
-
-        context = Context()
-        lambda_handler(
-            {
-                "requestPayload": {
-                    "body": json.dumps(
-                        {
-                            "pull_request": {
-                                "base": {"ref": "master"},
-                                "head": {"ref": "feature"},
-                                "number": 1,
-                                "merged": merged,
-                            },
-                            "repository": {"full_name": "user/repo"},
-                        }
-                    )
-                }
-            },
-            context,
+        mock_boto_client.run_task.side_effect = run_task_side_effect
+        app.trigger_create_deploy_stack(
+            "mock-repo",
+            "master",
+            "feature-123",
+            "commit-id-123",
+            "1",
+            "https://localhost",
+            True,
         )
 
-        log.info("Assert that the correct method was called")
-        if not merged:
-            mock_invoker.return_value.trigger_pr_plan.assert_called_once()
-            mock_invoker.return_value.trigger_create_deploy_stack.assert_not_called()
-        elif merged:
-            mock_invoker.return_value.trigger_create_deploy_stack.assert_called_once()
-            mock_invoker.return_value.trigger_pr_plan.assert_not_called()
+        log.info("Assert ECS run_task() cmd ran once")
+        assert len(mock_boto_client.run_task.call_args_list) == 1
+
+        log.info(f"Assert commit status is {expected_state}")
+
+        assert_commit_status_state(mock_gh, expected_state)
+
+
+class TestInvokerHandler:
+    @pytest.mark.parametrize(
+        "pattern, expected", [(".*\\.tf", True), (".*\\.py", False)]
+    )
+    @patch("github.Github.get_repo")
+    def test_validate_file_paths(self, mock_gh, handler, pattern, expected):
+        mock_gh.get_repo.return_value.compare.return_value.files = compare_files
+        handler.gh = mock_gh
+
+        is_valid = handler.validate_file_paths(
+            "pull_request",
+            {
+                "body": {
+                    "repository": {"full_name": "mock-repo"},
+                    "pull_request": {
+                        "base": {"sha": "commit-id-1"},
+                        "head": {"sha": "commit-id-2"},
+                    },
+                }
+            },
+            pattern,
+        )
+
+        assert is_valid == expected
+
+    @patch.dict(os.environ, {"BASE_BRANCH": "master", "FILE_PATH_PATTERN": ".+.tf"})
+    @patch("functions.webhook_receiver.lambda_function.validate_sig")
+    def test_handle_invalid_sig(self, mock_validate_sig, handler):
+
+        mock_validate_sig.side_effect = ClientException("invalid")
+        func = Mock()
+        event_type = "pull_request"
+        handler.app.listeners[event_type] = [{"function": func}]
+        response = handler.handle(
+            {
+                "headers": {
+                    "x-hub-signature-256": "sha256=invalid",
+                    "x-github-event": event_type,
+                },
+                "body": json.dumps({"foo": "bar"}),
+            },
+            {},
+        )
+
+        func.assert_not_called()
+        assert response["statusCode"] == 402
+
+    @patch("functions.webhook_receiver.lambda_function.validate_sig")
+    def test_handle_invalid_event(self, mock_validate_sig, handler):
+        func = Mock()
+        event_type = "pull_request"
+        handler.app.listeners[event_type] = [
+            {"function": func, "filter_groups": [{"A": "regex:bar"}]}
+        ]
+        response = handler.handle(
+            {
+                "headers": {
+                    "x-hub-signature-256": "sha256=123",
+                    "x-github-event": event_type,
+                },
+                "body": json.dumps({"foo": "bar"}),
+            },
+            {},
+        )
+
+        func.assert_not_called()
+        assert response["statusCode"] == 200
+
+    @patch("functions.webhook_receiver.lambda_function.validate_sig")
+    @patch.dict(os.environ, {"FILE_PATH_PATTERN": "mock-pattern"})
+    def test_handle_invalid_file_paths(self, mock_validate_sig, handler):
+        func = Mock()
+        event_type = "pull_request"
+        handler.app.listeners[event_type] = [
+            {"function": func, "filter_groups": [{"body.foo": "regex:bar"}]}
+        ]
+
+        with patch.object(handler, "validate_file_paths") as mock_validate_file_paths:
+            mock_validate_file_paths.return_value = False
+
+            response = handler.handle(
+                {
+                    "headers": {
+                        "x-hub-signature-256": "sha256=123",
+                        "x-github-event": event_type,
+                    },
+                    "body": json.dumps({"foo": "bar"}),
+                },
+                {},
+            )
+
+        func.assert_not_called()
+        assert response["statusCode"] == 200
+
+    @patch("functions.webhook_receiver.lambda_function.validate_sig")
+    def test_handle_success(self, mock_validate_sig, handler):
+        app = Invoker()
+        func = Mock()
+        event_type = "pull_request"
+        handler.app.listeners[event_type] = [
+            {"function": func, "filter_groups": [{"body.foo": "regex:bar"}]}
+        ]
+
+        invoker = InvokerHandler(app=app, secret="mock-secret", token=None)
+        with patch.object(invoker, "validate_file_paths") as mock_validate_file_paths:
+            mock_validate_file_paths.return_value = True
+
+            response = handler.handle(
+                {
+                    "headers": {
+                        "x-hub-signature-256": "sha256=123",
+                        "x-github-event": event_type,
+                    },
+                    "body": json.dumps({"foo": "bar"}),
+                },
+                {},
+            )
+
+        func.assert_called_once()
+        assert response["statusCode"] == 200

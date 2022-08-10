@@ -1,11 +1,11 @@
-from tests.integration import test_integration
+from tests.e2e import base_e2e
 import uuid
 from tests.helpers.utils import null_provider_resource
 import os
 import pytest
 
 
-class TestBasePR(test_integration.Integration):
+class TestBasePR(base_e2e.E2E):
     """
     Case covers a simple 3 node deployment containing one modified directory. The purpose
     of this PR is to deploy a new provider resource which creates a base Terraform remote state
@@ -33,7 +33,7 @@ class TestBasePR(test_integration.Integration):
     f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestBasePR::.+",
     allowed_outcomes=["passed", "skipped"],
 )
-class TestDeployPR(test_integration.Integration):
+class TestDeployPR(base_e2e.E2E):
     """
     Case covers a 5 node deployment with 2 modified directories. One of the
     deployments will be rejected causing the directory with new provider
@@ -71,7 +71,7 @@ class TestDeployPR(test_integration.Integration):
     f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestDeployPR::.+",
     allowed_outcomes=["passed", "skipped"],
 )
-class TestRevertPR(test_integration.Integration):
+class TestRevertPR(base_e2e.E2E):
     """
     Case covers a 5 node deployment containing no new modified directories other
     than the revert changes for the previous PR. This case will create a PR to

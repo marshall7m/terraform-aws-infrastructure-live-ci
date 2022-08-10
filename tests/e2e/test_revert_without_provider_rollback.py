@@ -4,14 +4,14 @@ import os
 import pytest
 import boto3
 from tests.helpers.utils import dummy_configured_provider_resource
-from tests.integration import test_integration
+from tests.e2e import base_e2e
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
 @pytest.mark.skip("See class case TODO")
-class TestDeployPR(test_integration.Integration):
+class TestDeployPR(base_e2e.E2E):
     """
     Case covers a simple one node deployment that contains a new dummy
     provider resource.
@@ -34,7 +34,7 @@ class TestDeployPR(test_integration.Integration):
     f"{os.path.splitext(os.path.basename(__file__))[0]}\.py::TestDeployPR::.+",
     allowed_outcomes=["passed", "skipped"],
 )
-class TestRevertPRWithoutProviderRollback(test_integration.Integration):
+class TestRevertPRWithoutProviderRollback(base_e2e.E2E):
     """
     Case will merge a PR that will revert the changes from the upstream case's PR.
     This case's associated create deploy stack task is expected to fail given

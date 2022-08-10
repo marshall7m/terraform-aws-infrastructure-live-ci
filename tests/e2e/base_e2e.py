@@ -4,9 +4,10 @@ import logging
 import json
 import time
 from datetime import datetime
+from functions.common_lambda.utils import get_email_approval_sig, aws_encode
 import github
 import git
-from tests.integration.conftest import mut_output
+from tests.e2e.conftest import mut_output
 import timeout_decorator
 import random
 import string
@@ -16,7 +17,7 @@ import aurora_data_api
 import boto3
 from pprint import pformat
 import requests
-from tests.integration import utils
+from tests.e2e import utils
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -24,7 +25,7 @@ log.setLevel(logging.DEBUG)
 ecs = boto3.client("ecs")
 
 
-class Integration:
+class E2E:
     executions = []
 
     @pytest.fixture(scope="class")
@@ -875,23 +876,39 @@ class Integration:
                 payload = json.loads(event["taskScheduledEventDetails"]["parameters"])[
                     "Payload"
                 ]
-                approval_url = payload["ApprovalAPI"]
+                approval_url = payload["ApprovalURL"]
+                task_token = payload["TaskToken"]
                 voter = payload["Voters"][0]
+                break
 
         log.debug(f"Approval URL: {approval_url}")
         log.debug(f"Voter: {voter}")
-
-        body = {
-            "action": request.cls.executions[int(request.node.callspec.id)]["action"],
-            "recipient": voter,
+        headers = {
+            "content-type": "application/json",
         }
+        query_params = {
+            "X-SES-Signature-256": get_email_approval_sig(
+                mut_output["email_approval_secret"],
+                record["execution_id"],
+                voter,
+                request.cls.executions[int(request.node.callspec.id)]["action"],
+            ),
+            "taskToken": task_token,
+            "recipient": voter,
+            "action": request.cls.executions[int(request.node.callspec.id)]["action"],
+            "ex": record["execution_id"],
+            "exArn": execution_arn,
+        }
+        approval_url = (
+            approval_url
+            + "ses?"
+            + "&".join([f"{k}={aws_encode(v)}" for k, v in query_params.items()])
+        )
 
-        log.debug(f"Request Body:\n{body}")
+        response = requests.post(approval_url, headers=headers)
+        log.debug(f"Response:\n{response.text}")
 
-        response = requests.post(approval_url, data=body).json()
-        log.debug(f"Response:\n{response}")
-
-        assert response["statusCode"] == 200
+        response.raise_for_status()
 
     @pytest.mark.dependency()
     @pytest.mark.usefixtures("target_execution")

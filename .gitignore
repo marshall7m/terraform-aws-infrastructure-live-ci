@@ -17,4 +17,4 @@ __pycache__
 *personal_docker_setup.sh*
 /*.egg-info
 /build/
-tests/integration/fixtures/builds/*.json
+tests/e2e/fixtures/builds/*.json

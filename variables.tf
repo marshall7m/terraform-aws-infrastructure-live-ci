@@ -236,7 +236,9 @@ variable "repo_name" {
 variable "file_path_pattern" {
   description = "Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension."
   type        = string
-  default     = ".+\\.(hcl|tf)$"
+  default     = <<EOF
+.+\.(hcl|tf)$
+EOF
 }
 
 

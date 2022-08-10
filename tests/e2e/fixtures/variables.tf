@@ -50,11 +50,6 @@ variable "approval_request_sender_email" {
   type        = string
 }
 
-variable "testing_secondary_aws_account_id" {
-  description = "Secondary AWS account ID used to test module ability to handle multiple AWS accounts"
-  type        = number
-}
-
 variable "github_token_ssm_value" {
   description = <<EOF
 Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.

@@ -7,6 +7,9 @@ import aurora_data_api
 from pprint import pformat
 import github
 
+sys.path.append(os.path.dirname(__file__) + "/..")
+from common_lambda.utils import ClientException
+
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
@@ -175,6 +178,7 @@ def _start_sf_executions(cur) -> None:
     if "DRY_RUN" in os.environ:
         log.info("DRY_RUN was set -- skip starting sf executions")
     else:
+        # TODO: replace built-in `id` var (use id_ ?)
         for id in ids:
             log.info(f"Execution ID: {id}")
 
@@ -253,9 +257,3 @@ def lambda_handler(event, context):
     except Exception as e:
         log.error(e, exc_info=True)
         return {"statusCode": 500, "message": "Invocation was unsuccessful"}
-
-
-class ClientException(Exception):
-    """Wraps around client-related errors"""
-
-    pass

@@ -4,127 +4,6 @@ locals {
   approval_logs          = "${var.prefix}-approval"
 }
 
-resource "aws_api_gateway_rest_api" "this" {
-  name        = local.approval_logs
-  description = "HTTP Endpoint backed by API Gateway that is used for handling GitHub webhook events and Step Function approvals"
-}
-
-resource "aws_api_gateway_resource" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
-  path_part   = "approval"
-}
-
-resource "aws_api_gateway_method" "approval" {
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  resource_id   = aws_api_gateway_resource.approval.id
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_method_settings" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  stage_name  = module.github_webhook_validator.api_stage_name
-  method_path = "*/*"
-
-  settings {
-    metrics_enabled    = true
-    logging_level      = "INFO"
-    data_trace_enabled = true
-  }
-}
-
-resource "aws_api_gateway_integration" "approval" {
-  rest_api_id             = aws_api_gateway_rest_api.this.id
-  resource_id             = aws_api_gateway_resource.approval.id
-  http_method             = aws_api_gateway_method.approval.http_method
-  integration_http_method = "POST"
-  type                    = "AWS"
-  uri                     = module.lambda_approval_response.lambda_function_invoke_arn
-
-  request_templates = {
-    # converts to key-value pairs (e.g. {'action': 'accept', 'comments': 'Reasoning for action\r\n'})
-    "application/x-www-form-urlencoded" = <<EOF
-{
-  "body": {
-    #foreach( $token in $input.path('$').split('&') )
-        #set( $keyVal = $token.split('=') )
-        #set( $keyValSize = $keyVal.size() )
-        #if( $keyValSize >= 1 )
-            #set( $key = $util.urlDecode($keyVal[0]) )
-            #if( $keyValSize >= 2 )
-                #set( $val = $util.urlDecode($keyVal[1]) )
-            #else
-                #set( $val = '' )
-            #end
-            "$key": "$util.escapeJavaScript($val)"#if($foreach.hasNext),#end
-        #end
-    #end
-    },
-  "query": {
-    #foreach($queryParam in $input.params().querystring.keySet())
-      #if ( $queryParam == "taskToken" )
-          "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam).replaceAll(" ", "+"))"
-      #else
-          "$queryParam": "$util.escapeJavaScript($input.params().querystring.get($queryParam))" 
-      #end
-      #if($foreach.hasNext),#end
-    #end
-  }
-}
-  EOF
-  }
-}
-
-
-resource "aws_api_gateway_integration_response" "approval" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.approval.id
-  http_method = aws_api_gateway_method.approval.http_method
-
-  status_code = aws_api_gateway_method_response.response_200.status_code
-
-  depends_on = [
-    aws_api_gateway_integration.approval
-  ]
-}
-
-resource "aws_api_gateway_method_response" "response_200" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.approval.id
-  http_method = aws_api_gateway_method.approval.http_method
-
-  status_code = "200"
-}
-
-resource "aws_api_gateway_account" "approval" {
-  cloudwatch_role_arn = module.agw_role.role_arn
-}
-
-module "agw_role" {
-  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-
-  role_name        = local.approval_logs
-  trusted_services = ["apigateway.amazonaws.com"]
-
-  statements = [
-    {
-      sid    = "CloudWatchAccess"
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams",
-        "logs:PutLogEvents",
-        "logs:GetLogEvents",
-        "logs:FilterLogEvents"
-      ]
-      resources = ["*"]
-    }
-  ]
-}
-
 data "aws_iam_policy_document" "lambda_approval_request" {
   statement {
     sid    = "SESAccess"
@@ -146,12 +25,36 @@ data "aws_iam_policy_document" "lambda_approval_request" {
       values   = flatten([for account in var.account_parent_cfg : account.voters])
     }
   }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter"
+    ]
+    resources = [aws_ssm_parameter.email_approval_secret.arn]
+  }
 }
 
 resource "aws_iam_policy" "lambda_approval_request" {
   name        = "${local.approval_request_name}-ses-access"
   description = "Allows Lambda function to send SES emails to and from defined email addresses"
   policy      = data.aws_iam_policy_document.lambda_approval_request.json
+}
+
+resource "random_password" "email_approval_secret" {
+  length = 24
+}
+
+resource "aws_ssm_parameter" "email_approval_secret" {
+  name  = "${var.prefix}-email-approval-secret"
+  type  = "SecureString"
+  value = random_password.email_approval_secret.result
 }
 
 module "lambda_approval_request" {
@@ -162,11 +65,18 @@ module "lambda_approval_request" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
 
-  source_path = "${path.module}/functions/approval_request"
+  source_path = [
+    "${path.module}/functions/approval_request",
+    {
+      path          = "${path.module}/functions/common_lambda"
+      prefix_in_zip = "common_lambda"
+    }
+  ]
 
   environment_variables = {
-    SENDER_EMAIL_ADDRESS = var.approval_request_sender_email
-    SES_TEMPLATE         = aws_ses_template.approval.name
+    SENDER_EMAIL_ADDRESS          = var.approval_request_sender_email
+    SES_TEMPLATE                  = aws_ses_template.approval.name
+    EMAIL_APPROVAL_SECRET_SSM_KEY = aws_ssm_parameter.email_approval_secret.name
   }
 
   publish = true
@@ -184,7 +94,6 @@ module "lambda_approval_request" {
   attach_network_policy  = var.lambda_approval_request_vpc_config != null ? true : false
 }
 
-
 data "aws_iam_policy_document" "approval_response" {
   statement {
     effect    = "Allow"
@@ -195,6 +104,19 @@ data "aws_iam_policy_document" "approval_response" {
     effect    = "Allow"
     actions   = ["states:DescribeExecution"]
     resources = ["*"]
+  }
+  statement {
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter"
+    ]
+    resources = [aws_ssm_parameter.email_approval_secret.arn]
   }
 }
 resource "aws_iam_policy" "approval_response" {
@@ -215,21 +137,22 @@ module "lambda_approval_response" {
     {
       path             = "${path.module}/functions/approval_response"
       pip_requirements = true
+    },
+    {
+      path          = "${path.module}/functions/common_lambda"
+      prefix_in_zip = "common_lambda"
     }
   ]
   timeout = 180
   environment_variables = {
-    METADB_NAME        = local.metadb_name
-    METADB_CLUSTER_ARN = aws_rds_cluster.metadb.arn
-    METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
+    METADB_NAME                   = local.metadb_name
+    METADB_CLUSTER_ARN            = aws_rds_cluster.metadb.arn
+    METADB_SECRET_ARN             = aws_secretsmanager_secret_version.ci_metadb_user.arn
+    EMAIL_APPROVAL_SECRET_SSM_KEY = aws_ssm_parameter.email_approval_secret.name
   }
 
-  allowed_triggers = {
-    APIGatewayInvokeAccess = {
-      service    = "apigateway"
-      source_arn = "${aws_api_gateway_rest_api.this.execution_arn}/*/*"
-    }
-  }
+  authorization_type         = "NONE"
+  create_lambda_function_url = true
 
   publish = true
 

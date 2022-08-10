@@ -24,7 +24,7 @@ services:
   unit:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.10
+    image: ghcr.io/marshall7m/terrace:v0.1.11
     volumes:
       - "$PWD:/src"
     environment:
@@ -36,22 +36,20 @@ services:
       - AWS_SESSION_EXPIRATION
       - UNTIL_AWS_EXP=30m
       - TF_VAR_testing_unit_github_token
-      - TF_VAR_approval_request_sender_email
       - PGUSER=postgres
       - PGPASSWORD=postgres
       - PGDATABASE=postgres
       - PGHOST=postgres
       - PGPORT=5432
-      - ADDITIONAL_PATH
     entrypoint: ["/bin/bash", "entrypoint.sh"]
     profiles: ["unit"]
     depends_on:
       - postgres
 
-  integration:
+  e2e:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.10
+    image: ghcr.io/marshall7m/terrace:v0.1.11
     volumes:
       - "$PWD:/src"
       - "/usr/bin/docker:/usr/bin/docker"
@@ -66,7 +64,6 @@ services:
       - TF_VAR_testing_integration_github_token
       - TF_VAR_registry_password
       - TF_VAR_github_token_ssm_value
-      - TF_VAR_testing_secondary_aws_account_id
       - TF_VAR_approval_request_sender_email
       - UNTIL_AWS_EXP=1h
       - ADDITIONAL_PATH

@@ -1,298 +1,225 @@
-import boto3
 import logging
 import json
 import os
-import github
-import urllib
-import re
-import fnmatch
 from pprint import pformat
+import github
+import boto3
+import hmac
+import hashlib
+import re
+import sys
+from request_filter_groups import RequestFilter, ValidationError
+
+sys.path.append(os.path.dirname(__file__) + "/..")
+sys.path.append(os.path.dirname(__file__))
+from invoker import Invoker  # noqa E402
+from common_lambda.utils import (  # noqa E402
+    ClientException,
+    ServerException,
+    aws_response,
+    validate_sig,
+    aws_encode,
+)
+
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-ssm = boto3.client("ssm")
-ecs = boto3.client("ecs")
+
+def get_logs_url(context):
+    return f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}'
 
 
-class ServerException(Exception):
-    pass
-
-
-def aws_encode(value):
-    """Encodes value into AWS friendly URL component"""
-    value = urllib.parse.quote_plus(value)
-    value = re.sub(r"\+", " ", value)
-    return re.sub(r"%", "$", urllib.parse.quote_plus(value))
-
-
-class Invoker:
-    def __init__(self, token, repo_full_name, base_ref, head_ref, logs_url):
-        """
-
-
-        Arguments:
-            base_ref: PR base ref
-            head_ref: PR head ref
-            logs_url: Cloudwatch log group stream associated with AWS Lambda
-                Function invocation
-        """
-        self.repo_full_name = repo_full_name
-        self.base_ref = base_ref
-        self.head_ref = head_ref
-        self.logs_url = logs_url
-
+class InvokerHandler(object):
+    def __init__(self, app, secret, token, commit_status_config={}):
+        self.app = app
+        self.secret = secret
+        self.app_listeners = self.app.listeners
         self.gh = github.Github(token)
-        self.repo = self.gh.get_repo(self.repo_full_name)
-        self.base = self.repo.get_branch(self.base_ref)
-        self.head = self.repo.get_branch(self.head_ref)
+        self.app.gh = self.gh
+        self.app.commit_status_config = commit_status_config
 
-    def merge_lock(self):
-        """Creates a PR commit status that shows the current merge lock status"""
-        merge_lock = ssm.get_parameter(Name=os.environ["MERGE_LOCK_SSM_KEY"])[
-            "Parameter"
-        ]["Value"]
-        log.info(f"Merge lock value: {merge_lock}")
-
-        if merge_lock != "none":
-            log.info("Merge lock status: locked")
-            self.head.commit.create_status(
-                state="pending",
-                description=f"Locked -- In Progress PR #{merge_lock}",
-                context=os.environ["MERGE_LOCK_STATUS_CHECK_NAME"],
-                target_url=self.logs_url,
-            )
-
-        elif merge_lock == "none":
-            log.info("Merge lock status: unlocked")
-            self.head.commit.create_status(
-                state="success",
-                description="Unlocked",
-                context=os.environ["MERGE_LOCK_STATUS_CHECK_NAME"],
-                target_url=self.logs_url,
-            )
-
-        else:
-            raise ServerException(f"Invalid merge lock value: {merge_lock}")
-
-    def trigger_pr_plan(self, send_commit_status) -> None:
-        """
-        Runs the PR Terragrunt plan ECS task for every added or modified Terragrunt
-        directory
-
-        Arguments:
-            send_commit_status: Send a pending commit status for each of the PR plan ECS task
-        """
-
-        log.info("Getting diff files")
-        diff_paths = list(
-            set(
-                [
-                    f.filename
-                    for f in self.repo.compare(self.base_ref, self.head_ref).files
-                    if f.status in ["added", "modified"]
-                ]
-            )
-        )
-        log.debug(f"Added or modified files within PR:\n{pformat(diff_paths)}")
-
-        for account in json.loads(os.environ["ACCOUNT_DIM"]):
-            log.debug(f"Account Record:\n{account}")
-
-            account_diff_paths = list(
-                set(
-                    [
-                        os.path.dirname(filename)
-                        for filename in diff_paths
-                        if fnmatch.fnmatch(filename, f'{account["path"]}/**.hcl')
-                        or fnmatch.fnmatch(filename, f'{account["path"]}/**.tf')
-                    ]
-                )
-            )
-
-            if len(account_diff_paths) > 0:
-                log.debug(
-                    f"Account-level Terragrunt/Terraform diff files:\n{account_diff_paths}"
-                )
-                log.info(f"Count: {len(account_diff_paths)}")
-                log.info(f'Plan Role ARN: {account["plan_role_arn"]}')
-
-                log_options = ecs.describe_task_definition(
-                    taskDefinition=os.environ["PR_PLAN_TASK_DEFINITION_ARN"]
-                )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"][
-                    "options"
-                ]
-
-                log.info("Running ECS tasks")
-                for path in account_diff_paths:
-                    log.info(f"Directory: {path}")
-                    context = f"Plan: {path}"
-                    try:
-                        task = ecs.run_task(
-                            cluster=os.environ["ECS_CLUSTER_ARN"],
-                            count=1,
-                            launchType="FARGATE",
-                            taskDefinition=os.environ["PR_PLAN_TASK_DEFINITION_ARN"],
-                            networkConfiguration=json.loads(
-                                os.environ["ECS_NETWORK_CONFIG"]
-                            ),
-                            overrides={
-                                "containerOverrides": [
-                                    {
-                                        "name": os.environ[
-                                            "PR_PLAN_TASK_CONTAINER_NAME"
-                                        ],
-                                        "command": [
-                                            "python",
-                                            "/src/pr_plan/plan.py",
-                                        ],
-                                        "environment": [
-                                            {
-                                                "name": "SOURCE_VERSION",
-                                                "value": self.head_ref,
-                                            },
-                                            {
-                                                "name": "COMMIT_ID",
-                                                "value": self.head.commit.sha,
-                                            },
-                                            {"name": "CFG_PATH", "value": path},
-                                            {
-                                                "name": "ROLE_ARN",
-                                                "value": account["plan_role_arn"],
-                                            },
-                                            {"name": "CONTEXT", "value": context},
-                                        ],
-                                    }
-                                ]
-                            },
-                        )
-                        log.debug(f"Run task response:\n{pformat(task)}")
-
-                        task_id = task["tasks"][0]["containers"][0]["taskArn"].split(
-                            "/"
-                        )[-1]
-                        status_data = {
-                            "state": "pending",
-                            "description": "Terraform Plan",
-                            "context": context,
-                            "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["PR_PLAN_TASK_CONTAINER_NAME"] + "/" + task_id)}',
-                        }
-                    except Exception as e:
-                        log.error(e, exc_info=True)
-                        status_data = {
-                            "state": "failure",
-                            "description": "Terraform Plan",
-                            "context": context,
-                            "target_url": self.logs_url,
-                        }
-
-                    log.info("Sending commit status for Terraform plan")
-                    log.debug(f"Status data:\n{pformat(status_data)}")
-                    if send_commit_status:
-                        self.head.commit.create_status(**status_data)
-            else:
-                log.info(
-                    "No New/Modified Terragrunt/Terraform configurations within account -- skipping plan"
-                )
-
-    def trigger_create_deploy_stack(
-        self,
-        pr_id,
-        send_commit_status: bool,
-    ) -> None:
-        """
-        Runs the Create Deploy Stack ECS task
-
-        Arguments:
-            pr_id: PR ID or also referred to as PR number
-            send_commit_status: Send a pending commit status for each of the PR plan ECS task
-        """
-        log_options = ecs.describe_task_definition(
-            taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"]
-        )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"]["options"]
+    def _get_header(self, key, request):
+        """Return message header if exists or returns client exception"""
 
         try:
-            task = ecs.run_task(
-                cluster=os.environ["ECS_CLUSTER_ARN"],
-                count=1,
-                launchType="FARGATE",
-                taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"],
-                networkConfiguration=json.loads(os.environ["ECS_NETWORK_CONFIG"]),
-                overrides={
-                    "containerOverrides": [
-                        {
-                            "name": os.environ[
-                                "CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME"
-                            ],
-                            "environment": [
-                                {"name": "BASE_REF", "value": self.base_ref},
-                                {"name": "HEAD_REF", "value": self.head_ref},
-                                {"name": "PR_ID", "value": pr_id},
-                                {"name": "COMMIT_ID", "value": self.head.commit.sha},
-                            ],
-                        }
-                    ]
-                },
-            )
-            log.debug(f"Run task response:\n{pformat(task)}")
+            return request["headers"][key]
+        except KeyError:
+            return aws_response(status_code=400, response="Missing header: " + key)
 
-            task_id = task["tasks"][0]["containers"][0]["taskArn"].split("/")[-1]
-            status_data = {
-                "state": "pending",
-                "description": "Create Deploy Stack",
-                "context": os.environ["CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT"],
-                "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME"] + "/" + task_id)}',
-            }
-        except Exception as e:
+    def validate_file_paths(self, event_type, event, pattern):
+
+        repo = self.gh.get_repo(event["body"]["repository"]["full_name"])
+        if event_type == "pull_request":
+            file_paths = [
+                path.filename
+                for path in repo.compare(
+                    event["body"]["pull_request"]["base"]["sha"],
+                    event["body"]["pull_request"]["head"]["sha"],
+                ).files
+            ]
+        else:
+            raise ServerException(f"Event type is not supported: {event_type}")
+        log.debug(f"File paths:\n{file_paths}")
+
+        valid = any([re.search(pattern, f) for f in file_paths])
+
+        return valid
+
+    def handle(self, event, context):
+        try:
+            RequestFilter.validate(
+                event,
+                [
+                    {
+                        "headers.x-github-event": ["required"]
+                        + [f"regex:^{event}$" for event in self.app_listeners.keys()],
+                        "headers.x-hub-signature-256": "required|regex:^sha256=.+$",
+                        "body": "required",
+                    }
+                ],
+            )
+        except ValidationError as e:
+            return aws_response(status_code=422, response=str(e))
+
+        event_type = event["headers"]["x-github-event"]
+        log.debug(f"GitHub event: {event_type}")
+
+        log.info("Validating request signature")
+        expected_sig = hmac.new(
+            bytes(str(self.secret), "utf-8"),
+            bytes(str(event["body"]), "utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        try:
+            validate_sig(
+                event["headers"]["x-hub-signature-256"].split("=", 1)[1], expected_sig
+            )
+        except ClientException as e:
             log.error(e, exc_info=True)
-            status_data = {
-                "state": "failure",
-                "description": "Create Deploy Stack",
-                "context": os.environ["CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT"],
-                "target_url": self.logs_url,
-            }
-        if send_commit_status:
-            log.info("Sending commit status")
-            log.debug(f"Status data:\n{pformat(status_data)}")
-            self.head.commit.create_status(**status_data)
+            return aws_response(status_code=402, response=str(e))
+
+        event["body"] = json.loads(event["body"])
+        hook_handlers = self.app_listeners[event_type]
+
+        for handler in hook_handlers:
+
+            log.debug(f"Function: {handler['function']}")
+
+            log.info("Validating request content")
+            try:
+                RequestFilter.validate(event, handler["filter_groups"])
+            except ValidationError as e:
+                log.debug("Invalid request content")
+                log.debug(f"Error:\n{e}")
+                continue
+
+            if os.environ.get("FILE_PATH_PATTERN"):
+                log.info("Validating event file path changes")
+                valid_file_path = self.validate_file_paths(
+                    event_type, event, os.environ.get("FILE_PATH_PATTERN")
+                )
+
+                if not valid_file_path:
+                    log.debug("PR does not contain valid file path changes")
+                    continue
+            else:
+                log.info(
+                    "$FILE_PATH_PATTERN is not found -- skipping file path validation"
+                )
+
+            log.info("Running handler")
+            handler["function"](event, context)
+
+        # TODO: create response for when no handlers were executed?
+        return aws_response(
+            status_code=200, response="Webhook event was successfully processed"
+        )
+
+
+app = Invoker()
+
+common_filters = {
+    "body.pull_request.base.ref": "regex:^" + os.environ.get("BASE_BRANCH", "") + "$",
+}
+
+
+def rule_not_true(x):
+    """Workaround to Validator not having negative rules"""
+    return x != True  # noqa : 712
+
+
+@app.hook(
+    event_type="pull_request",
+    filter_groups=[
+        {
+            **{
+                "body.pull_request.merged": rule_not_true,
+                "body.action": lambda x: re.search("(opened|edited|reopened)", x)
+                != None,  # noqa : 711
+            },
+            **common_filters,
+        }
+    ],
+)
+def open_pr(event, context):
+    app.merge_lock(
+        event["body"]["repository"]["full_name"],
+        event["body"]["pull_request"]["head"]["ref"],
+        get_logs_url(context),
+    )
+    app.trigger_pr_plan(
+        event["body"]["repository"]["full_name"],
+        event["body"]["pull_request"]["base"]["ref"],
+        event["body"]["pull_request"]["head"]["ref"],
+        event["body"]["pull_request"]["head"]["sha"],
+        get_logs_url(context),
+        app.commit_status_config.get("PrPlan"),
+    )
+
+
+@app.hook(
+    event_type="pull_request",
+    filter_groups=[
+        {
+            **{"body.pull_request.merged": "accepted", "body.action": "regex:^closed$"},
+            **common_filters,
+        }
+    ],
+)
+def merged_pr(event, context):
+
+    app.trigger_create_deploy_stack(
+        event["body"]["repository"]["full_name"],
+        event["body"]["pull_request"]["base"]["ref"],
+        event["body"]["pull_request"]["head"]["ref"],
+        event["body"]["pull_request"]["head"]["sha"],
+        event["body"]["pull_request"]["number"],
+        get_logs_url(context),
+        app.commit_status_config.get("CreateDeployStack"),
+    )
 
 
 def lambda_handler(event, context):
-    """
-    Runs the approriate workflow depending upon on if the function was triggered
-    by an open PR activity or PR merge event
-    """
-
     log.debug(f"Event:\n{pformat(event)}")
-    payload = json.loads(event["requestPayload"]["body"])
+    ssm = boto3.client("ssm")
 
     token = ssm.get_parameter(
         Name=os.environ["GITHUB_TOKEN_SSM_KEY"], WithDecryption=True
     )["Parameter"]["Value"]
 
-    invoker = Invoker(
-        token,
-        payload["repository"]["full_name"],
-        payload["pull_request"]["base"]["ref"],
-        payload["pull_request"]["head"]["ref"],
-        f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(context.log_group_name)}/log-events/{aws_encode(context.log_stream_name)}',
-    )
+    secret = ssm.get_parameter(
+        Name=os.environ["GITHUB_WEBHOOK_SECRET_SSM_KEY"], WithDecryption=True
+    )["Parameter"]["Value"]
 
     commit_status_config = json.loads(
         ssm.get_parameter(Name=os.environ["COMMIT_STATUS_CONFIG_SSM_KEY"])["Parameter"][
             "Value"
         ]
     )
-    log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
 
-    if not payload["pull_request"]["merged"]:
-        log.info("Running workflow for open PR")
-
-        invoker.merge_lock()
-        invoker.trigger_pr_plan(commit_status_config["PrPlan"])
-    else:
-        log.info("Running workflow for merged PR")
-        invoker.trigger_create_deploy_stack(
-            str(payload["pull_request"]["number"]),
-            commit_status_config["CreateDeployStack"],
-        )
+    invoker = InvokerHandler(
+        app=app, secret=secret, token=token, commit_status_config=commit_status_config
+    )
+    invoker.handle(event, context)

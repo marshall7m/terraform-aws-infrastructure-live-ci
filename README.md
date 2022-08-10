@@ -39,12 +39,12 @@
          * [Requirements](#requirements-2)
          * [Steps](#steps-2)
    * [Pitfalls](#pitfalls)
+      * [Think About...](#think-about)
    * [TODO:](#todo)
       * [Features:](#features)
       * [Improvements:](#improvements)
-      * [Think About...](#think-about)
 
-<!-- Added by: root, at: Wed Jul 13 00:41:40 UTC 2022 -->
+<!-- Added by: root, at: Wed Aug 10 00:16:28 UTC 2022 -->
 
 <!--te-->
 
@@ -77,37 +77,38 @@ After all directories and their associated dependencies are gathered, they are p
  
 ![Diagram](terraform-aws-infrastructure-live.png)
  
-1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS API Gateway endpoint on open PR activities or merge PR events. The API will pass the webhook payload to the #2 Lambda Function.
+1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS Lambda Function endpoint for open PR activities or merge PR events.
 
-2. The Lambda Function will validate the request's SHA-256 header value with the secret configured within Terraform module. If the request is valid, the function will check if the payload meets the requirements to pass the request to the next Lambda Function. The payload must contain attributes that reflect that the GitHub event was an open PR activity or PR merge, includes .tf and/or .hcl file additions and/or modifications, and has a PR base ref that is the trunk branch (trunk branch represents the live Terraform configurations and should be reflected within the Terraform state files).
+2. 
+  A: 
+    The Lambda Function will validate the request's SHA-256 header value with the secret configured within Terraform module. If the request is authenticated, the function will check if the payload meets specific requirements. The payload must contain attributes that reflect that the GitHub event was an open PR activity or PR merge, includes .tf and/or .hcl file additions and/or modifications, and has a PR base ref that is the trunk branch (trunk branch represents the live Terraform configurations and should be reflected within the Terraform state files).
+  B: The Lambda Function then acts as a branch that runs different logic depending on the GitHub event. 
 
-3. The Lambda Function acts as a branch that runs different logic depending on the GitHub event. 
-
-    If the Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#5). In addition to the ECS task(s), the Lambda Function will check if there's a deployment flow in progress and add the check to the PR's commit status. 
+    If the Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#4). In addition to the ECS task(s), the Lambda Function will check if there's a deployment flow in progress and add the check to the PR's commit status. 
 
     If the Github event was a merged PR, an ECS task named Create Deploy Stack will be run.
 
-4. The Lambda Function will load an AWS System Manager Parameter Store value reference as `merge_lock` that will contain the PR ID of the deployment in progress or `none` if there isn't any in progress. Merging will be locked until the deployment flow is done. Once the deployment flow is finished, the downstream Lambda Function will reset the parameter value (see #7).
+3. The Lambda Function will load an AWS System Manager Parameter Store value reference as `merge_lock` that will contain the PR ID of the deployment in progress or `none` if there isn't any in progress. Merging will be locked until the deployment flow is done. Once the deployment flow is finished, the downstream Lambda Function will reset the parameter value (see #6).
 
     `**NOTE: The PR committer will have to create another commit once the merge lock status is unlocked to get an updated merge lock commit status. **`
 
-5. The ECS task will run a plan on the Terragrunt directory. This will output the Terraform plan to the CloudWatch logs for users to see what resources are proposed to be created, modified, and/or deleted.
+4. The ECS task will run a plan on the Terragrunt directory. This will output the Terraform plan to the CloudWatch logs for users to see what resources are proposed to be created, modified, and/or deleted.
 
-6. The task will overwrite the current merge lock value with the associated PR ID. Next, the task will scan the trunk branch for changes made from the PR. The task will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the task will invoke the #7 Lambda Function.
+5. The task will overwrite the current merge lock value with the associated PR ID. Next, the task will scan the trunk branch for changes made from the PR. The task will insert records into the metadb for each directory that contains differences in its respective Terraform plan. After the records are inserted, the task will invoke the #6 Lambda Function.
  
-7. A Lambda Function referenced within the module as `trigger_sf` will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into JSON objects and pass each JSON as input into separate Step Function executions. 
+6. A Lambda Function referenced within the module as `trigger_sf` will select metadb records for Terragrunt directories with account and directory level dependencies met. The Lambda will convert the records into JSON objects and pass each JSON as input into separate Step Function executions. 
  
-8. An ECS task referenced as `terra_run` within the module will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created, modified, and/or deleted.
+7. An ECS task referenced as `terra_run` within the module will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created, modified, and/or deleted.
  
-9. A Lambda Function referenced as `approval_request` within the module will send an email via AWS SES to every email address defined under the record's `voters` attribute. The contents of the email will include metadata about the execution, a link to the Terraform plan, and a very minimal HTML forum for voters to cast their vote.
+8. A Lambda Function referenced as `approval_request` within the module will send an email via AWS SES to every email address defined under the record's `voters` attribute. The contents of the email will include metadata about the execution, a link to the Terraform plan, and a very minimal HTML forum for voters to cast their vote.
 
-10. When a voter approves or rejects a deployment, the Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a success [task token](https://docs.aws.amazon.com/step-functions/latest/dg/connect-to-resource.html#connect-wait-token) back to the associated Step Function execution.
+9. When a voter approves or rejects a deployment, the Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a success [task token](https://docs.aws.amazon.com/step-functions/latest/dg/connect-to-resource.html#connect-wait-token) back to the associated Step Function execution.
 
-11. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will run and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task will run the record's associated `apply_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified, and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. This [Rollback New Provider Resources](#rollback-new-provider-resources) section below will explain how the `new_resources` attribute will be used. 
+10. Based on which minimum approval count is met, the `Approval Results` Step Function task will conditionally choose which downstream task to run next. If the rejection count is met, the `Reject` task will run and the Step Function execution will be finished. If the approval count is met, the `terra_run` ECS task will run the record's associated `apply_command`. This Terraform apply output will be displayed within the CloudWatch logs for users to see what resources were created, modified, and/or deleted. If the deployment created new provider resources, the task will update the record's associated `new_resources` attribute with the new provider resource addresses that were created. This [Rollback New Provider Resources](#rollback-new-provider-resources) section below will explain how the `new_resources` attribute will be used. 
  
-11. After every Step Function execution, a Cloudwatch event rule will invoke the `trigger_sf` Lambda Function mentioned in step #7. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. If the `Success` task of the Step Function was successful, the updated status will be `succeeded` and if the `Reject` task was successful, the updated status will be `failed`.
+11. After every Step Function execution, a Cloudwatch event rule will invoke the `trigger_sf` Lambda Function mentioned in step #6. The Lambda Function will update the Step Function execution's associated metadb record status with the Step Function execution status. If the `Success` task of the Step Function was successful, the updated status will be `succeeded` and if the `Reject` task was successful, the updated status will be `failed`.
 
-    The Lambda Function will then repeat the same process as mentioned in step #7 until there are no records that are waiting to be run with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform-related PRs to be merged.
+    The Lambda Function will then repeat the same process as mentioned in step #6 until there are no records that are waiting to be run with a Step Function execution. As stated above, the Lambda Function will update the merge lock status value to allow other Terraform-related PRs to be merged.
 
 ## Commit Statuses
 
@@ -202,7 +203,7 @@ Each execution is passed a JSON input that contains record attributes that will 
  
 Let us say a PR introduces a new provider and resource block. The PR is merged and the deployment associated with the new provider resource succeeds. For some reason, a downstream deployment fails and the entire PR needs to be reverted. The revert PR is created and merged. The directory containing the new provider resource will be non-existent within the revert PR although the terraform state file associated with the directory will still contain the new provider resources. Given that the provider block and its associated provider credentials are gone, Terraform will output an error when trying to initialize the directory within the deployment flow. This type of scenario is also referenced in this [StackOverflow post](https://stackoverflow.com/a/57829202/12659025).
  
-To handle this scenario, the CI pipeline will document which directories define new provider resources within the metadb. After every deployment, any new provider resources that were deployed will also be documented. If any deployment flow fails, the CI pipeline will start Step Function executions for every directory that contains new providers with `-target` flags to destroy the new provider resources. To see it in action, run the [test_rollback_providers.py](./tests/integration/test_rollback_providers.py) test.
+To handle this scenario, the CI pipeline will document which directories define new provider resources within the metadb. After every deployment, any new provider resources that were deployed will also be documented. If any deployment flow fails, the CI pipeline will start Step Function executions for every directory that contains new providers with `-target` flags to destroy the new provider resources. To see it in action, run the [test_rollback_providers.py](./tests/e2e/test_rollback_providers.py) test.
 
 ## Infrastructure Repository Requirements
  
@@ -405,13 +406,11 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_agw_role"></a> [agw\_role](#module\_agw\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_apply_role"></a> [apply\_role](#module\_apply\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_create_deploy_stack_role"></a> [create\_deploy\_stack\_role](#module\_create\_deploy\_stack\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
 | <a name="module_ecs_execution_role"></a> [ecs\_execution\_role](#module\_ecs\_execution\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_github_webhook_validator"></a> [github\_webhook\_validator](#module\_github\_webhook\_validator) | github.com/marshall7m/terraform-aws-github-webhook | v0.1.4 |
 | <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | terraform-aws-modules/lambda/aws | 3.3.1 |
@@ -423,14 +422,6 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 
 | Name | Type |
 |------|------|
-| [aws_api_gateway_account.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_account) | resource |
-| [aws_api_gateway_integration.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration) | resource |
-| [aws_api_gateway_integration_response.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response) | resource |
-| [aws_api_gateway_method.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_method) | resource |
-| [aws_api_gateway_method_response.response_200](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_method_response) | resource |
-| [aws_api_gateway_method_settings.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_method_settings) | resource |
-| [aws_api_gateway_resource.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_resource) | resource |
-| [aws_api_gateway_rest_api.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_rest_api) | resource |
 | [aws_cloudwatch_event_rule.ecs_terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
 | [aws_cloudwatch_event_rule.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) | resource |
 | [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
@@ -460,13 +451,18 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | [aws_ses_template.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_template) | resource |
 | [aws_sfn_state_machine.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) | resource |
 | [aws_ssm_parameter.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [aws_ssm_parameter.email_approval_secret](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [aws_ssm_parameter.github_webhook_secret](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.merge_lock](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.scan_type](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
+| [github_repository_webhook.this](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_webhook) | resource |
 | [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.metadb_users](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
+| [random_password.email_approval_secret](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
+| [random_password.github_webhook_secret](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
 | [aws_iam_policy_document.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.approval_response](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
@@ -505,7 +501,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_ecs_vpc_id"></a> [ecs\_vpc\_id](#input\_ecs\_vpc\_id) | AWS VPC ID to host the ECS container instances within.<br>The VPC should be associated with the subnet IDs specified under `var.ecs_private_subnet_ids` | `string` | n/a | yes |
 | <a name="input_enable_branch_protection"></a> [enable\_branch\_protection](#input\_enable\_branch\_protection) | Determines if the branch protection rule is created. If the repository is private (most likely), the GitHub account associated with<br>the GitHub provider must be registered as a GitHub Pro, GitHub Team, GitHub Enterprise Cloud, or GitHub Enterprise Server account. See here for details: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/about-protected-branches | `bool` | `true` | no |
 | <a name="input_enforce_admin_branch_protection"></a> [enforce\_admin\_branch\_protection](#input\_enforce\_admin\_branch\_protection) | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
-| <a name="input_file_path_pattern"></a> [file\_path\_pattern](#input\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$"` | no |
+| <a name="input_file_path_pattern"></a> [file\_path\_pattern](#input\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$\n"` | no |
 | <a name="input_github_token_ssm_description"></a> [github\_token\_ssm\_description](#input\_github\_token\_ssm\_description) | Github token SSM parameter description | `string` | `"Github token used by Merge Lock Lambda Function"` | no |
 | <a name="input_github_token_ssm_key"></a> [github\_token\_ssm\_key](#input\_github\_token\_ssm\_key) | AWS SSM Parameter Store key for sensitive Github personal token used by the Merge Lock Lambda Function | `string` | `null` | no |
 | <a name="input_github_token_ssm_tags"></a> [github\_token\_ssm\_tags](#input\_github\_token\_ssm\_tags) | Tags for Github token SSM parameter | `map(string)` | `{}` | no |
@@ -550,7 +546,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 |------|-------------|
 | <a name="output_approval_request_function_name"></a> [approval\_request\_function\_name](#output\_approval\_request\_function\_name) | Name of the Lambda Function used for sending approval requests |
 | <a name="output_approval_request_log_group_name"></a> [approval\_request\_log\_group\_name](#output\_approval\_request\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
-| <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | API URL used for requesting deployment approvals |
+| <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | Lambda Function URL used for casting deployment approval votes |
 | <a name="output_base_branch"></a> [base\_branch](#output\_base\_branch) | Base branch for repository that all PRs will compare to |
 | <a name="output_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#output\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub commit status |
 | <a name="output_ecs_apply_role_arn"></a> [ecs\_apply\_role\_arn](#output\_ecs\_apply\_role\_arn) | IAM role ARN the AWS ECS terra run task can assume |
@@ -562,8 +558,9 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
+| <a name="output_email_approval_secret"></a> [email\_approval\_secret](#output\_email\_approval\_secret) | Secret value used for authenticating email approval responses |
+| <a name="output_github_webhook_id"></a> [github\_webhook\_id](#output\_github\_webhook\_id) | GitHub webhook ID used for sending pull request activity to the Lambda Receiver Function |
 | <a name="output_lambda_trigger_sf_arn"></a> [lambda\_trigger\_sf\_arn](#output\_lambda\_trigger\_sf\_arn) | ARN of the Lambda Function used for triggering Step Function execution(s) |
-| <a name="output_merge_lock_github_webhook_id"></a> [merge\_lock\_github\_webhook\_id](#output\_merge\_lock\_github\_webhook\_id) | GitHub webhook ID used for sending pull request activity to the API to be processed by the merge lock Lambda Function |
 | <a name="output_merge_lock_ssm_key"></a> [merge\_lock\_ssm\_key](#output\_merge\_lock\_ssm\_key) | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
 | <a name="output_merge_lock_status_check_name"></a> [merge\_lock\_status\_check\_name](#output\_merge\_lock\_status\_check\_name) | Context name of the merge lock GitHub commit status check |
 | <a name="output_metadb_arn"></a> [metadb\_arn](#output\_metadb\_arn) | ARN for the metadb |
@@ -582,7 +579,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_trigger_sf_function_name"></a> [trigger\_sf\_function\_name](#output\_trigger\_sf\_function\_name) | Name of the Lambda Function used for triggering Step Function execution(s) |
 | <a name="output_trigger_sf_log_group_name"></a> [trigger\_sf\_log\_group\_name](#output\_trigger\_sf\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
- 
+
 ## Deploy the Terraform Module
 
 ### CLI Requirements
@@ -606,7 +603,7 @@ For a demo of the module that will automatically clean up any resources created,
 6. Run `terraform apply` and enter `yes` to the approval prompt
 7. Refill coffee and wait for resources to be created
 8. Go to the `var.approval_request_sender_email` email address. Find the AWS SES verification email (subject should be something like "Amazon Web Services – Email Address Verification Request in region US West (Oregon)") and click on the verification link.
-8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in the Terraform configuration's tfstate file
+8. Create a PR with changes to the target repo defined under `var.repo_name` that will create a difference in a Terraform configuration's tfstate file
 9. Merge the PR
 10. Wait for the approval email to be sent to the voter's email address
 11. Login into the voter's email address and open the approval request email (subject should be something like "${var.step_function_name} - Need Approval for Path: {{path}}")
@@ -629,13 +626,13 @@ The steps below will set up a testing Docker environment for running tests.
 
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
-3. Ensure that the environment variables from the `docker-compose.yml` file's `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/integration/variables.tf` files.
-4. Run `docker-compose run --rm unit /bin/bash` to set up a docker environment for unit testing or run `docker-compose run --rm integration /bin/bash` to set up a docker environment for integration testing. The command will create an interactive shell within the docker container.
+3. Ensure that the environment variables from the `docker-compose.yml` file's `environment:` section are set. For a description of the `TF_VAR_*` variables, see the `tests/unit/variables.tf` and `tests/e2e/variables.tf` files.
+4. Run `docker-compose run --rm unit /bin/bash` to set up a docker environment for unit testing or run `docker-compose run --rm e2e /bin/bash` to set up a docker environment for e2e testing. The command will create an interactive shell within the docker container.
 5. Run tests within the `tests` directory
 
 ```
 NOTE: All Terraform resources will automatically be deleted during the PyTest session cleanup. If the provisioned resources are needed after the PyTest execution,
-use the `--skip-tf-destroy` flag (e.g. `pytest tests/integration --skip-tf-destroy`). BEWARE: If the resources are left alive after the tests, the AWS account may incur additional charges.
+use the `--skip-tf-destroy` flag (e.g. `pytest tests/e2e --skip-tf-destroy`). BEWARE: If the resources are left alive after the tests, the AWS account may incur additional charges.
 ```
 
 ### Local GitHub Actions Workflow
@@ -653,7 +650,7 @@ The steps below will run the GitHub Actions workflow via [act](https://github.co
 1. Clone this repo by running the CLI command: `git clone https://github.com/marshall7m/terraform-aws-infrastructure-live-ci.git`
 2. Within your CLI, change into the root of the repo
 3. Run the following command: `act push`. This will run the GitHub workflow logic for push events
-4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the unit testing [variables.tf](./tests/unit/tf-module-defaults/fixtures/variables.tf) and integration testing [variables.tf](./tests/integration/fixtures/variables.tf) file.
+4. A prompt will arise requesting GitHub Action secrets needed to run the workflow. Fill in the secrets accordingly. The secrets can be set via environment variables to skip the prompt. For a description of the `TF_VAR_*` variables, see the unit testing [variables.tf](./tests/unit/tf-module-defaults/fixtures/variables.tf) and e2e testing [variables.tf](./tests/e2e/fixtures/variables.tf) file.
 
 ```
 NOTE: All Terraform resources will automatically be deleted during the PyTest session cleanup
@@ -664,6 +661,15 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - Management of a GitHub Personal Access Token (PAT). The user will need to refresh the GitHub token value when the expiration date is close.
   - Possibly create a GitHub machine user and add as a collaborator to the repo to remove the need to renew token expiration? The user would specify a pre-existing machine user or the module can create a machine user (which would require a TF local-exec script to create the user).
 
+### Think About...
+
+- Decouple Docker runner image and place into a separate repository
+  - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
+  - Would require docker scripts to be cloud-agnostic which means replacing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run e2e testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
+- Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
+- Dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
+
+
 ## TODO:
 ### Features:
 
@@ -672,17 +678,13 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
 - [ ] Use AWS SQS with Exactly-Once Processing to create a queue of pr tf plan tasks to run
   - User can then set a time range (such as after hours) that the PR plans are run so that the plan tasks are not run for every PR update event
-
 ### Improvements:
 
 - [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)
 
-### Think About...
+- group ssm parameter via /var.prefix/param_name
+- use sns for sending approval requests/notifications
+- create custom python logging for functions and tf cmds to remove timestamp and other 
 
-- Decouple Docker runner image and place into a separate repository
-  - If other cloud versions of this TF module are created, this allows each of the TF modules to source the Docker image without having to manage its version of the docker image 
-  - Would require docker scripts to be cloud-agnostic which means removing aurora_data_api with psycopg2 connections. This would require a separate instance within the VPC that the metadb is hosted in to run integration testing assertion queries. This is because psycopg2 uses the metadb port unlike aurora_data_api which uses HTTPS
-- Create a `depends_on_running_deployment` input that conditionally runs the PR plans if none of the modified directories within the PR are in the current deployment stack and skips if otherwise. The reason is that if the common directories between the PR and the running deployment stack are changed within the deployments, the PR's Terraform plan will not be accurate since it won't take into account the deployment changes.
-- Dynamically create pr-plan and create deploy stack task IAM roles for each AWS account to isolate the task's blast radius from other AWS accounts
-
-
+- create an sns topic for failed terraform runs that notifies users
+- 
