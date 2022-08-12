@@ -3,6 +3,7 @@ import logging
 import json
 import os
 import sys
+from pprint import pformat
 
 sys.path.append(os.path.dirname(__file__) + "/..")
 from common_lambda.utils import aws_encode, get_email_approval_sig  # noqa : E402
@@ -11,22 +12,22 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-def get_ses_urls(event: dict, secret: str, recipient: str) -> dict:
+def get_ses_urls(msg: dict, secret: str, recipient: str) -> dict:
     """
     Returns mapping of approval actions and their respective URL
 
     Arguments:
-        event: Lambda Function event
+        msg: SNS message
         secret: Secret value used for generating authentification signature
         recipient: Email address that will receive the approval URL
     """
     resource_path = "ses"
     common_params = {
-        "ex": event["ExecutionName"],
-        "exArn": event["ExecutionArn"],
-        "sm": event["StateMachineArn"],
+        "ex": msg["ExecutionName"],
+        "exArn": msg["ExecutionArn"],
+        "sm": msg["StateMachineArn"],
         "recipient": recipient,
-        "taskToken": event["TaskToken"],
+        "taskToken": msg["TaskToken"],
     }
     actions = ["approve", "reject"]
     urls = {}
@@ -37,12 +38,12 @@ def get_ses_urls(event: dict, secret: str, recipient: str) -> dict:
             **{
                 "action": action,
                 "X-SES-Signature-256": get_email_approval_sig(
-                    secret, event["ExecutionName"], recipient, action
+                    secret, msg["ExecutionName"], recipient, action
                 ),
             },
         }
         urls[action] = (
-            event["ApprovalURL"]
+            msg["ApprovalURL"]
             + resource_path
             + "?"
             + "&".join([f"{k}={aws_encode(v)}" for k, v in query_params.items()])
@@ -53,18 +54,19 @@ def get_ses_urls(event: dict, secret: str, recipient: str) -> dict:
 
 def lambda_handler(event, context):
     """Sends approval request email to email addresses asssociated with Terragrunt path"""
-    log.debug(f"Lambda Event: {event}")
+    log.debug(f"Lambda Event:\n{pformat(event)}")
 
     ssm = boto3.client("ssm")
     ses = boto3.client("ses")
+    msg = json.loads(event["Records"][0]["Sns"]["Message"])
 
     template_data = {
-        "path": event["Path"],
-        "logs_url": event["LogUrlPrefix"]
-        + aws_encode(event["LogStreamPrefix"] + event["PlanTaskArn"].split("/")[-1]),
-        "execution_name": event["ExecutionName"],
-        "account_name": event["AccountName"],
-        "pr_id": event["PullRequestID"],
+        "path": msg["Path"],
+        "logs_url": msg["LogUrlPrefix"]
+        + aws_encode(msg["LogStreamPrefix"] + msg["PlanTaskArn"].split("/")[-1]),
+        "execution_name": msg["ExecutionName"],
+        "account_name": msg["AccountName"],
+        "pr_id": msg["PullRequestID"],
     }
 
     log.debug(f"Default Template Data:\n{template_data}")
@@ -78,8 +80,8 @@ def lambda_handler(event, context):
 
     # need to create a separate destination object for each address since the
     # approval URL is specifc to the address
-    for address in event["Voters"]:
-        urls = get_ses_urls(event, secret, address)
+    for address in msg["Voters"]:
+        urls = get_ses_urls(msg, secret, address)
         destinations.append(
             {
                 "Destination": {"ToAddresses": [address]},
