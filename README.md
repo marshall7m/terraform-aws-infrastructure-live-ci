@@ -686,7 +686,6 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 
 - [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)
 
-- use sns for sending approval requests/notifications
 - add retryAttemps > 1 for ecs tasks
 - create an sns topic for failed terraform runs that notifies users
 - create custom python logging for functions and tf cmds to remove timestamp and other 
