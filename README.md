@@ -44,7 +44,7 @@
       * [Features:](#features)
       * [Improvements:](#improvements)
 
-<!-- Added by: root, at: Wed Aug 10 00:16:28 UTC 2022 -->
+<!-- Added by: root, at: Fri Aug 12 05:37:49 UTC 2022 -->
 
 <!--te-->
 
@@ -100,7 +100,8 @@ After all directories and their associated dependencies are gathered, they are p
  
 7. An ECS task referenced as `terra_run` within the module will run the record's associated `plan_command`. This will output the Terraform plan to the CloudWatch logs for users to see what resources will be created, modified, and/or deleted.
  
-8. A Lambda Function referenced as `approval_request` within the module will send an email via AWS SES to every email address defined under the record's `voters` attribute. The contents of the email will include metadata about the execution, a link to the Terraform plan, and a very minimal HTML forum for voters to cast their vote.
+8. The Step Function machine will publish a message to the approval request SNS topic containing the execution context information. The SNS topic will send the message to the following approval request outlets:
+  - Lambda Function referenced as `approval_request` within the module will send an email via AWS SES to every email address defined under the record's `voters` attribute. The contents of the email will include metadata about the execution, a link to the Terraform plan, and a very minimal HTML forum for voters to cast their vote.
 
 9. When a voter approves or rejects a deployment, the Lambda Function referenced as `approval_response` will update the records approval or rejection count. Once the minimum approval count is met, the Lambda Function will send a success [task token](https://docs.aws.amazon.com/step-functions/latest/dg/connect-to-resource.html#connect-wait-token) back to the associated Step Function execution.
 
@@ -450,6 +451,8 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | [aws_ses_identity_policy.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_identity_policy) | resource |
 | [aws_ses_template.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_template) | resource |
 | [aws_sfn_state_machine.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) | resource |
+| [aws_sns_topic.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic) | resource |
+| [aws_sns_topic_subscription.ses_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic_subscription) | resource |
 | [aws_ssm_parameter.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.email_approval_secret](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
@@ -678,13 +681,12 @@ NOTE: All Terraform resources will automatically be deleted during the PyTest se
 - [ ] Approval voter can choose to be notified when deployment stack and/or deployment execution is successful or failed
 - [ ] Use AWS SQS with Exactly-Once Processing to create a queue of pr tf plan tasks to run
   - User can then set a time range (such as after hours) that the PR plans are run so that the plan tasks are not run for every PR update event
+
 ### Improvements:
 
 - [ ] create aesthetically pleasing approval request HTML template (Help appreciated!)
 
-- group ssm parameter via /var.prefix/param_name
-- use sns for sending approval requests/notifications
-- create custom python logging for functions and tf cmds to remove timestamp and other 
-
+- add retryAttemps > 1 for ecs tasks
 - create an sns topic for failed terraform runs that notifies users
-- 
+- create custom python logging for functions and tf cmds to remove timestamp and other 
+- group ssm parameter via /var.prefix/param_name

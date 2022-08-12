@@ -822,8 +822,8 @@ class E2E:
 
         sf = boto3.client("stepfunctions")
 
-        submitted = False
-        while not submitted:
+        status_code = None
+        while not status_code:
             time.sleep(10)
 
             events = sf.get_execution_history(
@@ -831,15 +831,15 @@ class E2E:
             )["events"]
 
             for event in events:
-                if event["type"] == "TaskSubmitted":
+                if (
+                    event.get("taskSubmittedEventDetails", {}).get("resource")
+                    == "publish.waitForTaskToken"
+                ):
                     out = json.loads(event["taskSubmittedEventDetails"]["output"])
-                    if "Payload" in out:
-                        submitted = True
+                    status_code = out["SdkHttpMetadata"]["HttpStatusCode"]
 
-        log.debug(f"Submitted task output:\n{pformat(out)}")
-
-        log.info("Assert Lambda Function response status code is valid")
-        assert out["Payload"]["statusCode"] == 200
+        log.info("Assert approval request succeeded")
+        assert status_code == 200
 
     @pytest.mark.dependency()
     @pytest.mark.usefixtures("target_execution")
@@ -869,16 +869,15 @@ class E2E:
 
         for event in events:
             if (
-                event["type"] == "TaskScheduled"
-                and event["taskScheduledEventDetails"]["resource"]
-                == "invoke.waitForTaskToken"
+                event.get("taskScheduledEventDetails", {}).get("resource")
+                == "publish.waitForTaskToken"
             ):
-                payload = json.loads(event["taskScheduledEventDetails"]["parameters"])[
-                    "Payload"
+                msg = json.loads(event["taskScheduledEventDetails"]["parameters"])[
+                    "Message"
                 ]
-                approval_url = payload["ApprovalURL"]
-                task_token = payload["TaskToken"]
-                voter = payload["Voters"][0]
+                approval_url = msg["ApprovalURL"]
+                task_token = msg["TaskToken"]
+                voter = msg["Voters"][0]
                 break
 
         log.debug(f"Approval URL: {approval_url}")

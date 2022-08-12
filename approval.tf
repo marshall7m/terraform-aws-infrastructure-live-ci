@@ -4,6 +4,16 @@ locals {
   approval_logs          = "${var.prefix}-approval"
 }
 
+resource "aws_sns_topic" "approval" {
+  name = "${var.prefix}-approval-request"
+}
+
+resource "aws_sns_topic_subscription" "ses_approval_request" {
+  topic_arn = aws_sns_topic.approval.arn
+  protocol  = "lambda"
+  endpoint  = module.lambda_approval_request.lambda_function_arn
+}
+
 data "aws_iam_policy_document" "lambda_approval_request" {
   statement {
     sid    = "SESAccess"
@@ -78,7 +88,12 @@ module "lambda_approval_request" {
     SES_TEMPLATE                  = aws_ses_template.approval.name
     EMAIL_APPROVAL_SECRET_SSM_KEY = aws_ssm_parameter.email_approval_secret.name
   }
-
+  allowed_triggers = {
+    SNSInvokeAccess = {
+      service    = "sns"
+      source_arn = aws_sns_topic.approval.arn
+    }
+  }
   publish = true
   policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",

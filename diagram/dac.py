@@ -2,9 +2,9 @@ from diagrams import Cluster, Diagram, Edge
 from diagrams.aws.database import Aurora
 from diagrams.aws.compute import LambdaFunction, Fargate
 from diagrams.aws.integration import StepFunctions
-from diagrams.aws.engagement import SimpleEmailServiceSesEmail
 from diagrams.aws.integration import Eventbridge
 from diagrams.aws.management import SystemsManagerParameterStore
+from diagrams.aws.integration import SimpleNotificationServiceSnsTopic
 from diagrams.custom import Custom
 
 node_attr = {"fontsize": "25", "height": "10.6", "fontname": "Times bold"}
@@ -70,14 +70,15 @@ with Diagram(
 
         with Cluster("Step Function Execution", graph_attr=cluster_attr):
             plan = Fargate("7. Plan")
-            request = LambdaFunction("8. Approval Request", labelloc="t")
-            email = SimpleEmailServiceSesEmail()
+            request = SimpleNotificationServiceSnsTopic(
+                "8. Approval Request", labelloc="t"
+            )
             response = LambdaFunction("9. Approval Response")
             apply = Fargate("10. Apply", labelloc="t")
 
             sf >> [plan, eventbridge]
             eventbridge >> trigger_sf
 
-            plan >> request >> email >> response >> apply
+            plan >> request >> response >> apply
 
     Aurora("MetaDB") - [create_deploy_stack, trigger_sf, response, apply]
