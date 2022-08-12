@@ -74,8 +74,8 @@ resource "aws_sfn_state_machine" "this" {
       "Request Approval" = {
         Next = "Approval Results"
         Parameters = {
-          FunctionName = module.lambda_approval_request.lambda_function_arn
-          Payload = {
+          TopicArn = aws_sns_topic.approval.arn
+          Message = {
             "Voters.$"          = "$.voters"
             "Path.$"            = "$.cfg_path"
             "ApprovalURL"       = module.lambda_approval_response.lambda_function_url
@@ -90,7 +90,7 @@ resource "aws_sfn_state_machine" "this" {
             "LogStreamPrefix"   = local.log_stream_prefix
           }
         }
-        Resource   = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+        Resource   = "arn:aws:states:::sns:publish.waitForTaskToken"
         Type       = "Task"
         ResultPath = "$.Action"
         Catch = [
@@ -278,6 +278,12 @@ module "sf_role" {
       resources = [
         "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.id}:rule/StepFunctionsGetEventsForECSTaskRule"
       ]
+    },
+    {
+      sid       = "SNSPublishAccess"
+      effect    = "Allow"
+      actions   = ["sns:Publish"]
+      resources = [aws_sns_topic.approval.arn]
     }
   ]
 }
