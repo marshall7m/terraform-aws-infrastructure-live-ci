@@ -2,6 +2,7 @@ import pytest
 import os
 import logging
 import sys
+import json
 from unittest.mock import patch
 from functions.approval_request.lambda_function import lambda_handler  # noqa E401
 
@@ -13,18 +14,28 @@ log.setLevel(logging.DEBUG)
 
 
 event = {
-    "ApprovalURL": "mock-url",
-    "Voters": ["success@simulator.amazonses.com"],
-    "Path": "test/foo",
-    "AccountName": "mock-account",
-    "ExecutionName": "run-123",
-    "ExecutionArn": "mock-execution-arn",
-    "StateMachineArn": "mock-state-machine-arn",
-    "TaskToken": "mock-token",
-    "PullRequestID": "1",
-    "LogUrlPrefix": "mock-log-prefix",
-    "LogStreamPrefix": "mock-stream-prefix",
-    "PlanTaskArn": "mock-arn",
+    "Records": [
+        {
+            "Sns": {
+                "Message": json.dumps(
+                    {
+                        "ApprovalURL": "mock-url",
+                        "Voters": ["success@simulator.amazonses.com"],
+                        "Path": "test/foo",
+                        "AccountName": "mock-account",
+                        "ExecutionName": "run-123",
+                        "ExecutionArn": "mock-execution-arn",
+                        "StateMachineArn": "mock-state-machine-arn",
+                        "TaskToken": "mock-token",
+                        "PullRequestID": "1",
+                        "LogUrlPrefix": "mock-log-prefix",
+                        "LogStreamPrefix": "mock-stream-prefix",
+                        "PlanTaskArn": "mock-arn",
+                    }
+                )
+            }
+        }
+    ]
 }
 
 
