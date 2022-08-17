@@ -69,12 +69,12 @@ EOF
   default     = 512
 }
 
-variable "ecs_private_subnet_ids" {
+variable "ecs_subnet_ids" {
   description = <<EOF
-AWS VPC private subnet IDs to host the ECS container instances within.
-Subnets should deny all inbound access and allow the minimum outbound access needed to pull
-the container image and make API calls to Terraform provider resources.
-The subnets should be associated with the VPC ID specified under `var.ecs_vpc_id`
+AWS VPC subnet IDs to host the ECS container instances within.
+The subnets should allow the ECS containers to have internet access to pull the
+container image and make API calls to Terraform provider resources.
+The subnets should be associated with the VPC ID specified under `var.vpc_id`
 EOF
   type        = list(string)
 }

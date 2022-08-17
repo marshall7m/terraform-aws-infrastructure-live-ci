@@ -127,8 +127,8 @@ module "lambda_webhook_receiver" {
     ECS_CLUSTER_ARN = aws_ecs_cluster.this.arn
     ECS_NETWORK_CONFIG = jsonencode({
       awsvpcConfiguration = {
-        subnets        = var.ecs_private_subnet_ids
-        securityGroups = var.ecs_security_group_ids
+        subnets        = var.ecs_subnet_ids
+        securityGroups = [aws_security_group.ecs_tasks.id]
       }
     })
 

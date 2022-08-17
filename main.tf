@@ -36,8 +36,8 @@ resource "aws_sfn_state_machine" "this" {
           LaunchType     = "FARGATE"
           NetworkConfiguration = {
             AwsvpcConfiguration = {
-              Subnets        = var.ecs_private_subnet_ids
-              SecurityGroups = var.ecs_security_group_ids
+              Subnets        = var.ecs_subnet_ids
+              SecurityGroups = [aws_security_group.ecs_tasks.id]
             }
           }
           Overrides = {
@@ -124,8 +124,8 @@ resource "aws_sfn_state_machine" "this" {
           LaunchType     = "FARGATE"
           NetworkConfiguration = {
             AwsvpcConfiguration = {
-              Subnets        = var.ecs_private_subnet_ids
-              SecurityGroups = var.ecs_security_group_ids
+              Subnets        = var.ecs_subnet_ids
+              SecurityGroups = [aws_security_group.ecs_tasks.id]
             }
           }
           Overrides = {
