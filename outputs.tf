@@ -60,6 +60,11 @@ output "ecs_cluster_arn" {
   value       = aws_ecs_cluster.this.arn
 }
 
+output "ecs_subnet_ids" {
+  description = "AWS VPC subnets IDs that the ECS tasks will be hosted in"
+  value       = var.ecs_subnet_ids
+}
+
 output "ecs_create_deploy_stack_family" {
   description = "AWS ECS task definition family for the create deploy stack task"
   value       = aws_ecs_task_definition.create_deploy_stack.family

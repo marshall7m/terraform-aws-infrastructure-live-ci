@@ -562,6 +562,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_ecs_create_deploy_stack_family"></a> [ecs\_create\_deploy\_stack\_family](#output\_ecs\_create\_deploy\_stack\_family) | AWS ECS task definition family for the create deploy stack task |
 | <a name="output_ecs_create_deploy_stack_role_arn"></a> [ecs\_create\_deploy\_stack\_role\_arn](#output\_ecs\_create\_deploy\_stack\_role\_arn) | AWS ECS create deploy stack task IAM role ARN |
 | <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
+| <a name="output_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#output\_ecs\_subnet\_ids) | AWS VPC subnets IDs that the ECS tasks will be hosted in |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_email_approval_secret"></a> [email\_approval\_secret](#output\_email\_approval\_secret) | Secret value used for authenticating email approval responses |
