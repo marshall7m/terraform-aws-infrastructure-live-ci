@@ -18,3 +18,4 @@ __pycache__
 /*.egg-info
 /build/
 tests/e2e/fixtures/builds/*.json
+tests/unit/tf-module-defaults/fixtures/builds/*.json
