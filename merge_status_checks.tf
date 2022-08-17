@@ -129,6 +129,7 @@ module "lambda_webhook_receiver" {
       awsvpcConfiguration = {
         subnets        = var.ecs_subnet_ids
         securityGroups = [aws_security_group.ecs_tasks.id]
+        assignPublicIp = local.ecs_assign_public_ip
       }
     })
 

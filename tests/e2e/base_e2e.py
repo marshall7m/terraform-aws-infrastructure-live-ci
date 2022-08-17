@@ -238,6 +238,7 @@ class E2E:
                         "awsvpcConfiguration": {
                             "subnets": mut_output["ecs_private_subnet_ids"],
                             "securityGroups": mut_output["ecs_security_group_ids"],
+                            "assignPublicIp": "ENABLED",
                         }
                     },
                     overrides={

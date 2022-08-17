@@ -38,6 +38,7 @@ resource "aws_sfn_state_machine" "this" {
             AwsvpcConfiguration = {
               Subnets        = var.ecs_subnet_ids
               SecurityGroups = [aws_security_group.ecs_tasks.id]
+              AssignPublicIp = local.ecs_assign_public_ip
             }
           }
           Overrides = {
@@ -126,6 +127,7 @@ resource "aws_sfn_state_machine" "this" {
             AwsvpcConfiguration = {
               Subnets        = var.ecs_subnet_ids
               SecurityGroups = [aws_security_group.ecs_tasks.id]
+              AssignPublicIp = local.ecs_assign_public_ip
             }
           }
           Overrides = {
