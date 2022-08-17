@@ -70,6 +70,17 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
   value       = var.metadb_ci_password
 }
 
+resource "aws_db_subnet_group" "metadb" {
+  name       = local.cluster_identifier
+  subnet_ids = var.metadb_subnet_ids
+}
+
+resource "aws_security_group" "metadb" {
+  name        = "${var.prefix}-metadb"
+  description = "Allow no inbound/outbound traffic"
+  vpc_id      = var.vpc_id
+}
+
 resource "aws_rds_cluster" "metadb" {
   cluster_identifier = local.cluster_identifier
   engine             = "aurora-postgresql"
@@ -86,8 +97,8 @@ resource "aws_rds_cluster" "metadb" {
   enable_http_endpoint = true
   skip_final_snapshot  = true
 
-  vpc_security_group_ids = var.metadb_security_group_ids
-  db_subnet_group_name   = var.metadb_subnets_group_name
+  vpc_security_group_ids = concat([aws_security_group.metadb.id], var.metadb_security_group_ids)
+  db_subnet_group_name   = aws_db_subnet_group.metadb.name
 }
 
 resource "random_id" "metadb_users" {
