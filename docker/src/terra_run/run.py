@@ -118,7 +118,7 @@ def main() -> None:
         log.error(e, exc_info=True)
         state = "failure"
 
-    sf = boto3.client("stepfunction")
+    sf = boto3.client("stepfunctions")
     log_url = get_task_log_url()
     output = json.dumps({"LogsUrl": log_url})
     if state == "success":
