@@ -114,13 +114,14 @@ def main() -> None:
         log.error(e, exc_info=True)
         state = "failure"
 
-    sf = boto3.client("stepfunctions")
     log_url = get_task_log_url()
-    output = json.dumps({"LogsUrl": log_url})
+    sf = boto3.client("stepfunctions")
+
     if state == "success":
+        output = json.dumps({"LogsUrl": log_url})
         sf.send_task_success(taskToken=os.environ["TASK_TOKEN"], output=output)
     else:
-        sf.send_task_failure(taskToken=os.environ["TASK_TOKEN"], output=output)
+        sf.send_task_failure(taskToken=os.environ["TASK_TOKEN"])
 
     try:
         send = json.loads(os.environ["COMMIT_STATUS_CONFIG"])[os.environ["STATE_NAME"]]
