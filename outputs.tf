@@ -65,6 +65,11 @@ output "ecs_subnet_ids" {
   value       = var.ecs_subnet_ids
 }
 
+output "ecs_security_group_ids" {
+  description = "List of security groups IDs used ECS tasks"
+  value       = [aws_security_group.ecs_tasks.id]
+}
+
 output "ecs_create_deploy_stack_family" {
   description = "AWS ECS task definition family for the create deploy stack task"
   value       = aws_ecs_task_definition.create_deploy_stack.family

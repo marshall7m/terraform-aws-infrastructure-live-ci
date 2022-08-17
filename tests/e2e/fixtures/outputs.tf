@@ -127,3 +127,7 @@ output "email_approval_secret" {
 output "ecs_subnet_ids" {
   value = module.mut_infrastructure_live_ci.ecs_subnet_ids
 }
+
+output "ecs_security_group_ids" {
+  value = module.mut_infrastructure_live_ci.ecs_security_group_ids
+}
