@@ -12,7 +12,6 @@ sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import (
     subprocess_run,
     send_commit_status,
-    ServerException,
     get_task_log_url,
 )
 
@@ -111,9 +110,6 @@ def main() -> None:
     try:
         if os.environ["STATE_NAME"] == "Apply":
             update_new_resources()
-    except KeyError as e:
-        log.error(e, exc_info=True)
-        ServerException("Env var: `STATE_NAME` is not passed from Step Function")
     except Exception as e:
         log.error(e, exc_info=True)
         state = "failure"
