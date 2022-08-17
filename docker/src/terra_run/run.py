@@ -6,9 +6,15 @@ import json
 from typing import List
 import aurora_data_api
 import ast
+import boto3
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import subprocess_run, send_commit_status, ServerException
+from common.utils import (
+    subprocess_run,
+    send_commit_status,
+    ServerException,
+    get_task_log_url,
+)
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -112,6 +118,14 @@ def main() -> None:
         log.error(e, exc_info=True)
         state = "failure"
 
+    sf = boto3.client("stepfunction")
+    log_url = get_task_log_url()
+    output = json.dumps({"LogsUrl": log_url})
+    if state == "success":
+        sf.send_task_success(taskToken=os.environ["TASK_TOKEN"], output=output)
+    else:
+        sf.send_task_failure(taskToken=os.environ["TASK_TOKEN"], output=output)
+
     try:
         send = json.loads(os.environ["COMMIT_STATUS_CONFIG"])[os.environ["STATE_NAME"]]
     except KeyError:
@@ -119,7 +133,7 @@ def main() -> None:
             f"Update SSM parameter for commit status config to include: {os.environ['STATE_NAME']}"
         )
     if send:
-        send_commit_status(state)
+        send_commit_status(state, log_url)
 
 
 if __name__ == "__main__":
