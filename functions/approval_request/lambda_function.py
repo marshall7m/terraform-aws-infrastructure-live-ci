@@ -62,8 +62,7 @@ def lambda_handler(event, context):
 
     template_data = {
         "path": msg["Path"],
-        "logs_url": msg["LogUrlPrefix"]
-        + aws_encode(msg["LogStreamPrefix"] + msg["PlanTaskArn"].split("/")[-1]),
+        "logs_url": msg["LogsUrl"],
         "execution_name": msg["ExecutionName"],
         "account_name": msg["AccountName"],
         "pr_id": msg["PullRequestID"],
