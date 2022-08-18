@@ -28,9 +28,7 @@ event = {
                         "StateMachineArn": "mock-state-machine-arn",
                         "TaskToken": "mock-token",
                         "PullRequestID": "1",
-                        "LogUrlPrefix": "mock-log-prefix",
-                        "LogStreamPrefix": "mock-stream-prefix",
-                        "PlanTaskArn": "mock-arn",
+                        "LogsUrl": "mock-log-url",
                     }
                 )
             }

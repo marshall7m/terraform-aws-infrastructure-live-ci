@@ -44,8 +44,7 @@
       * [Features:](#features)
       * [Improvements:](#improvements)
 
-<!-- Added by: root, at: Wed Aug 17 21:30:57 UTC 2022 -->
-
+<!-- Added by: root, at: Wed Aug 17 21:30:57 UTC 2022
 <!--te-->
 
 

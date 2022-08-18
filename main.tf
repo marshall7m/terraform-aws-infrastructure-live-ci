@@ -52,17 +52,18 @@ resource "aws_sfn_state_machine" "this" {
                       "Name"    = "TG_COMMAND"
                       "Value.$" = "$.plan_command"
                     },
+                    {
+                      "Name"    = "TASK_TOKEN"
+                      "Value.$" = "$$.Task.Token"
+                    },
                   ]
                 )
               }
             ]
           }
         }
-        Resource = "arn:aws:states:::ecs:runTask.sync"
-        Type     = "Task"
-        ResultSelector = {
-          "PlanTaskArn.$" = "$.TaskArn"
-        }
+        Resource   = "arn:aws:states:::ecs:runTask.sync"
+        Type       = "Task"
         ResultPath = "$.PlanOutput"
         Catch = [
           {
@@ -86,9 +87,7 @@ resource "aws_sfn_state_machine" "this" {
             "ExecutionName.$"   = "$$.Execution.Name"
             "AccountName.$"     = "$.account_name"
             "PullRequestID.$"   = "$.pr_id"
-            "PlanTaskArn.$"     = "$.PlanOutput.PlanTaskArn"
-            "LogUrlPrefix"      = local.log_url_prefix
-            "LogStreamPrefix"   = local.log_stream_prefix
+            "PlanOutput"        = "$.PlanOutput"
           }
         }
         Resource   = "arn:aws:states:::sns:publish.waitForTaskToken"
@@ -172,7 +171,11 @@ resource "aws_sfn_state_machine" "this" {
                     {
                       "Name"  = "METADB_SECRET_ARN"
                       "Value" = aws_secretsmanager_secret_version.ci_metadb_user.arn
-                    }
+                    },
+                    {
+                      "Name"    = "TASK_TOKEN"
+                      "Value.$" = "$$.Task.Token"
+                    },
                   ]
                 )
               }

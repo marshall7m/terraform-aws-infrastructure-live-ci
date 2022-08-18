@@ -158,15 +158,20 @@ def test_update_new_resources(mock_get_new_provider_resources, conn, resources):
     {
         "TG_COMMAND": "",
         "COMMIT_STATUS_CONFIG": json.dumps({"Plan": True, "Apply": True}),
+        "TASK_TOKEN": "token-123",
     },
 )
+@patch("docker.src.terra_run.run.get_task_log_url")
 @patch("docker.src.terra_run.run.send_commit_status")
 @patch("docker.src.terra_run.run.update_new_resources")
 @patch("subprocess.run")
+@patch("boto3.client")
 def test_main(
+    mock_boto3_client,
     mock_subprocess,
     mock_update_new_resources,
     mock_send_commit_status,
+    mock_get_task_log_url,
     state_name,
     expected_status,
     run_side_effect,
@@ -177,6 +182,8 @@ def test_main(
 
     mock_subprocess.side_effect = run_side_effect
     mock_update_new_resources.side_effect = update_new_resources_side_effect
+    log_url = "mock-url"
+    mock_get_task_log_url.return_value = log_url
 
     main()
-    assert mock_send_commit_status.call_args_list == [call(expected_status)]
+    assert mock_send_commit_status.call_args_list == [call(expected_status, log_url)]
