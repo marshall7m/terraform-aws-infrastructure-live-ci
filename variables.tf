@@ -69,30 +69,30 @@ EOF
   default     = 512
 }
 
-variable "ecs_private_subnet_ids" {
+variable "ecs_subnet_ids" {
   description = <<EOF
-AWS VPC private subnet IDs to host the ECS container instances within.
-Subnets should deny all inbound access and allow the minimum outbound access needed to pull
-the container image and make API calls to Terraform provider resources.
-The subnets should be associated with the VPC ID specified under `var.ecs_vpc_id`
+AWS VPC subnet IDs to host the ECS container instances within.
+The subnets should allow the ECS containers to have internet access to pull the
+container image and make API calls to Terraform provider resources.
+The subnets should be associated with the VPC ID specified under `var.vpc_id`
 EOF
   type        = list(string)
 }
 
-variable "ecs_security_group_ids" {
+variable "ecs_assign_public_ip" {
   description = <<EOF
-A maximum list of five AWS VPC security group IDs to attach to all ECS tasks. At a minimum, one of the security groups should have
-an egress rules that allows HTTP/HTTPS access. This gives the task the ability to pull it's associated Docker registry
-image and download Terraform provider resources. If not specified, the ECS task will use the VPC's default security group.
+Determines if an public IP address will be associated with ECS tasks.
+Value is required to be `true` if var.ecs_subnet_ids are public subnets.
+Value can be `false` if var.ecs_subnet_ids are private subnets that have a route
+to a NAT gateway.
 EOF
-  type        = list(string)
-  default     = []
+  type        = bool
+  default     = false
 }
-
-variable "ecs_vpc_id" {
+variable "vpc_id" {
   description = <<EOF
 AWS VPC ID to host the ECS container instances within.
-The VPC should be associated with the subnet IDs specified under `var.ecs_private_subnet_ids`
+The VPC should be associated with the subnet IDs specified under `var.ecs_subnet_ids`
 EOF
   type        = string
 }
@@ -351,15 +351,14 @@ variable "metadb_schema" {
 }
 
 variable "metadb_security_group_ids" {
-  description = "AWS VPC security group to associate the metadb with"
+  description = "Additional AWS VPC security group to associate the metadb with"
   type        = list(string)
   default     = []
 }
 
-variable "metadb_subnets_group_name" {
-  description = "AWS VPC subnet group name to associate the metadb with"
-  type        = string
-  default     = null
+variable "metadb_subnet_ids" {
+  description = "AWS VPC subnet IDs to host the metadb within"
+  type        = list(string)
 }
 
 variable "metadb_availability_zones" {

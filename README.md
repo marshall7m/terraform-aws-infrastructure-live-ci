@@ -44,8 +44,7 @@
       * [Features:](#features)
       * [Improvements:](#improvements)
 
-<!-- Added by: root, at: Wed Aug 17 21:24:41 UTC 2022 -->
-
+<!-- Added by: root, at: Wed Aug 17 21:30:57 UTC 2022
 <!--te-->
 
 
@@ -428,6 +427,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_event_target.terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_log_group.ecs_tasks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
+| [aws_db_subnet_group.metadb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group) | resource |
 | [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
 | [aws_ecs_task_definition.create_deploy_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
@@ -447,6 +447,8 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | [aws_secretsmanager_secret_version.ci_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
 | [aws_secretsmanager_secret_version.master_metadb_user](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
 | [aws_secretsmanager_secret_version.registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
+| [aws_security_group.ecs_tasks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
+| [aws_security_group.metadb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
 | [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_email_identity) | resource |
 | [aws_ses_identity_policy.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_identity_policy) | resource |
 | [aws_ses_template.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ses_template) | resource |
@@ -496,12 +498,11 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#input\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub status | `string` | `"Create Deploy Stack"` | no |
 | <a name="input_create_github_token_ssm_param"></a> [create\_github\_token\_ssm\_param](#input\_create\_github\_token\_ssm\_param) | Determines if the merge lock AWS SSM Parameter Store value should be created | `bool` | n/a | yes |
 | <a name="input_create_private_registry_secret"></a> [create\_private\_registry\_secret](#input\_create\_private\_registry\_secret) | Determines if the module should create the AWS Secret Manager resource used for private registry authentification | `bool` | `true` | no |
+| <a name="input_ecs_assign_public_ip"></a> [ecs\_assign\_public\_ip](#input\_ecs\_assign\_public\_ip) | Determines if an public IP address will be associated with ECS tasks.<br>Value is required to be `true` if var.ecs\_subnet\_ids are public subnets.<br>Value can be `false` if var.ecs\_subnet\_ids are private subnets that have a route<br>to a NAT gateway. | `bool` | `false` | no |
 | <a name="input_ecs_image_address"></a> [ecs\_image\_address](#input\_ecs\_image\_address) | Docker registry image to use for the ECS Fargate containers. If not specified, this Terraform module's GitHub registry image<br>will be used with the tag associated with the version of this module. | `string` | `null` | no |
-| <a name="input_ecs_private_subnet_ids"></a> [ecs\_private\_subnet\_ids](#input\_ecs\_private\_subnet\_ids) | AWS VPC private subnet IDs to host the ECS container instances within.<br>Subnets should deny all inbound access and allow the minimum outbound access needed to pull<br>the container image and make API calls to Terraform provider resources.<br>The subnets should be associated with the VPC ID specified under `var.ecs_vpc_id` | `list(string)` | n/a | yes |
-| <a name="input_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#input\_ecs\_security\_group\_ids) | A maximum list of five AWS VPC security group IDs to attach to all ECS tasks. At a minimum, one of the security groups should have<br>an egress rules that allows HTTP/HTTPS access. This gives the task the ability to pull it's associated Docker registry<br>image and download Terraform provider resources. If not specified, the ECS task will use the VPC's default security group. | `list(string)` | `[]` | no |
+| <a name="input_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#input\_ecs\_subnet\_ids) | AWS VPC subnet IDs to host the ECS container instances within.<br>The subnets should allow the ECS containers to have internet access to pull the<br>container image and make API calls to Terraform provider resources.<br>The subnets should be associated with the VPC ID specified under `var.vpc_id` | `list(string)` | n/a | yes |
 | <a name="input_ecs_task_logs_retention_in_days"></a> [ecs\_task\_logs\_retention\_in\_days](#input\_ecs\_task\_logs\_retention\_in\_days) | Number of days the ECS task logs will be retained | `number` | `14` | no |
 | <a name="input_ecs_tasks_common_env_vars"></a> [ecs\_tasks\_common\_env\_vars](#input\_ecs\_tasks\_common\_env\_vars) | Common env vars defined within all ECS tasks. Useful for setting Terragrunt specific env vars required to run Terragrunt commands. | <pre>list(object({<br>    name  = string<br>    value = string<br>  }))</pre> | `[]` | no |
-| <a name="input_ecs_vpc_id"></a> [ecs\_vpc\_id](#input\_ecs\_vpc\_id) | AWS VPC ID to host the ECS container instances within.<br>The VPC should be associated with the subnet IDs specified under `var.ecs_private_subnet_ids` | `string` | n/a | yes |
 | <a name="input_enable_branch_protection"></a> [enable\_branch\_protection](#input\_enable\_branch\_protection) | Determines if the branch protection rule is created. If the repository is private (most likely), the GitHub account associated with<br>the GitHub provider must be registered as a GitHub Pro, GitHub Team, GitHub Enterprise Cloud, or GitHub Enterprise Server account. See here for details: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/about-protected-branches | `bool` | `true` | no |
 | <a name="input_enforce_admin_branch_protection"></a> [enforce\_admin\_branch\_protection](#input\_enforce\_admin\_branch\_protection) | Determines if the branch protection rule is enforced for the GitHub repository's admins. <br>  This essentially gives admins permission to force push to the trunk branch and can allow their infrastructure-related commits to bypass the CI pipeline. | `bool` | `false` | no |
 | <a name="input_file_path_pattern"></a> [file\_path\_pattern](#input\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to. Defaults to any file with `.hcl` or `.tf` extension. | `string` | `".+\\.(hcl|tf)$\n"` | no |
@@ -520,8 +521,8 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_metadb_password"></a> [metadb\_password](#input\_metadb\_password) | Master password for the metadb | `string` | n/a | yes |
 | <a name="input_metadb_port"></a> [metadb\_port](#input\_metadb\_port) | Port for AWS RDS Postgres db | `number` | `5432` | no |
 | <a name="input_metadb_schema"></a> [metadb\_schema](#input\_metadb\_schema) | Schema for AWS RDS Postgres db | `string` | `"prod"` | no |
-| <a name="input_metadb_security_group_ids"></a> [metadb\_security\_group\_ids](#input\_metadb\_security\_group\_ids) | AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
-| <a name="input_metadb_subnets_group_name"></a> [metadb\_subnets\_group\_name](#input\_metadb\_subnets\_group\_name) | AWS VPC subnet group name to associate the metadb with | `string` | `null` | no |
+| <a name="input_metadb_security_group_ids"></a> [metadb\_security\_group\_ids](#input\_metadb\_security\_group\_ids) | Additional AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
+| <a name="input_metadb_subnet_ids"></a> [metadb\_subnet\_ids](#input\_metadb\_subnet\_ids) | AWS VPC subnet IDs to host the metadb within | `list(string)` | n/a | yes |
 | <a name="input_metadb_username"></a> [metadb\_username](#input\_metadb\_username) | Master username of the metadb | `string` | `"root"` | no |
 | <a name="input_plan_cpu"></a> [plan\_cpu](#input\_plan\_cpu) | Number of CPU units the PR plan task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
 | <a name="input_plan_memory"></a> [plan\_memory](#input\_plan\_memory) | Amount of memory (MiB) the PR plan task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
@@ -542,6 +543,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_terraform_version"></a> [terraform\_version](#input\_terraform\_version) | Terraform version used for create\_deploy\_stack and terra\_run tasks.<br>Version must be >= `0.13.0`.<br>If repo contains a variety of version constraints, implementing a <br>version manager is recommended (e.g. tfenv). | `string` | `""` | no |
 | <a name="input_terragrunt_version"></a> [terragrunt\_version](#input\_terragrunt\_version) | Terragrunt version used for create\_deploy\_stack and terra\_run tasks.<br>Version must be >= `0.31.0`.<br>If repo contains a variety of version constraints, implementing a <br>version manager is recommended (e.g. tgswitch). | `string` | `""` | no |
 | <a name="input_tf_state_read_access_policy"></a> [tf\_state\_read\_access\_policy](#input\_tf\_state\_read\_access\_policy) | AWS IAM policy ARN that allows create deploy stack ECS task to read from Terraform remote state resource | `string` | n/a | yes |
+| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | AWS VPC ID to host the ECS container instances within.<br>The VPC should be associated with the subnet IDs specified under `var.ecs_subnet_ids` | `string` | n/a | yes |
 
 ## Outputs
 
@@ -559,6 +561,8 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_ecs_create_deploy_stack_family"></a> [ecs\_create\_deploy\_stack\_family](#output\_ecs\_create\_deploy\_stack\_family) | AWS ECS task definition family for the create deploy stack task |
 | <a name="output_ecs_create_deploy_stack_role_arn"></a> [ecs\_create\_deploy\_stack\_role\_arn](#output\_ecs\_create\_deploy\_stack\_role\_arn) | AWS ECS create deploy stack task IAM role ARN |
 | <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
+| <a name="output_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#output\_ecs\_security\_group\_ids) | List of security groups IDs used ECS tasks |
+| <a name="output_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#output\_ecs\_subnet\_ids) | AWS VPC subnets IDs that the ECS tasks will be hosted in |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_email_approval_secret"></a> [email\_approval\_secret](#output\_email\_approval\_secret) | Secret value used for authenticating email approval responses |

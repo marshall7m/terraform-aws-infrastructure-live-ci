@@ -236,8 +236,9 @@ class E2E:
                     taskDefinition=mut_output["ecs_terra_run_task_definition_arn"],
                     networkConfiguration={
                         "awsvpcConfiguration": {
-                            "subnets": mut_output["ecs_private_subnet_ids"],
+                            "subnets": mut_output["ecs_subnet_ids"],
                             "securityGroups": mut_output["ecs_security_group_ids"],
+                            "assignPublicIp": "ENABLED",
                         }
                     },
                     overrides={
