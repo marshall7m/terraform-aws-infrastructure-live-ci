@@ -6,9 +6,14 @@ import json
 from typing import List
 import aurora_data_api
 import ast
+import boto3
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common.utils import subprocess_run, send_commit_status, ServerException
+from common.utils import (
+    subprocess_run,
+    send_commit_status,
+    get_task_log_url,
+)
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -105,12 +110,18 @@ def main() -> None:
     try:
         if os.environ["STATE_NAME"] == "Apply":
             update_new_resources()
-    except KeyError as e:
-        log.error(e, exc_info=True)
-        ServerException("Env var: `STATE_NAME` is not passed from Step Function")
     except Exception as e:
         log.error(e, exc_info=True)
         state = "failure"
+
+    log_url = get_task_log_url()
+    sf = boto3.client("stepfunctions")
+
+    if state == "success":
+        output = json.dumps({"LogsUrl": log_url})
+        sf.send_task_success(taskToken=os.environ["TASK_TOKEN"], output=output)
+    else:
+        sf.send_task_failure(taskToken=os.environ["TASK_TOKEN"])
 
     try:
         send = json.loads(os.environ["COMMIT_STATUS_CONFIG"])[os.environ["STATE_NAME"]]
@@ -119,7 +130,7 @@ def main() -> None:
             f"Update SSM parameter for commit status config to include: {os.environ['STATE_NAME']}"
         )
     if send:
-        send_commit_status(state)
+        send_commit_status(state, log_url)
 
 
 if __name__ == "__main__":
