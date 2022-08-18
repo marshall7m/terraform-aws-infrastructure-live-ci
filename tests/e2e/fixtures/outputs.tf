@@ -111,14 +111,6 @@ output "ecs_terra_run_task_container_name" {
   value = module.mut_infrastructure_live_ci.ecs_terra_run_task_container_name
 }
 
-output "ecs_private_subnet_ids" {
-  value = module.vpc.private_subnets
-}
-
-output "ecs_security_group_ids" {
-  value = [aws_security_group.ecs_tasks.id]
-}
-
 output "ecs_apply_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_apply_role_arn
 }
@@ -130,4 +122,12 @@ output "ecs_plan_role_arn" {
 output "email_approval_secret" {
   sensitive = true
   value     = module.mut_infrastructure_live_ci.email_approval_secret
+}
+
+output "ecs_subnet_ids" {
+  value = module.mut_infrastructure_live_ci.ecs_subnet_ids
+}
+
+output "ecs_security_group_ids" {
+  value = module.mut_infrastructure_live_ci.ecs_security_group_ids
 }

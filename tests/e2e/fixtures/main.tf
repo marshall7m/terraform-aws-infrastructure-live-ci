@@ -163,129 +163,12 @@ module "vpc" {
   name = local.mut_id
   cidr = "10.0.0.0/16"
 
-  azs             = ["${data.aws_region.current.name}a", "${data.aws_region.current.name}b"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
+  azs            = ["${data.aws_region.current.name}a", "${data.aws_region.current.name}b"]
+  public_subnets = ["10.0.101.0/24", "10.0.102.0/24"]
 
-  enable_nat_gateway     = true
-  single_nat_gateway     = true
-  one_nat_gateway_per_az = false
-
-  private_dedicated_network_acl = true
-  # for some odd reason opening up all inbound fixes the ECS networking issue for pulling the image
-  # TODO: fix once solution is present SO post: https://stackoverflow.com/questions/72780753/aws-ecs-resourceinitializationerror-unable-to-pull-secrets-or-registry-auth
-  private_inbound_acl_rules = [
-    {
-      cidr_block  = "0.0.0.0/0"
-      from_port   = 0,
-      protocol    = "-1",
-      rule_action = "allow",
-      rule_number = 1,
-      to_port     = 0
-    }
-  ]
-  private_outbound_acl_rules = [
-    {
-      cidr_block  = "0.0.0.0/0"
-      from_port   = 443,
-      protocol    = "tcp",
-      rule_action = "allow",
-      rule_number = 1,
-      to_port     = 443
-    },
-    {
-      cidr_block  = "0.0.0.0/0"
-      from_port   = 80,
-      protocol    = "tcp",
-      rule_action = "allow",
-      rule_number = 2,
-      to_port     = 80
-    },
-    {
-      cidr_block  = "0.0.0.0/0"
-      from_port   = 53,
-      protocol    = "tcp",
-      rule_action = "allow",
-      rule_number = 3,
-      to_port     = 53
-    },
-    {
-      cidr_block  = "0.0.0.0/0"
-      from_port   = 53,
-      protocol    = "udp",
-      rule_action = "allow",
-      rule_number = 4,
-      to_port     = 53
-    }
-  ]
-}
-
-resource "aws_security_group" "ecs_tasks" {
-  name   = "Allow access to ECR-related VPC endpoints"
-  vpc_id = module.vpc.vpc_id
-
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["10.0.0.0/16"]
-  }
-
-  egress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 53
-    to_port     = 53
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 53
-    to_port     = 53
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["10.0.0.0/16"]
-  }
-}
-
-resource "aws_security_group" "vpc_endpoints" {
-  name   = "Allow access to ECS tasks"
-  vpc_id = module.vpc.vpc_id
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    # security_groups = [aws_security_group.ecs_tasks.id]
-  }
-}
-
-resource "aws_vpc_endpoint" "ecr" {
-  for_each           = local.vpc_endpoints
-  vpc_id             = module.vpc.vpc_id
-  service_name       = each.value
-  vpc_endpoint_type  = "Interface"
-  security_group_ids = [aws_security_group.vpc_endpoints.id]
+  create_igw           = true
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 }
 
 module "mut_infrastructure_live_ci" {
@@ -320,16 +203,17 @@ module "mut_infrastructure_live_ci" {
   metadb_ci_username = "mut_ci_user"
   metadb_ci_password = random_password.metadb["ci"].result
   metadb_schema      = var.metadb_schema
+  metadb_subnet_ids  = module.vpc.public_subnets
 
-  ecs_vpc_id             = module.vpc.vpc_id
-  ecs_private_subnet_ids = module.vpc.private_subnets
+  vpc_id               = module.vpc.vpc_id
+  ecs_subnet_ids       = module.vpc.public_subnets
+  ecs_assign_public_ip = true
 
   private_registry_auth          = true
   create_private_registry_secret = true
   registry_username              = var.registry_username
   registry_password              = var.registry_password
   ecs_image_address              = local.full_image_url
-  ecs_security_group_ids         = [aws_security_group.ecs_tasks.id]
 
   # repo specific env vars required to conditionally set the terraform backend configurations
   ecs_tasks_common_env_vars = [

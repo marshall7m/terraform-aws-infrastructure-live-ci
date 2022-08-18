@@ -3,6 +3,7 @@ locals {
 
   ecs_execution_role_name = "${var.prefix}-ecs-execution"
 
+  ecs_assign_public_ip   = var.ecs_assign_public_ip ? "ENABLED" : "DISABLED"
   pr_plan_task_family    = "${var.prefix}-pr-plan"
   pr_plan_container_name = "plan"
 
@@ -151,6 +152,19 @@ module "plan_role" {
     }
   ]
   trusted_services = ["ecs-tasks.amazonaws.com"]
+}
+
+resource "aws_security_group" "ecs_tasks" {
+  name        = "${var.prefix}-ecs-tasks"
+  description = "Allow no inbound traffic and all outbound traffic"
+  vpc_id      = var.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 resource "aws_ecs_task_definition" "plan" {
