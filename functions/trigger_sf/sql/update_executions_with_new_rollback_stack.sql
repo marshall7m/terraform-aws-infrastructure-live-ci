@@ -62,7 +62,7 @@ SELECT
     apply_role_arn,
     -- gets cfg dependencies that depend on cfg_path 
     -- by reversing the dependency tree
-    ARRAY(
+    array(
         SELECT cfg_path  -- noqa: L028
         FROM executions
         WHERE d.cfg_path = any(cfg_deps)  -- noqa: L028, L026
