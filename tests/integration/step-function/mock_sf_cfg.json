@@ -1,0 +1,65 @@
+{
+  "MockedResponses": {
+    "MockedApprovalRequestFails": {
+      "0": {
+        "Return": {
+          "Cause": "1/2 emails failed to send",
+          "Error": "Lambda.Exception"
+        }
+      }
+    },
+    "MockedApprove": {
+      "0": {
+        "Return": "approve"
+      }
+    },
+    "MockedEcsFails": {
+      "0": {
+        "Throw": {
+          "Cause": "Terraform command failed",
+          "Error": "States.TaskFailed"
+        }
+      }
+    },
+    "MockedEcsSuccess": {
+      "0": {
+        "Return": {
+          "StatusCode": 200
+        }
+      }
+    },
+    "MockedReject": {
+      "0": {
+        "Return": "reject"
+      }
+    }
+  },
+  "StateMachines": {
+    "DeploymentFlowIntegration": {
+      "TestCases": {
+        "ApplyFails": {
+          "Apply": "MockedEcsFails",
+          "Plan": "MockedEcsSuccess",
+          "Request Approval": "MockedApprove"
+        },
+        "ApprovalRejected": {
+          "Apply": "MockedEcsSuccess",
+          "Plan": "MockedEcsSuccess",
+          "Request Approval": "MockedReject"
+        },
+        "CompleteSuccess": {
+          "Apply": "MockedEcsSuccess",
+          "Plan": "MockedEcsSuccess",
+          "Request Approval": "MockedApprove"
+        },
+        "PlanFails": {
+          "Plan": "MockedEcsFails"
+        },
+        "RequestApprovalFails": {
+          "Plan": "MockedEcsSuccess",
+          "Request Approval": "MockedApprovalRequestFails"
+        }
+      }
+    }
+  }
+}

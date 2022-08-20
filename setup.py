@@ -17,6 +17,7 @@ extras_require = {
         "awscli",
         "boto3",
         "pytest-regex-dependency",
+        "pygohcl",
     ],
 }
 extras_require["all"] = list(extras_require.values())
