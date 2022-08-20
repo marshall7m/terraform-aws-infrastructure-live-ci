@@ -1,4 +1,4 @@
-name: "Release"
+name: Release
 on:
   release:
     types: [published]
@@ -7,19 +7,19 @@ jobs:
   auto-updates:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref || github.ref }}
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref || github.ref }}
 
-      - name: Update source_version.txt
-        id: source_version
-        shell: bash
-        if: ${{ !env.ACT }}
-        run: |
-          echo "master" > source_version.txt
+    - name: Update source_version.txt
+      id: source_version
+      shell: bash
+      if: ${{ !env.ACT }}
+      run: |
+        echo "master" > source_version.txt
 
-      - uses: stefanzweifel/git-auto-commit-action@v4
-        if: ${{ !env.ACT }}
-        with:
-          branch: master
-          commit_message: Auto update source_version.txt
+    - uses: stefanzweifel/git-auto-commit-action@v4
+      if: ${{ !env.ACT }}
+      with:
+        branch: master
+        commit_message: Auto update source_version.txt
