@@ -70,27 +70,6 @@ def local_conn():
     )
 
 
-def local_execute(query, fetch_one=False, return_dict=False):
-    with local_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query)
-            if fetch_one:
-                res = cur.fetchone()
-                if return_dict:
-                    return dict(zip([desc.name for desc in cur.description], res))
-                else:
-                    return res
-            else:
-                res = cur.fetchall()
-                if return_dict:
-                    return dict(zip([desc.name for desc in cur.description], res))
-                else:
-                    return [
-                        dict(zip([desc.name for desc in cur.description], record))
-                        for record in res
-                    ]
-
-
 def toggle_trigger(table: str, trigger: str, enable=False):
     """
     Toggles the tables associated testing trigger that creates random defaults to prevent any null violations
@@ -100,21 +79,20 @@ def toggle_trigger(table: str, trigger: str, enable=False):
         trigger: Trigger to enable/disable
         enable: Enables the table's associated trigger
     """
-
-    log.debug("Creating triggers for table")
-    local_execute(
-        open(
+    with local_conn() as conn, conn.cursor() as cur:
+        with open(
             f"{os.path.dirname(os.path.realpath(__file__))}/../helpers/testing_triggers.sql"
-        ).read()
-    )
+        ) as f:
+            log.debug("Creating triggers for table")
+            cur.execute(f.read())
 
-    local_execute(
-        "ALTER TABLE {tbl} {action} TRIGGER {trigger}".format(
-            tbl=table,
-            action="ENABLE" if enable else "DISABLE",
-            trigger=trigger,
-        )
-    )
+            cur.execute(
+                "ALTER TABLE {tbl} {action} TRIGGER {trigger}".format(
+                    tbl=table,
+                    action="ENABLE" if enable else "DISABLE",
+                    trigger=trigger,
+                )
+            )
 
 
 def insert_records(table, records, enable_defaults=None):
@@ -158,8 +136,9 @@ def insert_records(table, records, enable_defaults=None):
             )
 
             log.debug(f"Running: {query}")
-            res = local_execute(query, fetch_one=True, return_dict=True)
-            log.debug(res)
+            with local_conn() as conn, conn.cursor() as cur:
+                cur.execute(query)
+                res = dict(zip([desc.name for desc in cur.description], cur.fetchone()))
             results.append(dict(res))
     except Exception as e:
         log.error(e)

@@ -1,9 +1,9 @@
 import pytest
 import os
+from tests.helpers.utils import local_conn
 import timeout_decorator
 import logging
 import github
-from tests.helpers.utils import local_conn, local_execute
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -15,22 +15,24 @@ def setup_metadb():
     """Creates `account_dim` and `executions` table"""
     log.info("Creating metadb tables")
 
-    with open(
-        f"{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql",
-        "r",
-    ) as f:
-        local_execute(
-            f.read()
-            .replace("$", "")
-            .format(
-                metadb_schema="testing",
-                metadb_name=os.environ["PGDATABASE"],
+    with local_conn() as conn, conn.cursor() as cur:
+        with open(
+            f"{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql",
+            "r",
+        ) as f:
+            cur.execute(
+                f.read()
+                .replace("$", "")
+                .format(
+                    metadb_schema="testing",
+                    metadb_name=os.environ["PGDATABASE"],
+                )
             )
-        )
     yield None
 
     log.info("Dropping metadb tables")
-    local_execute("DROP TABLE IF EXISTS executions, account_dim")
+    with local_conn() as conn, conn.cursor() as cur:
+        cur.execute("DROP TABLE IF EXISTS executions, account_dim")
 
 
 @pytest.fixture(scope="function")
@@ -40,7 +42,8 @@ def truncate_executions(setup_metadb):
     yield None
 
     log.info("Teardown: Truncating executions table")
-    local_execute("TRUNCATE executions")
+    with local_conn() as conn, conn.cursor() as cur:
+        cur.execute("TRUNCATE executions")
 
 
 @pytest.fixture()

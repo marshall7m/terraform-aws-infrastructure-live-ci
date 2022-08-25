@@ -5,7 +5,7 @@ import sys
 import json
 from unittest.mock import patch
 from pprint import pformat
-from tests.helpers.utils import insert_records, local_execute
+from tests.helpers.utils import insert_records, local_conn
 from functions.approval_response.lambda_function import App, ClientException
 from contextlib import nullcontext as does_not_raise
 
@@ -110,17 +110,17 @@ def test_update_vote(
 
     if record != {}:
         log.info("Assert record's approriate voters list contains the recipient")
-        res = local_execute(
-            """
-                SELECT approval_voters, rejection_voters
-                FROM executions
-                WHERE execution_id = '{}'
-            """.format(
-                execution_id
-            ),
-            fetch_one=True,
-            return_dict=True,
-        )
+        with local_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                    SELECT approval_voters, rejection_voters
+                    FROM executions
+                    WHERE execution_id = '{}'
+                """.format(
+                    execution_id
+                )
+            )
+            res = dict(zip([desc.name for desc in cur.description], cur.fetchone()))
 
         if action == "approve":
             assert voter in res["approval_voters"]

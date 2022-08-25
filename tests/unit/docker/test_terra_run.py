@@ -5,7 +5,7 @@ import logging
 from subprocess import CalledProcessError
 import json
 from unittest.mock import patch, call
-from tests.helpers.utils import local_execute, null_provider_resource, insert_records
+from tests.helpers.utils import null_provider_resource, insert_records, local_conn
 from docker.src.terra_run.run import (
     update_new_resources,
     get_new_provider_resources,
@@ -110,14 +110,15 @@ def test_update_new_resources(mock_get_new_provider_resources, resources):
 
     update_new_resources()
 
-    res = local_execute(
-        f"""
-    SELECT new_resources
-    FROM executions
-    WHERE execution_id = '{os.environ["EXECUTION_ID"]}'
-    """,
-        fetch_one=True,
-    )[0]
+    with local_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT new_resources
+            FROM executions
+            WHERE execution_id = '{os.environ["EXECUTION_ID"]}'
+        """
+        )
+        res = cur.fetchone()[0]
 
     log.debug(f"Results:\n{res}")
 

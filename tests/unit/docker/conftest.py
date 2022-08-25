@@ -4,7 +4,7 @@ import logging
 import git
 import re
 from docker.src.common.utils import subprocess_run
-from tests.helpers.utils import insert_records, local_execute
+from tests.helpers.utils import insert_records, local_conn
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -43,7 +43,8 @@ def account_dim():
 
     yield results
 
-    local_execute("TRUNCATE account_dim")
+    with local_conn() as conn, conn.cursor() as cur:
+        cur.execute("TRUNCATE account_dim")
 
 
 @pytest.fixture(scope="module")

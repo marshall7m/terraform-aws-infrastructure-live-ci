@@ -3,7 +3,7 @@ from unittest.mock import patch
 import os
 import json
 import logging
-from tests.helpers.utils import insert_records, local_conn, local_execute
+from tests.helpers.utils import insert_records, local_conn
 from functions.trigger_sf import lambda_function
 
 log = logging.getLogger(__name__)
@@ -136,69 +136,68 @@ def test__execution_finished_status_update(
         "Parameter": {"Value": json.dumps({"Execution": True})}
     }
 
-    with local_conn() as conn:
-        with conn.cursor() as cur:
-            mock_sf.list_executions.return_value = {
-                "executions": [
-                    {"name": record["execution_id"], "executionArn": "mock-arn"}
-                    for record in records
-                    if record["status"] != "waiting"
-                ]
-            }
-            mock_sf.stop_execution.return_value = None
-            records = insert_records("executions", records, enable_defaults=True)
+    with local_conn() as conn, conn.cursor() as cur:
+        mock_sf.list_executions.return_value = {
+            "executions": [
+                {"name": record["execution_id"], "executionArn": "mock-arn"}
+                for record in records
+                if record["status"] != "waiting"
+            ]
+        }
+        mock_sf.stop_execution.return_value = None
+        records = insert_records("executions", records, enable_defaults=True)
 
-            try:
-                lambda_function._execution_finished(cur, execution, 000000000000)
-            except lambda_function.ClientException as e:
-                # expects lambda to error if execution was a rollback and wasn't successful
-                if not execution["is_rollback"] and execution["status"] not in [
-                    "aborted",
-                    "failed",
-                ]:
-                    raise (e)
+        try:
+            lambda_function._execution_finished(cur, execution, 000000000000)
+        except lambda_function.ClientException as e:
+            # expects lambda to error if execution was a rollback and wasn't successful
+            if not execution["is_rollback"] and execution["status"] not in [
+                "aborted",
+                "failed",
+            ]:
+                raise (e)
 
-            log.info("Assert finished execution record status was updated")
-            cur.execute(
-                """
-                SELECT status
-                FROM executions
-                WHERE execution_id = '{}'
-                """.format(
-                    execution["execution_id"]
-                )
-            )
-            assert execution["status"] == cur.fetchone()[0]
-
-            log.info("Assert Step Function executions were aborted")
-            cur.execute(
-                """
-                SELECT execution_id
-                FROM executions
-                WHERE commit_id = '{}'
-                AND status = 'aborted'
+        log.info("Assert finished execution record status was updated")
+        cur.execute(
+            """
+            SELECT status
+            FROM executions
+            WHERE execution_id = '{}'
             """.format(
-                    execution["commit_id"]
-                )
+                execution["execution_id"]
             )
-            res = [val[0] for val in cur.fetchall()]
-            log.debug(f"Actual: {res}")
-            assert all(path in res for path in expected_aborted_ids) is True
+        )
+        assert execution["status"] == cur.fetchone()[0]
 
-            log.info("Assert rollback execution records were created")
-            cur.execute(
-                """
-                SELECT cfg_path
-                FROM executions
-                WHERE commit_id = '{}'
-                AND is_rollback = true
-            """.format(
-                    execution["commit_id"]
-                )
+        log.info("Assert Step Function executions were aborted")
+        cur.execute(
+            """
+            SELECT execution_id
+            FROM executions
+            WHERE commit_id = '{}'
+            AND status = 'aborted'
+        """.format(
+                execution["commit_id"]
             )
-            res = [val[0] for val in cur.fetchall()]
-            log.debug(f"Actual: {res}")
-            assert all(path in res for path in expected_rollback_cfg_paths) is True
+        )
+        res = [val[0] for val in cur.fetchall()]
+        log.debug(f"Actual: {res}")
+        assert all(path in res for path in expected_aborted_ids) is True
+
+        log.info("Assert rollback execution records were created")
+        cur.execute(
+            """
+            SELECT cfg_path
+            FROM executions
+            WHERE commit_id = '{}'
+            AND is_rollback = true
+        """.format(
+                execution["commit_id"]
+            )
+        )
+        res = [val[0] for val in cur.fetchall()]
+        log.debug(f"Actual: {res}")
+        assert all(path in res for path in expected_rollback_cfg_paths) is True
 
 
 @patch("functions.trigger_sf.lambda_function.sf")
@@ -358,13 +357,14 @@ def test__start_executions(mock_sf, records, expected_running_ids):
 
     records = insert_records("executions", records, enable_defaults=True)
 
-    with local_conn() as conn:
-        with conn.cursor() as cur:
-            lambda_function._start_sf_executions(cur)
+    with local_conn() as conn, conn.cursor() as cur:
+        lambda_function._start_sf_executions(cur)
 
     log.info("Assert started Step Function execution statuses were updated to running")
-    res = local_execute("SELECT execution_id FROM executions WHERE status = 'running'")
-    res = [record["execution_id"] for record in res]
+    with local_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT execution_id FROM executions WHERE status = 'running'")
+        res = cur.fetchall()
+    res = [record[0] for record in res]
     log.debug(f"Actual: {res}")
     assert all(path in res for path in expected_running_ids) is True
 
