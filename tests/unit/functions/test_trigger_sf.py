@@ -1,5 +1,4 @@
 import pytest
-from psycopg2 import sql
 from unittest.mock import patch
 import os
 import json
@@ -161,17 +160,26 @@ def test__execution_finished_status_update(
 
             log.info("Assert finished execution record status was updated")
             cur.execute(
-                sql.SQL("SELECT status FROM executions WHERE execution_id = {}").format(
-                    sql.Literal(execution["execution_id"])
+                """
+                SELECT status
+                FROM executions
+                WHERE execution_id = '{}'
+                """.format(
+                    execution["execution_id"]
                 )
             )
             assert execution["status"] == cur.fetchone()[0]
 
             log.info("Assert Step Function executions were aborted")
             cur.execute(
-                sql.SQL(
-                    "SELECT execution_id FROM executions WHERE commit_id = {} AND status = 'aborted'"
-                ).format(sql.Literal(execution["commit_id"]))
+                """
+                SELECT execution_id
+                FROM executions
+                WHERE commit_id = '{}'
+                AND status = 'aborted'
+            """.format(
+                    execution["commit_id"]
+                )
             )
             res = [val[0] for val in cur.fetchall()]
             log.debug(f"Actual: {res}")
@@ -179,9 +187,14 @@ def test__execution_finished_status_update(
 
             log.info("Assert rollback execution records were created")
             cur.execute(
-                sql.SQL(
-                    "SELECT cfg_path FROM executions WHERE commit_id = {} AND is_rollback = true"
-                ).format(sql.Literal(execution["commit_id"]))
+                """
+                SELECT cfg_path
+                FROM executions
+                WHERE commit_id = '{}'
+                AND is_rollback = true
+            """.format(
+                    execution["commit_id"]
+                )
             )
             res = [val[0] for val in cur.fetchall()]
             log.debug(f"Actual: {res}")
@@ -350,10 +363,8 @@ def test__start_executions(mock_sf, records, expected_running_ids):
             lambda_function._start_sf_executions(cur)
 
     log.info("Assert started Step Function execution statuses were updated to running")
-    res = local_execute(
-        sql.SQL("SELECT execution_id FROM executions WHERE status = 'running'")
-    )
-    res = [val[0] for val in res]
+    res = local_execute("SELECT execution_id FROM executions WHERE status = 'running'")
+    res = [record["execution_id"] for record in res]
     log.debug(f"Actual: {res}")
     assert all(path in res for path in expected_running_ids) is True
 
