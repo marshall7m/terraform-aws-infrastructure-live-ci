@@ -14,7 +14,6 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-
 voter = "voter-foo"
 task_token = "token-123"
 execution_id = "run-123"
@@ -115,7 +114,7 @@ def test_update_vote(
             """
                 SELECT approval_voters, rejection_voters
                 FROM executions
-                WHERE execution_id = {}
+                WHERE execution_id = '{}'
             """.format(
                 execution_id
             ),
