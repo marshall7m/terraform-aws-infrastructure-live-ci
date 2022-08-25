@@ -20,7 +20,7 @@ def mock_subprocess_run(cmd: str, check=True):
 
 
 @pytest.fixture(scope="module")
-def account_dim(conn):
+def account_dim():
     """Creates account records within local db"""
     results = insert_records(
         "account_dim",
