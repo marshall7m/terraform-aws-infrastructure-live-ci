@@ -91,13 +91,13 @@ def local_execute(query, fetch_one=False, return_dict=False):
                     ]
 
 
-def toggle_trigger(table, trigger, enable=False):
+def toggle_trigger(table: str, trigger: str, enable=False):
     """
     Toggles the tables associated testing trigger that creates random defaults to prevent any null violations
 
     Arguments:
-        conn: Database connection object
         table: Table to insert the records into
+        trigger: Trigger to enable/disable
         enable: Enables the table's associated trigger
     """
 
@@ -122,8 +122,8 @@ def insert_records(table, records, enable_defaults=None):
     Toggles table's associated trigger and inserts list of dictionaries or a single dictionary into the table
 
     Arguments:
-        conn: Database connection object
         table: Table to insert the records into
+        records: List of dictionaries or a single dictionary containing record(s) to insert
         enable_defaults: Enables the table's associated trigger that inputs default values
     """
     if type(records) == dict:
