@@ -4,7 +4,7 @@ from unittest.mock import patch
 import os
 import json
 import logging
-from tests.helpers.utils import insert_records
+from tests.helpers.utils import insert_records, local_conn, local_execute
 from functions.trigger_sf import lambda_function
 
 log = logging.getLogger(__name__)
@@ -18,13 +18,9 @@ log.setLevel(logging.DEBUG)
         "AWS_REGION": "us-west-2",
         "GITHUB_TOKEN_SSM_KEY": "mock-ssm-token-key",
         "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
     },
-    clear=True,
 )
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @pytest.mark.parametrize(
@@ -128,8 +124,6 @@ def test__execution_finished_status_update(
     mock_sf,
     mock_ssm,
     mock_github,
-    cur,
-    conn,
     records,
     execution,
     expected_aborted_ids,
@@ -143,54 +137,55 @@ def test__execution_finished_status_update(
         "Parameter": {"Value": json.dumps({"Execution": True})}
     }
 
-    cur = conn.cursor()
-    mock_sf.list_executions.return_value = {
-        "executions": [
-            {"name": record["execution_id"], "executionArn": "mock-arn"}
-            for record in records
-            if record["status"] != "waiting"
-        ]
-    }
-    mock_sf.stop_execution.return_value = None
-    records = insert_records(conn, "executions", records, enable_defaults=True)
+    with local_conn() as conn:
+        with conn.cursor() as cur:
+            mock_sf.list_executions.return_value = {
+                "executions": [
+                    {"name": record["execution_id"], "executionArn": "mock-arn"}
+                    for record in records
+                    if record["status"] != "waiting"
+                ]
+            }
+            mock_sf.stop_execution.return_value = None
+            records = insert_records("executions", records, enable_defaults=True)
 
-    try:
-        lambda_function._execution_finished(cur, execution, 000000000000)
-    except lambda_function.ClientException as e:
-        # expects lambda to error if execution was a rollback and wasn't successful
-        if not execution["is_rollback"] and execution["status"] not in [
-            "aborted",
-            "failed",
-        ]:
-            raise (e)
+            try:
+                lambda_function._execution_finished(cur, execution, 000000000000)
+            except lambda_function.ClientException as e:
+                # expects lambda to error if execution was a rollback and wasn't successful
+                if not execution["is_rollback"] and execution["status"] not in [
+                    "aborted",
+                    "failed",
+                ]:
+                    raise (e)
 
-    log.info("Assert finished execution record status was updated")
-    cur.execute(
-        sql.SQL("SELECT status FROM executions WHERE execution_id = {}").format(
-            sql.Literal(execution["execution_id"])
-        )
-    )
-    assert execution["status"] == cur.fetchone()[0]
+            log.info("Assert finished execution record status was updated")
+            cur.execute(
+                sql.SQL("SELECT status FROM executions WHERE execution_id = {}").format(
+                    sql.Literal(execution["execution_id"])
+                )
+            )
+            assert execution["status"] == cur.fetchone()[0]
 
-    log.info("Assert Step Function executions were aborted")
-    cur.execute(
-        sql.SQL(
-            "SELECT execution_id FROM executions WHERE commit_id = {} AND status = 'aborted'"
-        ).format(sql.Literal(execution["commit_id"]))
-    )
-    res = [val[0] for val in cur.fetchall()]
-    log.debug(f"Actual: {res}")
-    assert all(path in res for path in expected_aborted_ids) is True
+            log.info("Assert Step Function executions were aborted")
+            cur.execute(
+                sql.SQL(
+                    "SELECT execution_id FROM executions WHERE commit_id = {} AND status = 'aborted'"
+                ).format(sql.Literal(execution["commit_id"]))
+            )
+            res = [val[0] for val in cur.fetchall()]
+            log.debug(f"Actual: {res}")
+            assert all(path in res for path in expected_aborted_ids) is True
 
-    log.info("Assert rollback execution records were created")
-    cur.execute(
-        sql.SQL(
-            "SELECT cfg_path FROM executions WHERE commit_id = {} AND is_rollback = true"
-        ).format(sql.Literal(execution["commit_id"]))
-    )
-    res = [val[0] for val in cur.fetchall()]
-    log.debug(f"Actual: {res}")
-    assert all(path in res for path in expected_rollback_cfg_paths) is True
+            log.info("Assert rollback execution records were created")
+            cur.execute(
+                sql.SQL(
+                    "SELECT cfg_path FROM executions WHERE commit_id = {} AND is_rollback = true"
+                ).format(sql.Literal(execution["commit_id"]))
+            )
+            res = [val[0] for val in cur.fetchall()]
+            log.debug(f"Actual: {res}")
+            assert all(path in res for path in expected_rollback_cfg_paths) is True
 
 
 @patch("functions.trigger_sf.lambda_function.sf")
@@ -204,7 +199,6 @@ def test__execution_finished_status_update(
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
     },
-    clear=True,
 )
 @pytest.mark.usefixtures("mock_conn", "aws_credentials", "truncate_executions")
 @pytest.mark.parametrize(
@@ -346,17 +340,20 @@ def test__execution_finished_status_update(
         ),
     ],
 )
-def test__start_executions(mock_sf, conn, records, expected_running_ids):
+def test__start_executions(mock_sf, records, expected_running_ids):
     """Test to ensure that the Lambda Function handles account and directory level dependencies before starting any Step Function executions"""
 
-    cur = conn.cursor()
-    records = insert_records(conn, "executions", records, enable_defaults=True)
+    records = insert_records("executions", records, enable_defaults=True)
 
-    lambda_function._start_sf_executions(cur)
+    with local_conn() as conn:
+        with conn.cursor() as cur:
+            lambda_function._start_sf_executions(cur)
 
     log.info("Assert started Step Function execution statuses were updated to running")
-    cur.execute(sql.SQL("SELECT execution_id FROM executions WHERE status = 'running'"))
-    res = [val[0] for val in cur.fetchall()]
+    res = local_execute(
+        sql.SQL("SELECT execution_id FROM executions WHERE status = 'running'")
+    )
+    res = [val[0] for val in res]
     log.debug(f"Actual: {res}")
     assert all(path in res for path in expected_running_ids) is True
 
@@ -391,13 +388,12 @@ def test__start_executions(mock_sf, conn, records, expected_running_ids):
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
     },
-    clear=True,
 )
-def test_merge_lock(mock_ssm, conn, records, expect_unlocked_merge_lock):
+def test_merge_lock(mock_ssm, records, expect_unlocked_merge_lock):
     """Test to ensure that the AWS System Manager Parameter Store merge lock value was reset to none if all executions within the metadb are finished"""
     from functions.trigger_sf.lambda_function import lambda_handler
 
-    records = insert_records(conn, "executions", records, enable_defaults=True)
+    records = insert_records("executions", records, enable_defaults=True)
 
     lambda_handler({}, {})
     log.info("Assert merge lock value")

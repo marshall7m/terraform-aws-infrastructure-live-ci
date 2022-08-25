@@ -6,7 +6,7 @@ from unittest.mock import patch
 import uuid
 import git
 import json
-from tests.helpers.utils import dummy_configured_provider_resource
+from tests.helpers.utils import dummy_configured_provider_resource, local_execute
 from tests.unit.docker.conftest import mock_subprocess_run
 from tests.unit.conftest import push
 from docker.src.create_deploy_stack.create_deploy_stack import CreateStack  # noqa: E402
@@ -305,7 +305,7 @@ def test_create_stack(
         )
     ],
 )
-def test_update_executions_with_new_deploy_stack_query(conn, create_stack):
+def test_update_executions_with_new_deploy_stack_query(create_stack):
     """
     Ensures update_executions_with_new_deploy_stack_query() runs the insert
     query without error. Test includes assertion to ensure that the expected
@@ -313,11 +313,9 @@ def test_update_executions_with_new_deploy_stack_query(conn, create_stack):
     """
     with patch.object(task, "create_stack", side_effect=create_stack):
         task.update_executions_with_new_deploy_stack()
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM executions")
-            count = cur.fetchone()[0]
+        count = local_execute("SELECT COUNT(*) FROM executions", fetch_one=True)[0]
 
-            assert count == len(create_stack)
+        assert count == len(create_stack)
 
 
 # mock task's env vars
