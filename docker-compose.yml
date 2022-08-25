@@ -21,6 +21,22 @@ services:
       retries: 50
     profiles: ["unit"]
 
+  local-data-api:
+
+      image: koxudaxi/local-data-api:0.6.12
+      restart: always
+      environment:
+        - ENGINE=PostgresSQL
+        - POSTGRES_HOST=postgres
+        - POSTGRES_PORT=5432
+        - POSTGRES_USER=postgres
+        - POSTGRES_PASSWORD=postgres
+        - RESOURCE_ARN=${METADB_CLUSTER_ARN}
+        - SECRET_ARN=${METADB_SECRET_ARN}
+      ports:
+        - 8080:80
+      profiles: ["unit"]
+
   unit:
     stdin_open: true
     tty: true
@@ -41,9 +57,14 @@ services:
       - PGDATABASE=postgres
       - PGHOST=postgres
       - PGPORT=5432
+      - METADB_CLUSTER_ARN=${METADB_CLUSTER_ARN}
+      - METADB_NAME=${METADB_NAME}
+      - METADB_SECRET_ARN=${METADB_SECRET_ARN}
+      - LOCAL_METAB_PORT=${LOCAL_METAB_PORT}
     entrypoint: ["/bin/bash", "entrypoint.sh"]
     profiles: ["unit"]
     depends_on:
+      - local-data-api
       - postgres
 
   e2e:
