@@ -40,15 +40,17 @@ services:
       profiles: ["unit"]
 
   unit:
+    network_mode: host
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.11
+    image: terraform-aws-infrastructure-live/unit
+    build: ./tests/unit
     volumes:
       - "$PWD:/src"
     environment:
       - AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY
-      - AWS_REGION
+      - AWS_REGION=us-west-2
       - AWS_DEFAULT_REGION
       - AWS_SESSION_TOKEN
       - AWS_SESSION_EXPIRATION
