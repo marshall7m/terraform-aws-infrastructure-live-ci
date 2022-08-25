@@ -139,6 +139,14 @@ def insert_records(table, records, enable_defaults=None):
             cols = record.keys()
             log.info("Inserting record(s)")
             log.info(record)
+            values = []
+            for val in record.values():
+                if type(val) == str:
+                    values.append(f"'{val}'")
+                elif type(val) == list:
+                    values.append("'{" + ", ".join(val) + "}'")
+                else:
+                    values.append(str(val))
             query = """
             INSERT INTO {tbl} ({fields})
             VALUES({values})
@@ -146,9 +154,7 @@ def insert_records(table, records, enable_defaults=None):
             """.format(
                 tbl=table,
                 fields=", ".join(cols),
-                values=", ".join(
-                    [f"'{val}'" if type(val) == str else val for val in record]
-                ),
+                values=", ".join(values),
             )
 
             log.debug(f"Running: {query}")
