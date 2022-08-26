@@ -65,20 +65,8 @@ jobs:
   unit:
     needs: precommit
     runs-on: ubuntu-latest
-    container: ghcr.io/marshall7m/terrace:v0.1.11
-    services:
-      postgres:
-        image: postgres:10.14-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       TF_VAR_testing_unit_github_token: ${{ secrets.TF_VAR_TESTING_UNIT_GITHUB_TOKEN }}
-      TF_VAR_approval_request_sender_email: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
       LOCAL_METAB_PORT: 8080
     permissions:
       id-token: write
@@ -88,57 +76,16 @@ jobs:
       - name: mask sensitive
         run: |
           echo "::add-mask::$TF_VAR_testing_unit_github_token"
-          echo "::add-mask::$TF_VAR_approval_request_sender_email"
 
       - name: Configure AWS Credentials for remote workflow
         uses: aws-actions/configure-aws-credentials@v1
-        if: ${{ !env.ACT }}
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Configure AWS Credentials for local workflow
-        uses: aws-actions/configure-aws-credentials@v1
-        if: ${{ env.ACT }}
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: actions/setup-python@v3
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
-
-      - name: Tests
-        id: pytest_unit
-        shell: bash
-        if: ${{ !env.ACT }}
-        env:
-          PGUSER: postgres
-          PGPASSWORD: postgres
-          PGDATABASE: postgres
-          PGHOST: postgres
-          PGPORT: 5432
-        run: |
-          export PYTHONPATH=$PWD/functions:$PYTHONPATH
-          source $VIRTUAL_ENV/bin/activate
-          python3 -m pip install -e ".[unit]"
-          pytest -vv tests/unit
-
-      - name: Install Docker
-        id: unit_install_docker
-        shell: bash
-        if: ${{ env.ACT }} 
-        run: |
-          bash ./runner_install_docker.sh
-
-      # using docker compose workaround until nektos/act handles services properly. See issue: https://github.com/nektos/act/issues/173
       - name: Tests
         id: act_pytest_unit
         shell: bash
-        if: ${{ env.ACT }} 
         run: |
           docker compose run unit pytest -vv tests/unit
 
