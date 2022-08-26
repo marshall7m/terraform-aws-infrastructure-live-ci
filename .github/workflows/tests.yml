@@ -73,22 +73,22 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v3
-      - name: mask sensitive
-        run: |
-          echo "::add-mask::$TF_VAR_testing_unit_github_token"
+    - uses: actions/checkout@v3
+    - name: mask sensitive
+      run: |
+        echo "::add-mask::$TF_VAR_testing_unit_github_token"
 
-      - name: Configure AWS Credentials for remote workflow
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+    - name: Configure AWS Credentials for remote workflow
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ env.AWS_REGION }}
 
-      - name: Tests
-        id: act_pytest_unit
-        shell: bash
-        run: |
-          docker compose run unit pytest -vv tests/unit
+    - name: Tests
+      id: act_pytest_unit
+      shell: bash
+      run: |
+        docker compose run unit pytest -vv tests/unit
 
   integration:
     needs: [precommit, unit]
@@ -101,7 +101,7 @@ jobs:
       if: ${{ env.ACT }}
       run: |
         docker compose run integration pytest -vv tests/integration
-  
+
   e2e:
     needs: [precommit, unit]
     runs-on: ubuntu-latest

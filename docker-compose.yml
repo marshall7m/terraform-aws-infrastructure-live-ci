@@ -1,6 +1,5 @@
 version: '3.8'
 services:
-
   postgres:
     image: postgres:10.14-alpine
     restart: always
@@ -11,8 +10,8 @@ services:
     ports:
     - 5432:5432
     environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+    - POSTGRES_PASSWORD=postgres
+    - POSTGRES_DB=postgres
     deploy:
       restart_policy:
         condition: on-failure
@@ -48,23 +47,7 @@ services:
     - SECRET_ARN=arn:aws:secretsmanager:us-west-2:123456789012:secret:dummy
     ports:
     - 8080:80
-    profiles: [integration]
-
-  local-data-api:
-
-      image: koxudaxi/local-data-api:0.6.12
-      restart: always
-      environment:
-        - ENGINE=PostgresSQL
-        - POSTGRES_HOST=postgres
-        - POSTGRES_PORT=5432
-        - POSTGRES_USER=postgres
-        - POSTGRES_PASSWORD=postgres
-        - RESOURCE_ARN=${METADB_CLUSTER_ARN}
-        - SECRET_ARN=${METADB_SECRET_ARN}
-      ports:
-        - 8080:80
-      profiles: ["unit"]
+    profiles: [unit, integration]
 
   unit:
     network_mode: host
@@ -92,11 +75,11 @@ services:
     - METADB_NAME=${METADB_NAME}
     - METADB_SECRET_ARN=${METADB_SECRET_ARN}
     - LOCAL_METAB_PORT=${LOCAL_METAB_PORT}
-    entrypoint: ["/bin/bash", "entrypoint.sh"]
-    profiles: ["unit"]
+    entrypoint: [/bin/bash, entrypoint.sh]
+    profiles: [unit]
     depends_on:
-      - local-data-api
-      - postgres
+    - local-data-api
+    - postgres
 
   integration:
     network_mode: host
@@ -121,7 +104,7 @@ services:
     - postgres
     - sf-local
     - local-data-api
- 
+
   e2e:
     stdin_open: true
     tty: true
