@@ -15,7 +15,6 @@ fi
 
 
 source "$VIRTUAL_ENV"/bin/activate
-python3 -m pip install ".[all]"
 python3 -m pip install -e /src
 
 exec "$@"

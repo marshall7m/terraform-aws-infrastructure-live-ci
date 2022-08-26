@@ -4,7 +4,7 @@ import logging
 import git
 import re
 from docker.src.common.utils import subprocess_run
-from tests.helpers.utils import insert_records
+from tests.helpers.utils import insert_records, local_conn
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -20,10 +20,9 @@ def mock_subprocess_run(cmd: str, check=True):
 
 
 @pytest.fixture(scope="module")
-def account_dim(conn, cur):
+def account_dim():
     """Creates account records within local db"""
     results = insert_records(
-        conn,
         "account_dim",
         [
             {
@@ -44,7 +43,8 @@ def account_dim(conn, cur):
 
     yield results
 
-    cur.execute("TRUNCATE account_dim")
+    with local_conn() as conn, conn.cursor() as cur:
+        cur.execute("TRUNCATE account_dim")
 
 
 @pytest.fixture(scope="module")

@@ -1,10 +1,9 @@
 import uuid
 import logging
-from psycopg2 import sql
-import psycopg2
 import os
 import json
 import boto3
+import aurora_data_api
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -57,78 +56,96 @@ resource "dummy_resource" "this" {}
 """
 
 
-def toggle_trigger(conn, table, trigger, enable=False):
+def local_conn():
+    """Replacement AWS RDS client that uses the local data API container endpoint"""
+    rds = boto3.client(
+        "rds-data", endpoint_url="http://127.0.0.1:" + os.environ["LOCAL_METAB_PORT"]
+    )
+    return aurora_data_api.connect(
+        aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
+        secret_arn=os.environ["METADB_SECRET_ARN"],
+        database=os.environ["METADB_NAME"],
+        rds_data_client=rds,
+        continue_after_timeout=True,
+    )
+
+
+def toggle_trigger(table: str, trigger: str, enable=False):
     """
     Toggles the tables associated testing trigger that creates random defaults to prevent any null violations
 
     Arguments:
-        conn: Database connection object
         table: Table to insert the records into
+        trigger: Trigger to enable/disable
         enable: Enables the table's associated trigger
     """
-    with conn.cursor() as cur:
-        log.debug("Creating triggers for table")
-        cur.execute(
-            open(
-                f"{os.path.dirname(os.path.realpath(__file__))}/../helpers/testing_triggers.sql"
-            ).read()
-        )
+    with local_conn() as conn, conn.cursor() as cur:
+        with open(
+            f"{os.path.dirname(os.path.realpath(__file__))}/../helpers/testing_triggers.sql"
+        ) as f:
+            log.debug("Creating triggers for table")
+            cur.execute(f.read())
 
-        cur.execute(
-            sql.SQL("ALTER TABLE {tbl} {action} TRIGGER {trigger}").format(
-                tbl=sql.Identifier(table),
-                action=sql.SQL("ENABLE" if enable else "DISABLE"),
-                trigger=sql.Identifier(trigger),
+            cur.execute(
+                "ALTER TABLE {tbl} {action} TRIGGER {trigger}".format(
+                    tbl=table,
+                    action="ENABLE" if enable else "DISABLE",
+                    trigger=trigger,
+                )
             )
-        )
-
-        conn.commit()
 
 
-def insert_records(conn, table, records, enable_defaults=None):
+def insert_records(table, records, enable_defaults=None):
     """
     Toggles table's associated trigger and inserts list of dictionaries or a single dictionary into the table
 
     Arguments:
-        conn: Database connection object
         table: Table to insert the records into
+        records: List of dictionaries or a single dictionary containing record(s) to insert
         enable_defaults: Enables the table's associated trigger that inputs default values
     """
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        if type(records) == dict:
-            records = [records]
+    if type(records) == dict:
+        records = [records]
 
-        cols = set().union(*(r.keys() for r in records))
+    cols = set().union(*(r.keys() for r in records))
 
-        results = []
-        try:
-            if enable_defaults is not None:
-                toggle_trigger(conn, table, f"{table}_default", enable=enable_defaults)
-            for record in records:
-                cols = record.keys()
+    results = []
+    try:
+        if enable_defaults is not None:
+            toggle_trigger(table, f"{table}_default", enable=enable_defaults)
+        for record in records:
+            cols = record.keys()
+            log.info("Inserting record(s)")
+            log.info(record)
+            values = []
+            for val in record.values():
+                if type(val) == str:
+                    values.append(f"'{val}'")
+                elif type(val) == list:
+                    values.append("'{" + ", ".join(val) + "}'")
+                else:
+                    values.append(str(val))
+            query = """
+            INSERT INTO {tbl} ({fields})
+            VALUES({values})
+            RETURNING *
+            """.format(
+                tbl=table,
+                fields=", ".join(cols),
+                values=", ".join(values),
+            )
 
-                log.info("Inserting record(s)")
-                log.info(record)
-                query = sql.SQL(
-                    "INSERT INTO {tbl} ({fields}) VALUES({values}) RETURNING *"
-                ).format(
-                    tbl=sql.Identifier(table),
-                    fields=sql.SQL(", ").join(map(sql.Identifier, cols)),
-                    values=sql.SQL(", ").join(map(sql.Placeholder, cols)),
-                )
-
-                log.debug(f"Running: {query.as_string(conn)}")
-
-                cur.execute(query, record)
-                conn.commit()
-
-                results.append(dict(cur.fetchone()))
-        except Exception as e:
-            log.error(e)
-            raise
-        finally:
-            if enable_defaults is not None:
-                toggle_trigger(conn, table, f"{table}_default", enable=False)
+            log.debug(f"Running: {query}")
+            with local_conn() as conn, conn.cursor() as cur:
+                cur.execute(query)
+                res = dict(zip([desc.name for desc in cur.description], cur.fetchone()))
+            results.append(dict(res))
+    except Exception as e:
+        log.error(e)
+        raise
+    finally:
+        if enable_defaults is not None:
+            toggle_trigger(table, f"{table}_default", enable=False)
     return results
 
 

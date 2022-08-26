@@ -2,6 +2,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:10.14-alpine
+    restart: always
     container_name: postgres
     volumes:
     - $PWD/docker-pgsql-entrypoint:/docker-entrypoint-initdb.d
@@ -10,6 +11,7 @@ services:
     - 5432:5432
     environment:
     - POSTGRES_PASSWORD=postgres
+    - POSTGRES_DB=postgres
     deploy:
       restart_policy:
         condition: on-failure
@@ -36,27 +38,29 @@ services:
     image: koxudaxi/local-data-api:0.6.12
     restart: always
     environment:
-    - ENGINE=PostgreSQLJDBC
-    - PGHOST=postgres
-    - PGPORT=5432
-    - PGUSER=postgres
-    - PGPASSWORD=postgres
-    - RESOURCE_ARN=arn:aws:rds:us-west-2:123456789012:cluster:dummy
-    - SECRET_ARN=arn:aws:secretsmanager:us-west-2:123456789012:secret:dummy
+    - ENGINE=PostgresSQL
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=postgres
+    - POSTGRES_PASSWORD=postgres
+    - RESOURCE_ARN=${METADB_CLUSTER_ARN}
+    - SECRET_ARN=${METADB_SECRET_ARN}
     ports:
     - 8080:80
-    profiles: [integration]
+    profiles: [unit, integration]
 
   unit:
+    network_mode: host
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.11
+    image: terraform-aws-infrastructure-live/unit
+    build: ./tests/unit
     volumes:
     - $PWD:/src
     environment:
     - AWS_ACCESS_KEY_ID
     - AWS_SECRET_ACCESS_KEY
-    - AWS_REGION
+    - AWS_REGION=us-west-2
     - AWS_DEFAULT_REGION
     - AWS_SESSION_TOKEN
     - AWS_SESSION_EXPIRATION
@@ -67,9 +71,14 @@ services:
     - PGDATABASE=postgres
     - PGHOST=postgres
     - PGPORT=5432
+    - METADB_CLUSTER_ARN=${METADB_CLUSTER_ARN}
+    - METADB_NAME=${METADB_NAME}
+    - METADB_SECRET_ARN=${METADB_SECRET_ARN}
+    - LOCAL_METAB_PORT=${LOCAL_METAB_PORT}
     entrypoint: [/bin/bash, entrypoint.sh]
     profiles: [unit]
     depends_on:
+    - local-data-api
     - postgres
 
   integration:
