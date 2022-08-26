@@ -79,6 +79,7 @@ jobs:
     env:
       TF_VAR_testing_unit_github_token: ${{ secrets.TF_VAR_TESTING_UNIT_GITHUB_TOKEN }}
       TF_VAR_approval_request_sender_email: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
+      LOCAL_METAB_PORT: 8080
     permissions:
       id-token: write
       contents: read
