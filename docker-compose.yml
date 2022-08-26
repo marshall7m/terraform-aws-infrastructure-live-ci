@@ -38,13 +38,13 @@ services:
     image: koxudaxi/local-data-api:0.6.12
     restart: always
     environment:
-    - ENGINE=PostgreSQLJDBC
-    - PGHOST=postgres
-    - PGPORT=5432
-    - PGUSER=postgres
-    - PGPASSWORD=postgres
-    - RESOURCE_ARN=arn:aws:rds:us-west-2:123456789012:cluster:dummy
-    - SECRET_ARN=arn:aws:secretsmanager:us-west-2:123456789012:secret:dummy
+    - ENGINE=PostgresSQL
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=postgres
+    - POSTGRES_PASSWORD=postgres
+    - RESOURCE_ARN=${METADB_CLUSTER_ARN}
+    - SECRET_ARN=${METADB_SECRET_ARN}
     ports:
     - 8080:80
     profiles: [unit, integration]
