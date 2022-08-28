@@ -97,9 +97,8 @@ jobs:
     - name: Tests
       id: act_pytest_integration
       shell: bash
-      if: ${{ env.ACT }}
       run: |
-        docker compose run integration pytest -vv tests/integration
+        docker compose run --rm integration pytest -vv tests/integration/tasks
 
   e2e:
     needs: [precommit, unit]
