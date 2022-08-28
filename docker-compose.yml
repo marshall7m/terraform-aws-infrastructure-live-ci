@@ -85,9 +85,11 @@ services:
     network_mode: host
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.11
+    image: terraform-aws-infrastructure-live/integration
+    build: ./tests/integration
     volumes:
     - $PWD:/src
+    - /var/run/docker.sock:/var/run/docker.sock
     environment:
     - AWS_ACCESS_KEY_ID=dummy-key
     - AWS_SECRET_ACCESS_KEY=dummy-secret
