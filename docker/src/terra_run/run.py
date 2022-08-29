@@ -59,11 +59,16 @@ def update_new_resources() -> None:
         log.info(f"New Provider Resources:\n{resources}")
 
         if len(resources) > 0:
+            rds_data_client = boto3.client(
+                "rds-data", endpoint_url=os.environ.get("METAB_LOCAL_ENDPOINT")
+            )
+
             log.info("Adding new provider resources to associated execution record")
             with aurora_data_api.connect(
                 aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
                 secret_arn=os.environ["METADB_SECRET_ARN"],
                 database=os.environ["METADB_NAME"],
+                rds_data_client=rds_data_client,
             ) as conn:
                 with conn.cursor() as cur:
                     resources = ",".join(resources)

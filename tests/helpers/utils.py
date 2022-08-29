@@ -8,6 +8,10 @@ import aurora_data_api
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+rds_data_client = boto3.client(
+    "rds-data", endpoint_url=os.environ["METADB_LOCAL_ENDPOINT"]
+)
+
 
 def tf_vars_to_json(tf_vars: dict) -> dict:
     for k, v in tf_vars.items():
@@ -56,20 +60,6 @@ resource "dummy_resource" "this" {}
 """
 
 
-def local_conn():
-    """Replacement AWS RDS client that uses the local data API container endpoint"""
-    rds = boto3.client(
-        "rds-data", endpoint_url="http://127.0.0.1:" + os.environ["LOCAL_METAB_PORT"]
-    )
-    return aurora_data_api.connect(
-        aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
-        secret_arn=os.environ["METADB_SECRET_ARN"],
-        database=os.environ["METADB_NAME"],
-        rds_data_client=rds,
-        continue_after_timeout=True,
-    )
-
-
 def toggle_trigger(table: str, trigger: str, enable=False):
     """
     Toggles the tables associated testing trigger that creates random defaults to prevent any null violations
@@ -79,7 +69,9 @@ def toggle_trigger(table: str, trigger: str, enable=False):
         trigger: Trigger to enable/disable
         enable: Enables the table's associated trigger
     """
-    with local_conn() as conn, conn.cursor() as cur:
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         with open(
             f"{os.path.dirname(os.path.realpath(__file__))}/../helpers/testing_triggers.sql"
         ) as f:
@@ -136,7 +128,9 @@ def insert_records(table, records, enable_defaults=None):
             )
 
             log.debug(f"Running: {query}")
-            with local_conn() as conn, conn.cursor() as cur:
+            with aurora_data_api.connect(
+                database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+            ) as conn, conn.cursor() as cur:
                 cur.execute(query)
                 res = dict(zip([desc.name for desc in cur.description], cur.fetchone()))
             results.append(dict(res))

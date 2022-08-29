@@ -30,6 +30,9 @@ class App(object):
         execution = sf.describe_execution(executionArn=execution_arn)
         status = execution["status"]
         execution_id = execution["name"]
+        rds_data_client = boto3.client(
+            "rds-data", endpoint_url=os.environ.get("METAB_LOCAL_ENDPOINT")
+        )
 
         if status == "RUNNING":
             log.info("Updating vote count")
@@ -40,6 +43,7 @@ class App(object):
                 aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
                 secret_arn=os.environ["METADB_SECRET_ARN"],
                 database=os.environ["METADB_NAME"],
+                rds_data_client=rds_data_client,
             ) as conn:
                 with conn.cursor() as cur:
                     with open(

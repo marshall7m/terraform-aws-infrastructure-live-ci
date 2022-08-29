@@ -6,7 +6,8 @@ from unittest.mock import patch
 import uuid
 import git
 import json
-from tests.helpers.utils import dummy_configured_provider_resource, local_conn
+import aurora_data_api
+from tests.helpers.utils import dummy_configured_provider_resource, rds_data_client
 from tests.unit.docker.conftest import mock_subprocess_run
 from tests.unit.conftest import push
 from docker.src.create_deploy_stack.create_deploy_stack import CreateStack  # noqa: E402
@@ -293,7 +294,7 @@ def test_create_stack(
         "HEAD_REF": "feature-1",
     },
 )
-@pytest.mark.usefixtures("mock_conn", "account_dim", "truncate_executions")
+@pytest.mark.usefixtures("account_dim", "truncate_executions")
 @pytest.mark.parametrize(
     "create_stack",
     [
@@ -313,7 +314,9 @@ def test_update_executions_with_new_deploy_stack_query(create_stack):
     """
     with patch.object(task, "create_stack", side_effect=create_stack):
         task.update_executions_with_new_deploy_stack()
-        with local_conn() as conn, conn.cursor() as cur:
+        with aurora_data_api.connect(
+            database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+        ) as conn, conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM executions")
             count = cur.fetchone()[0]
 

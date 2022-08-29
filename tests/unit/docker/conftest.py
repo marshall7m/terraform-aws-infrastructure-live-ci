@@ -4,7 +4,8 @@ import logging
 import git
 import re
 from docker.src.common.utils import subprocess_run
-from tests.helpers.utils import insert_records, local_conn
+from tests.helpers.utils import insert_records, rds_data_client
+import aurora_data_api
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -43,7 +44,9 @@ def account_dim():
 
     yield results
 
-    with local_conn() as conn, conn.cursor() as cur:
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE account_dim")
 
 

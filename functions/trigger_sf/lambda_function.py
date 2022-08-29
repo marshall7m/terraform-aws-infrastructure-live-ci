@@ -17,6 +17,9 @@ log.setLevel(logging.DEBUG)
 
 sf = boto3.client("stepfunctions")
 ssm = boto3.client("ssm")
+rds_data_client = boto3.client(
+    "rds-data", endpoint_url=os.environ.get("METAB_LOCAL_ENDPOINT")
+)
 
 
 def _execution_finished(cur, execution: map, account_id) -> None:
@@ -215,6 +218,7 @@ def lambda_handler(event, context):
             aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
             secret_arn=os.environ["METADB_SECRET_ARN"],
             database=os.environ["METADB_NAME"],
+            rds_data_client=rds_data_client,
         ) as conn:
             with conn.cursor() as cur:
                 if "execution" in event:
