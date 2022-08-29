@@ -54,8 +54,8 @@ module "lambda_trigger_sf" {
     PGUSER             = var.metadb_ci_username
     PGPORT             = var.metadb_port
     METADB_NAME        = local.metadb_name
-    METADB_CLUSTER_ARN = aws_rds_cluster.metadb.arn
-    METADB_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
+    AURORA_CLUSTER_ARN = aws_rds_cluster.metadb.arn
+    AURORA_SECRET_ARN  = aws_secretsmanager_secret_version.ci_metadb_user.arn
   }
 
   allowed_triggers = {

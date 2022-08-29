@@ -136,11 +136,11 @@ locals {
                     "Value" = local.metadb_name
                   },
                   {
-                    "Name"  = "METADB_CLUSTER_ARN"
+                    "Name"  = "AURORA_CLUSTER_ARN"
                     "Value" = aws_rds_cluster.metadb.arn
                   },
                   {
-                    "Name"  = "METADB_SECRET_ARN"
+                    "Name"  = "AURORA_SECRET_ARN"
                     "Value" = aws_secretsmanager_secret_version.ci_metadb_user.arn
                   },
                   {

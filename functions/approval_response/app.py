@@ -20,13 +20,18 @@ from common_lambda.utils import (
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+sf = boto3.client("stepfunctions")
+rds_data_client = boto3.client(
+    "rds-data", endpoint_url=os.environ.get("METADB_LOCAL_ENDPOINT")
+)
+ssm = boto3.client("ssm")
+
 
 class App(object):
     def __init__(self):
         self.listeners = {}
 
     def update_vote(self, execution_arn: str, action: str, voter: str, task_token: str):
-        sf = boto3.client("stepfunctions")
         execution = sf.describe_execution(executionArn=execution_arn)
         status = execution["status"]
         execution_id = execution["name"]
@@ -36,10 +41,12 @@ class App(object):
             # NOTE: If query execution time is too long and
             #  causes downstream timeouts, invoke async lambda with
             #  query and return submission response from this function
+            log.debug(pformat(os.environ))
             with aurora_data_api.connect(
-                aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
-                secret_arn=os.environ["METADB_SECRET_ARN"],
+                aurora_cluster_arn=os.environ["AURORA_CLUSTER_ARN"],
+                secret_arn=os.environ["AURORA_SECRET_ARN"],
                 database=os.environ["METADB_NAME"],
+                rds_data_client=rds_data_client,
             ) as conn:
                 with conn.cursor() as cur:
                     with open(
@@ -110,8 +117,6 @@ class App(object):
                 )
             except ValidationError as e:
                 return aws_response(status_code=422, response=str(e))
-
-            ssm = boto3.client("ssm")
 
             secret = ssm.get_parameter(
                 Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True

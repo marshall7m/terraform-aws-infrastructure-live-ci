@@ -1,57 +1,10 @@
 import pytest
 import os
-from tests.helpers.utils import local_conn
-import timeout_decorator
 import logging
 import github
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
-
-
-@timeout_decorator.timeout(30)
-@pytest.fixture(scope="session")
-def setup_metadb():
-    """Creates `account_dim` and `executions` table"""
-    log.info("Creating metadb tables")
-
-    with local_conn() as conn, conn.cursor() as cur:
-        with open(
-            f"{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql",
-            "r",
-        ) as f:
-            cur.execute(
-                f.read()
-                .replace("$", "")
-                .format(
-                    metadb_schema="testing",
-                    metadb_name=os.environ["PGDATABASE"],
-                )
-            )
-    yield None
-
-    log.info("Dropping metadb tables")
-    with local_conn() as conn, conn.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS executions, account_dim")
-
-
-@pytest.fixture(scope="function")
-def truncate_executions(setup_metadb):
-    """Removes all rows from execution table after every test"""
-
-    yield None
-
-    log.info("Teardown: Truncating executions table")
-    with local_conn() as conn, conn.cursor() as cur:
-        cur.execute("TRUNCATE executions")
-
-
-@pytest.fixture()
-def mock_conn(mocker):
-    """Patches AWS RDS client with a client that connects to the local docker container Postgres database"""
-    return mocker.patch(
-        "aurora_data_api.connect", return_value=local_conn(), autospec=True
-    )
 
 
 @pytest.fixture(scope="function")

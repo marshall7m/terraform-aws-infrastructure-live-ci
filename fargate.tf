@@ -323,11 +323,11 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
           value = local.metadb_name
         },
         {
-          name  = "METADB_CLUSTER_ARN"
+          name  = "AURORA_CLUSTER_ARN"
           value = aws_rds_cluster.metadb.arn
         },
         {
-          name  = "METADB_SECRET_ARN"
+          name  = "AURORA_SECRET_ARN"
           value = aws_secretsmanager_secret_version.ci_metadb_user.arn
         }
       ])
@@ -424,11 +424,11 @@ resource "aws_ecs_task_definition" "terra_run" {
           value = local.metadb_name
         },
         {
-          name  = "METADB_CLUSTER_ARN"
+          name  = "AURORA_CLUSTER_ARN"
           value = aws_rds_cluster.metadb.arn
         },
         {
-          name  = "METADB_SECRET_ARN"
+          name  = "AURORA_SECRET_ARN"
           value = aws_secretsmanager_secret_version.ci_metadb_user.arn
         },
         {

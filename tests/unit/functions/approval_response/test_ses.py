@@ -54,13 +54,13 @@ event = {
     ],
 )
 @patch.dict(os.environ, {"EMAIL_APPROVAL_SECRET_SSM_KEY": "mock-key"})
-@patch("boto3.client")
+@patch("app.ssm")
 @patch.object(app, "update_vote")
 @patch("hmac.compare_digest")
 def test_ses_approve(
     mock_compare_digest,
     mock_update_vote,
-    mock_boto_client,
+    mock_ssm,
     event,
     update_vote_side_effect,
     authorized_request,
@@ -68,11 +68,7 @@ def test_ses_approve(
 ):
     mock_compare_digest.return_value = authorized_request
     mock_update_vote.side_effect = update_vote_side_effect
-    mock_boto_client.return_value = mock_boto_client
-    mock_boto_client.get_parameter.return_value = {
-        "Parameter": {"Value": "mock-secret"}
-    }
-
+    mock_ssm.get_parameter.return_value = {"Parameter": {"Value": "mock-secret"}}
     handler = ApprovalHandler(app=app)
 
     response = handler.handle(event, {})

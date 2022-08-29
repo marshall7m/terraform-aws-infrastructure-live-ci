@@ -4,8 +4,9 @@ import os
 import logging
 from subprocess import CalledProcessError
 import json
+import aurora_data_api
 from unittest.mock import patch, call
-from tests.helpers.utils import null_provider_resource, insert_records, local_conn
+from tests.helpers.utils import null_provider_resource, insert_records, rds_data_client
 from docker.src.terra_run.run import (
     update_new_resources,
     get_new_provider_resources,
@@ -75,9 +76,6 @@ def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expec
 @patch.dict(
     os.environ,
     {
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "TG_BACKEND": "local",
         "EXECUTION_ID": "test-id",
         "TG_COMMAND": "",
@@ -88,7 +86,7 @@ def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expec
     },
 )
 @patch("docker.src.terra_run.run.get_new_provider_resources")
-@pytest.mark.usefixtures("mock_conn", "aws_credentials", "truncate_executions")
+@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @pytest.mark.parametrize(
     "resources",
     [
@@ -110,7 +108,9 @@ def test_update_new_resources(mock_get_new_provider_resources, resources):
 
     update_new_resources()
 
-    with local_conn() as conn, conn.cursor() as cur:
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         cur.execute(
             f"""
             SELECT new_resources

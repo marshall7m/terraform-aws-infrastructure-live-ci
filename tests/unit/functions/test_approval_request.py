@@ -55,7 +55,6 @@ event = {
         ),
     ],
 )
-@pytest.mark.usefixtures("mock_conn")
 @patch.dict(
     os.environ,
     {"SES_TEMPLATE": "mock-template", "SENDER_EMAIL_ADDRESS": "user@invalid.com"},

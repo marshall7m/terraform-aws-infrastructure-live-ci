@@ -5,7 +5,8 @@ import sys
 import json
 from unittest.mock import patch
 from pprint import pformat
-from tests.helpers.utils import insert_records, local_conn
+from tests.helpers.utils import insert_records, rds_data_client
+import aurora_data_api
 from functions.approval_response.lambda_function import App, ClientException
 from contextlib import nullcontext as does_not_raise
 
@@ -77,22 +78,17 @@ execution_id = "run-123"
         ),
     ],
 )
-@patch.dict(
-    os.environ,
-    {"METADB_CLUSTER_ARN": "mock", "METADB_SECRET_ARN": "mock", "METADB_NAME": "mock"},
-)
-@pytest.mark.usefixtures("mock_conn", "aws_credentials", "truncate_executions")
-@patch("boto3.client")
+@pytest.mark.usefixtures("truncate_executions")
+@patch("app.sf")
 def test_update_vote(
-    mock_boto_client,
+    mock_sf,
     action,
     status,
     record,
     expectation,
     expect_send_task_token,
 ):
-    mock_boto_client.return_value = mock_boto_client
-    mock_boto_client.describe_execution.return_value = {
+    mock_sf.describe_execution.return_value = {
         "status": status,
         "name": "run-123",
     }
@@ -110,7 +106,9 @@ def test_update_vote(
 
     if record != {}:
         log.info("Assert record's approriate voters list contains the recipient")
-        with local_conn() as conn, conn.cursor() as cur:
+        with aurora_data_api.connect(
+            database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+        ) as conn, conn.cursor() as cur:
             cur.execute(
                 """
                     SELECT approval_voters, rejection_voters
@@ -131,7 +129,7 @@ def test_update_vote(
             assert voter not in res["approval_voters"]
 
     if expect_send_task_token:
-        mock_boto_client.send_task_success.assert_called_with(
+        mock_sf.send_task_success.assert_called_with(
             taskToken=task_token,
             output=json.dumps(action),
         )

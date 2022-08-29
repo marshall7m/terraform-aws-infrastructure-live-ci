@@ -161,8 +161,8 @@ module "lambda_approval_response" {
   timeout = 180
   environment_variables = {
     METADB_NAME                   = local.metadb_name
-    METADB_CLUSTER_ARN            = aws_rds_cluster.metadb.arn
-    METADB_SECRET_ARN             = aws_secretsmanager_secret_version.ci_metadb_user.arn
+    AURORA_CLUSTER_ARN            = aws_rds_cluster.metadb.arn
+    AURORA_SECRET_ARN             = aws_secretsmanager_secret_version.ci_metadb_user.arn
     EMAIL_APPROVAL_SECRET_SSM_KEY = aws_ssm_parameter.email_approval_secret.name
   }
 

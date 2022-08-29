@@ -3,7 +3,8 @@ from unittest.mock import patch
 import os
 import json
 import logging
-from tests.helpers.utils import insert_records, local_conn
+import aurora_data_api
+from tests.helpers.utils import insert_records, rds_data_client
 from functions.trigger_sf import lambda_function
 
 log = logging.getLogger(__name__)
@@ -136,7 +137,9 @@ def test__execution_finished_status_update(
         "Parameter": {"Value": json.dumps({"Execution": True})}
     }
 
-    with local_conn() as conn, conn.cursor() as cur:
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         mock_sf.list_executions.return_value = {
             "executions": [
                 {"name": record["execution_id"], "executionArn": "mock-arn"}
@@ -205,14 +208,11 @@ def test__execution_finished_status_update(
     os.environ,
     {
         "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
     },
 )
-@pytest.mark.usefixtures("mock_conn", "aws_credentials", "truncate_executions")
+@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @pytest.mark.parametrize(
     "records,expected_running_ids",
     [
@@ -357,11 +357,15 @@ def test__start_executions(mock_sf, records, expected_running_ids):
 
     records = insert_records("executions", records, enable_defaults=True)
 
-    with local_conn() as conn, conn.cursor() as cur:
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         lambda_function._start_sf_executions(cur)
 
     log.info("Assert started Step Function execution statuses were updated to running")
-    with local_conn() as conn, conn.cursor() as cur:
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         cur.execute("SELECT execution_id FROM executions WHERE status = 'running'")
         res = cur.fetchall()
     res = [record[0] for record in res]
@@ -388,14 +392,11 @@ def test__start_executions(mock_sf, records, expected_running_ids):
     ],
 )
 @patch("functions.trigger_sf.lambda_function.ssm")
-@pytest.mark.usefixtures("mock_conn", "aws_credentials", "truncate_executions")
+@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @patch.dict(
     os.environ,
     {
         "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
     },
