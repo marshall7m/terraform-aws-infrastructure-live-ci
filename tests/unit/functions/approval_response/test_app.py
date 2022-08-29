@@ -78,10 +78,6 @@ execution_id = "run-123"
         ),
     ],
 )
-@patch.dict(
-    os.environ,
-    {"METADB_CLUSTER_ARN": "mock", "METADB_SECRET_ARN": "mock", "METADB_NAME": "mock"},
-)
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @patch("boto3.client")
 def test_update_vote(

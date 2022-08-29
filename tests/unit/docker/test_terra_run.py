@@ -76,9 +76,6 @@ def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expec
 @patch.dict(
     os.environ,
     {
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "TG_BACKEND": "local",
         "EXECUTION_ID": "test-id",
         "TG_COMMAND": "",

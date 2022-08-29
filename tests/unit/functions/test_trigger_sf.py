@@ -208,9 +208,6 @@ def test__execution_finished_status_update(
     os.environ,
     {
         "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
     },
@@ -400,9 +397,6 @@ def test__start_executions(mock_sf, records, expected_running_ids):
     os.environ,
     {
         "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
     },

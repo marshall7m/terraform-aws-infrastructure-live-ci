@@ -285,9 +285,6 @@ def test_create_stack(
 @patch.dict(
     os.environ,
     {
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "PR_ID": "1",
         "COMMIT_ID": "commit-1",
         "BASE_REF": "master",
@@ -329,9 +326,6 @@ def test_update_executions_with_new_deploy_stack_query(create_stack):
     {
         "BASE_REF": "master",
         "HEAD_REF": "test-feature",
-        "METADB_CLUSTER_ARN": "mock",
-        "METADB_SECRET_ARN": "mock",
-        "METADB_NAME": "mock",
         "STATE_MACHINE_ARN": "mock",
         "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
         "TRIGGER_SF_FUNCTION_NAME": "mock-lambda",

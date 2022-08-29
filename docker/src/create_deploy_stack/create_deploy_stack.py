@@ -26,7 +26,7 @@ log.setLevel(logging.DEBUG)
 ssm = boto3.client("ssm")
 lb = boto3.client("lambda")
 rds_data_client = boto3.client(
-    "rds-data", endpoint_url=os.environ.get("METAB_LOCAL_ENDPOINT")
+    "rds-data", endpoint_url=os.environ.get("METADB_LOCAL_ENDPOINT")
 )
 
 
@@ -226,8 +226,8 @@ class CreateStack:
         associated deployment stack within the metadb
         """
         with aurora_data_api.connect(
-            aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
-            secret_arn=os.environ["METADB_SECRET_ARN"],
+            aurora_cluster_arn=os.environ["AURORA_CLUSTER_ARN"],
+            secret_arn=os.environ["AURORA_SECRET_ARN"],
             database=os.environ["METADB_NAME"],
             rds_data_client=rds_data_client,
         ) as conn:

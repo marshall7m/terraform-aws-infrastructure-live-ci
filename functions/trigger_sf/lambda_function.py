@@ -18,7 +18,7 @@ log.setLevel(logging.DEBUG)
 sf = boto3.client("stepfunctions")
 ssm = boto3.client("ssm")
 rds_data_client = boto3.client(
-    "rds-data", endpoint_url=os.environ.get("METAB_LOCAL_ENDPOINT")
+    "rds-data", endpoint_url=os.environ.get("METADB_LOCAL_ENDPOINT")
 )
 
 
@@ -215,8 +215,8 @@ def lambda_handler(event, context):
     log.debug(f"Event:\n{event}")
     try:
         with aurora_data_api.connect(
-            aurora_cluster_arn=os.environ["METADB_CLUSTER_ARN"],
-            secret_arn=os.environ["METADB_SECRET_ARN"],
+            aurora_cluster_arn=os.environ["AURORA_CLUSTER_ARN"],
+            secret_arn=os.environ["AURORA_SECRET_ARN"],
             database=os.environ["METADB_NAME"],
             rds_data_client=rds_data_client,
         ) as conn:
