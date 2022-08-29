@@ -87,12 +87,11 @@ def aws_session_expiration_check(request):
 def setup_metadb():
     """Creates `account_dim` and `executions` table"""
     log.info("Creating metadb tables")
-
     with aurora_data_api.connect(
         database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
     ) as conn, conn.cursor() as cur:
         with open(
-            f"{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql",
+            f"{os.path.dirname(os.path.realpath(__file__))}/../sql/create_metadb_tables.sql",
             "r",
         ) as f:
             cur.execute(
