@@ -78,18 +78,17 @@ execution_id = "run-123"
         ),
     ],
 )
-@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
-@patch("boto3.client")
+@pytest.mark.usefixtures("truncate_executions")
+@patch("app.sf")
 def test_update_vote(
-    mock_boto_client,
+    mock_sf,
     action,
     status,
     record,
     expectation,
     expect_send_task_token,
 ):
-    mock_boto_client.return_value = mock_boto_client
-    mock_boto_client.describe_execution.return_value = {
+    mock_sf.describe_execution.return_value = {
         "status": status,
         "name": "run-123",
     }
@@ -130,7 +129,7 @@ def test_update_vote(
             assert voter not in res["approval_voters"]
 
     if expect_send_task_token:
-        mock_boto_client.send_task_success.assert_called_with(
+        mock_sf.send_task_success.assert_called_with(
             taskToken=task_token,
             output=json.dumps(action),
         )
