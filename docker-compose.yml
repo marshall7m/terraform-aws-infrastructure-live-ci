@@ -35,7 +35,8 @@ services:
     profiles: [integration]
 
   local-data-api:
-    image: koxudaxi/local-data-api:0.6.12
+    # using latest img until pinned version fixes issue: https://github.com/koxudaxi/local-data-api/issues/217
+    image: koxudaxi/local-data-api:latest
     restart: always
     environment:
     - ENGINE=PostgresSQL
@@ -43,8 +44,8 @@ services:
     - POSTGRES_PORT=5432
     - POSTGRES_USER=postgres
     - POSTGRES_PASSWORD=postgres
-    - RESOURCE_ARN=${AURORA_CLUSTER_ARN}
-    - SECRET_ARN=${AURORA_SECRET_ARN}
+    - CLUSTER_ARN=arn:aws:rds:us-west-2:123456789012:cluster:${TF_VAR_mut_id}-cluster
+    - SECRET_ARN=arn:aws:secretsmanager:us-west-2:123456789012:secret:${TF_VAR_mut_id}-data-api-${TF_VAR_metadb_username}-credentials
     ports:
     - 8080:80
     profiles: [unit, integration]
@@ -92,8 +93,8 @@ services:
     - PGDATABASE=postgres
     - PGHOST=postgres
     - PGPORT=5432
-    - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
-    - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
+    - AURORA_CLUSTER_ARN=arn:aws:rds:us-west-2:123456789012:cluster:${TF_VAR_mut_id}-cluster
+    - AURORA_SECRET_ARN=arn:aws:secretsmanager:us-west-2:123456789012:secret:${TF_VAR_mut_id}-data-api-${TF_VAR_metadb_username}-credentials
     - METADB_NAME=${METADB_NAME}
     - METADB_LOCAL_ENDPOINT=http://127.0.0.1:8080
     entrypoint: [/bin/bash, entrypoint.sh]
@@ -121,12 +122,16 @@ services:
     - PGDATABASE=postgres
     - PGHOST=postgres
     - PGPORT=5432
+    - TF_VAR_mut_id
+    - TF_VAR_metadb_username
     entrypoint: [/bin/bash, entrypoint.sh]
     profiles: [integration]
     depends_on:
     - postgres
     - sf-local
     - local-data-api
+    - moto
+    - localstack
 
   e2e:
     stdin_open: true
