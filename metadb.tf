@@ -70,10 +70,12 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
   value       = var.metadb_ci_password
 }
 
-resource "aws_db_subnet_group" "metadb" {
-  name       = local.cluster_identifier
-  subnet_ids = var.metadb_subnet_ids
-}
+
+# resource "aws_db_subnet_group" "metadb" {
+#   count = var.create_metadb_subnet_group ? 1 : 0
+#   name       = coalesce(var.metadb_subnet_group_name, local.cluster_identifier)
+#   subnet_ids = var.metadb_subnet_ids
+# }
 
 resource "aws_security_group" "metadb" {
   name        = "${var.prefix}-metadb"
@@ -98,7 +100,9 @@ resource "aws_rds_cluster" "metadb" {
   skip_final_snapshot  = true
 
   vpc_security_group_ids = concat([aws_security_group.metadb.id], var.metadb_security_group_ids)
-  db_subnet_group_name   = aws_db_subnet_group.metadb.name
+  # db_subnet_group_name   = try(aws_db_subnet_group.metadb[0].name, var.metadb_subnet_group_name)
+  # db_subnet_group_name   = var.metadb_subnet_group_name
+
 }
 
 resource "random_id" "metadb_users" {
@@ -106,7 +110,7 @@ resource "random_id" "metadb_users" {
 }
 
 resource "aws_secretsmanager_secret" "master_metadb_user" {
-  name = "${local.cluster_identifier}-data-api-${var.metadb_username}-credentials-${random_id.metadb_users.id}"
+  name = "${local.cluster_identifier}-data-api-${var.metadb_username}-credentials"
 }
 
 resource "aws_secretsmanager_secret_version" "master_metadb_user" {
@@ -118,7 +122,7 @@ resource "aws_secretsmanager_secret_version" "master_metadb_user" {
 }
 
 resource "aws_secretsmanager_secret" "ci_metadb_user" {
-  name = "${local.cluster_identifier}-data-api-${var.metadb_ci_username}-credentials-${random_id.metadb_users.id}"
+  name = "${local.cluster_identifier}-data-api-${var.metadb_ci_username}-credentials"
 }
 
 resource "aws_secretsmanager_secret_version" "ci_metadb_user" {
