@@ -49,6 +49,28 @@ services:
     - 8080:80
     profiles: [unit, integration]
 
+  localstack:
+    image: localstack/localstack:1.0.4
+    environment:
+    - LAMBDA_EXECUTOR=docker_reuse
+    - DOCKER_HOST=unix:///var/run/docker.sock
+    - DEFAULT_REGION=us-west-2
+    - DEBUG=1
+    - DATA_DIR=/tmp/localstack/data
+    - PORT_WEB_UI=8080
+    ports:
+    - 127.0.0.1:4566:4566
+    - 127.0.0.1:4510-4559:4510-4559
+    - 8079:8080
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - $PWD/localstack:/tmp/localstack/data
+
+  moto:
+    image: motoserver/moto:4.0.1
+    ports:
+    - 5000:5000
+    profiles: [integration]
   unit:
     network_mode: host
     stdin_open: true
