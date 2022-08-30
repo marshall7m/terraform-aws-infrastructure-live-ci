@@ -2,6 +2,7 @@ import pytest
 import os
 import logging
 import github
+from tests.helpers.utils import commit
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -28,64 +29,8 @@ def gh():
     return github.Github(os.environ["TF_VAR_testing_unit_github_token"], retry=3)
 
 
-@pytest.fixture(scope="module")
-def repo(gh, request):
-
-    if type(request.param) == dict:
-        if request.param["is_fork"]:
-            log.info(f"Forking repo: {request.param['name']}")
-            base = gh.get_repo(request.param["name"])
-            repo = gh.get_user().create_fork(base)
-    else:
-        log.info(f"Creating repo: {request.param}")
-        repo = gh.get_user().create_repo(request.param, auto_init=True)
-
-    yield repo
-
-    log.info(f"Deleting repo: {request.param}")
-    repo.delete()
-
-
 class ServerException(Exception):
     pass
-
-
-def commit(repo, branch, changes, commit_message):
-    elements = []
-    for filepath, content in changes.items():
-        log.debug(f"Creating file: {filepath}")
-        blob = repo.create_git_blob(content, "utf-8")
-        elements.append(
-            github.InputGitTreeElement(
-                path=filepath, mode="100644", type="blob", sha=blob.sha
-            )
-        )
-
-    head_sha = repo.get_branch(branch).commit.sha
-    base_tree = repo.get_git_tree(sha=head_sha)
-    tree = repo.create_git_tree(elements, base_tree)
-    parent = repo.get_git_commit(sha=head_sha)
-    commit = repo.create_git_commit(commit_message, tree, [parent])
-
-    return commit
-
-
-def push(repo, branch, changes, commit_message="Adding test files"):
-    try:
-        ref = repo.get_branch(branch)
-    except Exception:
-        log.debug(f"Creating ref for branch: {branch}")
-        ref = repo.create_git_ref(
-            ref="refs/heads/" + branch,
-            sha=repo.get_branch(repo.default_branch).commit.sha,
-        )
-        log.debug(f"Ref: {ref.ref}")
-
-    commit_obj = commit(repo, branch, changes, commit_message)
-    log.debug(f"Pushing commit ID: {commit_obj.sha}")
-    ref.edit(sha=commit_obj.sha)
-
-    return branch
 
 
 @pytest.fixture
