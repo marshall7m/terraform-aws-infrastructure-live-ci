@@ -3,7 +3,6 @@ services:
   postgres:
     image: postgres:10.14-alpine
     restart: always
-    container_name: postgres
     volumes:
     - $PWD/docker-pgsql-entrypoint:/docker-entrypoint-initdb.d
     - $PWD/docker-pgsql-volume:/var/lib/postgresql/data
@@ -48,6 +47,8 @@ services:
     - SECRET_ARN=arn:aws:secretsmanager:us-west-2:123456789012:secret:${TF_VAR_mut_id}-data-api-${TF_VAR_metadb_username}-credentials
     ports:
     - 8080:80
+    depends_on:
+    - postgres
     profiles: [unit, integration]
 
   localstack:
@@ -117,6 +118,8 @@ services:
     - AWS_SECRET_ACCESS_KEY=dummy-secret
     - AWS_REGION=us-west-2
     - AWS_DEFAULT_REGION=us-west-2
+    - TF_VAR_testing_integration_github_token
+    - TF_VAR_github_token_ssm_value
     - PGUSER=postgres
     - PGPASSWORD=postgres
     - PGDATABASE=postgres
