@@ -94,6 +94,7 @@ resource "aws_rds_cluster" "metadb" {
   master_password    = var.metadb_password
   port               = var.metadb_port
   engine_mode        = "serverless"
+  storage_type       = "io1"
   scaling_configuration {
     min_capacity = 2
   }
