@@ -1,6 +1,7 @@
 locals {
-  plan_role_name   = "${var.mut_id}-plan"
-  deploy_role_name = "${var.mut_id}-deploy"
+  mut_id           = "mut-${random_string.mut.id}"
+  plan_role_name   = "${local.mut_id}-plan"
+  deploy_role_name = "${local.mut_id}-deploy"
 }
 
 data "aws_caller_identity" "current" {}
@@ -11,9 +12,16 @@ data "github_user" "current" {
   username = ""
 }
 
+resource "random_string" "mut" {
+  length  = 8
+  lower   = true
+  upper   = false
+  special = false
+}
+
 resource "github_repository" "testing" {
-  name        = var.mut_id
-  description = "Test repo for mut: ${var.mut_id}"
+  name        = local.mut_id
+  description = "Test repo for mut: ${local.mut_id}"
   # TODO: Test with `visibility  = "private"` and `var.enable_branch_protection = true`
   # In order to enable branch protection for a private repo within the TF module, 
   # GitHub Pro account must be used for the provider
@@ -25,7 +33,7 @@ resource "github_repository" "testing" {
 }
 
 resource "aws_s3_bucket" "testing_tf_state" {
-  bucket        = "${var.mut_id}-tf-state"
+  bucket        = "${local.mut_id}-tf-state"
   force_destroy = true
 }
 
@@ -44,14 +52,6 @@ resource "aws_s3_bucket_versioning" "testing_tf_state" {
   versioning_configuration {
     status = "Enabled"
   }
-}
-
-
-resource "random_string" "mut" {
-  length  = 8
-  lower   = true
-  upper   = false
-  special = false
 }
 
 resource "random_password" "metadb" {
@@ -92,7 +92,7 @@ data "aws_iam_policy_document" "trigger_sf_tf_state_access" {
 }
 
 resource "aws_iam_policy" "trigger_sf_tf_state_access" {
-  name        = "${var.mut_id}-tf-state-read-access"
+  name        = "${local.mut_id}-tf-state-read-access"
   path        = "/"
   description = "Allows ECS tasks to read from terraform state S3 bucket"
   policy      = data.aws_iam_policy_document.trigger_sf_tf_state_access.json
@@ -103,7 +103,7 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "3.14.2"
 
-  name = var.mut_id
+  name = local.mut_id
   cidr = "10.0.0.0/16"
 
   azs            = ["${data.aws_region.current.name}a", "${data.aws_region.current.name}b"]
@@ -117,7 +117,7 @@ module "vpc" {
 module "mut_infrastructure_live_ci" {
   source = "../../..//"
 
-  prefix = var.mut_id
+  prefix = local.mut_id
 
   repo_name   = github_repository.testing.name
   base_branch = "master"
