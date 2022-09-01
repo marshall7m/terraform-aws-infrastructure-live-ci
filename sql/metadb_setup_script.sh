@@ -8,7 +8,7 @@ set -e
 source "${tf_module_path}/sql/utils.sh" 
 
 echo "Creating tables"
-aws rds-data execute-statement \
+aws "${endpoint_url_flag}" rds-data execute-statement \
   --continue-after-timeout \
   --resource-arn "${cluster_arn}" \
   --secret-arn "${secret_arn}" \
@@ -17,11 +17,24 @@ aws rds-data execute-statement \
   --sql "${create_tables_sql}"
 
 echo "Ensure tables exists"
-table_exists_check "account_dim" "${cluster_arn}" "${secret_arn}" "${db_name}"
-table_exists_check "executions" "${cluster_arn}" "${secret_arn}" "${db_name}"
+table_exists_check \
+  "account_dim" \
+  "${cluster_arn}" \
+  "${secret_arn}" \
+  "${db_name}" \
+  "${schema}" \
+  "${endpoint_url_flag}"
+
+table_exists_check \
+  "executions" \
+  "${cluster_arn}" \
+  "${secret_arn}" \
+  "${db_name}" \
+  "${schema}" \
+  "${endpoint_url_flag}"
 
 echo "Creating CI user"
-aws rds-data execute-statement \
+aws "${endpoint_url_flag}" rds-data execute-statement \
   --continue-after-timeout \
   --resource-arn "${cluster_arn}" \
   --secret-arn "${secret_arn}" \
@@ -30,7 +43,7 @@ aws rds-data execute-statement \
   --sql "${create_ci_user_sql}"
 
 echo "Inserting account records into account_dim"
-aws rds-data batch-execute-statement \
+aws "${endpoint_url_flag}" rds-data batch-execute-statement \
   --resource-arn "${cluster_arn}" \
   --secret-arn "${secret_arn}" \
   --database "${db_name}" \

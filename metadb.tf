@@ -2,10 +2,12 @@ locals {
   metadb_name        = replace("${var.prefix}_metadb", "-", "_")
   cluster_identifier = replace("${var.prefix}-cluster", "_", "-")
   metadb_setup_script = templatefile("${path.module}/sql/metadb_setup_script.sh", {
-    tf_module_path = path.module
-    cluster_arn    = aws_rds_cluster.metadb.arn
-    secret_arn     = aws_secretsmanager_secret_version.master_metadb_user.arn
-    db_name        = aws_rds_cluster.metadb.database_name
+    tf_module_path    = path.module
+    cluster_arn       = aws_rds_cluster.metadb.arn
+    secret_arn        = aws_secretsmanager_secret_version.master_metadb_user.arn
+    db_name           = aws_rds_cluster.metadb.database_name
+    schema            = var.metadb_schema
+    endpoint_url_flag = var.metadb_endpoint_url != null ? "--endpoint-url=${var.metadb_endpoint_url}" : ""
     create_tables_sql = templatefile("${path.module}/sql/create_metadb_tables.sql", {
       metadb_schema = var.metadb_schema,
       metadb_name   = local.metadb_name
