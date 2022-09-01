@@ -64,6 +64,7 @@ module "lambda_trigger_sf" {
       source_arn = aws_cloudwatch_event_rule.sf_execution.arn
     }
   }
+  create_unqualified_alias_allowed_triggers = false
 
   publish = true
 
