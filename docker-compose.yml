@@ -34,8 +34,8 @@ services:
     profiles: [integration]
 
   local-data-api:
-    # using latest img until pinned version fixes issue: https://github.com/koxudaxi/local-data-api/issues/217
-    image: koxudaxi/local-data-api:latest
+    build: ./tests/local-data-api
+    image: terraform-aws-infrastructure-live-ci/local-data-api:latest
     restart: always
     environment:
     - ENGINE=PostgresSQL
