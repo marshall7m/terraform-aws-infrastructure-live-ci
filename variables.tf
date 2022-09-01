@@ -516,3 +516,15 @@ variable "create_approval_sender_policy" {
   type        = bool
   default     = true
 }
+
+variable "metadb_endpoint_url" {
+  description = "Endpoint URL that metadb setup queries will be directed to (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
+variable "metadb_name" {
+  description = "Name of the metadb"
+  type        = string
+  default     = null
+}

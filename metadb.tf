@@ -1,5 +1,5 @@
 locals {
-  metadb_name        = replace("${var.prefix}_metadb", "-", "_")
+  metadb_name        = coalesce(var.metadb_name, replace("${var.prefix}_metadb", "-", "_"))
   cluster_identifier = replace("${var.prefix}-cluster", "_", "-")
   metadb_setup_script = templatefile("${path.module}/sql/metadb_setup_script.sh", {
     tf_module_path    = path.module

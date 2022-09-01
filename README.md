@@ -521,6 +521,8 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_metadb_availability_zones"></a> [metadb\_availability\_zones](#input\_metadb\_availability\_zones) | AWS availability zones that the metadb RDS cluster will be hosted in. Recommended to define atleast 3 zones. | `list(string)` | `null` | no |
 | <a name="input_metadb_ci_password"></a> [metadb\_ci\_password](#input\_metadb\_ci\_password) | Password for the metadb user used for the ECS tasks | `string` | n/a | yes |
 | <a name="input_metadb_ci_username"></a> [metadb\_ci\_username](#input\_metadb\_ci\_username) | Name of the metadb user used for the ECS tasks | `string` | `"ci_user"` | no |
+| <a name="input_metadb_endpoint_url"></a> [metadb\_endpoint\_url](#input\_metadb\_endpoint\_url) | Endpoint URL that metadb setup queries will be directed to (used for local metadb testing) | `string` | `null` | no |
+| <a name="input_metadb_name"></a> [metadb\_name](#input\_metadb\_name) | Name of the metadb | `string` | `null` | no |
 | <a name="input_metadb_password"></a> [metadb\_password](#input\_metadb\_password) | Master password for the metadb | `string` | n/a | yes |
 | <a name="input_metadb_port"></a> [metadb\_port](#input\_metadb\_port) | Port for AWS RDS Postgres db | `number` | `5432` | no |
 | <a name="input_metadb_schema"></a> [metadb\_schema](#input\_metadb\_schema) | Schema for AWS RDS Postgres db | `string` | `"prod"` | no |
