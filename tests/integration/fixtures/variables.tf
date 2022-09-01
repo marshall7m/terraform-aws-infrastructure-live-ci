@@ -39,13 +39,28 @@ EOF
   sensitive   = true
 }
 
-variable "mut_id" {
-  description = "Module Under Testing ID"
+variable "metadb_endpoint_url" {
+  description = "Endpoint URL that metadb setup queries will be directed to (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
+variable "metadb_name" {
+  description = "Name of the metadb"
   type        = string
 }
 
 variable "metadb_username" {
   description = "Master username of the metadb"
   type        = string
-  default     = "root"
+}
+
+variable "moto_endpoint_url" {
+  description = "Endpoint URL for standalone moto server"
+  type        = string
+}
+
+variable "sf_endpoint_url" {
+  description = "Endpoint URL for Step Function service"
+  type        = string
 }

@@ -141,12 +141,14 @@ module "mut_infrastructure_live_ci" {
     Execution         = true
   }
 
-  metadb_username    = var.metadb_username
-  metadb_password    = random_password.metadb["master"].result
-  metadb_ci_username = "mut_ci_user"
-  metadb_ci_password = random_password.metadb["ci"].result
-  metadb_schema      = "testing"
-  metadb_subnet_ids  = module.vpc.public_subnets
+  metadb_name         = var.metadb_name
+  metadb_username     = var.metadb_username
+  metadb_password     = random_password.metadb["master"].result
+  metadb_ci_username  = "mut_ci_user"
+  metadb_ci_password  = random_password.metadb["ci"].result
+  metadb_schema       = "testing"
+  metadb_subnet_ids   = module.vpc.public_subnets
+  metadb_endpoint_url = var.metadb_endpoint_url
 
   vpc_id         = module.vpc.vpc_id
   ecs_subnet_ids = module.vpc.public_subnets
