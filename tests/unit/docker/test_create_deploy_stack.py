@@ -7,9 +7,12 @@ import uuid
 import git
 import json
 import aurora_data_api
-from tests.helpers.utils import dummy_configured_provider_resource, rds_data_client
+from tests.helpers.utils import (
+    dummy_configured_provider_resource,
+    rds_data_client,
+    push,
+)
 from tests.unit.docker.conftest import mock_subprocess_run
-from tests.unit.conftest import push
 from docker.src.create_deploy_stack.create_deploy_stack import CreateStack  # noqa: E402
 
 log = logging.getLogger(__name__)

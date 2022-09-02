@@ -1,4 +1,5 @@
 import pytest
+import uuid
 import os
 import datetime
 import re
@@ -122,3 +123,30 @@ def truncate_executions(setup_metadb):
         database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
     ) as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE executions")
+
+
+@pytest.fixture(scope="module")
+def repo(gh, request):
+
+    if type(request.param) == dict:
+        if request.param["is_fork"]:
+            log.info(f"Forking repo: {request.param['name']}")
+            base = gh.get_repo(request.param["name"])
+            repo = gh.get_user().create_fork(base)
+    else:
+        name = getattr(request, "param", f"test-repo-{uuid.uuid4()}")
+        log.info(f"Creating repo: {name}")
+        repo = gh.get_user().create_repo(name, auto_init=True)
+
+    yield repo
+
+    log.info(f"Deleting repo: {request.param}")
+    repo.delete()
+
+
+@pytest.fixture(scope="session")
+def mut_output(tf):
+    log.info("Applying testing tf module")
+    tf.apply(auto_approve=True)
+
+    yield {k: v["value"] for k, v in tf.output().items()}
