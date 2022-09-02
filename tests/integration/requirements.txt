@@ -1,9 +1,10 @@
 terraform-local
-localstack-client
-localstack
+# localstack-client
+# localstack
 aurora-data-api
 GitPython
 boto3
 pytest-regex-dependency
 pygohcl
 python-on-whales
+container-transform
