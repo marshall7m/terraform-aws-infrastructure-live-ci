@@ -15,7 +15,7 @@ resource "aws_ssm_parameter" "github_webhook_secret" {
 }
 
 resource "github_repository_webhook" "this" {
-  repository = var.repo_name
+  repository = local.repo_full_name
 
   configuration {
     url          = module.lambda_webhook_receiver.lambda_function_url
@@ -165,7 +165,7 @@ module "lambda_webhook_receiver" {
 
 resource "github_branch_protection" "merge_lock" {
   count         = var.enable_branch_protection ? 1 : 0
-  repository_id = var.repo_name
+  repository_id = local.repo_full_name
 
   pattern          = var.base_branch
   enforce_admins   = var.enforce_admin_branch_protection

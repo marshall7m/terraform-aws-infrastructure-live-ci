@@ -228,8 +228,8 @@ EOF
 
 # GITHUB WEBHOOK #
 
-variable "repo_name" {
-  description = "Name of the pre-existing GitHub repository that is owned by the Github provider"
+variable "repo_clone_url" {
+  description = "Clone URL of the repository (e.g. ssh://host.xz/path/to/repo.git, https://host.xz/path/to/repo.git)"
   type        = string
 }
 

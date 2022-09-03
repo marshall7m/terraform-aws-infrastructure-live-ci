@@ -481,7 +481,6 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 | [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ses_email_identity) | data source |
 | [aws_ssm_parameter.github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ssm_parameter) | data source |
-| [github_repository.this](https://registry.terraform.io/providers/integrations/github/latest/docs/data-sources/repository) | data source |
 
 ## Inputs
 
@@ -540,7 +539,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="input_private_registry_secret_manager_arn"></a> [private\_registry\_secret\_manager\_arn](#input\_private\_registry\_secret\_manager\_arn) | Pre-existing AWS Secret Manager ARN used for private registry authentification | `string` | `null` | no |
 | <a name="input_registry_password"></a> [registry\_password](#input\_registry\_password) | Private Docker registry password used to authenticate ECS task to pull docker image | `string` | `null` | no |
 | <a name="input_registry_username"></a> [registry\_username](#input\_registry\_username) | Private Docker registry username used to authenticate ECS task to pull docker image | `string` | `null` | no |
-| <a name="input_repo_name"></a> [repo\_name](#input\_repo\_name) | Name of the pre-existing GitHub repository that is owned by the Github provider | `string` | n/a | yes |
+| <a name="input_repo_clone_url"></a> [repo\_clone\_url](#input\_repo\_clone\_url) | Clone URL of the repository (e.g. ssh://host.xz/path/to/repo.git, https://host.xz/path/to/repo.git) | `string` | n/a | yes |
 | <a name="input_send_verification_email"></a> [send\_verification\_email](#input\_send\_verification\_email) | Determines if an email verification should be sent to the var.approval\_request\_sender\_email address. Set<br>  to true if the email address is not already authorized to send emails via AWS SES. | `bool` | `true` | no |
 | <a name="input_step_function_name"></a> [step\_function\_name](#input\_step\_function\_name) | Name of AWS Step Function machine | `string` | `"deployment-flow"` | no |
 | <a name="input_terra_run_cpu"></a> [terra\_run\_cpu](#input\_terra\_run\_cpu) | Number of CPU units the terra run task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |

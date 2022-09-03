@@ -20,6 +20,7 @@ locals {
       "Value.$" = "$.commit_id"
     },
   ])
+  repo_full_name = trimsuffix(trim(regex("(?:(?P<scheme>[^:/?#]+):)?(?://(?P<authority>[^/?#]*))?(?P<path>[^?#]*)(?:\\?(?P<query>[^#]*))?(?:#(?P<fragment>.*))?", var.repo_clone_url).path, "/"), ".git")
 }
 
 resource "aws_sfn_state_machine" "this" {

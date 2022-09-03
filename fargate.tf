@@ -39,11 +39,11 @@ locals {
   ecs_tasks_base_env_vars = [
     {
       name  = "SOURCE_CLONE_URL"
-      value = data.github_repository.this.http_clone_url
+      value = var.repo_clone_url
     },
     {
       name  = "REPO_FULL_NAME"
-      value = data.github_repository.this.full_name
+      value = local.repo_full_name
     },
     {
       name  = "TERRAFORM_VERSION"
