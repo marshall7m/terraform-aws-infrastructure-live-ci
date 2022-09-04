@@ -152,7 +152,7 @@ services:
   e2e:
     stdin_open: true
     tty: true
-    image: ghcr.io/marshall7m/terrace:v0.1.12
+    image: ghcr.io/marshall7m/terrace:v0.1.13
     volumes:
     - $PWD:/src
     - /usr/bin/docker:/usr/bin/docker
