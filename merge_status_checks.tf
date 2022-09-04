@@ -2,11 +2,13 @@ locals {
   webhook_receiver_name         = "${var.prefix}-webhook-receiver"
   trigger_pr_plan_name          = "${var.prefix}-trigger-pr-plan"
   github_webhook_secret_ssm_key = "${local.webhook_receiver_name}-gh-secret"
+  repo_name                     = join("/", slice(split("/", local.repo_full_name), 1, length(split("/", local.repo_full_name))))
 }
 
 resource "random_password" "github_webhook_secret" {
   length = 24
 }
+
 resource "aws_ssm_parameter" "github_webhook_secret" {
   name        = local.github_webhook_secret_ssm_key
   description = "Secret value used to authenticate GitHub webhook requests"
@@ -15,7 +17,7 @@ resource "aws_ssm_parameter" "github_webhook_secret" {
 }
 
 resource "github_repository_webhook" "this" {
-  repository = local.repo_full_name
+  repository = local.repo_name
 
   configuration {
     url          = module.lambda_webhook_receiver.lambda_function_url
@@ -165,7 +167,7 @@ module "lambda_webhook_receiver" {
 
 resource "github_branch_protection" "merge_lock" {
   count         = var.enable_branch_protection ? 1 : 0
-  repository_id = local.repo_full_name
+  repository_id = local.repo_name
 
   pattern          = var.base_branch
   enforce_admins   = var.enforce_admin_branch_protection
