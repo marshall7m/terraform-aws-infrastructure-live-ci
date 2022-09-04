@@ -1,9 +1,63 @@
 locals {
   remote_provider = <<EOF
+variable "testing_integration_github_token" {
+  description = <<EOT
+GitHub token used for the Terraform GitHub provider and the PyTest PyGithub API connection.
+The permissions for the token is dependent on if the repo has public or private visibility.
+Permissions:
+  private:
+    - admin:repo_hook
+    - repo
+    - read:org (if organization repo)
+    - delete_repo
+    - read:discussion
+  public:
+    - admin:repo_hook
+    - repo:status
+    - public_repo
+    - read:org (if organization repo)
+    - delete_repo
+    - read:discussion
+See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
+EOT
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+provider "github" {
+  token = var.testing_integration_github_token
+}
+
 provider "aws" {}
 EOF
 
   local_provider = <<EOF
+variable "testing_integration_github_token" {
+  description = <<EOT
+GitHub token used for the Terraform GitHub provider and the PyTest PyGithub API connection.
+The permissions for the token is dependent on if the repo has public or private visibility.
+Permissions:
+  private:
+    - admin:repo_hook
+    - repo
+    - read:org (if organization repo)
+    - delete_repo
+    - read:discussion
+  public:
+    - admin:repo_hook
+    - repo:status
+    - public_repo
+    - read:org (if organization repo)
+    - delete_repo
+    - read:discussion
+See more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps
+EOT
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 variable "moto_endpoint_url" {
   description = "Endpoint URL for standalone moto server"
   type        = string
@@ -12,6 +66,10 @@ variable "moto_endpoint_url" {
 variable "sf_endpoint_url" {
   description = "Endpoint URL for Step Function service"
   type        = string
+}
+
+provider "github" {
+  token = var.testing_integration_github_token
 }
 
 provider "aws" {
