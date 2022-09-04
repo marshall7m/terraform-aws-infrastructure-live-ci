@@ -46,7 +46,8 @@ def mock_request(request):
     request.secretArn = list(SECRETS.keys())[0]
     request.resourceArn = list(RESOURCE_METAS.keys())[0]
     # POSTGRES_DB env var provided by docker compose (value must be same as local postgres db)
-    request.database = os.environ["POSTGRES_DB"]
+    if hasattr(request, "database"):
+        request.database = os.environ["POSTGRES_DB"]
     return request
 
 
@@ -57,6 +58,7 @@ def execute_sql(request: ExecuteSqlRequest) -> None:
 
 @app.post("/BeginTransaction", response_model=BeginTransactionResponse)
 def begin_statement(request: BeginTransactionRequest) -> BeginTransactionResponse:
+    request = mock_request(request)
     resource: Resource = get_resource(
         request.resourceArn, request.secretArn, database=request.database
     )
@@ -67,6 +69,7 @@ def begin_statement(request: BeginTransactionRequest) -> BeginTransactionRespons
 
 @app.post("/CommitTransaction", response_model=CommitTransactionResponse)
 def commit_transaction(request: CommitTransactionRequest) -> CommitTransactionResponse:
+    request = mock_request(request)
     resource: Resource = get_resource(
         request.resourceArn, request.secretArn, request.transactionId
     )
@@ -81,6 +84,7 @@ def commit_transaction(request: CommitTransactionRequest) -> CommitTransactionRe
 def rollback_transaction(
     request: RollbackTransactionRequest,
 ) -> RollbackTransactionResponse:
+    request = mock_request(request)
     resource: Resource = get_resource(
         request.resourceArn, request.secretArn, request.transactionId
     )
