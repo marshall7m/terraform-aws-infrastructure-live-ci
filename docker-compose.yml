@@ -52,28 +52,15 @@ services:
     - postgres
     profiles: [unit, integration]
 
-  localstack:
-    image: localstack/localstack:1.0.4
-    environment:
-    - LAMBDA_EXECUTOR=docker_reuse
-    - DOCKER_HOST=unix:///var/run/docker.sock
-    - DEFAULT_REGION=us-west-2
-    - DEBUG=1
-    - DATA_DIR=/tmp/localstack/data
-    - PORT_WEB_UI=8080
-    ports:
-    - 127.0.0.1:4566:4566
-    - 127.0.0.1:4510-4559:4510-4559
-    - 8079:8080
-    volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - $PWD/localstack:/tmp/localstack/data
-
   moto:
     image: motoserver/moto:4.0.1
     ports:
     - 5000:5000
     profiles: [integration]
+
+  tasks:
+    image: ${LOCAL_ECS_IMAGE_ADDRESS}
+    build: ./docker
 
   unit:
     network_mode: host
@@ -118,6 +105,7 @@ services:
     build: ./tests/integration
     volumes:
     - $PWD:/src
+    - /usr/bin/docker:/usr/bin/docker
     - /var/run/docker.sock:/var/run/docker.sock
     environment:
     - AWS_ACCESS_KEY_ID=dummy-key
@@ -131,7 +119,13 @@ services:
     - PGHOST=${POSTGRES_HOST}
     - PGPORT=${POSTGRES_PORT}
 
+    - METADB_NAME=${POSTGRES_DB}
     - METADB_LOCAL_ENDPOINT=${METADB_ENDPOINT_URL}
+
+    - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
+    - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
+
+    - MOTO_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
 
     - TF_VAR_metadb_endpoint_url=${METADB_ENDPOINT_URL}
     - TF_VAR_metadb_name=${POSTGRES_DB}
@@ -140,6 +134,7 @@ services:
     - TF_VAR_testing_integration_github_token
     - TF_VAR_github_token_ssm_value
     - TF_VAR_moto_endpoint_url=${MOTO_ENDPOINT_URL}
+    - LOCAL_ECS_IMAGE_ADDRESS=${LOCAL_ECS_IMAGE_ADDRESS}
     entrypoint: [/bin/bash, entrypoint.sh]
     profiles: [integration]
     depends_on:
@@ -147,7 +142,7 @@ services:
     - sf-local
     - local-data-api
     - moto
-    - localstack
+    - tasks
 
   e2e:
     stdin_open: true
