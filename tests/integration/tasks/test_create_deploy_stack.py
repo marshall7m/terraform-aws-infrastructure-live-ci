@@ -31,31 +31,40 @@ tests:
 LOCAL_ECS_IMAGE_ADDRESS
 """
 
+
 def pytest_generate_tests(metafunc):
     if "terra" in metafunc.fixturenames:
-        metafunc.parametrize("terra", [
-            pytest.param(
-                {
-                    "binary": "terragrunt",
-                    "skip_teardown": True,
-                    "env": {
-                        "IS_REMOTE": "False",
-                        "TF_VAR_ecs_image_address": os.environ["LOCAL_ECS_IMAGE_ADDRESS"],
-                        "TF_VAR_approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
-                        "TF_VAR_approval_request_sender_email": "fakesender@fake.com",
-                        "TF_VAR_create_approval_sender_policy": "false"
-                    },
-                    "tfdir": f"{os.path.dirname(os.path.realpath(__file__))}/../../fixtures/terraform/mut/basic"
-                }
-            )
-        ], indirect=True, scope="module"
-    )
+        metafunc.parametrize(
+            "terra",
+            [
+                pytest.param(
+                    {
+                        "binary": "terragrunt",
+                        "skip_teardown": True,
+                        "env": {
+                            "IS_REMOTE": "False",
+                            "TF_VAR_ecs_image_address": os.environ[
+                                "LOCAL_ECS_IMAGE_ADDRESS"
+                            ],
+                            "TF_VAR_approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
+                            "TF_VAR_approval_request_sender_email": "fakesender@fake.com",
+                            "TF_VAR_create_approval_sender_policy": "false",
+                        },
+                        "tfdir": f"{os.path.dirname(os.path.realpath(__file__))}/../../fixtures/terraform/mut/basic",
+                    }
+                )
+            ],
+            indirect=True,
+            scope="module",
+        )
+
 
 @pytest.fixture
 def mut(terra):
     terra.setup(cleanup_on_exit=False)
     terra.run("apply", get_cache=True, extra_args={"auto_approve": True})
     return terra
+
 
 @pytest.mark.usefixtures("truncate_executions")
 @pytest.mark.parametrize("changes", [{"foo/a.tf": dummy_tf_output()}])
