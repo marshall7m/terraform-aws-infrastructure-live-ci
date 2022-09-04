@@ -92,33 +92,6 @@ def tf(tf_factory):
     yield tf_factory(f"{os.path.dirname(os.path.realpath(__file__))}/fixtures")
 
 
-@pytest.fixture(scope="session")
-def mut_plan(tf):
-    log.info("Getting tf plan")
-    yield tf.plan(output=True)
-
-
-@pytest.fixture(scope="session")
-def mut_output(tf):
-    log.info("Applying testing tf module")
-    tf.apply(auto_approve=True)
-
-    yield {k: v["value"] for k, v in tf.output().items()}
-
-
-@pytest.fixture(scope="module")
-def gh():
-    return github.Github(os.environ["TF_VAR_testing_integration_github_token"], retry=3)
-
-
-@pytest.fixture(scope="module")
-def repo(gh, mut_output):
-    repo = gh.get_user().get_repo(mut_output["repo_name"])
-    os.environ["REPO_FULL_NAME"] = repo.full_name
-
-    return repo
-
-
 @pytest.fixture(scope="module")
 def git_repo(tmp_path_factory):
     dir = str(tmp_path_factory.mktemp("scenario-repo-"))

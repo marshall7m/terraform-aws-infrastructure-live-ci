@@ -24,11 +24,6 @@ def aws_credentials():
     os.environ["AWS_DEFAULT_REGION"] = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
 
 
-@pytest.fixture(scope="session")
-def gh():
-    return github.Github(os.environ["TF_VAR_testing_unit_github_token"], retry=3)
-
-
 class ServerException(Exception):
     pass
 

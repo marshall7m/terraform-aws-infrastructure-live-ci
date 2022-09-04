@@ -126,9 +126,11 @@ def truncate_executions(setup_metadb):
 
 
 @pytest.fixture(scope="module")
-def repo(gh, request):
-
+def repo(request):
+    gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
     if type(request.param) == dict:
+        # TODO: add ability to create repo based on template repo once PR
+        # changes are in a release: https://github.com/PyGithub/PyGithub/pull/2090
         if request.param["is_fork"]:
             log.info(f"Forking repo: {request.param['name']}")
             base = gh.get_repo(request.param["name"])
