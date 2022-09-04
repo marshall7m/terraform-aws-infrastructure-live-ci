@@ -42,4 +42,4 @@ def reset_moto_server(request):
         log.info("Skip resetting moto server")
     else:
         log.info("Resetting moto server")
-        requests.post("http://localhost:5000/moto-api/reset")
+        requests.post(f"{os.environ['MOTO_ENDPOINT_URL']}/moto-api/reset")
