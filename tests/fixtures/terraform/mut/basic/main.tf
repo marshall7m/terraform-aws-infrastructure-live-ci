@@ -7,7 +7,7 @@ locals {
 data "aws_caller_identity" "current" {}
 
 module "mut_infrastructure_live_ci" {
-  source = "../../../../..//"
+  source = "../../../../../../../..//"
 
   prefix = local.mut_id
 

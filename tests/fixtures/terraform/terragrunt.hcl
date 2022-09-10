@@ -100,17 +100,6 @@ provider "aws" {
     sns            = var.moto_endpoint_url
     ssm            = var.moto_endpoint_url
     sts            = var.moto_endpoint_url
-
-    # local stack
-    # s3             = "http://s3.localhost.localstack.cloud:4566"
-    # cloudwatch     = "http://localhost:4566"
-    # iam            = "http://localhost:4566"
-    # lambda         = "http://localhost:4566"
-    # s3             = "http://s3.localhost.localstack.cloud:4566"
-    # secretsmanager = "http://localhost:4566"
-    # sns            = "http://localhost:4566"
-    # ssm            = "http://localhost:4566"
-    # sts            = "http://localhost:4566"
   }
 }
 EOF
@@ -119,5 +108,5 @@ EOF
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite"
-  contents  = get_env("IS_REMOTE") == "true" ? local.remote_provider : local.local_provider
+  contents  = get_env("IS_REMOTE", false) ? local.remote_provider : local.local_provider
 }
