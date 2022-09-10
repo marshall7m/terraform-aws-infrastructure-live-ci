@@ -75,7 +75,7 @@ After all directories and their associated dependencies are gathered, they are p
  
 ## Design
  
-![Diagram](terraform-aws-infrastructure-live.png)
+![Diagram](./diagram/terraform-aws-infrastructure-live.png)
  
 1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS Lambda Function endpoint for open PR activities or merge PR events.
 
