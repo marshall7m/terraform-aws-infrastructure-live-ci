@@ -1,0 +1,186 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:10.14-alpine
+    restart: always
+    volumes:
+    - $PWD/docker-pgsql-entrypoint:/docker-entrypoint-initdb.d
+    - $PWD/docker-pgsql-volume:/var/lib/postgresql/data
+    ports:
+    - 5432:5432
+    environment:
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=${POSTGRES_DB}
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 15s
+      timeout: 5000s
+      retries: 50
+    networks:
+    - terraform-aws-infrastructure-live-ci_local
+    profiles: [unit, integration]
+
+  sf-local:
+    image: amazon/aws-stepfunctions-local:1.10.2
+    container_name: step-function-local
+    volumes:
+    - $PWD/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
+    ports:
+    - 8083:8083
+    environment:
+    - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
+    networks:
+    - terraform-aws-infrastructure-live-ci_local
+    profiles: [integration]
+
+  local-data-api:
+    build: ./local-data-api
+    image: terraform-aws-infrastructure-live-ci/local-data-api:latest
+    restart: always
+    environment:
+    - ENGINE=PostgresSQL
+    - POSTGRES_HOST=${POSTGRES_HOST}
+    - POSTGRES_PORT=${POSTGRES_PORT}
+    - POSTGRES_USER=${POSTGRES_USER}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=${POSTGRES_DB}
+    - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
+    - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
+    ports:
+    - 8080:80
+    networks:
+    - terraform-aws-infrastructure-live-ci_local
+    depends_on:
+    - postgres
+    profiles: [unit, integration]
+
+  moto:
+    image: motoserver/moto:4.0.1
+    ports:
+    - 5000:5000
+    networks:
+      terraform-aws-infrastructure-live-ci_local:
+        aliases:
+        - ${MOTO_ALIAS}
+    profiles: [integration]
+
+  unit:
+    stdin_open: true
+    tty: true
+    image: terraform-aws-infrastructure-live/unit
+    build: ./unit
+    volumes:
+    - ../:/src
+    environment:
+    - AWS_ACCESS_KEY_ID=mock-aws-access-key
+    - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
+    - AWS_REGION=us-east-1
+    - AWS_DEFAULT_REGION=us-east-1
+    - AWS_SESSION_TOKEN=mock-aws-session-token
+    - AWS_SESSION_EXPIRATION=mock-aws-exp
+
+    - TF_VAR_testing_unit_github_token
+
+    - PGUSER=${POSTGRES_USER}
+    - PGPASSWORD=${POSTGRES_PASSWORD}
+    - PGDATABASE=${POSTGRES_DB}
+    - PGHOST=${POSTGRES_HOST}
+    - PGPORT=${POSTGRES_PORT}
+
+    - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
+    - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
+
+    - METADB_NAME=${POSTGRES_DB}
+    - METADB_ENDPOINT_URL=${METADB_ENDPOINT_URL}
+    entrypoint: [/bin/bash, entrypoint.sh]
+    profiles: [unit]
+    networks:
+    - terraform-aws-infrastructure-live-ci_local
+    depends_on:
+    - local-data-api
+    - postgres
+
+  integration:
+    stdin_open: true
+    tty: true
+    image: terraform-aws-infrastructure-live/integration
+    build: ./integration
+    volumes:
+    - ../:/src
+    - /usr/bin/docker:/usr/bin/docker
+    - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+    - AWS_ACCESS_KEY_ID=dummy-key
+    - AWS_SECRET_ACCESS_KEY=dummy-secret
+    - AWS_REGION=us-west-2
+    - AWS_DEFAULT_REGION=us-west-2
+
+    - GITHUB_TOKEN=${TESTING_GITHUB_TOKEN}
+
+    - PGUSER=${POSTGRES_USER}
+    - PGPASSWORD=${POSTGRES_PASSWORD}
+    - PGDATABASE=${POSTGRES_DB}
+    - PGHOST=${POSTGRES_HOST}
+    - PGPORT=${POSTGRES_PORT}
+
+    - METADB_NAME=${POSTGRES_DB}
+    - METADB_ENDPOINT_URL=${METADB_ENDPOINT_URL}
+
+    - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
+    - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
+
+    - MOTO_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+
+    - TF_VAR_metadb_endpoint_url=${METADB_ENDPOINT_URL}
+    - TF_VAR_metadb_name=${POSTGRES_DB}
+    - TF_VAR_metadb_username=${POSTGRES_USER}
+    - TF_VAR_sf_endpoint_url=${SF_ENDPOINT_URL}
+    - TF_VAR_github_token_ssm_value
+    - TF_VAR_moto_endpoint_url=${MOTO_ENDPOINT_URL}
+    entrypoint: [/bin/bash, /src/tests/entrypoint.sh]
+    profiles: [integration]
+    networks:
+    - terraform-aws-infrastructure-live-ci_local
+    depends_on:
+    - postgres
+    - sf-local
+    - local-data-api
+    - moto
+
+  e2e:
+    stdin_open: true
+    tty: true
+    image: ghcr.io/marshall7m/terrace:v0.1.13
+    volumes:
+    - ../:/src
+    - /usr/bin/docker:/usr/bin/docker
+    - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_REGION
+    - AWS_DEFAULT_REGION
+    - AWS_SESSION_TOKEN
+    - AWS_SESSION_EXPIRATION
+
+    - TF_VAR_testing_integration_github_token
+    - TF_VAR_registry_password
+    - TF_VAR_github_token_ssm_value
+    - TF_VAR_approval_request_sender_email
+
+    - UNTIL_AWS_EXP=1h
+    - ADDITIONAL_PATH
+    entrypoint: [/bin/bash, /src/tests/entrypoint.sh]
+    networks:
+    - terraform-aws-infrastructure-live-ci_local
+
+
+networks:
+  terraform-aws-infrastructure-live-ci_local:
+    driver: bridge
+    ipam:
+      driver: default
