@@ -60,7 +60,7 @@ def update_new_resources() -> None:
 
         if len(resources) > 0:
             rds_data_client = boto3.client(
-                "rds-data", endpoint_url=os.environ.get("METADB_LOCAL_ENDPOINT")
+                "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
             )
 
             log.info("Adding new provider resources to associated execution record")

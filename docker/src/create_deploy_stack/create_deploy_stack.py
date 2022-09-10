@@ -23,10 +23,10 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-ssm = boto3.client("ssm")
-lb = boto3.client("lambda")
+ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))
+lb = boto3.client("lambda", endpoint_url=os.environ.get("LAMBDA_ENDPOINT_URL"))
 rds_data_client = boto3.client(
-    "rds-data", endpoint_url=os.environ.get("METADB_LOCAL_ENDPOINT")
+    "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
 )
 
 
