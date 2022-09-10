@@ -7,6 +7,7 @@ import logging
 import timeout_decorator
 from tests.helpers.utils import rds_data_client
 import aurora_data_api
+import github
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -113,7 +114,7 @@ def setup_metadb():
 
 
 @pytest.fixture(scope="function")
-def truncate_executions(setup_metadb):
+def truncate_executions():
     """Removes all rows from execution table after every test"""
 
     yield None
