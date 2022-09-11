@@ -1,5 +1,4 @@
 import pytest
-import uuid
 import os
 import datetime
 import re
@@ -7,7 +6,6 @@ import logging
 import timeout_decorator
 from tests.helpers.utils import rds_data_client
 import aurora_data_api
-import github
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -124,32 +122,3 @@ def truncate_executions():
         database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
     ) as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE executions")
-
-
-@pytest.fixture(scope="module")
-def repo(request):
-    gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
-    if type(request.param) == dict:
-        # TODO: add ability to create repo based on template repo once PR
-        # changes are in a release: https://github.com/PyGithub/PyGithub/pull/2090
-        if request.param["is_fork"]:
-            log.info(f"Forking repo: {request.param['name']}")
-            base = gh.get_repo(request.param["name"])
-            repo = gh.get_user().create_fork(base)
-    else:
-        name = getattr(request, "param", f"test-repo-{uuid.uuid4()}")
-        log.info(f"Creating repo: {name}")
-        repo = gh.get_user().create_repo(name, auto_init=True)
-
-    yield repo
-
-    log.info(f"Deleting repo: {request.param}")
-    repo.delete()
-
-
-@pytest.fixture(scope="session")
-def mut_output(tf):
-    log.info("Applying testing tf module")
-    tf.apply(auto_approve=True)
-
-    yield {k: v["value"] for k, v in tf.output().items()}
