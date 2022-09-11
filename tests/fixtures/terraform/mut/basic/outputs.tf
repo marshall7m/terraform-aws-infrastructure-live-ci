@@ -1,3 +1,11 @@
+output "repo_full_name" {
+  value = github_repository.testing.full_name
+}
+
+output "repo_clone_url" {
+  value = github_repository.testing.http_clone_url
+}
+
 output "repo_name" {
   value = github_repository.testing.name
 }
@@ -130,4 +138,8 @@ output "ecs_subnet_ids" {
 
 output "ecs_security_group_ids" {
   value = module.mut_infrastructure_live_ci.ecs_security_group_ids
+}
+
+output "aws_region" {
+  value = aws_region.current.name
 }
