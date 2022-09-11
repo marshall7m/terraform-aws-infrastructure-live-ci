@@ -1,0 +1,21 @@
+version: '3.4'
+services:
+  create-stack:
+    networks:
+      ecs-local-network:
+        ipv4_address: 169.254.170.3
+      tests_terraform-aws-infrastructure-live-ci_local:
+    environment:
+    - AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
+    - SSM_ENDPOINT_URL
+    - LAMBDA_ENDPOINT_URL
+    - AWS_ACCESS_KEY_ID=mock-aws-access-key
+    - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
+    - AWS_REGION
+    - AWS_DEFAULT_REGION=us-west-2
+    - PR_ID
+    - BASE_REF
+    - HEAD_REF
+    - COMMIT_ID
+    depends_on:
+    - ecs-local-endpoints
