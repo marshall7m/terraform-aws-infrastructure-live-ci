@@ -312,6 +312,9 @@ def test_update_executions_with_new_deploy_stack_query(create_stack):
     query without error. Test includes assertion to ensure that the expected
     count of records are inserted.
     """
+    # TODO: cover case where create_stack() returns results that causes query to fail on a
+    # later account iteration and all queries to be rolled back.
+    # then assert metadb doesn't contain the any of the create_stack records
     with patch.object(task, "create_stack", side_effect=create_stack):
         task.update_executions_with_new_deploy_stack()
         with aurora_data_api.connect(
