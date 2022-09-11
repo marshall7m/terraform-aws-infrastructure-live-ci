@@ -108,5 +108,5 @@ EOF
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite"
-  contents  = get_env("IS_REMOTE", false) ? local.remote_provider : local.local_provider
+  contents  = get_env("IS_REMOTE", "") != "" ? local.remote_provider : local.local_provider
 }
