@@ -5,6 +5,7 @@ python3 -m pip install -r requirements.txt
 apt-get -y update
 apt-get -y install gnupg
 
+# ecs-cli
 curl -Lo /usr/local/bin/ecs-cli https://amazon-ecs-cli.s3.amazonaws.com/ecs-cli-linux-amd64-latest
 cat <<EOF > /tmp/pub_ecs_cli.txt
 -----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -143,6 +144,7 @@ curl -Lo ecs-cli.asc https://amazon-ecs-cli.s3.amazonaws.com/ecs-cli-linux-amd64
 gpg --verify ecs-cli.asc /usr/local/bin/ecs-cli
 chmod +x /usr/local/bin/ecs-cli
 
+# docker compose plugin
 DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.docker}"
 mkdir -p "${DOCKER_CONFIG}"/cli-plugins
 curl -SL https://github.com/docker/compose/releases/download/v2.3.3/docker-compose-linux-aarch64 -o "${DOCKER_CONFIG}"/cli-plugins/docker-compose
