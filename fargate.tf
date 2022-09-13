@@ -8,7 +8,7 @@ locals {
   pr_plan_container_name = "plan"
 
   create_deploy_stack_family         = "${var.prefix}-create-deploy-stack"
-  create_deploy_stack_container_name = "create-stack"
+  create_deploy_stack_container_name = "create_stack"
 
   terra_run_family         = "${var.prefix}-terra-run"
   terra_run_container_name = "run"
