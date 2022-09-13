@@ -141,5 +141,9 @@ output "ecs_security_group_ids" {
 }
 
 output "aws_region" {
-  value = aws_region.current.name
+  value = data.aws_region.current.name
+}
+
+output "ecs_network_config" {
+  value = module.mut_infrastructure_live_ci.ecs_network_config
 }

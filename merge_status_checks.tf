@@ -3,6 +3,11 @@ locals {
   trigger_pr_plan_name          = "${var.prefix}-trigger-pr-plan"
   github_webhook_secret_ssm_key = "${local.webhook_receiver_name}-gh-secret"
   repo_name                     = join("/", slice(split("/", local.repo_full_name), 1, length(split("/", local.repo_full_name))))
+  ecs_network_config = {
+    subnets        = var.ecs_subnet_ids
+    securityGroups = [aws_security_group.ecs_tasks.id]
+    assignPublicIp = local.ecs_assign_public_ip
+  }
 }
 
 resource "random_password" "github_webhook_secret" {
@@ -128,11 +133,7 @@ module "lambda_webhook_receiver" {
 
     ECS_CLUSTER_ARN = aws_ecs_cluster.this.arn
     ECS_NETWORK_CONFIG = jsonencode({
-      awsvpcConfiguration = {
-        subnets        = var.ecs_subnet_ids
-        securityGroups = [aws_security_group.ecs_tasks.id]
-        assignPublicIp = local.ecs_assign_public_ip
-      }
+      awsvpcConfiguration = local.ecs_network_config
     })
 
     MERGE_LOCK_SSM_KEY           = aws_ssm_parameter.merge_lock.name

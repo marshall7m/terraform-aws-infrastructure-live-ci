@@ -181,3 +181,10 @@ output "email_approval_secret" {
   sensitive   = true
   value       = random_password.email_approval_secret.result
 }
+
+output "ecs_network_config" {
+  description = "VPC network configurations for ECS tasks"
+  value = {
+    awsvpcConfiguration = local.ecs_network_config
+  }
+}
