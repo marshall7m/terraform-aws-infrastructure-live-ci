@@ -16,6 +16,7 @@ from common.utils import (
     subprocess_run,
     TerragruntException,
     ClientException,
+    get_task_log_url,
 )
 
 log = logging.getLogger(__name__)
@@ -385,11 +386,7 @@ class CreateStack:
             commit.create_status(
                 state=state,
                 context=os.environ["STATUS_CHECK_NAME"],
-                target_url=[
-                    s.target_url
-                    for s in commit.get_statuses()
-                    if s.context == os.environ["STATUS_CHECK_NAME"]
-                ][0],
+                target_url=get_task_log_url(),
             )
 
 
