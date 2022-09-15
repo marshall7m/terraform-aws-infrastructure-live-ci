@@ -12,6 +12,12 @@ def pytest_addoption(parser):
         "--skip-moto-reset", action="store_true", help="skips resetting moto server"
     )
 
+    parser.addoption(
+        "--setup-reset-moto-server",
+        action="store_true",
+        help="Resets moto server on session setup",
+    )
+
 
 def pytest_generate_tests(metafunc):
     tf_versions = [pytest.param("latest")]
@@ -36,10 +42,18 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture(scope="session")
 def reset_moto_server(request):
+    if not os.environ.get("IS_REMOTE", False):
+        reset = request.config.getoption("setup_reset_moto_server")
+        if reset:
+            log.info("Resetting moto server on setup")
+            requests.post(f"{os.environ['MOTO_ENDPOINT_URL']}/moto-api/reset")
+
     yield None
-    skip = request.config.getoption("skip_moto_reset")
-    if skip:
-        log.info("Skip resetting moto server")
-    else:
-        log.info("Resetting moto server")
-        requests.post(f"{os.environ['MOTO_ENDPOINT_URL']}/moto-api/reset")
+
+    if os.environ.get("IS_REMOTE", False):
+        skip = request.config.getoption("skip_moto_reset")
+        if skip:
+            log.info("Skip resetting moto server")
+        else:
+            log.info("Resetting moto server")
+            requests.post(f"{os.environ['MOTO_ENDPOINT_URL']}/moto-api/reset")
