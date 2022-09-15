@@ -375,7 +375,7 @@ class CreateStack:
 
         commit_status_config = json.loads(os.environ["COMMIT_STATUS_CONFIG"])
         log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
-        if commit_status_config["CreateDeployStack"]:
+        if commit_status_config[os.environ["STATUS_CHECK_NAME"]]:
             commit = (
                 github.Github(os.environ["GITHUB_TOKEN"], retry=3)
                 .get_repo(os.environ["REPO_FULL_NAME"])
