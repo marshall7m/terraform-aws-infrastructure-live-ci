@@ -147,3 +147,11 @@ output "aws_region" {
 output "ecs_network_config" {
   value = module.mut_infrastructure_live_ci.ecs_network_config
 }
+
+output "create_deploy_stack_log_stream_prefix" {
+  value = module.mut_infrastructure_live_ci.create_deploy_stack_log_stream_prefix
+}
+
+output "ecs_log_url_prefix" {
+  value = "https://${data.aws_region.current.name}.console.aws.amazon.com/cloudwatch/home?region=${data.aws_region.current.name}#logsV2:log-groups/log-group/${module.mut_infrastructure_live_ci.ecs_log_group_name}/log-events/"
+}

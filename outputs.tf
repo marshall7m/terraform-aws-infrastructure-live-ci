@@ -188,3 +188,13 @@ output "ecs_network_config" {
     awsvpcConfiguration = local.ecs_network_config
   }
 }
+
+output "ecs_log_group_name" {
+  description = "Cloudwatch log group name for all ECS tasks"
+  value       = aws_cloudwatch_log_group.ecs_tasks.name
+}
+
+output "create_deploy_stack_log_stream_prefix" {
+  description = "Create Deploy Stack Cloudwatch log stream prefix"
+  value       = local.create_deploy_stack_log_stream_prefix
+}
