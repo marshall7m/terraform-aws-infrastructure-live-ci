@@ -48,6 +48,7 @@ def mock_request(request):
     # POSTGRES_DB env var provided by docker compose (value must be same as local postgres db)
     if hasattr(request, "database"):
         request.database = os.environ["POSTGRES_DB"]
+
     return request
 
 
