@@ -15,12 +15,12 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ecs = boto3.client("ecs", endpoint_url=os.environ["MOTO_ENDPOINT_URL"])
+gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
 
 
 @pytest.fixture
 def push_changes(mut_output, request):
     branch = f"test-{uuid.uuid4()}"
-    gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
     repo = gh.get_repo(mut_output["repo_full_name"])
 
     yield {"commit_id": push(repo, branch, request.param), "branch": branch}
@@ -41,12 +41,8 @@ def send_commit_status(push_changes, mut_output):
     log.info("Sending commit status")
     commit.create_status(
         state="pending",
-        context="CreateDeployStack",
-        target_url=[
-            s.target_url
-            for s in commit.get_statuses()
-            if s.context == "CreateDeployStack"
-        ][0],
+        context=mut_output["create_deploy_stack_status_check_name"],
+        target_url="http://localhost:8080",
     )
 
 
@@ -78,7 +74,7 @@ def task_output(mut_output, send_commit_status, push_changes):
         "SOURCE_CLONE_URL": mut_output["repo_clone_url"],
         "REPO_FULL_NAME": mut_output["repo_full_name"],
         "SOURCE_VERSION": push_changes["branch"],
-        "STATUS_CHECK_NAME": "CreateDeployStack",
+        "STATUS_CHECK_NAME": mut_output["create_deploy_stack_status_check_name"],
         "BASE_REF": push_changes["branch"],
         "HEAD_REF": "feature-123",
         "PR_ID": "1",
@@ -88,10 +84,12 @@ def task_output(mut_output, send_commit_status, push_changes):
         "AURORA_SECRET_ARN": mut_output["metadb_secret_manager_ci_arn"],
         "TRIGGER_SF_FUNCTION_NAME": mut_output["trigger_sf_function_name"],
         "METADB_NAME": mut_output["metadb_name"],
+        "LOG_URL_PREFIX": mut_output["ecs_log_url_prefix"],
+        "LOG_STREAM_PREFIX": mut_output["create_deploy_stack_log_stream_prefix"],
     }
 
     if os.environ.get("IS_REMOTE"):
-
+        log.info("Running task remotely")
         out = ecs.run_task(
             cluster=mut_output["ecs_cluster_arn"],
             count=1,
@@ -113,6 +111,7 @@ def task_output(mut_output, send_commit_status, push_changes):
         )
 
     else:
+        log.info("Running task locally")
         # runs task locally via docker compose
         compose_filepath = f"{os.path.dirname(__file__)}/files/docker-compose.create-deploy-stack.local.yml"
 
@@ -144,7 +143,7 @@ def task_output(mut_output, send_commit_status, push_changes):
             "create_stack_GITHUB_TOKEN": os.environ["GITHUB_TOKEN"],
             "create_stack_SCAN_TYPE": "graph",
             "create_stack_COMMIT_STATUS_CONFIG": json.dumps(
-                {"CreateDeployStack": True}
+                {mut_output["create_deploy_stack_status_check_name"]: True}
             ),
         }
 
@@ -162,15 +161,20 @@ def task_output(mut_output, send_commit_status, push_changes):
     return out
 
 
-@pytest.mark.usefixtures("truncate_executions")
+@pytest.mark.usefixtures("truncate_executions", "task_output")
 @pytest.mark.parametrize(
     "push_changes", [{"foo/a.tf": dummy_tf_output()}], indirect=True
 )
-def test_successful_execution(reset_moto_server, terra_setup, task_output):
+def test_successful_execution(reset_moto_server, terra_setup, mut_output, push_changes):
     """
     Test ensures that the proper IAM permissions for the task role are in place and execution runs
     without any failures
     """
-    log.debug(task_output)
-    log.debug("dir:" + dir(task_output))
-    log.debug("vars: " + vars(task_output))
+    repo = gh.get_repo(mut_output["repo_full_name"])
+    status = [
+        status
+        for status in repo.get_commit(push_changes["commit_id"]).get_statuses()
+        if status.context == mut_output["create_deploy_stack_status_check_name"]
+    ][0]
+
+    assert status.state == "success"
