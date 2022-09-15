@@ -141,10 +141,14 @@ module "lambda_webhook_receiver" {
 
     PR_PLAN_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
     PR_PLAN_TASK_CONTAINER_NAME = local.pr_plan_container_name
+    PR_PLAN_LOG_STREAM_PREFIX   = local.pr_plan_log_stream_prefix
 
     CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN   = aws_ecs_task_definition.create_deploy_stack.arn
     CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT = var.create_deploy_stack_status_check_name
     CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME   = local.create_deploy_stack_container_name
+    CREATE_DEPLOY_STACK_LOG_STREAM_PREFIX     = local.create_deploy_stack_log_stream_prefix
+
+    LOG_URL_PREFIX = local.log_url_prefix
 
     ACCOUNT_DIM = jsonencode(var.account_parent_cfg)
   }
