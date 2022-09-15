@@ -109,12 +109,6 @@ class Invoker:
                 log.info(f"Count: {len(account_diff_paths)}")
                 log.info(f'Plan Role ARN: {account["plan_role_arn"]}')
 
-                log_options = ecs.describe_task_definition(
-                    taskDefinition=os.environ["PR_PLAN_TASK_DEFINITION_ARN"]
-                )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"][
-                    "options"
-                ]
-
                 log.info("Running ECS tasks")
                 for path in account_diff_paths:
                     log.info(f"Directory: {path}")
@@ -167,7 +161,10 @@ class Invoker:
                             "state": "pending",
                             "description": "Terraform Plan",
                             "context": context,
-                            "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["PR_PLAN_TASK_CONTAINER_NAME"] + "/" + task_id)}',
+                            "target_url": os.environ["LOG_URL_PREFIX"]
+                            + aws_encode(
+                                os.environ["PR_PLAN_LOG_STREAM_PREFIX"] + task_id
+                            ),
                         }
                     except Exception as e:
                         log.error(e, exc_info=True)
@@ -207,10 +204,6 @@ class Invoker:
         """
         ecs = boto3.client("ecs")
 
-        log_options = ecs.describe_task_definition(
-            taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"]
-        )["taskDefinition"]["containerDefinitions"][0]["logConfiguration"]["options"]
-
         try:
             task = ecs.run_task(
                 cluster=os.environ["ECS_CLUSTER_ARN"],
@@ -241,7 +234,10 @@ class Invoker:
                 "state": "pending",
                 "description": "Create Deploy Stack",
                 "context": os.environ["CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT"],
-                "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME"] + "/" + task_id)}',
+                "target_url": os.environ["LOG_URL_PREFIX"]
+                + aws_encode(
+                    os.environ["CREATE_DEPLOY_STACK_LOG_STREAM_PREFIX"] + task_id
+                ),
             }
         except Exception as e:
             log.error(e, exc_info=True)
