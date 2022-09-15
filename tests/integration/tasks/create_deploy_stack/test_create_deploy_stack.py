@@ -135,7 +135,12 @@ def task_output(mut, push_changes):
             for key, value in {**task_env_vars, **testing_env_vars}.items():
                 f.writelines(f"{key}={value}\n")
 
-        out = docker.compose.up(build=True, abort_on_container_exit=True)
+        try:
+            out = docker.compose.up(build=True, abort_on_container_exit=True)
+        except Exception as e:
+            docker.compose.down(remove_orphans=True)
+
+            raise e
 
     return out
 
