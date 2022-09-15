@@ -18,17 +18,36 @@ ecs = boto3.client("ecs", endpoint_url=os.environ["MOTO_ENDPOINT_URL"])
 
 
 @pytest.fixture
-def push_changes(mut, request):
+def push_changes(mut_output, request):
     branch = f"test-{uuid.uuid4()}"
-    output = {k: v["value"] for k, v in mut.output().items()}
     gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
-    repo = gh.get_repo(output["repo_full_name"])
+    repo = gh.get_repo(mut_output["repo_full_name"])
 
     yield {"commit_id": push(repo, branch, request.param), "branch": branch}
 
     log.debug(f"Deleting branch: {branch}")
     ref = repo.get_git_ref(f"heads/{branch}")
     ref.delete()
+
+
+@pytest.fixture
+def send_commit_status(push_changes, mut_output):
+    commit = (
+        github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+        .get_repo(mut_output["repo_full_name"])
+        .get_commit(push_changes["commit_id"])
+    )
+
+    log.info("Sending commit status")
+    commit.create_status(
+        state="pending",
+        context="CreateDeployStack",
+        target_url=[
+            s.target_url
+            for s in commit.get_statuses()
+            if s.context == "CreateDeployStack"
+        ][0],
+    )
 
 
 def generate_local_task_compose_file(task_arn, path, overwrite=True):
@@ -53,59 +72,52 @@ def generate_local_task_compose_file(task_arn, path, overwrite=True):
 
 
 @pytest.fixture
-def task_output(mut, push_changes):
-
-    output = {k: v["value"] for k, v in mut.output().items()}
-
+def task_output(mut_output, send_commit_status, push_changes):
     # task env vars independent of if resources are remote or not
     task_env_vars = {
-        "SOURCE_CLONE_URL": output["repo_clone_url"],
-        "REPO_FULL_NAME": output["repo_full_name"],
+        "SOURCE_CLONE_URL": mut_output["repo_clone_url"],
+        "REPO_FULL_NAME": mut_output["repo_full_name"],
         "SOURCE_VERSION": push_changes["branch"],
         "STATUS_CHECK_NAME": "CreateDeployStack",
         "BASE_REF": push_changes["branch"],
         "HEAD_REF": "feature-123",
         "PR_ID": "1",
         "COMMIT_ID": push_changes["commit_id"],
-        "GITHUB_MERGE_LOCK_SSM_KEY": output["merge_lock_ssm_key"],
-        "AURORA_CLUSTER_ARN": output["metadb_arn"],
-        "AURORA_SECRET_ARN": output["metadb_secret_manager_ci_arn"],
-        "TRIGGER_SF_FUNCTION_NAME": output["trigger_sf_function_name"],
-        "METADB_NAME": output["metadb_name"],
+        "GITHUB_MERGE_LOCK_SSM_KEY": mut_output["merge_lock_ssm_key"],
+        "AURORA_CLUSTER_ARN": mut_output["metadb_arn"],
+        "AURORA_SECRET_ARN": mut_output["metadb_secret_manager_ci_arn"],
+        "TRIGGER_SF_FUNCTION_NAME": mut_output["trigger_sf_function_name"],
+        "METADB_NAME": mut_output["metadb_name"],
     }
 
     if os.environ.get("IS_REMOTE"):
-        # runs task remotely
-        pass
-        # use tf outs to interpolate env vars for docker compose ecs integrations override file
-        # still use ecs-cli to convert task to compose
-        # out = ecs.run_task(
-        #     cluster=os.environ["ECS_CLUSTER_ARN"],
-        #     count=1,
-        #     launchType="FARGATE",
-        #     taskDefinition=output["ecs_create_deploy_stack_definition_arn"],
-        #     networkConfiguration=json.loads(os.environ["ECS_NETWORK_CONFIG"]),
-        #     overrides={
-        #         "containerOverrides": [
-        #             {
-        #                 "name": output[""],
-        #                 "environment": [
-        #                     {"name": "BASE_REF", "value": base_ref},
-        #                     {"name": "HEAD_REF", "value": head_ref},
-        #                     {"name": "PR_ID", "value": str(pr_id)},
-        #                     {"name": "COMMIT_ID", "value": head_sha},
-        #                 ],
-        #             }
-        #         ]
-        #     },
-        # )
+
+        out = ecs.run_task(
+            cluster=mut_output["ecs_cluster_arn"],
+            count=1,
+            launchType="FARGATE",
+            taskDefinition=mut_output["ecs_create_deploy_stack_definition_arn"],
+            networkConfiguration=mut_output["ecs_network_config"],
+            overrides={
+                "containerOverrides": [
+                    {
+                        "name": mut_output["ecs_create_deploy_stack_container_name"],
+                        "environment": [
+                            {"name": key, "value": value}
+                            for key, value in task_env_vars.items()
+                            if key in ["BASE_REF", "HEAD_REF", "COMMIT_ID", "PR_ID"]
+                        ],
+                    }
+                ]
+            },
+        )
 
     else:
         # runs task locally via docker compose
         compose_filepath = f"{os.path.dirname(__file__)}/files/docker-compose.create-deploy-stack.local.yml"
 
         generate_local_task_compose_file(
-            output["ecs_create_deploy_stack_definition_arn"], compose_filepath
+            mut_output["ecs_create_deploy_stack_definition_arn"], compose_filepath
         )
 
         docker = DockerClient(
@@ -127,8 +139,13 @@ def task_output(mut, push_changes):
             "SSM_ENDPOINT_URL": os.environ["MOTO_ENDPOINT_URL"],
             "LAMBDA_ENDPOINT_URL": os.environ["MOTO_ENDPOINT_URL"],
             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "/role-arn/"
-            + output["ecs_create_deploy_stack_role_arn"],
-            "AWS_REGION": output.get("aws_region", "us-west-2"),
+            + mut_output["ecs_create_deploy_stack_role_arn"],
+            "AWS_REGION": mut_output["aws_region"],
+            "create_stack_GITHUB_TOKEN": os.environ["GITHUB_TOKEN"],
+            "create_stack_SCAN_TYPE": "graph",
+            "create_stack_COMMIT_STATUS_CONFIG": json.dumps(
+                {"CreateDeployStack": True}
+            ),
         }
 
         with open(f"{os.path.dirname(__file__)}/files/.env", "w") as f:
@@ -149,9 +166,11 @@ def task_output(mut, push_changes):
 @pytest.mark.parametrize(
     "push_changes", [{"foo/a.tf": dummy_tf_output()}], indirect=True
 )
-def test_successful_execution(task_output):
+def test_successful_execution(reset_moto_server, terra_setup, task_output):
     """
     Test ensures that the proper IAM permissions for the task role are in place and execution runs
     without any failures
     """
     log.debug(task_output)
+    log.debug("dir:" + dir(task_output))
+    log.debug("vars: " + vars(task_output))
