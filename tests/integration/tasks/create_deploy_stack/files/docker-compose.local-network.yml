@@ -1,6 +1,7 @@
 version: '3.4'
 services:
-  create-stack:
+  create_stack:
+    build: ../../../../../docker
     networks:
       ecs-local-network:
         ipv4_address: 169.254.170.3
@@ -9,6 +10,7 @@ services:
     - AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
     - SSM_ENDPOINT_URL
     - LAMBDA_ENDPOINT_URL
+    - METADB_ENDPOINT_URL
     - AWS_ACCESS_KEY_ID=mock-aws-access-key
     - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
     - AWS_REGION
