@@ -7,8 +7,10 @@ locals {
   pr_plan_task_family    = "${var.prefix}-pr-plan"
   pr_plan_container_name = "plan"
 
-  create_deploy_stack_family         = "${var.prefix}-create-deploy-stack"
-  create_deploy_stack_container_name = "create_stack"
+  create_deploy_stack_family            = "${var.prefix}-create-deploy-stack"
+  create_deploy_stack_container_name    = "create_stack"
+  create_deploy_stack_logs_prefix       = "merge"
+  create_deploy_stack_log_stream_prefix = "merge/${local.create_deploy_stack_container_name}/"
 
   terra_run_family         = "${var.prefix}-terra-run"
   terra_run_container_name = "run"
@@ -329,6 +331,14 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
         {
           name  = "AURORA_SECRET_ARN"
           value = aws_secretsmanager_secret_version.ci_metadb_user.arn
+        },
+        {
+          name  = "LOG_URL_PREFIX"
+          value = local.log_url_prefix
+        },
+        {
+          name  = "LOG_STREAM_PREFIX"
+          value = local.create_deploy_stack_log_stream_prefix
         }
       ])
     }
