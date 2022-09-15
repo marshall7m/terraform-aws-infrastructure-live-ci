@@ -234,7 +234,15 @@ class CreateStack:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                SELECT *
+                SELECT
+                    account_name,
+                    account_path,
+                    account_deps::VARCHAR,
+                    min_approval_count,
+                    min_rejection_count,
+                    voters::VARCHAR,
+                    plan_role_arn,
+                    apply_role_arn
                 FROM account_dim
                 ORDER BY account_name
                 """
@@ -244,7 +252,17 @@ class CreateStack:
                 log.debug(f"Raw accounts records:\n{res}")
                 accounts = []
                 for account in res:
-                    accounts.append(dict(zip(cols, account)))
+                    record = dict(zip(cols, account))
+                    record["account_deps"] = (
+                        record["account_deps"]
+                        .removeprefix("{")
+                        .removesuffix("}")
+                        .split(",")
+                    )
+                    record["voters"] = (
+                        record["voters"].removeprefix("{").removesuffix("}").split(",")
+                    )
+                    accounts.append(record)
                 log.debug(f"Accounts:\n{accounts}")
 
                 if len(accounts) == 0:
