@@ -20,10 +20,10 @@ provider "aws" {
     # amazon/aws-stepfunctions-local
     stepfunctions = var.sf_endpoint_url
 
-    # koxudaxi/local-data-api proxy container
+    # terraform-aws-infrastructure-live-ci/local-data-api
     rdsdata = var.metadb_endpoint_url
 
-    # moto
+    # motoserver/moto
     ses            = var.moto_endpoint_url
     rds            = var.moto_endpoint_url
     ecs            = var.moto_endpoint_url
