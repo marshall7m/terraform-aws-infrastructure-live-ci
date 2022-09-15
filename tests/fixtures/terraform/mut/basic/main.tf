@@ -83,4 +83,10 @@ module "mut_infrastructure_live_ci" {
       apply_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.deploy_role_name}"
     }
   ]
+
+  # for some reason an explicit dependency is needed for github_repository.testing or else a repo not found error is raised
+  # when the module resources access github_repository attributes
+  depends_on = [
+    github_repository.testing
+  ]
 }
