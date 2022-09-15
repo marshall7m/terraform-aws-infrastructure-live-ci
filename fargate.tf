@@ -3,9 +3,10 @@ locals {
 
   ecs_execution_role_name = "${var.prefix}-ecs-execution"
 
-  ecs_assign_public_ip   = var.ecs_assign_public_ip ? "ENABLED" : "DISABLED"
-  pr_plan_task_family    = "${var.prefix}-pr-plan"
-  pr_plan_container_name = "plan"
+  ecs_assign_public_ip      = var.ecs_assign_public_ip ? "ENABLED" : "DISABLED"
+  pr_plan_task_family       = "${var.prefix}-pr-plan"
+  pr_plan_container_name    = "plan"
+  pr_plan_log_stream_prefix = "pr/${local.pr_plan_container_name}/"
 
   create_deploy_stack_family            = "${var.prefix}-create-deploy-stack"
   create_deploy_stack_container_name    = "create_stack"
@@ -209,7 +210,20 @@ resource "aws_ecs_task_definition" "plan" {
           valueFrom = aws_ssm_parameter.commit_status_config.arn
         }
       ]
-      environment = concat(local.ecs_tasks_base_env_vars, var.ecs_tasks_common_env_vars)
+      environment = concat(
+        [
+          {
+            name  = "LOG_URL_PREFIX"
+            value = local.log_url_prefix
+          },
+          {
+            name  = "LOG_STREAM_PREFIX"
+            value = local.pr_plan_log_stream_prefix
+          }
+        ],
+        local.ecs_tasks_base_env_vars,
+        var.ecs_tasks_common_env_vars
+      )
     }
   ])
   cpu                      = var.plan_cpu
