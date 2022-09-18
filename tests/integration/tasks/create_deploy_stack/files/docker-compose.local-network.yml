@@ -11,8 +11,10 @@ services:
     - SSM_ENDPOINT_URL
     - LAMBDA_ENDPOINT_URL
     - METADB_ENDPOINT_URL
-    - AWS_ACCESS_KEY_ID=mock-aws-access-key
-    - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
+    - AWS_S3_ENDPOINT
+    - AWS_DYNAMODB_ENDPOINT
+    - AWS_IAM_ENDPOINT
+    - AWS_STS_ENDPOINT
     - AWS_REGION
     - AWS_DEFAULT_REGION=us-west-2
     - PR_ID

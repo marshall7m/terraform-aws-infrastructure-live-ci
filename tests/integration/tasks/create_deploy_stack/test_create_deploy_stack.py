@@ -137,6 +137,11 @@ def task_output(mut_output, send_commit_status, push_changes):
             "METADB_ENDPOINT_URL": os.environ["METADB_ENDPOINT_URL"],
             "SSM_ENDPOINT_URL": os.environ["MOTO_ENDPOINT_URL"],
             "LAMBDA_ENDPOINT_URL": os.environ["MOTO_ENDPOINT_URL"],
+            "AWS_S3_ENDPOINT": os.environ["MOTO_ENDPOINT_URL"],
+            "AWS_DYNAMODB_ENDPOINT": os.environ["MOTO_ENDPOINT_URL"],
+            "AWS_IAM_ENDPOINT": os.environ["MOTO_ENDPOINT_URL"],
+            "AWS_STS_ENDPOINT": os.environ["MOTO_ENDPOINT_URL"],
+            "S3_BACKEND_FORCE_PATH_STYLE": "true",
             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "/role-arn/"
             + mut_output["ecs_create_deploy_stack_role_arn"],
             "AWS_REGION": mut_output["aws_region"],
