@@ -187,7 +187,7 @@ def commit(repo, branch, changes, commit_message):
 
 def push(repo, branch, changes, commit_message="Adding test files"):
     try:
-        ref = repo.get_branch(branch)
+        ref = repo.get_git_ref(f"heads/{branch}")
     except Exception:
         log.debug(f"Creating ref for branch: {branch}")
         ref = repo.create_git_ref(
