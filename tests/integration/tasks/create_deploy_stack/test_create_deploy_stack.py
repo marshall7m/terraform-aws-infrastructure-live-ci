@@ -10,12 +10,14 @@ import subprocess
 import shlex
 from tempfile import NamedTemporaryFile
 import json
+import aurora_data_api
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ecs = boto3.client("ecs", endpoint_url=os.environ["MOTO_ENDPOINT_URL"])
 gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+rds_data = boto3.client("rds-data", endpoint_url=os.environ["METADB_ENDPOINT_URL"])
 
 
 @pytest.fixture
@@ -168,13 +170,48 @@ def task_output(mut_output, send_commit_status, push_changes):
 
 @pytest.mark.usefixtures("truncate_executions", "task_output")
 @pytest.mark.parametrize(
-    "push_changes", [{"foo/a.tf": dummy_tf_output()}], indirect=True
+    "push_changes,expected_cfg_paths",
+    [
+        pytest.param(
+            {
+                f"directory_dependency/shared-services-account/us-west-2/env-one/doo/{uuid.uuid4()}.tf": dummy_tf_output()
+            },
+            ["directory_dependency/shared-services-account/us-west-2/env-one/doo"],
+            id="one_node",
+        )
+    ],
+    indirect=["push_changes"],
 )
-def test_successful_execution(reset_moto_server, terra_setup, mut_output, push_changes):
+def test_successful_execution(
+    reset_moto_server, expected_cfg_paths, terra_setup, mut_output, push_changes
+):
     """
-    Test ensures that the proper IAM permissions for the task role are in place and execution runs
-    without any failures
+    Test ensures that the proper IAM permissions for the task role are in place, execution runs
+    without any failures, expected metadb execution records were created, and expected commit status is sent.
     """
+
+    with aurora_data_api.connect(
+        aurora_cluster_arn=mut_output["metadb_arn"],
+        secret_arn=mut_output["metadb_secret_manager_master_arn"],
+        database=mut_output["metadb_name"],
+        rds_data_client=rds_data,
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+            SELECT array_agg(cfg_path::TEXT)
+            FROM {mut_output["metadb_schema"]}.executions
+            WHERE commit_id = '{push_changes["commit_id"]}'
+            """
+            )
+            results = cur.fetchone()[0]
+            actual_cfg_paths = [] if results is None else [id for id in results]
+
+    log.info("Assert that all expected cfg_paths are within executions table")
+    assert len(expected_cfg_paths) == len(actual_cfg_paths) and sorted(
+        expected_cfg_paths
+    ) == sorted(actual_cfg_paths)
+
     repo = gh.get_repo(mut_output["repo_full_name"])
     status = [
         status
@@ -182,4 +219,5 @@ def test_successful_execution(reset_moto_server, terra_setup, mut_output, push_c
         if status.context == mut_output["create_deploy_stack_status_check_name"]
     ][0]
 
+    log.info("Assert that expected commit status state is sent")
     assert status.state == "success"
