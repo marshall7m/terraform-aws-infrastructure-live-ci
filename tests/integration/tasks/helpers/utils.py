@@ -96,13 +96,15 @@ def run_task(
         else:
             log.debug("Creating docker compose directory")
             os.makedirs(compose_dir)
+            log.debug("Generating docker compose files")
             generate_local_task_compose_file(
                 task_def_arn, os.path.join(compose_dir, "docker-compose.ecs-local.yml")
             )
 
         compose_files = (
-            glob(compose_dir + "/*.yml")
-            + [os.path.dirname(__file__) + "/compose/docker-compose.local-endpoint.yml"]
+            glob(compose_dir + "/*[!override].yml")
+            + glob(compose_dir + "/*override.yml")
+            + [os.path.dirname(__file__) + "/docker-compose.local-endpoint.yml"]
             + compose_files
         )
 
