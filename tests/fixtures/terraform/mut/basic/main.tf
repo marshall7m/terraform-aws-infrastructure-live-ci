@@ -37,7 +37,7 @@ module "mut_infrastructure_live_ci" {
   ecs_image_address              = var.ecs_image_address
 
   # repo specific env vars required to conditionally set the terraform backend configurations
-  ecs_tasks_common_env_vars = [
+  ecs_tasks_common_env_vars = concat([
     {
       name  = "TG_BACKEND"
       value = "s3"
@@ -46,7 +46,7 @@ module "mut_infrastructure_live_ci" {
       name  = "TG_S3_BUCKET"
       value = aws_s3_bucket.testing_tf_state.id
     }
-  ]
+  ], local.local_task_common_env_vars)
 
   tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
 

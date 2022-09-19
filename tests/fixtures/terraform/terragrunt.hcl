@@ -1,5 +1,42 @@
 locals {
   local_provider = <<EOF
+
+locals {
+  local_task_common_env_vars = [
+    {
+      name = "SSM_ENDPOINT_URL"
+      value = var.moto_endpoint_url
+    },
+    {
+      name = "LAMBDA_ENDPOINT_URL"
+      value = var.moto_endpoint_url
+    },
+    {
+      name = "AWS_S3_ENDPOINT"
+      value = var.moto_endpoint_url
+    },
+    {
+      name = "AWS_DYNAMODB_ENDPOINT"
+      value = var.moto_endpoint_url
+    },
+    {
+      name = "AWS_IAM_ENDPOINT"
+      value = var.moto_endpoint_url
+    },
+    {
+      name = "AWS_STS_ENDPOINT"
+      value = var.moto_endpoint_url
+    },
+    {
+      name = "METADB_ENDPOINT_URL"
+      value = var.metadb_endpoint_url
+    },
+    {
+      name = "S3_BACKEND_FORCE_PATH_STYLE"
+      value = "true"
+    },
+  ]
+}  
 variable "moto_endpoint_url" {
   description = "Endpoint URL for standalone moto server"
   type        = string
