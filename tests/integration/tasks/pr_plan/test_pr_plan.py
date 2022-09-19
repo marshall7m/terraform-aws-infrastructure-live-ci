@@ -4,7 +4,7 @@ import github
 import logging
 import uuid
 from tests.helpers.utils import dummy_tf_output
-from tests.integration.tasks.utils import run_task
+from tests.integration.tasks.helpers.utils import run_task
 
 log = logging.getLogger(__file__)
 log.setLevel(logging.DEBUG)
