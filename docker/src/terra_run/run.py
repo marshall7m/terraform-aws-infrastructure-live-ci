@@ -120,7 +120,9 @@ def main() -> None:
         state = "failure"
 
     log_url = get_task_log_url()
-    sf = boto3.client("stepfunctions")
+    sf = boto3.client(
+        "stepfunctions", endpoint_url=os.environ.get("STEP_FUNCTION_ENDPOINT_URL")
+    )
 
     if state == "success":
         output = json.dumps({"LogsUrl": log_url})
