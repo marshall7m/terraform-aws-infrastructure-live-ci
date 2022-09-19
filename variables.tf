@@ -202,10 +202,11 @@ variable "merge_lock_status_check_name" {
   type        = string
   default     = "Merge Lock"
 }
+
 variable "create_deploy_stack_status_check_name" {
   description = "Name of the create deploy stack GitHub status"
   type        = string
-  default     = "Create Deploy Stack"
+  default     = "CreateDeployStack"
 }
 
 variable "create_deploy_stack_cpu" {
