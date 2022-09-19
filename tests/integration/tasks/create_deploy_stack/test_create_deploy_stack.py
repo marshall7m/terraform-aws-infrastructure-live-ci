@@ -5,8 +5,9 @@ from tests.helpers.utils import dummy_tf_output
 import boto3
 import github
 import uuid
+import json
 import aurora_data_api
-from tests.integration.tasks.utils import run_task
+from tests.integration.tasks.helpers.utils import run_task
 
 
 log = logging.getLogger(__name__)
@@ -93,10 +94,17 @@ class TestCreateDeployStack:
             local_task_env_vars={
                 "create_stack_GITHUB_TOKEN": os.environ["GITHUB_TOKEN"],
                 "create_stack_SCAN_TYPE": "graph",
-                "create_stack_COMMIT_STATUS_CONFIG": mut_output["commit_status_config"],
+                "create_stack_COMMIT_STATUS_CONFIG": json.dumps(
+                    mut_output["commit_status_config"]
+                ),
+                "BUILD_PATH": os.path.join(
+                    os.path.dirname(__file__), "../../../../docker"
+                ),
             },
             compose_files=[
-                os.path.dirname(__file__) + "/docker-compose.local-network.yml"
+                os.path.join(
+                    os.path.dirname(__file__), "docker-compose.local-network.yml"
+                )
             ],
         )
 

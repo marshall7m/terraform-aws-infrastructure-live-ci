@@ -1,7 +1,7 @@
 version: '3.4'
 services:
   create_stack:
-    build: $PWD/../../../../docker
+    build: $BUILD_PATH
     networks:
       ecs-local-network:
         ipv4_address: 169.254.170.3
