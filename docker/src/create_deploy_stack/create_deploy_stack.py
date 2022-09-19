@@ -267,8 +267,7 @@ class CreateStack:
                 log.debug(f"Accounts:\n{accounts}")
 
                 if len(accounts) == 0:
-                    log.fatal("No account paths are defined in account_dim")
-                    sys.exit(1)
+                    Exception("No account paths are defined in account_dim")
 
                 try:
                     log.info("Getting account stacks")
@@ -358,6 +357,7 @@ class CreateStack:
                     Type="String",
                     Overwrite=True,
                 )
+                # raise after sending failed commit status
                 raise e
 
             log.info(
