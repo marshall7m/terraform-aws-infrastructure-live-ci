@@ -155,3 +155,11 @@ output "create_deploy_stack_log_stream_prefix" {
 output "ecs_log_url_prefix" {
   value = "https://${data.aws_region.current.name}.console.aws.amazon.com/cloudwatch/home?region=${data.aws_region.current.name}#logsV2:log-groups/log-group/${module.mut_infrastructure_live_ci.ecs_log_group_name}/log-events/"
 }
+
+output "commit_status_config" {
+  value = module.mut_infrastructure_live_ci.commit_status_config
+}
+
+output "ecs_pr_plan_task_definition_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_pr_plan_task_definition_arn
+}

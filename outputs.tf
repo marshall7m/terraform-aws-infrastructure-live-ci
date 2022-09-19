@@ -120,6 +120,11 @@ output "ecs_terra_run_task_container_name" {
   value       = local.terra_run_container_name
 }
 
+output "ecs_pr_plan_task_definition_arn" {
+  description = "AWS ECS terra run task defintion ARN"
+  value       = aws_ecs_task_definition.plan.arn
+}
+
 output "step_function_arn" {
   description = "ARN of the Step Function"
   value       = aws_sfn_state_machine.this.arn
@@ -197,4 +202,8 @@ output "ecs_log_group_name" {
 output "create_deploy_stack_log_stream_prefix" {
   description = "Create Deploy Stack Cloudwatch log stream prefix"
   value       = local.create_deploy_stack_log_stream_prefix
+}
+
+output "commit_status_config" {
+  value = local.commit_status_config
 }

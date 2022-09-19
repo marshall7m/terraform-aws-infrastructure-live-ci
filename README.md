@@ -558,6 +558,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_approval_request_log_group_name"></a> [approval\_request\_log\_group\_name](#output\_approval\_request\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
 | <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | Lambda Function URL used for casting deployment approval votes |
 | <a name="output_base_branch"></a> [base\_branch](#output\_base\_branch) | Base branch for repository that all PRs will compare to |
+| <a name="output_commit_status_config"></a> [commit\_status\_config](#output\_commit\_status\_config) | n/a |
 | <a name="output_create_deploy_stack_log_stream_prefix"></a> [create\_deploy\_stack\_log\_stream\_prefix](#output\_create\_deploy\_stack\_log\_stream\_prefix) | Create Deploy Stack Cloudwatch log stream prefix |
 | <a name="output_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#output\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub commit status |
 | <a name="output_ecs_apply_role_arn"></a> [ecs\_apply\_role\_arn](#output\_ecs\_apply\_role\_arn) | IAM role ARN the AWS ECS terra run task can assume |
@@ -569,6 +570,7 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_ecs_log_group_name"></a> [ecs\_log\_group\_name](#output\_ecs\_log\_group\_name) | Cloudwatch log group name for all ECS tasks |
 | <a name="output_ecs_network_config"></a> [ecs\_network\_config](#output\_ecs\_network\_config) | VPC network configurations for ECS tasks |
 | <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
+| <a name="output_ecs_pr_plan_task_definition_arn"></a> [ecs\_pr\_plan\_task\_definition\_arn](#output\_ecs\_pr\_plan\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#output\_ecs\_security\_group\_ids) | List of security groups IDs used ECS tasks |
 | <a name="output_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#output\_ecs\_subnet\_ids) | AWS VPC subnets IDs that the ECS tasks will be hosted in |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
