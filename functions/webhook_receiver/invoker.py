@@ -146,7 +146,10 @@ class Invoker:
                                                 "name": "ROLE_ARN",
                                                 "value": account["plan_role_arn"],
                                             },
-                                            {"name": "CONTEXT", "value": context},
+                                            {
+                                                "name": "STATUS_CHECK_NAME",
+                                                "value": context,
+                                            },
                                         ],
                                     }
                                 ]
