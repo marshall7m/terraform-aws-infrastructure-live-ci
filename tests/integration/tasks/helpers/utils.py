@@ -132,7 +132,9 @@ def run_task(
                 f.writelines(f"{key}={value}\n")
 
         try:
-            out = docker.compose.up(build=True, abort_on_container_exit=True)
+            out = docker.compose.up(
+                build=True, abort_on_container_exit=True, log_prefix=False
+            )
         except Exception as e:
             docker.compose.down(remove_orphans=True)
 
