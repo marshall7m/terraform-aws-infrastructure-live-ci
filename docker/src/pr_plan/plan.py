@@ -5,6 +5,7 @@ import subprocess
 import sys
 import github
 import json
+from common.utils import get_task_log_url
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
@@ -41,12 +42,8 @@ def main() -> None:
         log.info("Sending commit status")
         commit.create_status(
             state=state,
-            context=os.environ["CONTEXT"],
-            target_url=[
-                s.target_url
-                for s in commit.get_statuses()
-                if s.context == os.environ["STATUS_CHECK_NAME"]
-            ][0],
+            context=os.environ["STATUS_CHECK_NAME"],
+            target_url=get_task_log_url(),
         )
 
 
