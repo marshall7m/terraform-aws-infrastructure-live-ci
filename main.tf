@@ -12,7 +12,7 @@ locals {
       "Value.$" = "$$.State.Name"
     },
     {
-      "Name"    = "CONTEXT"
+      "Name"    = "STATUS_CHECK_NAME"
       "Value.$" = "States.Format('{} {}: {}', $$.Execution.Name, $$.State.Name, $.cfg_path)"
     },
     {

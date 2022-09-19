@@ -45,7 +45,7 @@ def main() -> None:
             target_url=[
                 s.target_url
                 for s in commit.get_statuses()
-                if s.context == os.environ["CONTEXT"]
+                if s.context == os.environ["STATUS_CHECK_NAME"]
             ][0],
         )
 
