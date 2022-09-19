@@ -12,8 +12,8 @@ locals {
       value = var.moto_endpoint_url
     },
     {
-      name = "STEP_FUNCTION_ENDPOINT_URL"
-      value = var.moto_endpoint_url
+      name = "SF_ENDPOINT_URL"
+      value = var.sf_endpoint_url
     },
     {
       name = "AWS_S3_ENDPOINT"
