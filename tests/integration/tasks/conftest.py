@@ -1,6 +1,9 @@
 import os
 import pytest
 import logging
+import uuid
+import github
+from tests.helpers.utils import push
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -37,3 +40,16 @@ def pytest_generate_tests(metafunc):
 @pytest.fixture()
 def mut_output(terra_apply, terra_output):
     return {k: v["value"] for k, v in terra_output.items()}
+
+
+@pytest.fixture
+def push_changes(mut_output, request):
+    gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
+    branch = f"test-{uuid.uuid4()}"
+    repo = gh.get_repo(mut_output["repo_full_name"])
+
+    yield {"commit_id": push(repo, branch, request.param), "branch": branch}
+
+    log.debug(f"Deleting branch: {branch}")
+    ref = repo.get_git_ref(f"heads/{branch}")
+    ref.delete()
