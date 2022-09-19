@@ -18,6 +18,8 @@ services:
     - IAM_ENDPOINT
     - STS_ENDPOINT
     - AWS_REGION
+    - AWS_ACCESS_KEY_ID=mock-aws-access-key
+    - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
     networks:
       ecs-local-network:
         ipv4_address: 169.254.170.2
