@@ -1,7 +1,7 @@
 locals {
-  mut_id           = "mut-${random_string.mut.id}"
-  plan_role_name   = "${local.mut_id}-plan"
-  deploy_role_name = "${local.mut_id}-deploy"
+  mut_id          = "mut-${random_string.mut.id}"
+  plan_role_name  = "${local.mut_id}-plan"
+  apply_role_name = "${local.mut_id}-deploy"
 }
 
 data "aws_caller_identity" "current" {}
@@ -70,7 +70,7 @@ module "mut_infrastructure_live_ci" {
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
-      apply_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.deploy_role_name}"
+      apply_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.apply_role_name}"
     },
     {
       name                = "shared_services"
@@ -80,7 +80,7 @@ module "mut_infrastructure_live_ci" {
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
-      apply_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.deploy_role_name}"
+      apply_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.apply_role_name}"
     }
   ]
 

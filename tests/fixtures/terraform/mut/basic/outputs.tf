@@ -163,3 +163,7 @@ output "commit_status_config" {
 output "ecs_pr_plan_task_definition_arn" {
   value = module.mut_infrastructure_live_ci.ecs_pr_plan_task_definition_arn
 }
+
+output "apply_role_arn" {
+  value = module.apply_role.role_arn
+}

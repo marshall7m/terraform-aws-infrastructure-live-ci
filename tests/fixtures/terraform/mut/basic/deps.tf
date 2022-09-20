@@ -60,9 +60,9 @@ module "plan_role" {
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
 }
 
-module "deploy_role" {
+module "apply_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
-  role_name               = local.deploy_role_name
+  role_name               = local.apply_role_name
   trusted_entities        = [module.mut_infrastructure_live_ci.ecs_apply_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
 }
