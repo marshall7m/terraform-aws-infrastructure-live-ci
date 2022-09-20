@@ -103,7 +103,7 @@ class TestCreateDeployStack:
             },
             compose_files=[
                 os.path.join(
-                    os.path.dirname(__file__), "docker-compose.local-network.yml"
+                    os.path.dirname(__file__), "docker-compose.ecs-local.custom.yml"
                 )
             ],
         )
