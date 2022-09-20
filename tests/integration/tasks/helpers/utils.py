@@ -151,9 +151,7 @@ def run_task(
             out = docker.compose.up(
                 build=True, abort_on_container_exit=True, log_prefix=False
             )
-        except Exception as e:
+        finally:
             docker.compose.down(remove_orphans=True)
-
-            raise e
 
     return out
