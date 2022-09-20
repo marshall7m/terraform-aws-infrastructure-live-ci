@@ -8,6 +8,8 @@ import boto3
 import inspect
 from tempfile import NamedTemporaryFile
 from python_on_whales import DockerClient
+from python_on_whales import docker as _docker
+from python_on_whales.exceptions import DockerException
 import shlex
 
 log = logging.getLogger(__name__)
@@ -76,6 +78,20 @@ def run_task(
         )
 
     else:
+        log.info("Creating ECS local Docker network")
+        ecs_network_name = "ecs-local-network"
+        try:
+            _docker.network.create(
+                ecs_network_name,
+                attachable=True,
+                driver="bridge",
+                gateway="169.254.170.1",
+                subnet="169.254.170.0/24",
+            )
+        # TODO: create more granular docker catch
+        except DockerException:
+            log.info("Network already exists: " + ecs_network_name)
+
         log.info("Running task locally")
         task_def = ecs.describe_task_definition(taskDefinition=task_def_arn)[
             "taskDefinition"

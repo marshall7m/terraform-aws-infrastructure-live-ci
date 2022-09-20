@@ -1,11 +1,7 @@
 version: '3.4'
 networks:
   ecs-local-network:
-    driver: bridge
-    ipam:
-      config:
-      - subnet: 169.254.170.0/24
-        gateway: 169.254.170.1
+    external: true
   tests_terraform-aws-infrastructure-live-ci_local:
     external: true
 services:
