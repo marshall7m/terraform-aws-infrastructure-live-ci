@@ -72,10 +72,10 @@ if `dev/rds` and `dev/ec2` have changes, only `dev/rds` and `dev/ec2` will be co
 
 After all directories and their associated dependencies are gathered, they are put into separate database records that a downstream Lambda Function will then use. The Lambda Function will determine the order in which the directories are passed into the Step Function deployment flow. This entire process includes no human intervention and removes the need for users to define the deployment ordering all together. The actual code that runs this process is defined [here](./docker/src/create_deploy_stack/create_deploy_stack.py).
  
- 
+
 ## Design
  
-![Diagram](terraform-aws-infrastructure-live.png)
+![Diagram](./diagram/terraform-aws-infrastructure-live.png)
  
 1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS Lambda Function endpoint for open PR activities or merge PR events.
 
