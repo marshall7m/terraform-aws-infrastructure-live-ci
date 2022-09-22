@@ -30,9 +30,12 @@ with Diagram(
     graph_attr=graph_attr,
     node_attr=node_attr,
     edge_attr=edge_attr,
+    filename="./diagram/terraform-aws-infrastructure-live",
+    outformat="png",
+    show=False,
 ):
-    receiver = LambdaFunction("2. Receiver")
-    create_deploy_stack = Fargate("5. Create Deploy Stack")
+    receiver = LambdaFunction("\n2. Receiver")
+    create_deploy_stack = Fargate("\n5. Create Deploy Stack")
 
     receiver
     (
@@ -46,8 +49,8 @@ with Diagram(
             fontname="Times bold",
         )
         >> [
-            SystemsManagerParameterStore("3. Merge Lock"),
-            Fargate("4. PR Plan"),
+            SystemsManagerParameterStore("\n3. Merge Lock"),
+            Fargate("\n4. PR Plan"),
         ]
     )
     (
@@ -64,21 +67,21 @@ with Diagram(
 
     with Cluster("Deployment Flow", graph_attr=cluster_attr):
         trigger_sf = LambdaFunction("6. Trigger Step Function", labelloc="t")
-        eventbridge = Eventbridge("11. Finished Execution", labelloc="t")
+        eventbridge = Eventbridge("11. Finished Execution\n", labelloc="t")
         sf = StepFunctions()
         create_deploy_stack >> trigger_sf >> sf
 
         with Cluster("Step Function Execution", graph_attr=cluster_attr):
-            plan = Fargate("7. Plan")
+            plan = Fargate("\n7. Plan")
             request = SimpleNotificationServiceSnsTopic(
                 "8. Approval Request", labelloc="t"
             )
-            response = LambdaFunction("9. Approval Response")
-            apply = Fargate("10. Apply", labelloc="t")
+            response = LambdaFunction("\n9. Approval Response")
+            apply = Fargate("10. Apply\n", labelloc="t")
 
             sf >> [plan, eventbridge]
             eventbridge >> trigger_sf
 
             plan >> request >> response >> apply
 
-    Aurora("MetaDB") - [create_deploy_stack, trigger_sf, response, apply]
+    Aurora("\nMetaDB") - [create_deploy_stack, trigger_sf, response, apply]
