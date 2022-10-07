@@ -24,7 +24,7 @@ services:
     - terraform-aws-infrastructure-live-ci_local
     profiles: [unit, integration]
 
-  sf-local:
+  local-sf-api:
     image: amazon/aws-stepfunctions-local:1.10.2
     container_name: step-function-local
     volumes:
@@ -33,6 +33,22 @@ services:
     - 8083:8083
     environment:
     - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
+    networks:
+    - terraform-aws-infrastructure-live-ci_local
+    profiles: [integration]
+  local-ecs-api:
+    image: marshall7m/local-ecs-api:0.0.1
+    restart: always
+    volumes:
+    - /usr/bin/docker:/usr/bin/docker
+    - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+    - 8000:8000
+    environment:
+    - COMPOSE_DEST=/tmp/compose
+    - IAM_ENDPOINT=${MOTO_ENDPOINT_URL}
+    - STS_ENDPOINT=${MOTO_ENDPOINT_URL}
+    - ECS_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
     networks:
     - terraform-aws-infrastructure-live-ci_local
     profiles: [integration]
@@ -147,8 +163,9 @@ services:
     - terraform-aws-infrastructure-live-ci_local
     depends_on:
     - postgres
-    - sf-local
+    - local-sf-api
     - local-data-api
+    - local-ecs-api
     - moto
 
   e2e:
