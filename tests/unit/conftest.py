@@ -1,7 +1,6 @@
 import pytest
 import os
 import logging
-import github
 from tests.helpers.utils import commit
 
 log = logging.getLogger(__name__)

@@ -5,9 +5,7 @@ from tests.helpers.utils import dummy_tf_output
 import boto3
 import github
 import uuid
-import json
 import aurora_data_api
-from tests.integration.tasks.helpers.utils import run_task
 
 
 log = logging.getLogger(__name__)
@@ -53,7 +51,7 @@ def send_commit_status(push_changes, mut_output):
     )
 
 
-@pytest.mark.usefixtures("truncate_executions", "send_commit_status", "terra_setup")
+@pytest.mark.usefixtures("truncate_executions", "send_commit_status")
 class TestCreateDeployStack:
     @pytest.mark.parametrize(
         "push_changes,expected_cfg_paths",
@@ -73,39 +71,50 @@ class TestCreateDeployStack:
         Test ensures that the proper IAM permissions for the task role are in place, execution runs
         without any failures, expected metadb execution records were created, and expected commit status is sent.
         """
-        run_task(
-            mut_output=mut_output,
-            task_def_arn=mut_output["ecs_create_deploy_stack_definition_arn"],
-            task_env_vars={
-                "BASE_REF": push_changes["branch"],
-                "HEAD_REF": "feature-123",
-                "PR_ID": "1",
-                "COMMIT_ID": push_changes["commit_id"],
-                "GITHUB_MERGE_LOCK_SSM_KEY": mut_output["merge_lock_ssm_key"],
-                "AURORA_CLUSTER_ARN": mut_output["metadb_arn"],
-                "AURORA_SECRET_ARN": mut_output["metadb_secret_manager_ci_arn"],
-                "TRIGGER_SF_FUNCTION_NAME": mut_output["trigger_sf_function_name"],
-                "METADB_NAME": mut_output["metadb_name"],
-                "LOG_URL_PREFIX": mut_output["ecs_log_url_prefix"],
-                "LOG_STREAM_PREFIX": mut_output[
-                    "create_deploy_stack_log_stream_prefix"
-                ],
+        ecs = boto3.client("ecs", endpoint_url=mut_output.get("ecs_endpoint_url"))
+
+        ecs.run_task(
+            taskDefinition=mut_output["ecs_create_deploy_stack_definition_arn"],
+            overrides={
+                "containerOverrides": [
+                    {
+                        "environment": [
+                            {
+                                "name": "BASE_REF",
+                                "value": push_changes["branch"],
+                            },
+                            {
+                                "name": "HEAD_REF",
+                                "value": "feature-123",
+                            },
+                            {
+                                "name": "PR_ID",
+                                "value": "1",
+                            },
+                            {
+                                "name": "COMMIT_ID",
+                                "value": push_changes["commit_id"],
+                            },
+                            {
+                                "name": "HEAD_REF",
+                                "value": "feature-123",
+                            },
+                            {
+                                "name": "HEAD_REF",
+                                "value": "feature-123",
+                            },
+                            {
+                                "name": "HEAD_REF",
+                                "value": "feature-123",
+                            },
+                            {
+                                "name": "HEAD_REF",
+                                "value": "feature-123",
+                            },
+                        ]
+                    }
+                ]
             },
-            local_task_env_vars={
-                "create_stack_GITHUB_TOKEN": os.environ["GITHUB_TOKEN"],
-                "create_stack_SCAN_TYPE": "graph",
-                "create_stack_COMMIT_STATUS_CONFIG": json.dumps(
-                    mut_output["commit_status_config"]
-                ),
-                "BUILD_PATH": os.path.join(
-                    os.path.dirname(__file__), "../../../../docker"
-                ),
-            },
-            compose_files=[
-                os.path.join(
-                    os.path.dirname(__file__), "docker-compose.ecs-local.custom.yml"
-                )
-            ],
         )
 
         with aurora_data_api.connect(
@@ -140,10 +149,9 @@ class TestCreateDeployStack:
         log.info("Assert that expected commit status state is sent")
         assert status.state == "success"
 
-    @pytest.mark.skip()
+    @pytest.mark.skip("Not implemented")
     def test_failed_execution(self, mut_output, push_changes):
-        with pytest.raises(Exception):
-            run_task(mut_output, overwrite_compose=True)
+        # TODO: Run task
 
         actual_cfg_paths = get_commit_cfg_paths(push_changes["commit_id"], mut_output)
 
