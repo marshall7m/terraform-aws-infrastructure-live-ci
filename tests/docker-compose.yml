@@ -39,7 +39,8 @@ services:
     profiles: [integration]
 
   local-ecs-api:
-    image: marshall7m/local-ecs-api:v0.0.1
+    # image: marshall7m/local-ecs-api:v0.0.1
+    image: marshall7m/local-ecs-api:latest
     restart: always
     volumes:
     - /usr/bin/docker:/usr/bin/docker
