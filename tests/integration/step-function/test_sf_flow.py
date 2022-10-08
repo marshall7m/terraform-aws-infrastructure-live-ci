@@ -4,35 +4,12 @@ import boto3
 import uuid
 import json
 import os
-import pygohcl
 import time
 from pprint import pformat
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
-sf = boto3.client("stepfunctions", endpoint_url="http://localhost:8083")
-
-
-def get_sf_def():
-    with open(os.path.dirname(__file__) + "/skeleton_sf_def.tf", "r") as f:
-        definition = pygohcl.loads(f.read())
-    return definition["locals"]["definition"]
-
-
-@pytest.fixture(scope="module")
-def mock_sf_machine():
-
-    log.debug("Creating mock Step Function machine")
-    arn = sf.create_state_machine(
-        name="DeploymentFlowIntegration",
-        definition=json.dumps(get_sf_def()),
-        roleArn="arn:aws:iam::123456789012:role/service-role/MockStepFunctionRole",
-        type="STANDARD",
-    )["stateMachineArn"]
-    yield arn
-
-    log.debug("Deleting mock Step Function machine")
-    sf.delete_state_machine(stateMachineArn=arn)
+sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
 
 
 base_input = {
@@ -106,11 +83,11 @@ base_output = {
     ],
 )
 def test_flow(
-    mock_sf_machine, case, sf_input, expected_status, expected_states, expected_output
+    mut_output, case, sf_input, expected_status, expected_states, expected_output
 ):
     arn = sf.start_execution(
         name=f"test-{case}-{uuid.uuid4()}",
-        stateMachineArn=mock_sf_machine + "#" + case,
+        stateMachineArn=mut_output["step_function_arn"] + "#" + case,
         input=json.dumps(sf_input),
     )["executionArn"]
 
