@@ -35,7 +35,7 @@ gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
     ],
     indirect=["push_changes"],
 )
-def test_successful_execution(mut_output, push_changes):
+def test_successful_execution(mut_output, push_changes, expected_status):
     ecs = boto3.client("ecs", endpoint_url=mut_output.get("ecs_endpoint_url"))
 
     cfg_path = os.path.dirname(list(push_changes["changes"].keys())[0])
@@ -46,6 +46,7 @@ def test_successful_execution(mut_output, push_changes):
         overrides={
             "containerOverrides": [
                 {
+                    "name": mut_output["ecs_terra_run_task_container_name"],
                     "environment": [
                         {"name": "CFG_PATH", "value": cfg_path},
                         {
@@ -69,7 +70,7 @@ def test_successful_execution(mut_output, push_changes):
                             "value": "task-token-123",
                         },
                         {"name": "STATUS_CHECK_NAME", "value": status_check_name},
-                    ]
+                    ],
                 }
             ]
         },

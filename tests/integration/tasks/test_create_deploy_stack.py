@@ -78,6 +78,7 @@ class TestCreateDeployStack:
             overrides={
                 "containerOverrides": [
                     {
+                        "name": mut_output["ecs_create_deploy_stack_container_name"],
                         "environment": [
                             {
                                 "name": "BASE_REF",
@@ -111,7 +112,7 @@ class TestCreateDeployStack:
                                 "name": "HEAD_REF",
                                 "value": "feature-123",
                             },
-                        ]
+                        ],
                     }
                 ]
             },

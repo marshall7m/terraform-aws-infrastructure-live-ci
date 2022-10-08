@@ -45,13 +45,14 @@ def test_successful_execution(mut_output, push_changes, expected_status):
         overrides={
             "containerOverrides": [
                 {
+                    "name": mut_output["ecs_pr_plan_container_name"],
                     "environment": [
                         {"name": "CFG_PATH", "value": cfg_path},
                         {
                             "name": "COMMIT_ID",
                             "value": push_changes["commit_id"],
                         },
-                    ]
+                    ],
                 }
             ]
         },
