@@ -33,11 +33,13 @@ services:
     - 8083:8083
     environment:
     - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
+    - ECS_ENDPOINT=${ECS_ENDPOINT_URL}
     networks:
     - terraform-aws-infrastructure-live-ci_local
     profiles: [integration]
+
   local-ecs-api:
-    image: marshall7m/local-ecs-api:0.0.1
+    image: marshall7m/local-ecs-api:v0.0.1
     restart: always
     volumes:
     - /usr/bin/docker:/usr/bin/docker
@@ -150,11 +152,13 @@ services:
     - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
 
     - MOTO_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+    - SF_ENDPOINT_URL=${SF_ENDPOINT_URL}
 
     - TF_VAR_metadb_endpoint_url=${METADB_ENDPOINT_URL}
     - TF_VAR_metadb_name=${POSTGRES_DB}
     - TF_VAR_metadb_username=${POSTGRES_USER}
     - TF_VAR_sf_endpoint_url=${SF_ENDPOINT_URL}
+    - TF_VAR_ecs_endpoint_url=${ECS_ENDPOINT_URL}
     - TF_VAR_github_token_ssm_value
     - TF_VAR_moto_endpoint_url=${MOTO_ENDPOINT_URL}
     entrypoint: [/bin/bash, /src/tests/entrypoint.sh]
