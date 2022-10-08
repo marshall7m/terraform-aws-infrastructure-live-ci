@@ -125,6 +125,11 @@ output "ecs_pr_plan_task_definition_arn" {
   value       = aws_ecs_task_definition.plan.arn
 }
 
+output "ecs_pr_plan_container_name" {
+  description = "Name of the pr plan ECS task container"
+  value       = local.pr_plan_container_name
+}
+
 output "step_function_arn" {
   description = "ARN of the Step Function"
   value       = aws_sfn_state_machine.this.arn

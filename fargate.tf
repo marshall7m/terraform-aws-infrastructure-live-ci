@@ -174,7 +174,7 @@ resource "aws_ecs_task_definition" "plan" {
   family = local.pr_plan_task_family
   container_definitions = jsonencode([
     {
-      name      = "plan"
+      name      = local.pr_plan_container_name
       essential = true
       image     = local.ecs_image_address
       command   = ["python", "/src/pr_plan/plan.py"]

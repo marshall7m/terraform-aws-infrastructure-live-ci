@@ -95,6 +95,10 @@ output "ecs_create_deploy_stack_container_name" {
   value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_container_name
 }
 
+output "ecs_pr_plan_container_name" {
+  value = module.mut_infrastructure_live_ci.ecs_pr_plan_container_name
+}
+
 output "ecs_create_deploy_stack_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn
 }
@@ -166,4 +170,12 @@ output "ecs_pr_plan_task_definition_arn" {
 
 output "apply_role_arn" {
   value = module.apply_role.role_arn
+}
+
+output "step_function_arn" {
+  value = module.mut_infrastructure_live_ci.step_function_arn
+}
+
+output "step_function_name" {
+  value = module.mut_infrastructure_live_ci.step_function_name
 }
