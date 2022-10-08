@@ -64,8 +64,11 @@ def reset_moto_server(request):
             requests.post(f"{os.environ['MOTO_ENDPOINT_URL']}/moto-api/reset")
 
 
-@pytest.fixture()
-def mut_output(reset_moto_server):
+@pytest.fixture(scope="session")
+def mut_output(request, reset_moto_server):
+    cache_dir = str(request.config.cache.makedir("tftest"))
+    log.info(f"Caching Tftest return results to {cache_dir}")
+
     tf = tftest.TerragruntTest(
         env={
             "TF_VAR_approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
@@ -74,6 +77,7 @@ def mut_output(reset_moto_server):
         },
         tfdir=f"{os.path.dirname(os.path.realpath(__file__))}/../fixtures/terraform/mut/basic",
         enable_cache=True,
+        cache_dir=cache_dir,
     )
 
     tf.setup(cleanup_on_exit=True, use_cache=True)
