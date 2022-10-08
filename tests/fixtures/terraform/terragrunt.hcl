@@ -40,15 +40,25 @@ locals {
       value = "true"
     },
   ]
-}  
+}
+
 variable "moto_endpoint_url" {
   description = "Endpoint URL for standalone moto server"
   type        = string
 }
 
 variable "sf_endpoint_url" {
-  description = "Endpoint URL for Step Function service"
+  description = "Endpoint URL for AWS Step Function"
   type        = string
+}
+
+variable "ecs_endpoint_url" {
+  description = "Endpoint URL for AWS ECS"
+  type = string
+}
+
+output "ecs_endpoint_url" {
+  value = var.ecs_endpoint_url
 }
 
 provider "aws" {
@@ -67,7 +77,7 @@ provider "aws" {
     # motoserver/moto
     ses            = var.moto_endpoint_url
     rds            = var.moto_endpoint_url
-    ecs            = var.moto_endpoint_url
+    ecs            = var.ecs_endpoint_url
     ec2            = var.moto_endpoint_url
     events         = var.moto_endpoint_url
     cloudwatch     = var.moto_endpoint_url
