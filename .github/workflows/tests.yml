@@ -90,7 +90,7 @@ jobs:
         docker compose run unit pytest -vv tests/unit
 
   integration:
-    # needs: [precommit, unit]
+    needs: [precommit, unit]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -98,10 +98,11 @@ jobs:
       id: act_pytest_integration
       shell: bash
       run: |
-        docker compose run --rm integration pytest -vv tests/integration/tasks
+        docker compose run --rm integration pytest -vv tests/integration
 
   e2e:
-    needs: [precommit, unit]
+    needs: [precommit, unit, integration]
+    if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     container: ghcr.io/marshall7m/terrace:v0.1.14
     permissions:
