@@ -122,6 +122,10 @@ def mock_sf_cfg(mut_output):
 def test_flow(
     mut_output, case, sf_input, expected_status, expected_states, expected_output
 ):
+    """
+    Test possible scenario at the Step Function execution level. Desires Step Function
+    states associated with the parametrized cases are mocked within the mock_sf_cfg fixture.
+    """
     arn = sf.start_execution(
         name=f"test-{case}-{uuid.uuid4()}",
         stateMachineArn=mut_output["step_function_arn"] + "#" + case,
@@ -138,6 +142,8 @@ def test_flow(
     for e in events:
         if "stateEnteredEventDetails" in e:
             states.append(e["stateEnteredEventDetails"]["name"])
+
+    log.info("Assert the expected states are started")
     assert states == expected_states
 
     for e in events:
@@ -147,4 +153,6 @@ def test_flow(
     assert output == expected_output
 
     status = sf.describe_execution(executionArn=arn)["status"]
+
+    log.info("Assert that the execution finished with expected status")
     assert status == expected_status
