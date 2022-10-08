@@ -48,10 +48,17 @@ services:
     ports:
     - 8000:8000
     environment:
+    # directory generated docker compose files for local RunTask will be stored
     - COMPOSE_DEST=/tmp/compose
+    # endpoint ecs tasks will use to retreive task role creds
     - IAM_ENDPOINT=${MOTO_ENDPOINT_URL}
     - STS_ENDPOINT=${MOTO_ENDPOINT_URL}
+    # endpoint used to retreive ecs task definition for RunTask API calls
     - ECS_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+    # mock aws creds can be used since moto server is used as aws backend
+    - AWS_ACCESS_KEY_ID=mock
+    - AWS_SECRET_ACCESS_KEY=mock
+    - AWS_DEFAULT_REGION=us-east-1
     networks:
     - terraform-aws-infrastructure-live-ci_local
     profiles: [integration]
