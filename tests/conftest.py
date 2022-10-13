@@ -3,9 +3,11 @@ import os
 import datetime
 import re
 import logging
+
 import timeout_decorator
-from tests.helpers.utils import rds_data_client
+from python_on_whales import DockerClient
 import aurora_data_api
+import boto3
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -84,7 +86,7 @@ def aws_session_expiration_check(request):
 
 @timeout_decorator.timeout(30)
 @pytest.fixture(scope="session")
-def setup_metadb():
+def setup_metadb(rds_data_client):
     """Creates `account_dim` and `executions` table"""
     log.info("Creating metadb tables")
     with aurora_data_api.connect(
@@ -109,6 +111,36 @@ def setup_metadb():
         database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
     ) as conn, conn.cursor() as cur:
         cur.execute("DROP TABLE IF EXISTS executions, account_dim")
+
+
+@pytest.fixture(scope="session")
+def metadb_endpoint():
+    docker = DockerClient(
+        compose_files=[os.path.join(os.path.dirname(__file__), "../docker-compose.yml")]
+    )
+    docker.compose.run("local-data-api", publish=[(8080, 80)], detach=True)
+    os.environ["METADB_LOCAL_ENDPOINT"] = "http://local-data-api:8080"
+
+    yield os.environ["METADB_LOCAL_ENDPOINT"]
+
+    docker.compose.stop()
+
+
+@pytest.fixture(scope="session")
+def rds_data_client(metadb_endpoint):
+    return boto3.client("rds-data", endpoint_url=metadb_endpoint)
+
+
+@pytest.fixture(scope="session")
+def sf_endpoint():
+    docker = DockerClient(
+        compose_files=[os.path.join(os.path.dirname(__file__), "../docker-compose.yml")]
+    )
+    docker.compose.run("local-sf-api", publish=[(8083, 80)], detach=True)
+
+    yield "http://local-sf-api:8083"
+
+    docker.compose.stop()
 
 
 @pytest.fixture(scope="function")

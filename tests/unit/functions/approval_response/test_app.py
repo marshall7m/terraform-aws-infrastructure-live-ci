@@ -5,7 +5,7 @@ import sys
 import json
 from unittest.mock import patch
 from pprint import pformat
-from tests.helpers.utils import insert_records, rds_data_client
+from tests.helpers.utils import insert_records
 import aurora_data_api
 from functions.approval_response.lambda_function import App, ClientException
 from contextlib import nullcontext as does_not_raise
@@ -87,6 +87,7 @@ def test_update_vote(
     record,
     expectation,
     expect_send_task_token,
+    rds_data_client,
 ):
     mock_sf.describe_execution.return_value = {
         "status": status,

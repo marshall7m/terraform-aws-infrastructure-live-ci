@@ -4,7 +4,7 @@ import logging
 import git
 import re
 from docker.src.common.utils import subprocess_run
-from tests.helpers.utils import insert_records, rds_data_client
+from tests.helpers.utils import insert_records
 import aurora_data_api
 
 log = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ def mock_subprocess_run(cmd: str, check=True):
 
 
 @pytest.fixture(scope="module")
-def account_dim():
+def account_dim(rds_data_client):
     """Creates account records within local db"""
     results = insert_records(
         "account_dim",
@@ -55,7 +55,7 @@ def base_git_repo(tmp_path_factory):
     """Clones template infrastructure-live repo from GitHub into local tmp dir"""
     root_dir = str(tmp_path_factory.mktemp("test-create-deploy-stack-"))
     yield git.Repo.clone_from(
-        f'https://oauth2:{os.environ["TF_VAR_testing_unit_github_token"]}@github.com/marshall7m/infrastructure-live-testing-template.git',
+        f'https://oauth2:{os.environ["TF_VAR_testing_github_token"]}@github.com/marshall7m/infrastructure-live-testing-template.git',
         root_dir,
     )
 

@@ -7,7 +7,7 @@ import uuid
 import git
 import json
 import aurora_data_api
-from tests.helpers.utils import dummy_configured_provider_resource, rds_data_client
+from tests.helpers.utils import dummy_configured_provider_resource
 from tests.unit.docker.conftest import mock_subprocess_run
 from tests.unit.conftest import push
 from docker.src.create_deploy_stack.create_deploy_stack import CreateStack  # noqa: E402
@@ -93,7 +93,7 @@ def test_get_graph_deps(tmp_path_factory, repo):
     os.environ,
     {
         "TG_BACKEND": "local",
-        "GITHUB_TOKEN": os.environ["TF_VAR_testing_unit_github_token"],
+        "GITHUB_TOKEN": os.environ["TF_VAR_testing_github_token"],
     },
 )
 def test_get_github_diff_paths(repo, tmp_path_factory):
@@ -143,7 +143,7 @@ def test_get_github_diff_paths(repo, tmp_path_factory):
     os.environ,
     {
         "TG_BACKEND": "local",
-        "GITHUB_TOKEN": os.environ["TF_VAR_testing_unit_github_token"],
+        "GITHUB_TOKEN": os.environ["TF_VAR_testing_github_token"],
     },
 )
 @patch(
@@ -303,7 +303,7 @@ def test_create_stack(
         )
     ],
 )
-def test_update_executions_with_new_deploy_stack_query(create_stack):
+def test_update_executions_with_new_deploy_stack_query(rds_data_client, create_stack):
     """
     Ensures update_executions_with_new_deploy_stack_query() runs the insert
     query without error. Test includes assertion to ensure that the expected

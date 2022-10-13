@@ -1,6 +1,6 @@
-import pytest
 import os
 import logging
+import pytest
 import github
 
 log = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def aws_credentials():
 
 @pytest.fixture(scope="session")
 def gh():
-    return github.Github(os.environ["TF_VAR_testing_unit_github_token"], retry=3)
+    return github.Github(os.environ["TF_VAR_testing_github_token"], retry=3)
 
 
 @pytest.fixture(scope="module")

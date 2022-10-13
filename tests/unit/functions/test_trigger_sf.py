@@ -4,7 +4,7 @@ import os
 import json
 import logging
 import aurora_data_api
-from tests.helpers.utils import insert_records, rds_data_client
+from tests.helpers.utils import insert_records
 from functions.trigger_sf import lambda_function
 
 log = logging.getLogger(__name__)
@@ -128,6 +128,7 @@ def test__execution_finished_status_update(
     execution,
     expected_aborted_ids,
     expected_rollback_cfg_paths,
+    rds_data_client,
 ):
     """
     Test to ensure that the finished execution's respective status was updated and
@@ -352,7 +353,7 @@ def test__execution_finished_status_update(
         ),
     ],
 )
-def test__start_executions(mock_sf, records, expected_running_ids):
+def test__start_executions(mock_sf, records, expected_running_ids, rds_data_client):
     """Test to ensure that the Lambda Function handles account and directory level dependencies before starting any Step Function executions"""
 
     records = insert_records("executions", records, enable_defaults=True)
