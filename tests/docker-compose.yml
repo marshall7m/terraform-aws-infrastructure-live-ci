@@ -1,0 +1,49 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:10.14-alpine
+    restart: always
+    container_name: postgres
+    volumes:
+    - $PWD/docker-pgsql-entrypoint:/docker-entrypoint-initdb.d
+    - $PWD/docker-pgsql-volume:/var/lib/postgresql/data
+    ports:
+    - 5432:5432
+    environment:
+    - POSTGRES_PASSWORD=postgres
+    - POSTGRES_DB=postgres
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 15s
+      timeout: 5000s
+      retries: 50
+
+  local-data-api:
+    image: koxudaxi/local-data-api:0.6.12
+    restart: always
+    environment:
+    - ENGINE=PostgresSQL
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=postgres
+    - POSTGRES_PASSWORD=postgres
+    - RESOURCE_ARN=${AURORA_CLUSTER_ARN}
+    - SECRET_ARN=${AURORA_SECRET_ARN}
+    ports:
+    - 8080:80
+    depends_on:
+    - postgres
+
+  local-sf-api:
+    image: amazon/aws-stepfunctions-local:1.10.2
+    container_name: step-function-local
+    volumes:
+    - $PWD/tests/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
+    ports:
+    - 8083:8083
+    environment:
+    - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
