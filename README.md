@@ -44,7 +44,7 @@
       * [Features:](#features)
       * [Improvements:](#improvements)
 
-<!-- Added by: root, at: Fri Aug 26 18:32:06 UTC 2022 -->
+<!-- Added by: root, at: Wed Oct 12 18:13:49 UTC 2022 -->
 
 <!--te-->
 
@@ -79,14 +79,10 @@ After all directories and their associated dependencies are gathered, they are p
  
 1. An GitHub webhook will be created for the target GitHub repository. The webhook will send requests to the AWS Lambda Function endpoint for open PR activities or merge PR events.
 
-2. 
-  A: 
-    The Lambda Function will validate the request's SHA-256 header value with the secret configured within Terraform module. If the request is authenticated, the function will check if the payload meets specific requirements. The payload must contain attributes that reflect that the GitHub event was an open PR activity or PR merge, includes .tf and/or .hcl file additions and/or modifications, and has a PR base ref that is the trunk branch (trunk branch represents the live Terraform configurations and should be reflected within the Terraform state files).
-  B: The Lambda Function then acts as a branch that runs different logic depending on the GitHub event. 
-
-    If the Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#4). In addition to the ECS task(s), the Lambda Function will check if there's a deployment flow in progress and add the check to the PR's commit status. 
-
-    If the Github event was a merged PR, an ECS task named Create Deploy Stack will be run.
+2.  
+  - The Lambda Function will validate the request's SHA-256 header value with the secret configured within Terraform module. If the request is authenticated, the function will check if the payload meets specific requirements. The payload must contain attributes that reflect that the GitHub event was an open PR activity or PR merge, includes .tf and/or .hcl file additions and/or modifications, and has a PR base ref that is the trunk branch (trunk branch represents the live Terraform configurations and should be reflected within the Terraform state files).
+  
+  - The Lambda Function then acts as a branch that runs different logic depending on the GitHub event. If the Github event was open PR activity, the Lambda Function will collect a list of unique directories that contain new/modified .hcl and/or .tf files. For every directory, the Lambda Function will run an ECS task (#4). In addition to the ECS task(s), the Lambda Function will check if there's a deployment flow in progress and add the check to the PR's commit status. If the Github event was a merged PR, an ECS task named Create Deploy Stack will be run.
 
 3. The Lambda Function will load an AWS System Manager Parameter Store value reference as `merge_lock` that will contain the PR ID of the deployment in progress or `none` if there isn't any in progress. Merging will be locked until the deployment flow is done. Once the deployment flow is finished, the downstream Lambda Function will reset the parameter value (see #6).
 

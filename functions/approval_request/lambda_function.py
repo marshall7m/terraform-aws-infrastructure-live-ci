@@ -11,6 +11,8 @@ from common_lambda.utils import aws_encode, get_email_approval_sig  # noqa : E40
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+ssm = boto3.client("ssm")
+
 
 def get_ses_urls(msg: dict, secret: str, recipient: str) -> dict:
     """
@@ -52,13 +54,15 @@ def get_ses_urls(msg: dict, secret: str, recipient: str) -> dict:
     return urls
 
 
-def lambda_handler(event, context):
-    """Sends approval request email to email addresses asssociated with Terragrunt path"""
-    log.debug(f"Lambda Event:\n{pformat(event)}")
+def send_approval(msg: dict, secret: str) -> dict:
+    """
+    Sends approval request to every voter via AWS SES
 
-    ssm = boto3.client("ssm")
+    Arguments:
+        msg: SNS message
+        secret: Secret value used for generating authentification signature
+    """
     ses = boto3.client("ses")
-    msg = json.loads(event["Records"][0]["Sns"]["Message"])
 
     template_data = {
         "path": msg["Path"],
@@ -67,16 +71,9 @@ def lambda_handler(event, context):
         "account_name": msg["AccountName"],
         "pr_id": msg["PullRequestID"],
     }
-
     log.debug(f"Default Template Data:\n{template_data}")
 
     destinations = []
-
-    # secret used for generating signature query param
-    secret = ssm.get_parameter(
-        Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
-    )["Parameter"]["Value"]
-
     # need to create a separate destination object for each address since the
     # approval URL is specifc to the address
     for address in msg["Voters"]:
@@ -105,9 +102,7 @@ def lambda_handler(event, context):
     log.debug(f"Response:\n{response}")
     failed_count = 0
     for msg in response["Status"]:
-        if msg["Status"] == "Success":
-            log.info("Email was succesfully sent")
-        else:
+        if msg["Status"] != "Success":
             failed_count += 1
             log.error("Email was not successfully sent")
             log.debug(f"Email Status:\n{msg}")
@@ -119,3 +114,19 @@ def lambda_handler(event, context):
         }
 
     return {"statusCode": 200, "message": "All emails were successfully sent"}
+
+
+def lambda_handler(event, context):
+    """Sends approval request email to email addresses associated with Terragrunt path"""
+    log.debug(f"Lambda Event:\n{pformat(event)}")
+
+    msg = json.loads(event["Records"][0]["Sns"]["Message"])
+
+    # secret used for generating signature query param
+    secret = ssm.get_parameter(
+        Name=os.environ["EMAIL_APPROVAL_SECRET_SSM_KEY"], WithDecryption=True
+    )["Parameter"]["Value"]
+
+    res = send_approval(msg, secret)
+
+    return res
