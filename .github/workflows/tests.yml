@@ -45,7 +45,7 @@ jobs:
   precommit:
     needs: build
     runs-on: ubuntu-latest
-    container: ${{ env.DEV_DOCKER_IMG }}
+    container: dev
     permissions:
       id-token: write
       contents: write
@@ -69,7 +69,7 @@ jobs:
   unit:
     needs: precommit
     runs-on: ubuntu-latest
-    container: ${{ env.DEV_DOCKER_IMG }}
+    container: dev
     env:
       TF_VAR_testing_github_token: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
     permissions:
@@ -93,7 +93,7 @@ jobs:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.DEV_DOCKER_IMG }}
+      image: dev
       volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     steps:
@@ -111,7 +111,7 @@ jobs:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.DEV_DOCKER_IMG }}
+      image: dev
       volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     permissions:
