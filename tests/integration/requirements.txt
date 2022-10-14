@@ -1,8 +1,0 @@
-terraform-local
-# localstack-client
-# localstack
-aurora-data-api
-GitPython
-boto3
-pytest-regex-dependency
-python-on-whales
