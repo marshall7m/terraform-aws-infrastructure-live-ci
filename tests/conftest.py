@@ -118,7 +118,7 @@ def metadb_endpoint():
     docker = DockerClient(
         compose_files=[os.path.join(os.path.dirname(__file__), "../docker-compose.yml")]
     )
-    docker.compose.run("local-data-api", publish=[(8080, 80)], detach=True)
+    docker.compose.run("local-data-api", publish=[(8080, 80)], tty=False, detach=True)
     os.environ["METADB_LOCAL_ENDPOINT"] = "http://local-data-api:8080"
 
     yield os.environ["METADB_LOCAL_ENDPOINT"]
@@ -136,7 +136,7 @@ def sf_endpoint():
     docker = DockerClient(
         compose_files=[os.path.join(os.path.dirname(__file__), "../docker-compose.yml")]
     )
-    docker.compose.run("local-sf-api", publish=[(8083, 80)], detach=True)
+    docker.compose.run("local-sf-api", publish=[(8083, 80)], tty=False, detach=True)
 
     yield "http://local-sf-api:8083"
 
