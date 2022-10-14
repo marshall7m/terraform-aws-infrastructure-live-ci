@@ -48,7 +48,7 @@ services:
     image: amazon/aws-stepfunctions-local:1.10.2
     container_name: step-function-local
     volumes:
-    - $PWD/tests/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
+    - ../tests/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
     ports:
     - 8083:8083
     environment:
