@@ -76,8 +76,11 @@ services:
     - AWS_SESSION_EXPIRATION
 
     - METADB_NAME=${METADB_NAME}
+    - METADB_ENDPOINT_URL=http://local-data-api:80
     - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
     - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
+
+    - TF_VAR_testing_github_token
     networks:
       terraform-aws-infrastructure-live-ci:
     # TODO: use profiles to change what other services are spinned based on testing env
