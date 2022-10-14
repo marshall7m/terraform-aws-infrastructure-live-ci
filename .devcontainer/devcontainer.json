@@ -1,7 +1,4 @@
 {
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
   "containerEnv": {
     "AWS_ACCESS_KEY_ID": "${localEnv:AWS_ACCESS_KEY_ID}",
     "AWS_DEFAULT_REGION": "${localEnv:AWS_DEFAULT_REGION}",
@@ -22,6 +19,7 @@
         "ms-python.vscode-pylance"
       ],
       "settings": {
+        "#terminal.integrated.defaultProfile.linux#": "/bin/bash",
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.formatting.autopep8Path": "/usr/local/py-utils/bin/autopep8",
         "python.formatting.blackPath": "/usr/local/py-utils/bin/black",
@@ -37,6 +35,7 @@
       }
     }
   },
+  "dockerComposeFile": "docker-compose.yml",
   "features": {
     "ghcr.io/devcontainers/features/docker-from-docker:1": {
       "version": "latest"
@@ -46,5 +45,7 @@
     }
   },
   "name": "Development",
-  "postStartCommand": "/bin/bash ./.devcontainer/entrypoint.sh"
+  "service": "dev",
+  "shutdownAction": "stopCompose",
+  "workspaceFolder": "/workspace"
 }

@@ -4,9 +4,6 @@ services:
     image: postgres:10.14-alpine
     restart: always
     container_name: postgres
-    volumes:
-    - $PWD/docker-pgsql-entrypoint:/docker-entrypoint-initdb.d
-    - $PWD/docker-pgsql-volume:/var/lib/postgresql/data
     ports:
     - 5432:5432
     environment:
@@ -21,9 +18,13 @@ services:
       interval: 15s
       timeout: 5000s
       retries: 50
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    # profiles: ["unit", "integration"]
 
   local-data-api:
     image: koxudaxi/local-data-api:0.6.12
+    container_name: metadb
     restart: always
     environment:
     - ENGINE=PostgresSQL
@@ -31,12 +32,16 @@ services:
     - POSTGRES_PORT=5432
     - POSTGRES_USER=postgres
     - POSTGRES_PASSWORD=postgres
+    - POSTGRES_DB=postgres
     - RESOURCE_ARN=${AURORA_CLUSTER_ARN}
     - SECRET_ARN=${AURORA_SECRET_ARN}
     ports:
     - 8080:80
+    networks:
+      terraform-aws-infrastructure-live-ci:
     depends_on:
     - postgres
+    # profiles: ["unit", "integration"]
 
   local-sf-api:
     image: amazon/aws-stepfunctions-local:1.10.2
@@ -47,3 +52,32 @@ services:
     - 8083:8083
     environment:
     - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    # profiles: ["integration"]
+
+  dev:
+    image: terraform-aws-infrastructure-live-ci/dev
+    container_name: dev
+    volumes:
+    - ../:/workspace
+    build:
+      context: .
+    entrypoint: [/bin/bash, ./.devcontainer/entrypoint.sh]
+    command: sleep infinity
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    # TODO: use profiles to change what other services are spinned based on testing env
+    # once supported: https://github.com/microsoft/vscode-remote-release/issues/5795
+    # profiles: [unit, integration, e2e, all]
+    depends_on:
+    - postgres
+    - local-data-api
+    - local-sf-api
+
+networks:
+  terraform-aws-infrastructure-live-ci:
+    name: terraform-aws-infrastructure-live-ci
+    driver: bridge
+    ipam:
+      driver: default
