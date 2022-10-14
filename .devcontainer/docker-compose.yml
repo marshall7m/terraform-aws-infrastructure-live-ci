@@ -60,11 +60,24 @@ services:
     image: terraform-aws-infrastructure-live-ci/dev
     container_name: dev
     volumes:
+    - /usr/bin/docker:/usr/bin/docker
+    - /var/run/docker.sock:/var/run/docker.sock
     - ../:/workspace
     build:
       context: .
     entrypoint: [/bin/bash, ./.devcontainer/entrypoint.sh]
     command: sleep infinity
+    environment:
+    - AWS_ACCESS_KEY_ID=mock-aws-key
+    - AWS_SECRET_ACCESS_KEY==mock-aws-secret-key
+    - AWS_REGION=us-west-2
+    - AWS_DEFAULT_REGION=us-west-2
+    - AWS_SESSION_TOKEN=mock-session-token
+    - AWS_SESSION_EXPIRATION
+
+    - METADB_NAME=${METADB_NAME}
+    - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
+    - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
     networks:
       terraform-aws-infrastructure-live-ci:
     # TODO: use profiles to change what other services are spinned based on testing env
