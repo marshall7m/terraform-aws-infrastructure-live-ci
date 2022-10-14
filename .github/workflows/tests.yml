@@ -34,29 +34,9 @@ env:
   AWS_DEFAULT_REGION: us-west-2
   DEV_DOCKER_IMG: dev
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Log into GitHub Container Registry
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Build and push Docker Dev image
-      uses: docker/build-push-action@v3
-      with:
-        context: ./.devcontainer
-        push: true
-        tags: ghcr.io/${{ github.repository }}/ci:latest
-
   precommit:
     needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/${{ github.repository }}/ci:latest
     permissions:
       id-token: write
       contents: write
@@ -64,7 +44,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Hooks
       shell: bash
-      run: pre-commit run -a
+      run: docker compose -f ./.devcontainer/docker-compose.yml run dev pre-commit run -a
 
     - name: Update README.md TOC
       id: readme_toc
@@ -80,7 +60,6 @@ jobs:
   unit:
     needs: precommit
     runs-on: ubuntu-latest
-    container: ghcr.io/${{ github.repository }}/ci:latest
     env:
       TF_VAR_testing_github_token: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
     permissions:
@@ -92,21 +71,13 @@ jobs:
     - name: mask sensitive
       run: echo "::add-mask::$TF_VAR_testing_github_token"
 
-    - name: Install Deps
-      shell: bash
-      run: python3 -m pip install -e .
-
     - name: Tests
       shell: bash
-      run: pytest -vv tests/unit
+      run: docker compose -f ./.devcontainer/docker-compose.yml run dev pytest -vv tests/unit
 
   integration:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository }}/ci:latest
-      volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     steps:
     - uses: actions/checkout@v3
 
@@ -116,15 +87,11 @@ jobs:
 
     - name: Tests
       shell: bash
-      run: pytest -vv tests/integration
+      run: docker compose -f ./.devcontainer/docker-compose.yml run dev pytest -vv tests/integration
 
   e2e:
     needs: [precommit, unit]
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository }}/ci:latest
-      volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     permissions:
       id-token: write
       contents: read
@@ -160,10 +127,6 @@ jobs:
         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
         aws-region: ${{ env.AWS_REGION }}
 
-    - name: Install Deps
-      shell: bash
-      run: python3 -m pip install -e .
-
     - name: Tests
       shell: bash
-      run: pytest -vv tests/e2e
+      run: docker compose -f ./.devcontainer/docker-compose.yml run dev pytest -vv tests/e2e
