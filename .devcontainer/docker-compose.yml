@@ -69,7 +69,7 @@ services:
     command: sleep infinity
     environment:
     - AWS_ACCESS_KEY_ID=mock-aws-key
-    - AWS_SECRET_ACCESS_KEY==mock-aws-secret-key
+    - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
     - AWS_REGION=us-west-2
     - AWS_DEFAULT_REGION=us-west-2
     - AWS_SESSION_TOKEN=mock-session-token
