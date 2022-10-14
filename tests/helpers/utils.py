@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 rds_data_client = boto3.client(
-    "rds-data", endpoint_url=os.environ["METADB_LOCAL_ENDPOINT"]
+    "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
 )
 
 
@@ -87,7 +87,11 @@ def toggle_trigger(table: str, trigger: str, enable=False):
             )
 
 
-def insert_records(table, records, enable_defaults=None):
+def insert_records(
+    table,
+    records,
+    enable_defaults=None,
+):
     """
     Toggles table's associated trigger and inserts list of dictionaries or a single dictionary into the table
 

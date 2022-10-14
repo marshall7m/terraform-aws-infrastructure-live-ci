@@ -4,8 +4,9 @@ import logging
 import git
 import re
 from docker.src.common.utils import subprocess_run
-from tests.helpers.utils import insert_records, rds_data_client
 import aurora_data_api
+
+from tests.helpers.utils import rds_data_client, insert_records
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -55,7 +56,7 @@ def base_git_repo(tmp_path_factory):
     """Clones template infrastructure-live repo from GitHub into local tmp dir"""
     root_dir = str(tmp_path_factory.mktemp("test-create-deploy-stack-"))
     yield git.Repo.clone_from(
-        f'https://oauth2:{os.environ["TF_VAR_testing_unit_github_token"]}@github.com/marshall7m/infrastructure-live-testing-template.git',
+        f'https://oauth2:{os.environ["TF_VAR_testing_github_token"]}@github.com/marshall7m/infrastructure-live-testing-template.git',
         root_dir,
     )
 

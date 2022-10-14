@@ -138,7 +138,7 @@ def test_abort_sf_executions():
 
 
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
-def test_create_rollback_records():
+def test_create_rollback_records(rds_data_client):
     commit_id = "test-commit"
     expected_rollback_cfg_paths = ["dev/bar"]
     records = [

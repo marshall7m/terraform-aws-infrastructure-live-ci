@@ -1,0 +1,96 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:10.14-alpine
+    restart: always
+    container_name: postgres
+    ports:
+    - 5432:5432
+    environment:
+    - POSTGRES_PASSWORD=postgres
+    - POSTGRES_DB=postgres
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 15s
+      timeout: 5000s
+      retries: 50
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    # profiles: ["unit", "integration"]
+
+  local-data-api:
+    image: koxudaxi/local-data-api:0.6.12
+    container_name: metadb
+    restart: always
+    environment:
+    - ENGINE=PostgresSQL
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=postgres
+    - POSTGRES_PASSWORD=postgres
+    - POSTGRES_DB=postgres
+    - RESOURCE_ARN=${AURORA_CLUSTER_ARN}
+    - SECRET_ARN=${AURORA_SECRET_ARN}
+    ports:
+    - 8080:80
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    depends_on:
+    - postgres
+    # profiles: ["unit", "integration"]
+
+  local-sf-api:
+    image: amazon/aws-stepfunctions-local:1.10.2
+    container_name: step-function-local
+    volumes:
+    - $PWD/tests/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
+    ports:
+    - 8083:8083
+    environment:
+    - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    # profiles: ["integration"]
+
+  dev:
+    image: terraform-aws-infrastructure-live-ci/dev
+    container_name: dev
+    volumes:
+    - /usr/bin/docker:/usr/bin/docker
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ../:/workspace
+    build:
+      context: .
+    entrypoint: [/bin/bash, ./.devcontainer/entrypoint.sh]
+    command: sleep infinity
+    environment:
+    - AWS_ACCESS_KEY_ID=mock-aws-key
+    - AWS_SECRET_ACCESS_KEY==mock-aws-secret-key
+    - AWS_REGION=us-west-2
+    - AWS_DEFAULT_REGION=us-west-2
+    - AWS_SESSION_TOKEN=mock-session-token
+    - AWS_SESSION_EXPIRATION
+
+    - METADB_NAME=${METADB_NAME}
+    - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
+    - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    # TODO: use profiles to change what other services are spinned based on testing env
+    # once supported: https://github.com/microsoft/vscode-remote-release/issues/5795
+    # profiles: [unit, integration, e2e, all]
+    depends_on:
+    - postgres
+    - local-data-api
+    - local-sf-api
+
+networks:
+  terraform-aws-infrastructure-live-ci:
+    name: terraform-aws-infrastructure-live-ci
+    driver: bridge
+    ipam:
+      driver: default
