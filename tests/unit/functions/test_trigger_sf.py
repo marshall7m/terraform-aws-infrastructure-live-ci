@@ -7,7 +7,7 @@ import aurora_data_api
 import boto3
 from moto import mock_stepfunctions
 
-from tests.helpers.utils import insert_records
+from tests.helpers.utils import insert_records, rds_data_client
 from functions.trigger_sf import lambda_function
 
 log = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ log.setLevel(logging.DEBUG)
 
 
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
-def test_execution_finished_update_status(rds_data_client):
+def test_execution_finished_update_status():
     execution_id = "run-123"
     expected_status = "success"
     records = [{"execution_id": execution_id, "status": "running"}]
@@ -49,7 +49,7 @@ def test_execution_finished_update_status(rds_data_client):
 
 
 @pytest.mark.usefixtures("truncate_executions")
-def test_abort_commit_records(rds_data_client):
+def test_abort_commit_records():
     commit_id = "test-commit"
     records = [
         {
@@ -347,7 +347,7 @@ def test_handle_failed_execution_is_rollback():
 )
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @patch("functions.trigger_sf.lambda_function.sf")
-def test_start_executions(mock_sf, records, expected_running_ids, rds_data_client):
+def test_start_executions(mock_sf, records, expected_running_ids):
     """Test to ensure that the Lambda Function handles account and directory level dependencies before starting any Step Function executions"""
 
     records = insert_records("executions", records, enable_defaults=True)

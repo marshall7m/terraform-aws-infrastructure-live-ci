@@ -7,10 +7,11 @@ import uuid
 import git
 import json
 import aurora_data_api
-from tests.helpers.utils import dummy_configured_provider_resource
+
 from tests.unit.docker.conftest import mock_subprocess_run
 from tests.unit.conftest import push
 from docker.src.create_deploy_stack.create_deploy_stack import CreateStack  # noqa: E402
+from tests.helpers.utils import rds_data_client, dummy_configured_provider_resource
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -303,7 +304,7 @@ def test_create_stack(
         )
     ],
 )
-def test_update_executions_with_new_deploy_stack_query(rds_data_client, create_stack):
+def test_update_executions_with_new_deploy_stack_query(create_stack):
     """
     Ensures update_executions_with_new_deploy_stack_query() runs the insert
     query without error. Test includes assertion to ensure that the expected

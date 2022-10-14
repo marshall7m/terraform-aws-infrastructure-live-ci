@@ -4,8 +4,9 @@ import logging
 import git
 import re
 from docker.src.common.utils import subprocess_run
-from tests.helpers.utils import insert_records
 import aurora_data_api
+
+from tests.helpers.utils import rds_data_client, insert_records
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -21,7 +22,7 @@ def mock_subprocess_run(cmd: str, check=True):
 
 
 @pytest.fixture(scope="module")
-def account_dim(rds_data_client):
+def account_dim():
     """Creates account records within local db"""
     results = insert_records(
         "account_dim",

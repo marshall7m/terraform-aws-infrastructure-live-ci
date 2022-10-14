@@ -8,6 +8,10 @@ import aurora_data_api
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+rds_data_client = boto3.client(
+    "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
+)
+
 
 def tf_vars_to_json(tf_vars: dict) -> dict:
     for k, v in tf_vars.items():
@@ -56,9 +60,7 @@ resource "dummy_resource" "this" {}
 """
 
 
-def toggle_trigger(
-    table: str, trigger: str, enable=False, rds_data_client=boto3.client("rds-data")
-):
+def toggle_trigger(table: str, trigger: str, enable=False):
     """
     Toggles the tables associated testing trigger that creates random defaults to prevent any null violations
 
@@ -86,7 +88,9 @@ def toggle_trigger(
 
 
 def insert_records(
-    table, records, enable_defaults=None, rds_data_client=boto3.client("rds-data")
+    table,
+    records,
+    enable_defaults=None,
 ):
     """
     Toggles table's associated trigger and inserts list of dictionaries or a single dictionary into the table

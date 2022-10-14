@@ -6,7 +6,7 @@ from subprocess import CalledProcessError
 import json
 import aurora_data_api
 from unittest.mock import patch, call
-from tests.helpers.utils import null_provider_resource, insert_records
+from tests.helpers.utils import null_provider_resource, insert_records, rds_data_client
 from docker.src.terra_run.run import (
     update_new_resources,
     get_new_provider_resources,
@@ -95,9 +95,7 @@ def test_get_new_provider_resources(mock_run, repo_changes, new_providers, expec
         pytest.param([], id="no_resources"),
     ],
 )
-def test_update_new_resources(
-    mock_get_new_provider_resources, resources, rds_data_client
-):
+def test_update_new_resources(mock_get_new_provider_resources, resources):
     """Assert that the expected new_resources value is within the associated record"""
 
     insert_records(
