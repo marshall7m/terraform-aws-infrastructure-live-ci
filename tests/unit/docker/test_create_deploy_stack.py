@@ -96,7 +96,7 @@ def test_get_graph_deps(tmp_path_factory, repo):
     os.environ,
     {
         "TG_BACKEND": "local",
-        "GITHUB_TOKEN": os.environ["TF_VAR_testing_unit_github_token"],
+        "GITHUB_TOKEN": os.environ["TF_VAR_testing_github_token"],
     },
 )
 def test_get_github_diff_paths(repo, tmp_path_factory):
@@ -146,7 +146,7 @@ def test_get_github_diff_paths(repo, tmp_path_factory):
     os.environ,
     {
         "TG_BACKEND": "local",
-        "GITHUB_TOKEN": os.environ["TF_VAR_testing_unit_github_token"],
+        "GITHUB_TOKEN": os.environ["TF_VAR_testing_github_token"],
     },
 )
 @patch(

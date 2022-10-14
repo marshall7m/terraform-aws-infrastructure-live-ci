@@ -1,9 +1,12 @@
-import pytest
-from unittest.mock import patch
 import os
-import json
 import logging
+from unittest.mock import patch
+
+import pytest
 import aurora_data_api
+import boto3
+from moto import mock_stepfunctions
+
 from tests.helpers.utils import insert_records, rds_data_client
 from functions.trigger_sf import lambda_function
 
@@ -11,183 +14,166 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-@patch.dict(
-    os.environ,
-    {
-        "REPO_FULL_NAME": "user/repo",
-        "AWS_REGION": "us-west-2",
-        "GITHUB_TOKEN_SSM_KEY": "mock-ssm-token-key",
-        "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        "STATE_MACHINE_ARN": "mock",
-        "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
-    },
-)
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
-@pytest.mark.parametrize(
-    "records,execution,expected_aborted_ids,expected_rollback_cfg_paths",
-    [
-        pytest.param(
-            [
-                {
-                    "execution_id": "run-foo",
-                    "status": "running",
-                    "is_rollback": False,
-                    "commit_id": "test-commit",
-                }
-            ],
-            {
-                "execution_id": "run-foo",
-                "status": "succeeded",
-                "is_rollback": False,
-                "commit_id": "test-commit",
-            },
-            [],
-            [],
-            id="succeeded_execution",
-        ),
-        pytest.param(
-            [
-                {
-                    "execution_id": "run-baz",
-                    "account_name": "dev",
-                    "cfg_path": "dev/baz",
-                    "status": "succeeded",
-                    "is_rollback": False,
-                    "commit_id": "test-commit",
-                    "new_providers": [],
-                    "new_resources": [],
-                },
-                {
-                    "execution_id": "run-zoo",
-                    "account_name": "dev",
-                    "cfg_path": "dev/zoo",
-                    "status": "running",
-                    "is_rollback": False,
-                    "commit_id": "test-commit",
-                    "new_providers": [],
-                    "new_resources": [],
-                },
-                {
-                    "execution_id": "run-bar",
-                    "account_name": "dev",
-                    "cfg_path": "dev/bar",
-                    "status": "succeeded",
-                    "is_rollback": False,
-                    "commit_id": "test-commit",
-                    "new_providers": ["hashicorp/null"],
-                    "new_resources": ["null_resource.this"],
-                },
-                {
-                    "execution_id": "run-foo",
-                    "status": "running",
-                    "is_rollback": False,
-                    "commit_id": "test-commit",
-                    "cfg_path": "dev/foo",
-                },
-            ],
-            {
-                "execution_id": "run-foo",
-                "status": "failed",
-                "is_rollback": False,
-                "commit_id": "test-commit",
-                "cfg_path": "dev/foo",
-            },
-            ["run-zoo"],
-            ["dev/bar"],
-            id="failed_execution",
-        ),
-        pytest.param(
-            [
-                {
-                    "execution_id": "run-foo",
-                    "status": "running",
-                    "is_rollback": True,
-                    "commit_id": "test-commit",
-                }
-            ],
-            {
-                "execution_id": "run-foo",
-                "status": "failed",
-                "is_rollback": True,
-                "commit_id": "test-commit",
-            },
-            [],
-            [],
-            id="failed_rollback_execution",
-        ),
-    ],
-)
-@patch("github.Github")
-@patch("functions.trigger_sf.lambda_function.ssm")
-@patch("functions.trigger_sf.lambda_function.sf")
-def test__execution_finished_status_update(
-    mock_sf,
-    mock_ssm,
-    mock_github,
-    records,
-    execution,
-    expected_aborted_ids,
-    expected_rollback_cfg_paths,
-):
-    """
-    Test to ensure that the finished execution's respective status was updated and
-    the function handles all possible execution statuses.
-    """
-    mock_ssm.get_parameter.return_value = {
-        "Parameter": {"Value": json.dumps({"Execution": True})}
-    }
+def test_execution_finished_update_status():
+    execution_id = "run-123"
+    expected_status = "success"
+    records = [{"execution_id": execution_id, "status": "running"}]
+    records = insert_records("executions", records, enable_defaults=True)
 
+    execution = lambda_function.ExecutionFinished(
+        execution_id=execution_id,
+        status=expected_status,
+        is_rollback="false",
+        commit_id="mock-commit",
+        cfg_path="/foo",
+    )
+    execution.update_status()
+
+    log.info("Assert finished execution record status was updated")
     with aurora_data_api.connect(
         database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
     ) as conn, conn.cursor() as cur:
-        mock_sf.list_executions.return_value = {
-            "executions": [
-                {"name": record["execution_id"], "executionArn": "mock-arn"}
-                for record in records
-                if record["status"] != "waiting"
-            ]
-        }
-        mock_sf.stop_execution.return_value = None
-        records = insert_records("executions", records, enable_defaults=True)
-
-        try:
-            lambda_function._execution_finished(cur, execution, 000000000000)
-        except lambda_function.ClientException as e:
-            # expects lambda to error if execution was a rollback and wasn't successful
-            if not execution["is_rollback"] and execution["status"] not in [
-                "aborted",
-                "failed",
-            ]:
-                raise (e)
-
-        log.info("Assert finished execution record status was updated")
         cur.execute(
             """
             SELECT status
             FROM executions
             WHERE execution_id = '{}'
             """.format(
-                execution["execution_id"]
+                execution_id
             )
         )
-        assert execution["status"] == cur.fetchone()[0]
+        actual_status = cur.fetchone()[0]
 
-        log.info("Assert Step Function executions were aborted")
+    assert actual_status == expected_status
+
+
+@pytest.mark.usefixtures("truncate_executions")
+def test_abort_commit_records():
+    commit_id = "test-commit"
+    records = [
+        {
+            "execution_id": "run-bar",
+            "account_name": "dev",
+            "cfg_path": "dev/bar",
+            "status": "running",
+            "is_rollback": False,
+            "commit_id": commit_id,
+        },
+        {
+            "execution_id": "run-foo",
+            "status": "waiting",
+            "is_rollback": False,
+            "commit_id": commit_id,
+            "cfg_path": "dev/foo",
+        },
+        {
+            "execution_id": "run-baz",
+            "status": "success",
+            "is_rollback": False,
+            "commit_id": commit_id,
+            "cfg_path": "dev/baz",
+        },
+    ]
+    insert_records("executions", records, enable_defaults=True)
+
+    execution = lambda_function.ExecutionFinished(
+        execution_id="run-123",
+        status="failed",
+        is_rollback="false",
+        commit_id=commit_id,
+        cfg_path="/foo",
+    )
+    execution.abort_commit_records()
+
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         cur.execute(
             """
             SELECT execution_id
             FROM executions
             WHERE commit_id = '{}'
-            AND status = 'aborted'
+            AND "status" IN ('waiting', 'running')
         """.format(
-                execution["commit_id"]
+                commit_id
             )
         )
-        res = [val[0] for val in cur.fetchall()]
-        log.debug(f"Actual: {res}")
-        assert all(path in res for path in expected_aborted_ids) is True
+        in_progress_ids = [val[0] for val in cur.fetchall() if val[0] is not None]
 
-        log.info("Assert rollback execution records were created")
+        log.info("Assert no execution has a waiting or running status")
+        assert len(in_progress_ids) == 0
+
+
+@mock_stepfunctions
+def test_abort_sf_executions():
+    execution_id = "run-123"
+    sf = boto3.client("stepfunctions")
+
+    machine_arn = sf.create_state_machine(
+        name="mock-machine",
+        definition="string",
+        roleArn="arn:aws:iam::123456789012:role/machine-role",
+    )["stateMachineArn"]
+
+    execution_arn = sf.start_execution(stateMachineArn=machine_arn, name=execution_id)[
+        "executionArn"
+    ]
+
+    execution = lambda_function.ExecutionFinished(
+        execution_id=execution_id,
+        status="failed",
+        is_rollback="false",
+        commit_id="mock-commit",
+        cfg_path="/foo",
+    )
+
+    with patch.dict(os.environ, {"STATE_MACHINE_ARN": machine_arn}):
+        # TODO: figure out how mock sf client with moto client to allow module-scope client in lambda file
+        with patch("boto3.client") as mock_sf:
+            mock_sf.return_value = sf
+            execution.abort_sf_executions([execution_id])
+
+    assert sf.describe_execution(executionArn=execution_arn)["status"] == "ABORTED"
+
+
+@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
+def test_create_rollback_records(rds_data_client):
+    commit_id = "test-commit"
+    expected_rollback_cfg_paths = ["dev/bar"]
+    records = [
+        {
+            "execution_id": "run-bar",
+            "account_name": "dev",
+            "cfg_path": expected_rollback_cfg_paths[0],
+            "status": "succeeded",
+            "is_rollback": False,
+            "commit_id": commit_id,
+            "new_providers": ["hashicorp/null"],
+            "new_resources": ["null_resource.this"],
+        },
+        {
+            "execution_id": "run-foo",
+            "status": "running",
+            "is_rollback": False,
+            "commit_id": commit_id,
+            "cfg_path": "dev/foo",
+        },
+    ]
+    insert_records("executions", records, enable_defaults=True)
+
+    execution = lambda_function.ExecutionFinished(
+        execution_id="run-123",
+        status="failed",
+        is_rollback="false",
+        commit_id=commit_id,
+        cfg_path="/foo",
+    )
+    execution.create_rollback_records()
+
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
         cur.execute(
             """
             SELECT cfg_path
@@ -195,23 +181,30 @@ def test__execution_finished_status_update(
             WHERE commit_id = '{}'
             AND is_rollback = true
         """.format(
-                execution["commit_id"]
+                commit_id
             )
         )
-        res = [val[0] for val in cur.fetchall()]
-        log.debug(f"Actual: {res}")
-        assert all(path in res for path in expected_rollback_cfg_paths) is True
+        actual = [val[0] for val in cur.fetchall()]
+
+        log.info("Assert rollback execution records were created")
+        for path in expected_rollback_cfg_paths:
+            assert path in actual
 
 
-@patch("functions.trigger_sf.lambda_function.sf")
-@patch.dict(
-    os.environ,
-    {
-        "COMMIT_STATUS_CONFIG_SSM_KEY": "mock-ssm-config-key",
-        "STATE_MACHINE_ARN": "mock",
-        "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
-    },
-)
+def test_handle_failed_execution_is_rollback():
+    execution = lambda_function.ExecutionFinished(
+        execution_id="run-123",
+        status="failed",
+        is_rollback="true",
+        commit_id="mock-commit",
+        cfg_path="/foo",
+    )
+
+    with pytest.raises(lambda_function.ClientException):
+        execution.handle_failed_execution()
+
+
+@patch.dict(os.environ, {"STATE_MACHINE_ARN": "mock"})
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @pytest.mark.parametrize(
     "records,expected_running_ids",
@@ -352,15 +345,14 @@ def test__execution_finished_status_update(
         ),
     ],
 )
-def test__start_executions(mock_sf, records, expected_running_ids):
+@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
+@patch("functions.trigger_sf.lambda_function.sf")
+def test_start_executions(mock_sf, records, expected_running_ids):
     """Test to ensure that the Lambda Function handles account and directory level dependencies before starting any Step Function executions"""
 
     records = insert_records("executions", records, enable_defaults=True)
 
-    with aurora_data_api.connect(
-        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
-    ) as conn, conn.cursor() as cur:
-        lambda_function._start_sf_executions(cur)
+    lambda_function.start_sf_executions()
 
     log.info("Assert started Step Function execution statuses were updated to running")
     with aurora_data_api.connect(

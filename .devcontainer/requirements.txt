@@ -1,0 +1,7 @@
+GitPython
+awscli
+boto3
+aurora-data-api
+request-filter-groups
+moto
+python-on-whales

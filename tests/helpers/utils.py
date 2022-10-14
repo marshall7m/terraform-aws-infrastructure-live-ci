@@ -88,7 +88,11 @@ def toggle_trigger(table: str, trigger: str, enable=False):
             )
 
 
-def insert_records(table, records, enable_defaults=None):
+def insert_records(
+    table,
+    records,
+    enable_defaults=None,
+):
     """
     Toggles table's associated trigger and inserts list of dictionaries or a single dictionary into the table
 
