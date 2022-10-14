@@ -43,9 +43,6 @@
    * [TODO:](#todo)
       * [Features:](#features)
       * [Improvements:](#improvements)
-
-<!-- Added by: root, at: Fri Oct 14 00:32:46 UTC 2022 -->
-
 <!--te-->
 
 
