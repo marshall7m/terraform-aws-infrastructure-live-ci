@@ -18,7 +18,7 @@
 
 Terraform module that provisions an AWS serverless CI/CD pipeline used for managing live infrastructure defined in a trunk-based repository. The module features AWS account-level dependencies and approval flows for handling implicit and nested Terraform dependency changes.
 
-- For a deep-dive on the architecture, refer to [DESIGN.MD](./DESIGN.md)
+- For a deep-dive into the architecture, refer to [DESIGN.MD](./DESIGN.md)
 - To see how to contribute to this project, refer to [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## Cost

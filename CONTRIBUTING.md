@@ -13,11 +13,11 @@
 <!--te-->
 
 
-PRs are welcomed!
+PRs are welcome!
 
-The following sections will include the required steps in order to develop and run tests for this project.
+The following sections will include the required steps to develop and run tests for this project.
 
-The project contains unit, integration and e2e tests that are within the `tests/` directory. Each of the tests use the [Pytest](https://docs.pytest.org/en/7.1.x/) framework.
+The project contains unit, integration, and e2e tests that are within the `tests/` directory. Each of the tests uses the [Pytest](https://docs.pytest.org/en/7.1.x/) framework.
 
 
 ```
@@ -45,7 +45,7 @@ Once you complete the above steps, you can choose from the following sections de
 The following additional tools are required:
 - [dev container extension](https://code.visualstudio.com/docs/remote/containers)
 
-To launch a full fledged development docker container that includes all the dependencies needed for this project, see this section's [instructions](https://code.visualstudio.com/docs/remote/containers#_quick-start-open-an-existing-folder-in-a-container).
+To launch a full-fledged development docker container that includes all the dependencies needed for this project, see this section's [instructions](https://code.visualstudio.com/docs/remote/containers#_quick-start-open-an-existing-folder-in-a-container).
 
 
 ## Run tests via Docker Compose
@@ -62,7 +62,7 @@ To execute the tests from the repo's root directory, run commands like so:
 
 - `docker compose -f ./.devcontainer/docker-compose.yml run --rm dev pytest tests/integration`
 
-All the containers that the `dev` service depends upons will be launched within the same custom docker bridge network.
+All the containers that the `dev` service depends on will be launched within the same custom docker bridge network.
 
 
 ## Local GitHub Actions Workflow
