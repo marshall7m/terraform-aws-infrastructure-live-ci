@@ -9,8 +9,7 @@ on:
     - tests
     paths-ignore:
     - .gitignore
-    - LICENSE.md
-    - README.md
+    - '**.md'
     - docker/**
     - .github/workflows/build.yml
 
@@ -22,8 +21,7 @@ on:
     - tests
     paths-ignore:
     - .gitignore
-    - LICENSE.md
-    - README.md
+    - '**.md'
     - docker/**
     - .github/workflows/build.yml
 
