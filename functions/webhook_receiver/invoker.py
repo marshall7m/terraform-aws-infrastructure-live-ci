@@ -152,9 +152,7 @@ def trigger_pr_plan(
                     )
                     log.debug(f"Run task response:\n{pformat(task)}")
 
-                    task_id = task["tasks"][0]["containers"][0]["taskArn"].split("/")[
-                        -1
-                    ]
+                    task_id = task["tasks"][0]["taskArn"].split("/")[-1]
                     status_data = {
                         "state": "pending",
                         "description": "Terraform Plan",
@@ -225,7 +223,7 @@ def trigger_create_deploy_stack(
         )
         log.debug(f"Run task response:\n{pformat(task)}")
 
-        task_id = task["tasks"][0]["containers"][0]["taskArn"].split("/")[-1]
+        task_id = task["tasks"][0]["taskArn"].split("/")[-1]
         status_data = {
             "state": "pending",
             "description": "Create Deploy Stack",
