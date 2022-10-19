@@ -3,7 +3,6 @@ services:
   postgres:
     image: postgres:10.14-alpine
     restart: always
-    container_name: postgres
     ports:
     - 5432
     environment:
@@ -94,7 +93,6 @@ services:
 
   dev:
     image: terraform-aws-infrastructure-live-ci/dev
-    container_name: dev
     volumes:
     - /usr/bin/docker:/usr/bin/docker
     - /var/run/docker.sock:/var/run/docker.sock
@@ -104,12 +102,12 @@ services:
     entrypoint: [/bin/bash, ./.devcontainer/entrypoint.sh]
     command: sleep infinity
     environment:
-    - AWS_ACCESS_KEY_ID=mock-aws-key
-    - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
-    - AWS_REGION=us-west-2
-    - AWS_DEFAULT_REGION=us-west-2
-    - AWS_SESSION_TOKEN=mock-session-token
-    - AWS_SESSION_EXPIRATION=mock-aws-exp
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
+    - AWS_REGION=${AWS_REGION}
+    - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+    - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-mock-session-token}
+    - AWS_SESSION_EXPIRATION=${AWS_SESSION_EXPIRATION:-mock-aws-session-exp}
 
     - PGUSER=${POSTGRES_USER}
     - PGPASSWORD=${POSTGRES_PASSWORD}
@@ -119,11 +117,11 @@ services:
 
     - METADB_NAME=${POSTGRES_DB}
     - METADB_ENDPOINT_URL=${METADB_ENDPOINT_URL}
-    
+
     - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
     - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
 
-    - GITHUB_TOKEN=${TESTING_GITHUB_TOKEN}
+    - GITHUB_TOKEN=${GITHUB_TOKEN}
 
     - MOTO_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
     - SF_ENDPOINT_URL=${SF_ENDPOINT_URL}
@@ -133,13 +131,13 @@ services:
     - TF_VAR_metadb_username=${POSTGRES_USER}
     - TF_VAR_sf_endpoint_url=${SF_ENDPOINT_URL}
     - TF_VAR_ecs_endpoint_url=${ECS_ENDPOINT_URL}
-    - TF_VAR_github_token_ssm_value
+    - TF_VAR_github_token_ssm_value=${TF_VAR_GITHUB_TOKEN_SSM_VALUE}
     - TF_VAR_moto_endpoint_url=${MOTO_ENDPOINT_URL}
-    - TF_VAR_registry_password
-    - TF_VAR_approval_request_sender_email
-    - TF_VAR_testing_github_token
-    
-    - UNTIL_AWS_EXP=1h
+    - TF_VAR_registry_password=${TF_VAR_REGISTRY_PASSWORD}
+    - TF_VAR_approval_request_sender_email=${TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL}
+    - TF_VAR_testing_github_token=${TF_VAR_TESTING_GITHUB_TOKEN}
+
+    - UNTIL_AWS_EXP=${UNTIL_AWS_EXP}
     networks:
       terraform-aws-infrastructure-live-ci:
     # TODO: use profiles to change what other services are spinned based on testing env
