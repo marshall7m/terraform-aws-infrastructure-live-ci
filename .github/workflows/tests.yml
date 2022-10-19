@@ -9,8 +9,7 @@ on:
     - tests
     paths-ignore:
     - .gitignore
-    - LICENSE.md
-    - README.md
+    - '**.md'
     - docker/**
     - .github/workflows/build.yml
 
@@ -22,8 +21,7 @@ on:
     - tests
     paths-ignore:
     - .gitignore
-    - LICENSE.md
-    - README.md
+    - '**.md'
     - docker/**
     - .github/workflows/build.yml
 
@@ -52,7 +50,7 @@ jobs:
       run: |
         curl https://raw.githubusercontent.com/ekalinin/github-markdown-toc/0.8.0/gh-md-toc -o gh-md-toc
         chmod a+x gh-md-toc
-        ./gh-md-toc --insert --no-backup --hide-footer README.md
+        ./gh-md-toc --insert --no-backup --hide-footer README.md DESIGN.md CONTRIBUTING.md
         rm gh-md-toc
 
     - uses: stefanzweifel/git-auto-commit-action@v4
