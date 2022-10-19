@@ -23,7 +23,7 @@ services:
     # profiles: ["unit", "integration"]
 
   local-data-api:
-    build: ./local-data-api
+    build: ../tests/local-data-api
     image: terraform-aws-infrastructure-live-ci/local-data-api:latest
     container_name: metadb
     restart: always
