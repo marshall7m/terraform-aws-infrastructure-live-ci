@@ -80,6 +80,8 @@ services:
     - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
     - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
 
+    - PGDATABASE=postgres
+
     - TF_VAR_testing_github_token
     networks:
       terraform-aws-infrastructure-live-ci:
