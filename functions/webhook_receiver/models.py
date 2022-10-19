@@ -55,6 +55,7 @@ class Repository(BaseModel):
 
 class Base(BaseModel):
     sha: str
+    ref: str
 
     class Config:
         extra = Extra.ignore
@@ -62,6 +63,7 @@ class Base(BaseModel):
 
 class Head(BaseModel):
     sha: str
+    ref: str
 
     class Config:
         extra = Extra.ignore
@@ -71,6 +73,7 @@ class PullRequest(BaseModel):
     merged: bool
     base: Base
     head: Head
+    number: int
 
     class Config:
         extra = Extra.ignore
@@ -81,23 +84,10 @@ class Body(BaseModel):
     pull_request: PullRequest
     action: str
 
-    resource_path: str = None
     commit_status_config: dict[str, bool] = None
 
     class Config:
         extra = Extra.ignore
-
-    @validator("resource_path", pre=True)
-    def set_resource_path(cls, val, values):
-        if (
-            values["action"] in ["opened", "edited", "reopened"]
-            and values["pull_request"]["merged"] is False
-        ):
-            return "/open"
-        elif values["action"] == "closed" and values["pull_request"]["merged"] is True:
-            return "/merged"
-        else:
-            raise ValueError("Pull request event is not supported")
 
     @root_validator(skip_on_failure=True)
     def validate_file_path(cls, values):
@@ -174,6 +164,14 @@ class Event(BaseModel):
         extra = Extra.ignore
 
 
-class LambdaFunctionUrlRequest(BaseModel):
-    event: Event
-    # logs_url: str = f'https://{os.environ.get("AWS_REGION")}.console.aws.amazon.com/cloudwatch/home?region={os.environ.get("AWS_REGION")}#logsV2:log-groups/log-group/{aws_encode(scope["aws.context"]["log_group_name"])}/log-events/{aws_encode(scope["aws.context"]["log_stream_name"])}'
+class Context(BaseModel):
+    log_group_name: str
+    log_stream_name: str
+    logs_url: str = None
+
+    @validator("logs_url")
+    def set_logs_url(cls, val, values):
+        return f'https://{os.environ.get("AWS_REGION")}.console.aws.amazon.com/cloudwatch/home?region={os.environ.get("AWS_REGION")}#logsV2:log-groups/log-group/{aws_encode(values["log_group_name"])}/log-events/{aws_encode(values["log_stream_name"])}'
+
+    class Config:
+        extra = Extra.ignore

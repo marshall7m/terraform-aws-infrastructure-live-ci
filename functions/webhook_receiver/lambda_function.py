@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
@@ -7,44 +8,52 @@ from fastapi import FastAPI
 from mangum import Mangum
 
 sys.path.append(os.path.dirname(__file__))
-from models import LambdaFunctionUrlRequest
+from models import Event, Context
 from invoker import merge_lock, trigger_pr_plan, trigger_create_deploy_stack
 from exceptions import InvalidSignatureError, FilePathsNotMatched
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 app = FastAPI()
 
 
 @app.post("/open")
-def open_pr(request: LambdaFunctionUrlRequest):
+def open_pr(request: Request):
+    event = Event(**request.scope["aws.event"])
+    context = Context(**request.scope["aws.context"].__dict__)
+
     merge_lock(
-        request.body.respository.full_name,
-        request.body.pull_request.head.ref,
-        request._log_url,
+        event.body.repository.full_name,
+        event.body.pull_request.head.ref,
+        context.logs_url,
     )
 
     trigger_pr_plan(
-        request.body.respository.full_name,
-        request.body.pull_request.base.ref,
-        request.body.pull_request.head.ref,
-        request.body.pull_request.head.sha,
-        request._log_url,
-        request._commit_status_config.get("PrPlan"),
+        event.body.repository.full_name,
+        event.body.pull_request.base.ref,
+        event.body.pull_request.head.ref,
+        event.body.pull_request.head.sha,
+        context.logs_url,
+        event.body.commit_status_config.get("PrPlan"),
     )
 
     return Response("foo")
 
 
 @app.post("/merge")
-def merged_pr(request: LambdaFunctionUrlRequest):
+def merged_pr(request: Request):
+    event = Event(**request.scope["aws.event"])
+    context = Context(**request.scope["aws.context"].__dict__)
 
     trigger_create_deploy_stack(
-        request.body.respository.full_name,
-        request.body.pull_request.base.ref,
-        request.body.pull_request.head.ref,
-        request.body.pull_request.head.sha,
-        request.body.pull_request.number,
-        request._log_url,
-        request._commit_status_config.get("CreateDeployStack"),
+        event.body.repository.full_name,
+        event.body.pull_request.base.ref,
+        event.body.pull_request.head.ref,
+        event.body.pull_request.head.sha,
+        event.body.pull_request.number,
+        context.logs_url,
+        event.body.commit_status_config.get("CreateDeployStack"),
     )
 
 
@@ -56,15 +65,38 @@ async def value_error_exception_handler(request: Request, exc: ValueError):
     )
 
 
+@app.exception_handler(InvalidSignatureError)
+async def invalid_signature_error_exception_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=403,
+        content={"message": str(exc)},
+    )
+
+
+@app.exception_handler(FilePathsNotMatched)
+async def filepath_not_mtached_error_exception_handler(
+    request: Request, exc: ValueError
+):
+    return JSONResponse(
+        status_code=200,
+        content={"message": str(exc)},
+    )
+
+
+# TODO: add allowed_hosts=["github.com"] ?
 @app.middleware("http")
 async def add_resource_path(request: Request, call_next):
-    try:
-        LambdaFunctionUrlRequest(event=request.scope["aws.event"])
-    except InvalidSignatureError as e:
-        return JSONResponse(status_code=403, content=str(e))
-    except FilePathsNotMatched as e:
-        return JSONResponse(status_code=200, content=str(e))
-    response = await call_next(**request)
+    body = await request.json()
+    merged = body.get("pull_request", {}).get("merged")
+    if body.get("action") in ["opened", "edited", "reopened"] and merged is False:
+        request.scope["path"] = "/open"
+
+    elif body.get("action") == "closed" and merged is True:
+        request.scope["path"] = "/merge"
+
+    log.debug("Resource Path: %s", request.scope["path"])
+
+    response = await call_next(request)
     return response
 
 
