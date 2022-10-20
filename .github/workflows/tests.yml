@@ -62,7 +62,7 @@ jobs:
     # needs: precommit
     runs-on: ubuntu-latest
     env:
-      TF_VAR_TESTING_GITHUB_TOKEN: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
     permissions:
       id-token: write
       contents: read
@@ -70,7 +70,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: mask sensitive
-      run: echo "::add-mask::$TF_VAR_TESTING_GITHUB_TOKEN"
+      run: echo "::add-mask::$TESTING_GITHUB_TOKEN"
 
     - name: Tests
       shell: bash
@@ -81,10 +81,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-
-    - name: Install Deps
-      shell: bash
-      run: python3 -m pip install -e .
 
     - name: Tests
       shell: bash
@@ -98,19 +94,17 @@ jobs:
       id-token: write
       contents: read
     env:
-      TF_VAR_TESTING_GITHUB_TOKEN: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
-      TF_VAR_REGISTRY_PASSWORD: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
-      TF_VAR_GITHUB_TOKEN_SSM_VALUE: ${{ secrets.TF_VAR_GITHUB_TOKEN_SSM_VALUE }}
-      TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      REGISTRY_PASSWORD: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      APPROVAL_REQUEST_SENDER_EMAIL: ${{ secrets.APPROVAL_REQUEST_SENDER_EMAIL }}
     steps:
     - uses: actions/checkout@v3
 
     - name: mask sensitive
       run: |
-        echo "::add-mask::$TF_VAR_TESTING_GITHUB_TOKEN"
-        echo "::add-mask::$TF_VAR_REGISTRY_PASSWORD"
-        echo "::add-mask::$TF_VAR_GITHUB_TOKEN_SSM_VALUE"
-        echo "::add-mask::$TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL"
+        echo "::add-mask::$TESTING_GITHUB_TOKEN"
+        echo "::add-mask::$REGISTRY_PASSWORD"
+        echo "::add-mask::$APPROVAL_REQUEST_SENDER_EMAIL"
 
     - name: Configure AWS Credentials for remote workflow
       uses: aws-actions/configure-aws-credentials@v1

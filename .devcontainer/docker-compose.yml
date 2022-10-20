@@ -120,18 +120,10 @@ services:
 
     - MOTO_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
     - SF_ENDPOINT_URL=${SF_ENDPOINT_URL}
+    - ECS_ENDPOINT_URL=${ECS_ENDPOINT_URL}
 
-    - TF_VAR_metadb_endpoint_url=${METADB_ENDPOINT_URL}
-    - TF_VAR_metadb_name=${POSTGRES_DB}
-    - TF_VAR_metadb_username=${POSTGRES_USER}
-    - TF_VAR_sf_endpoint_url=${SF_ENDPOINT_URL}
-    - TF_VAR_ecs_endpoint_url=${ECS_ENDPOINT_URL}
-    - TF_VAR_moto_endpoint_url=${MOTO_ENDPOINT_URL}
-    - TF_VAR_registry_password=${TF_VAR_REGISTRY_PASSWORD}
-    - TF_VAR_approval_request_sender_email=${TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL}
-    - TF_VAR_github_token_ssm_value=${TESTING_GITHUB_TOKEN}
-    - TF_VAR_testing_github_token=${TESTING_GITHUB_TOKEN}
-
+    - REGISTRY_PASSWORD=${REGISTRY_PASSWORD}
+    - APPROVAL_REQUEST_SENDER_EMAIL=${APPROVAL_REQUEST_SENDER_EMAIL}
     - GITHUB_TOKEN=${TESTING_GITHUB_TOKEN}
 
     - UNTIL_AWS_EXP=${UNTIL_AWS_EXP}

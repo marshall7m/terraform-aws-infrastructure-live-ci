@@ -1,6 +1,7 @@
 import os
 import logging
 import uuid
+import json
 
 import requests
 import pytest
@@ -65,22 +66,91 @@ def reset_moto_server(request):
 
 
 @pytest.fixture(scope="session")
-def mut_output(request, reset_moto_server):
+def tfvars_files(tmp_path_factory):
+    """Creates the tfvars json file to be used for Terraform variables"""
+    parent = tmp_path_factory.mktemp("tfvars")
+
+    secret_env_vars = {
+        "registry_password": os.environ.get("REGISTRY_PASSWORD"),
+        "github_token_ssm_value": os.environ.get("GITHUB_TOKEN"),
+    }
+
+    secret_filepath = parent / "secret.auto.tfvars.json"
+
+    with secret_filepath.open("w", encoding="utf-8") as f:
+        json.dump(secret_env_vars, f, indent=4, sort_keys=True)
+
+    if os.environ.get("IS_REMOTE", False):
+        env_vars = {
+            "approval_request_sender_email": os.environ[
+                "APPROVAL_REQUEST_SENDER_EMAIL"
+            ],
+        }
+    else:
+        # maps local endpoint URLs to terraform variables
+        env_vars = {
+            "local_task_env_vars": [
+                {"name": "SSM_ENDPOINT_URL", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {
+                    "name": "LAMBDA_ENDPOINT_URL",
+                    "value": os.environ["MOTO_ENDPOINT_URL"],
+                },
+                {"name": "SF_ENDPOINT_URL", "value": os.environ["SF_ENDPOINT_URL"]},
+                {"name": "AWS_S3_ENDPOINT", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {
+                    "name": "AWS_DYNAMODB_ENDPOINT",
+                    "value": os.environ["MOTO_ENDPOINT_URL"],
+                },
+                {"name": "AWS_IAM_ENDPOINT", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {"name": "AWS_STS_ENDPOINT", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {
+                    "name": "METADB_ENDPOINT_URL",
+                    "value": os.environ["METADB_ENDPOINT_URL"],
+                },
+                {"name": "S3_BACKEND_FORCE_PATH_STYLE", "value": True},
+            ],
+            "approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
+            "approval_request_sender_email": "fakesender@fake.com",
+            "create_approval_sender_policy": "false",
+            "moto_endpoint_url": os.environ["MOTO_ENDPOINT_URL"],
+            "metadb_endpoint_url": os.environ["METADB_ENDPOINT_URL"],
+            "sf_endpoint_url": os.environ["SF_ENDPOINT_URL"],
+            "ecs_endpoint_url": os.environ["ECS_ENDPOINT_URL"],
+            "metadb_cluster_arn": os.environ["AURORA_CLUSTER_ARN"],
+            "metadb_secret_arn": os.environ["AURORA_SECRET_ARN"],
+            "metadb_username": os.environ["PGUSER"],
+            "metadb_name": os.environ["PGDATABASE"],
+            "skip_credentials_validation": True,
+            "skip_metadata_api_check": True,
+            "skip_requesting_account_id": True,
+            "s3_use_path_style": True,
+        }
+
+    testing_filepath = parent / "testing.auto.tfvars.json"
+    with testing_filepath.open("w", encoding="utf-8") as f:
+        json.dump(env_vars, f, indent=4, sort_keys=True)
+
+    filepaths = [testing_filepath, secret_filepath]
+
+    yield filepaths
+
+    for p in filepaths:
+        p.unlink(missing_ok=True)
+
+
+@pytest.fixture(scope="session")
+def mut_output(request, reset_moto_server, tfvars_files):
+    """Returns dictionary of Terraform output command results"""
     cache_dir = str(request.config.cache.makedir("tftest"))
     log.info(f"Caching Tftest return results to {cache_dir}")
 
     tf = tftest.TerragruntTest(
-        env={
-            "TF_VAR_approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
-            "TF_VAR_approval_request_sender_email": "fakesender@fake.com",
-            "TF_VAR_create_approval_sender_policy": "false",
-        },
         tfdir=f"{os.path.dirname(os.path.realpath(__file__))}/../fixtures/terraform/mut/basic",
         enable_cache=True,
         cache_dir=cache_dir,
     )
 
-    tf.setup(cleanup_on_exit=True, use_cache=True)
+    tf.setup(cleanup_on_exit=True, extra_files=tfvars_files, use_cache=True)
     tf.apply(auto_approve=True, use_cache=True)
 
     return {k: v["value"] for k, v in tf.output(use_cache=True).items()}
