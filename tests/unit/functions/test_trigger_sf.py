@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 
-@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
+@pytest.mark.usefixtures("aws_credentials", "truncate_executions", "setup_metadb")
 def test_execution_finished_update_status():
     execution_id = "run-123"
     expected_status = "success"
@@ -137,8 +137,8 @@ def test_abort_sf_executions():
     assert sf.describe_execution(executionArn=execution_arn)["status"] == "ABORTED"
 
 
-@pytest.mark.usefixtures("aws_credentials", "truncate_executions")
-def test_create_rollback_records(rds_data_client):
+@pytest.mark.usefixtures("aws_credentials", "truncate_executions", "setup_metadb")
+def test_create_rollback_records():
     commit_id = "test-commit"
     expected_rollback_cfg_paths = ["dev/bar"]
     records = [
@@ -347,6 +347,7 @@ def test_handle_failed_execution_is_rollback():
 )
 @pytest.mark.usefixtures("aws_credentials", "truncate_executions")
 @patch("functions.trigger_sf.lambda_function.sf")
+@patch.dict(os.environ, {"GITHUB_MERGE_LOCK_SSM_KEY": "mock-key"})
 def test_start_executions(mock_sf, records, expected_running_ids):
     """Test to ensure that the Lambda Function handles account and directory level dependencies before starting any Step Function executions"""
 
