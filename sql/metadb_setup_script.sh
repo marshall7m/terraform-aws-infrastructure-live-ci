@@ -7,13 +7,6 @@ set -e
 
 source "${tf_module_path}/sql/utils.sh" 
 
-# for local testing, use testing env var ARNs instead of tf module ARN's given the env var ARNs is what the
-# local metadb is setup with and will be the only ARNs that will be valid for queries
-# unfortunately the local-data-api image used for the local metadb doesn't allow for additional ARN's to be 
-# setup after the container is started
-cluster_arn="${AURORA_CLUSTER_ARN:=tf_cluster_arn}"
-secret_arn="${AURORA_CLUSTER_ARN:=tf_secret_arn}"
-
 echo "Creating tables"
 aws "${endpoint_url_flag}" rds-data execute-statement \
   --continue-after-timeout \

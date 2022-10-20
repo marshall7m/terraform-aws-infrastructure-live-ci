@@ -148,11 +148,74 @@ variable "metadb_endpoint_url" {
   default     = null
 }
 
+variable "metadb_cluster_arn" {
+  description = "Metadb cluster ARN that will be used for metadb setup queries (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
+variable "metadb_secret_arn" {
+  description = "Metadb secret ARN that will be used for metadb setup queries (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
 variable "ecs_image_address" {
   description = <<EOF
 Docker registry image to use for the ECS Fargate containers. If not specified, this Terraform module's GitHub registry image
 will be used with the tag associated with the version of this module. 
 EOF
   type        = string
+  default     = null
+}
+
+variable "moto_endpoint_url" {
+  description = "Endpoint URL for standalone moto server"
+  type        = string
+  default     = null
+}
+
+variable "sf_endpoint_url" {
+  description = "Endpoint URL for AWS Step Function"
+  type        = string
+  default     = null
+}
+
+variable "ecs_endpoint_url" {
+  description = "Endpoint URL for AWS ECS"
+  type        = string
+  default     = null
+}
+
+variable "local_task_common_env_vars" {
+  description = "ECS task env vars to set for local testing terraform module"
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default = []
+}
+
+variable "skip_credentials_validation" {
+  description = "Skip credentials validation via the STS API (set to True for local testing)"
+  type        = bool
+  default     = null
+}
+
+variable "skip_metadata_api_check" {
+  description = "Skip the AWS Metadata API check (set to True for local testing)"
+  type        = bool
+  default     = null
+}
+
+variable "skip_requesting_account_id" {
+  description = "Skip requesting the account ID"
+  type        = bool
+  default     = null
+}
+
+variable "s3_use_path_style" {
+  description = "Enable the request to use path-style addressing (set to True for local testing)"
+  type        = bool
   default     = null
 }

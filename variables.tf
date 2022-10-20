@@ -524,6 +524,18 @@ variable "metadb_endpoint_url" {
   default     = null
 }
 
+variable "metadb_cluster_arn" {
+  description = "Metadb cluster ARN that will be used for metadb setup queries (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
+variable "metadb_secret_arn" {
+  description = "Metadb secret ARN that will be used for metadb setup queries (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
 variable "metadb_name" {
   description = "Name of the metadb"
   type        = string

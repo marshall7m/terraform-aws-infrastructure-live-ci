@@ -26,6 +26,8 @@ module "mut_infrastructure_live_ci" {
   metadb_schema       = var.metadb_schema
   metadb_subnet_ids   = module.vpc.public_subnets
   metadb_endpoint_url = var.metadb_endpoint_url
+  metadb_cluster_arn  = var.metadb_cluster_arn
+  metadb_secret_arn   = var.metadb_secret_arn
 
   vpc_id         = module.vpc.vpc_id
   ecs_subnet_ids = module.vpc.public_subnets
@@ -46,7 +48,7 @@ module "mut_infrastructure_live_ci" {
       name  = "TG_S3_BUCKET"
       value = aws_s3_bucket.testing_tf_state.id
     }
-  ], local.local_task_common_env_vars)
+  ], var.local_task_common_env_vars)
 
   tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
 

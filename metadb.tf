@@ -3,8 +3,8 @@ locals {
   cluster_identifier = replace("${var.prefix}-cluster", "_", "-")
   metadb_setup_script = templatefile("${path.module}/sql/metadb_setup_script.sh", {
     tf_module_path    = path.module
-    tf_cluster_arn    = aws_rds_cluster.metadb.arn
-    tf_secret_arn     = aws_secretsmanager_secret_version.master_metadb_user.arn
+    cluster_arn       = coalesce(var.metadb_cluster_arn, aws_rds_cluster.metadb.arn)
+    secret_arn        = coalesce(var.metadb_secret_arn, aws_secretsmanager_secret_version.master_metadb_user.arn)
     db_name           = aws_rds_cluster.metadb.database_name
     schema            = var.metadb_schema
     endpoint_url_flag = var.metadb_endpoint_url != null ? "--endpoint-url=${var.metadb_endpoint_url}" : ""

@@ -179,3 +179,7 @@ output "step_function_arn" {
 output "step_function_name" {
   value = module.mut_infrastructure_live_ci.step_function_name
 }
+
+output "ecs_endpoint_url" {
+  value = var.ecs_endpoint_url
+}
