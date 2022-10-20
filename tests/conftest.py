@@ -114,7 +114,7 @@ def setup_metadb():
 
 
 @pytest.fixture(scope="function")
-def truncate_executions():
+def truncate_executions(setup_metadb):
     """Removes all rows from execution table after every test"""
 
     yield None
