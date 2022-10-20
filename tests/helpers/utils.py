@@ -122,41 +122,22 @@ def insert_records(
                     values.append("'{" + ", ".join(val) + "}'")
                 else:
                     values.append(str(val))
-
-            return_col_types_query = """
-            SELECT c.column_name || '::VARCHAR'
-                FROM information_schema.columns AS c
-                WHERE table_name = '{tbl}'
-                AND data_type = 'ARRAY'
-            UNION ALL
-            SELECT c.column_name
-            FROM information_schema.columns AS c
-            WHERE table_name = '{tbl}'
-            AND data_type != 'ARRAY'
+            query = """
+            INSERT INTO {tbl} ({fields})
+            VALUES({values})
+            RETURNING *
             """.format(
                 tbl=table,
+                fields=", ".join(cols),
+                values=", ".join(values),
             )
 
+            log.debug(f"Running: {query}")
             with aurora_data_api.connect(
                 database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
             ) as conn, conn.cursor() as cur:
-                cur.execute(return_col_types_query)
-
-                return_cols = [c[0] for c in cur.fetchall()]
-                query = """
-                INSERT INTO {tbl} ({fields})
-                VALUES({values})
-                RETURNING {cols}
-                """.format(
-                    tbl=table,
-                    fields=", ".join(cols),
-                    values=", ".join(values),
-                    cols=", ".join(return_cols),
-                )
-                log.debug(f"Running query:\n{query}")
                 cur.execute(query)
                 res = dict(zip([desc.name for desc in cur.description], cur.fetchone()))
-
             results.append(dict(res))
     except Exception as e:
         log.error(e)
