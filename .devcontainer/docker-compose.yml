@@ -79,7 +79,7 @@ services:
     # profiles: [integration]
 
   moto:
-    image: motoserver/moto:4.0.1
+    image: motoserver/moto:4.0.8
     ports:
     - 5000:5000
     networks:
