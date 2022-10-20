@@ -43,7 +43,6 @@ services:
 
   local-sf-api:
     image: amazon/aws-stepfunctions-local:1.10.2
-    container_name: step-function-local
     volumes:
     - ../tests/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
     ports:
