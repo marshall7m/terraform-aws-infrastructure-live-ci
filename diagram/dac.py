@@ -26,7 +26,7 @@ cluster_attr = {
 }
 
 with Diagram(
-    "terraform-aws-infrastructure-live",
+    "\nterraform-aws-infrastructure-live",
     graph_attr=graph_attr,
     node_attr=node_attr,
     edge_attr=edge_attr,
@@ -39,7 +39,7 @@ with Diagram(
 
     receiver
     (
-        Custom("1. GitHub Event", "./gh_icon.png")
+        Custom("\n1. GitHub Event", "./gh_icon.png")
         >> receiver
         >> Edge(
             label="Open",
