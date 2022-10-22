@@ -142,7 +142,7 @@ def tfvars_files(tmp_path_factory):
 def mut_output(request, reset_moto_server, tfvars_files):
     """Returns dictionary of Terraform output command results"""
     cache_dir = str(request.config.cache.makedir("tftest"))
-    log.info(f"Caching Tftest return results to {cache_dir}")
+    log.info(f"Caching Tftest results to {cache_dir}")
 
     tf = tftest.TerragruntTest(
         tfdir=f"{os.path.dirname(os.path.realpath(__file__))}/../fixtures/terraform/mut/basic",
@@ -158,7 +158,7 @@ def mut_output(request, reset_moto_server, tfvars_files):
 
 @pytest.fixture
 def push_changes(mut_output, request):
-    gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
+    gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"], retry=3)
     branch = f"test-{uuid.uuid4()}"
     repo = gh.get_repo(mut_output["repo_full_name"])
 
