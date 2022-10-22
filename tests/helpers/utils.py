@@ -2,6 +2,8 @@ import uuid
 import logging
 import os
 import json
+import time
+
 import boto3
 import aurora_data_api
 import github
@@ -170,6 +172,7 @@ def check_ses_sender_email_auth(email_address: str, send_verify_email=False) -> 
 
 
 def commit(repo, branch, changes, commit_message):
+    """Creates a local commit"""
     elements = []
     for filepath, content in changes.items():
         log.debug(f"Creating file: {filepath}")
@@ -189,7 +192,8 @@ def commit(repo, branch, changes, commit_message):
     return commit
 
 
-def push(repo, branch, changes, commit_message="Adding test files"):
+def push(repo, branch: str, changes=dict[str, str], commit_message="Adding test files"):
+    """Pushes changes to associated repo and returns the commit ID"""
     try:
         ref = repo.get_git_ref(f"heads/{branch}")
     except Exception:
@@ -204,4 +208,39 @@ def push(repo, branch, changes, commit_message="Adding test files"):
     log.debug(f"Pushing commit ID: {commit_obj.sha}")
     ref.edit(sha=commit_obj.sha)
 
-    return branch
+    return commit_obj.sha
+
+
+def wait_for_finished_task(
+    cluster: str, task_arn: str, endpoint_url=None, sleep=5
+) -> str:
+    """Waits for ECS task to return a STOPPED status"""
+    ecs = boto3.client("ecs", endpoint_url=endpoint_url)
+    task_status = None
+
+    while task_status != "STOPPED":
+        time.sleep(sleep)
+        try:
+            task_status = ecs.describe_tasks(cluster=cluster, tasks=[task_arn],)[
+                "tasks"
+            ][0]["lastStatus"]
+            log.debug(f"Task Status: {task_status}")
+
+        except IndexError:
+            log.debug("Task does not exist yet")
+
+    return task_status
+
+
+def get_commit_status(
+    repo_full_name: str, commit_id: str, context: str, token: str = None, wait: int = 3
+) -> str:
+    """Returns commit status associated with the passed context argument"""
+    if not token:
+        token = os.environ["GITHUB_TOKEN"]
+
+    gh = github.Github(login_or_token=token)
+    repo = gh.get_repo(repo_full_name)
+    for status in repo.get_commit(commit_id).get_statuses():
+        if status.context == context:
+            return status.state
