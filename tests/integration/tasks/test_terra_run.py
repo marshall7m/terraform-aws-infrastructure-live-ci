@@ -1,53 +1,55 @@
 import os
+from pprint import pprint
 import uuid
 import logging
 
 import pytest
 import boto3
 import github
-from tests.helpers.utils import dummy_tf_output
+import timeout_decorator
+
+from tests.helpers.utils import (
+    dummy_tf_output,
+    wait_for_finished_task,
+    get_commit_status,
+)
 
 log = logging.getLogger(__file__)
 log.setLevel(logging.DEBUG)
 gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
 
 
+# need support in order to pass custom endpoint URL for terragrunt command with
+# --terragrunt-iam-role flag
+# @pytest.mark.skip("Waiting on Terragrunt Issue: #2282")
+@timeout_decorator.timeout(60)
 @pytest.mark.usefixtures("truncate_executions")
 @pytest.mark.parametrize(
-    "push_changes, expected_status",
+    "push_changes",
     [
         pytest.param(
             {
                 f"directory_dependency/shared-services-account/us-west-2/env-one/doo/{uuid.uuid4()}.tf": dummy_tf_output()
             },
-            "success",
-            id="valid_tf_file",
-        ),
-        pytest.param(
-            {
-                f"directory_dependency/shared-services-account/us-west-2/env-one/doo/{uuid.uuid4()}.tf": dummy_tf_output(
-                    name="1_invalid_name"
-                )
-            },
-            "failure",
-            id="invalid_tf_file",
         ),
     ],
-    indirect=["push_changes"],
+    indirect=True,
 )
-def test_successful_execution(mut_output, push_changes, expected_status):
+def test_successful_apply_task(mut_output, push_changes):
     ecs = boto3.client("ecs", endpoint_url=mut_output.get("ecs_endpoint_url"))
 
     cfg_path = os.path.dirname(list(push_changes["changes"].keys())[0])
     status_check_name = f"test-{uuid.uuid4()}"
 
-    ecs.run_task(
+    task_arn = ecs.run_task(
         taskDefinition=mut_output["ecs_terra_run_task_definition_arn"],
         overrides={
             "containerOverrides": [
                 {
                     "name": mut_output["ecs_terra_run_task_container_name"],
                     "environment": [
+                        {"name": "STATE_NAME", "value": "Apply"},
+                        {"name": "AWS_DEFAULT_REGION", "value": "us-west-2"},
                         {"name": "CFG_PATH", "value": cfg_path},
                         {
                             "name": "COMMIT_ID",
@@ -63,7 +65,7 @@ def test_successful_execution(mut_output, push_changes, expected_status):
                         },
                         {
                             "name": "TG_COMMAND",
-                            "value": f"terragrunt plan --terragrunt-working-dir {cfg_path} --terragrunt-iam-role {mut_output['apply_role_arn']} -auto-approve",
+                            "value": f"terragrunt apply --terragrunt-working-dir {cfg_path} --terragrunt-iam-role {mut_output['apply_role_arn']} -auto-approve",
                         },
                         {
                             "name": "TASK_TOKEN",
@@ -75,13 +77,27 @@ def test_successful_execution(mut_output, push_changes, expected_status):
             ]
         },
     )
+    pprint(task_arn)
+    task_arn = task_arn["tasks"][0]["taskArn"]
 
-    repo = gh.get_repo(mut_output["repo_full_name"])
-    status = [
-        status
-        for status in repo.get_commit(push_changes["commit_id"]).get_statuses()
-        if status.context == status_check_name
-    ][0]
+    wait_for_finished_task(
+        mut_output["ecs_cluster_arn"], task_arn, mut_output.get("ecs_endpoint_url")
+    )
+
+    status = get_commit_status(
+        mut_output["repo_full_name"], push_changes["commit_id"], status_check_name
+    )
 
     log.info("Assert that expected commit status state is sent")
-    assert status.state == "success"
+    assert status == "success"
+
+
+@pytest.mark.skip("not implemented")
+def test_failed_apply_task():
+    pass
+    # create case where apply_role_arn does not have the proper IAM permissions to run apply
+    # and terraform creates the new provider resources but fails to create other downstream resources
+    # TODO: assert new provider resources that were written to tf state file were added to metadb record's
+    # new_resources column
+
+    # TODO: assert commit status == failure
