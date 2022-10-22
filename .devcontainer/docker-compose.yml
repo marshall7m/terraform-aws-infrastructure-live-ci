@@ -70,10 +70,15 @@ services:
     - STS_ENDPOINT=${MOTO_ENDPOINT_URL}
     # endpoint used to retreive ecs task definition for RunTask API calls
     - ECS_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
-    # mock aws creds can be used since moto server is used as aws backend
-    - AWS_ACCESS_KEY_ID=mock
-    - AWS_SECRET_ACCESS_KEY=mock
-    - AWS_DEFAULT_REGION=us-east-1
+    - SSM_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+    - SECRET_MANAGER_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
+    - AWS_REGION=${AWS_REGION}
+    - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+    - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-mock-session-token}
+    - AWS_SESSION_EXPIRATION=${AWS_SESSION_EXPIRATION:-mock-aws-session-exp}
     networks:
       terraform-aws-infrastructure-live-ci:
     # profiles: [integration]
