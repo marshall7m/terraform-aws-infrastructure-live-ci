@@ -21,125 +21,6 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 - For a deep-dive into the architecture, refer to [DESIGN.MD](./DESIGN.md)
 - To see how to contribute to this project, refer to [CONTRIBUTING.md](./CONTRIBUTING.md)
 
-## Cost
-
-Cost estimate in the us-west-2 region via [Infracost](https://github.com/infracost/infracost):
-
-```
- Name                                                                                            Monthly Qty  Unit                        Monthly Cost 
-                                                                                                                                                       
- aws_api_gateway_rest_api.this                                                                                                                         
- └─ Requests (first 333M)                                                                Monthly cost depends on usage: $3.50 per 1M requests          
-                                                                                                                                                       
- aws_cloudwatch_log_group.ecs_tasks                                                                                                                    
- ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
- ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
- └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
-                                                                                                                                                       
- aws_rds_cluster.metadb                                                                                                                                
- ├─ Aurora serverless                                                                    Monthly cost depends on usage: $0.06 per ACU-hours            
- ├─ Storage                                                                              Monthly cost depends on usage: $0.10 per GB                   
- ├─ I/O requests                                                                         Monthly cost depends on usage: $0.20 per 1M requests          
- └─ Snapshot export                                                                      Monthly cost depends on usage: $0.01 per GB                   
-                                                                                                                                                       
- aws_secretsmanager_secret.ci_metadb_user                                                                                                              
- ├─ Secret                                                                                                 1  months                             $0.40 
- └─ API requests                                                                         Monthly cost depends on usage: $0.05 per 10k requests         
-                                                                                                                                                       
- aws_secretsmanager_secret.master_metadb_user                                                                                                          
- ├─ Secret                                                                                                 1  months                             $0.40 
- └─ API requests                                                                         Monthly cost depends on usage: $0.05 per 10k requests         
-                                                                                                                                                       
- aws_sfn_state_machine.this                                                                                                                            
- └─ Transitions                                                                          Monthly cost depends on usage: $0.025 per 1K transitions      
-                                                                                                                                                       
- module.github_webhook_validator.aws_cloudwatch_log_group.agw[0]                                                                                       
- ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
- ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
- └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
-                                                                                                                                                       
- module.github_webhook_validator.module.lambda_function.aws_cloudwatch_log_group.lambda                                                                
- ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
- ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
- └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
-                                                                                                                                                       
- module.github_webhook_validator.module.lambda_function.aws_lambda_function.this                                                                       
- ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
- └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
-                                                                                                                                                       
- module.lambda_approval_request.aws_cloudwatch_log_group.this[0]                                                                                       
- ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
- ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
- └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
-                                                                                                                                                       
- module.lambda_approval_request.aws_lambda_function.this[0]                                                                                            
- ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
- └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
-                                                                                                                                                       
- module.lambda_approval_response.aws_cloudwatch_log_group.this[0]                                                                                      
- ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
- ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
- └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
-                                                                                                                                                       
- module.lambda_approval_response.aws_lambda_function.this[0]                                                                                           
- ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
- └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
-                                                                                                                                                       
- module.lambda_trigger_sf.aws_cloudwatch_log_group.this[0]                                                                                             
- ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
- ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
- └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
-                                                                                                                                                       
- module.lambda_trigger_sf.aws_lambda_function.this[0]                                                                                                  
- ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
- └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
-                                                                                                                                                       
- module.lambda_webhook_receiver.aws_cloudwatch_log_group.this[0]                                                                                       
- ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
- ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
- └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
-                                                                                                                                                       
- module.lambda_webhook_receiver.aws_lambda_function.this[0]                                                                                            
- ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
- └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
-                                                                                                                                                       
- OVERALL TOTAL                                                                                                                                   $0.80 
-──────────────────────────────────
-133 cloud resources were detected:
-∙ 17 were estimated, all of which include usage-based costs, see https://infracost.io/usage-file
-∙ 106 were free:
-  ∙ 31 x aws_iam_role_policy_attachment
-  ∙ 22 x aws_iam_policy
-  ∙ 9 x aws_iam_role
-  ∙ 7 x aws_ssm_parameter
-  ∙ 5 x aws_lambda_permission
-  ∙ 4 x aws_api_gateway_method_response
-  ∙ 4 x aws_lambda_layer_version
-  ∙ 3 x aws_ecs_task_definition
-  ∙ 2 x aws_api_gateway_integration
-  ∙ 2 x aws_api_gateway_method
-  ∙ 2 x aws_api_gateway_method_settings
-  ∙ 2 x aws_api_gateway_resource
-  ∙ 2 x aws_cloudwatch_event_rule
-  ∙ 2 x aws_cloudwatch_event_target
-  ∙ 2 x aws_secretsmanager_secret_version
-  ∙ 1 x aws_api_gateway_account
-  ∙ 1 x aws_api_gateway_deployment
-  ∙ 1 x aws_api_gateway_model
-  ∙ 1 x aws_api_gateway_stage
-  ∙ 1 x aws_ecs_cluster
-  ∙ 1 x aws_lambda_event_source_mapping
-  ∙ 1 x aws_lambda_function_event_invoke_config
-∙ 10 are not supported yet, see https://infracost.io/requested-resources:
-  ∙ 4 x aws_api_gateway_integration_response
-  ∙ 1 x aws_lambda_function_url
-  ∙ 1 x aws_lambda_provisioned_concurrency_config
-  ∙ 1 x aws_s3_object
-  ∙ 1 x aws_ses_email_identity
-  ∙ 1 x aws_ses_identity_policy
-  ∙ 1 x aws_ses_template
-```
- 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
@@ -343,6 +224,125 @@ Cost estimate in the us-west-2 region via [Infracost](https://github.com/infraco
 | <a name="output_trigger_sf_function_name"></a> [trigger\_sf\_function\_name](#output\_trigger\_sf\_function\_name) | Name of the Lambda Function used for triggering Step Function execution(s) |
 | <a name="output_trigger_sf_log_group_name"></a> [trigger\_sf\_log\_group\_name](#output\_trigger\_sf\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for triggering Step Function execution(s) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+
+## Cost
+
+Cost estimate in the us-west-2 region via [Infracost](https://github.com/infracost/infracost):
+
+```
+ Name                                                                                            Monthly Qty  Unit                        Monthly Cost 
+                                                                                                                                                       
+ aws_api_gateway_rest_api.this                                                                                                                         
+ └─ Requests (first 333M)                                                                Monthly cost depends on usage: $3.50 per 1M requests          
+                                                                                                                                                       
+ aws_cloudwatch_log_group.ecs_tasks                                                                                                                    
+ ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
+ ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
+ └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
+                                                                                                                                                       
+ aws_rds_cluster.metadb                                                                                                                                
+ ├─ Aurora serverless                                                                    Monthly cost depends on usage: $0.06 per ACU-hours            
+ ├─ Storage                                                                              Monthly cost depends on usage: $0.10 per GB                   
+ ├─ I/O requests                                                                         Monthly cost depends on usage: $0.20 per 1M requests          
+ └─ Snapshot export                                                                      Monthly cost depends on usage: $0.01 per GB                   
+                                                                                                                                                       
+ aws_secretsmanager_secret.ci_metadb_user                                                                                                              
+ ├─ Secret                                                                                                 1  months                             $0.40 
+ └─ API requests                                                                         Monthly cost depends on usage: $0.05 per 10k requests         
+                                                                                                                                                       
+ aws_secretsmanager_secret.master_metadb_user                                                                                                          
+ ├─ Secret                                                                                                 1  months                             $0.40 
+ └─ API requests                                                                         Monthly cost depends on usage: $0.05 per 10k requests         
+                                                                                                                                                       
+ aws_sfn_state_machine.this                                                                                                                            
+ └─ Transitions                                                                          Monthly cost depends on usage: $0.025 per 1K transitions      
+                                                                                                                                                       
+ module.github_webhook_validator.aws_cloudwatch_log_group.agw[0]                                                                                       
+ ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
+ ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
+ └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
+                                                                                                                                                       
+ module.github_webhook_validator.module.lambda_function.aws_cloudwatch_log_group.lambda                                                                
+ ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
+ ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
+ └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
+                                                                                                                                                       
+ module.github_webhook_validator.module.lambda_function.aws_lambda_function.this                                                                       
+ ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
+ └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
+                                                                                                                                                       
+ module.lambda_approval_request.aws_cloudwatch_log_group.this[0]                                                                                       
+ ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
+ ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
+ └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
+                                                                                                                                                       
+ module.lambda_approval_request.aws_lambda_function.this[0]                                                                                            
+ ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
+ └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
+                                                                                                                                                       
+ module.lambda_approval_response.aws_cloudwatch_log_group.this[0]                                                                                      
+ ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
+ ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
+ └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
+                                                                                                                                                       
+ module.lambda_approval_response.aws_lambda_function.this[0]                                                                                           
+ ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
+ └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
+                                                                                                                                                       
+ module.lambda_trigger_sf.aws_cloudwatch_log_group.this[0]                                                                                             
+ ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
+ ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
+ └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
+                                                                                                                                                       
+ module.lambda_trigger_sf.aws_lambda_function.this[0]                                                                                                  
+ ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
+ └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
+                                                                                                                                                       
+ module.lambda_webhook_receiver.aws_cloudwatch_log_group.this[0]                                                                                       
+ ├─ Data ingested                                                                        Monthly cost depends on usage: $0.50 per GB                   
+ ├─ Archival Storage                                                                     Monthly cost depends on usage: $0.03 per GB                   
+ └─ Insights queries data scanned                                                        Monthly cost depends on usage: $0.005 per GB                  
+                                                                                                                                                       
+ module.lambda_webhook_receiver.aws_lambda_function.this[0]                                                                                            
+ ├─ Requests                                                                             Monthly cost depends on usage: $0.20 per 1M requests          
+ └─ Duration                                                                             Monthly cost depends on usage: $0.0000166667 per GB-seconds   
+                                                                                                                                                       
+ OVERALL TOTAL                                                                                                                                   $0.80 
+──────────────────────────────────
+133 cloud resources were detected:
+∙ 17 were estimated, all of which include usage-based costs, see https://infracost.io/usage-file
+∙ 106 were free:
+  ∙ 31 x aws_iam_role_policy_attachment
+  ∙ 22 x aws_iam_policy
+  ∙ 9 x aws_iam_role
+  ∙ 7 x aws_ssm_parameter
+  ∙ 5 x aws_lambda_permission
+  ∙ 4 x aws_api_gateway_method_response
+  ∙ 4 x aws_lambda_layer_version
+  ∙ 3 x aws_ecs_task_definition
+  ∙ 2 x aws_api_gateway_integration
+  ∙ 2 x aws_api_gateway_method
+  ∙ 2 x aws_api_gateway_method_settings
+  ∙ 2 x aws_api_gateway_resource
+  ∙ 2 x aws_cloudwatch_event_rule
+  ∙ 2 x aws_cloudwatch_event_target
+  ∙ 2 x aws_secretsmanager_secret_version
+  ∙ 1 x aws_api_gateway_account
+  ∙ 1 x aws_api_gateway_deployment
+  ∙ 1 x aws_api_gateway_model
+  ∙ 1 x aws_api_gateway_stage
+  ∙ 1 x aws_ecs_cluster
+  ∙ 1 x aws_lambda_event_source_mapping
+  ∙ 1 x aws_lambda_function_event_invoke_config
+∙ 10 are not supported yet, see https://infracost.io/requested-resources:
+  ∙ 4 x aws_api_gateway_integration_response
+  ∙ 1 x aws_lambda_function_url
+  ∙ 1 x aws_lambda_provisioned_concurrency_config
+  ∙ 1 x aws_s3_object
+  ∙ 1 x aws_ses_email_identity
+  ∙ 1 x aws_ses_identity_policy
+  ∙ 1 x aws_ses_template
+```
 
 ## Deploy the Terraform Module
 
