@@ -19,3 +19,4 @@ __pycache__
 /build/
 **/builds/*
 *.task-compose*
+**tfvars**
