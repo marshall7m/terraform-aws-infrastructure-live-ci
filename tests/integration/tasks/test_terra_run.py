@@ -1,5 +1,4 @@
 import os
-from pprint import pprint
 import uuid
 import logging
 
@@ -77,7 +76,6 @@ def test_successful_apply_task(mut_output, push_changes):
             ]
         },
     )
-    pprint(task_arn)
     task_arn = task_arn["tasks"][0]["taskArn"]
 
     wait_for_finished_task(

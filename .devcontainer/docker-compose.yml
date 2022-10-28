@@ -55,7 +55,7 @@ services:
     # profiles: ["integration"]
 
   local-ecs-api:
-    image: marshall7m/local-ecs-api:latest
+    image: marshall7m/local-ecs-api:v0.0.3
     restart: always
     volumes:
     - /usr/bin/docker:/usr/bin/docker
@@ -70,6 +70,12 @@ services:
     - STS_ENDPOINT=${MOTO_ENDPOINT_URL}
     # endpoint used to retreive ecs task definition for RunTask API calls
     - ECS_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+    - ECS_ENDPOINT_AWS_REGION=${AWS_REGION}
+    - ECS_ENDPOINT_AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
+    - ECS_ENDPOINT_AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
+
+    - ECS_EXTERNAL_NETWORKS=${NETWORK_NAME}
+
     - SSM_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
     - SECRET_MANAGER_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
 
@@ -84,7 +90,8 @@ services:
     # profiles: [integration]
 
   moto:
-    image: motoserver/moto:4.0.8
+    # image: motoserver/moto:4.0.8
+    image: moto-dev:latest
     ports:
     - 5000:5000
     networks:
@@ -129,7 +136,8 @@ services:
 
     - REGISTRY_PASSWORD=${REGISTRY_PASSWORD}
     - APPROVAL_REQUEST_SENDER_EMAIL=${APPROVAL_REQUEST_SENDER_EMAIL}
-    - GITHUB_TOKEN=${TESTING_GITHUB_TOKEN}
+    - GITHUB_TOKEN=${GITHUB_TESTING_TOKEN}
+    - TF_VAR_github_token=${GITHUB_TESTING_TOKEN}
 
     - UNTIL_AWS_EXP=${UNTIL_AWS_EXP}
     networks:
@@ -146,7 +154,7 @@ services:
 
 networks:
   terraform-aws-infrastructure-live-ci:
-    name: terraform-aws-infrastructure-live-ci
+    name: ${NETWORK_NAME}
     driver: bridge
     ipam:
       driver: default
