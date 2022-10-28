@@ -2,15 +2,21 @@ import os
 import logging
 import uuid
 import json
+import shutil
+from typing import List
 
 import requests
 import pytest
 import github
 import tftest
+import python_on_whales
+from python_on_whales import docker
 from tests.helpers.utils import push
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+FILE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
 def pytest_addoption(parser):
@@ -66,10 +72,21 @@ def reset_moto_server(request):
 
 
 @pytest.fixture(scope="session")
-def tfvars_files(tmp_path_factory):
-    """Creates the tfvars json file to be used for Terraform variables"""
-    parent = tmp_path_factory.mktemp("tfvars")
+def docker_ecs_task() -> python_on_whales.Image:
+    """Builds Docker image for ECS tasks"""
+    img = docker.buildx.build(
+        os.path.join(FILE_DIR, "../docker"),
+        cache=True,
+        tags=["terraform-aws-infrastructure-live-ci/tasks:latest"],
+    )
 
+    return img
+
+
+@pytest.fixture(scope="session")
+def tfvars_files(tmp_path_factory, docker_ecs_task) -> List[str]:
+    """Returns list of tfvars json files to be used for Terraform variables"""
+    parent = tmp_path_factory.mktemp("tfvars")
     secret_env_vars = {
         "registry_password": os.environ.get("REGISTRY_PASSWORD"),
         "github_token_ssm_value": os.environ.get("GITHUB_TOKEN"),
@@ -109,6 +126,7 @@ def tfvars_files(tmp_path_factory):
                 },
                 {"name": "S3_BACKEND_FORCE_PATH_STYLE", "value": True},
             ],
+            "ecs_image_address": docker_ecs_task.repo_tags[0],
             "approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
             "approval_request_sender_email": "fakesender@fake.com",
             "create_approval_sender_policy": "false",
@@ -129,13 +147,11 @@ def tfvars_files(tmp_path_factory):
     testing_filepath = parent / "testing.auto.tfvars.json"
     with testing_filepath.open("w", encoding="utf-8") as f:
         json.dump(env_vars, f, indent=4, sort_keys=True)
-
     filepaths = [testing_filepath, secret_filepath]
 
     yield filepaths
 
-    for p in filepaths:
-        p.unlink(missing_ok=True)
+    shutil.rmtree(parent)
 
 
 @pytest.fixture(scope="session")
@@ -145,7 +161,7 @@ def mut_output(request, reset_moto_server, tfvars_files):
     log.info(f"Caching Tftest results to {cache_dir}")
 
     tf = tftest.TerragruntTest(
-        tfdir=f"{os.path.dirname(os.path.realpath(__file__))}/../fixtures/terraform/mut/basic",
+        tfdir=f"{FILE_DIR}/fixtures/terraform/mut/basic",
         enable_cache=True,
         cache_dir=cache_dir,
     )
