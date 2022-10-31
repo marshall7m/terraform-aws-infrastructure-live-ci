@@ -106,7 +106,7 @@ def tfvars_files(tmp_path_factory, docker_ecs_task) -> List[str]:
     else:
         # maps local endpoint URLs to terraform variables
         env_vars = {
-            "local_task_env_vars": [
+            "local_task_common_env_vars": [
                 {"name": "SSM_ENDPOINT_URL", "value": os.environ["MOTO_ENDPOINT_URL"]},
                 {
                     "name": "LAMBDA_ENDPOINT_URL",
