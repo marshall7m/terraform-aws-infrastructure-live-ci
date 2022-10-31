@@ -55,7 +55,6 @@ services:
     # profiles: ["integration"]
 
   local-ecs-api:
-    image: marshall7m/local-ecs-api:v0.0.3
     restart: always
     volumes:
     - /usr/bin/docker:/usr/bin/docker
@@ -70,7 +69,7 @@ services:
     - STS_ENDPOINT=${MOTO_ENDPOINT_URL}
     # endpoint used to retreive ecs task definition for RunTask API calls
     - ECS_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
-    - ECS_ENDPOINT_AWS_REGION=${AWS_REGION}
+    - ECS_ENDPOINT_AWS_REGION=${AWS_REGION:-us-west-2}
     - ECS_ENDPOINT_AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
     - ECS_ENDPOINT_AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
 
