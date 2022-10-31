@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import time
+from pprint import pformat
 
 import boto3
 import aurora_data_api
@@ -244,3 +245,72 @@ def get_commit_status(
     for status in repo.get_commit(commit_id).get_statuses():
         if status.context == context:
             return status.state
+
+
+def assert_terra_run_status(
+    execution_arn: str, state_name: str, expected_status: str
+) -> None:
+    """
+    Waits for the Step Function's associated task to finish and assert
+    that the task status matches the expected status
+
+    Arguments:
+        execution_arn: ARN of the Step Function execution
+        state_name: State name within the Step Function definition
+        expected_status: Expected task status
+    """
+    log.info(f"Waiting for Step Function task to finish: {state_name}")
+    exited_event = None
+    while not exited_event:
+        time.sleep(10)
+        exited_event = get_sf_state_event(
+            execution_arn, state_name, "stateExitedEventDetails"
+        )
+    status_event = [e for e in exited_event if e["id"] == exited_event["id"] - 1][0]
+
+    log.info(f"Assert state: {state_name} has the expected status: {expected_status}")
+    try:
+        assert status_event["type"] == expected_status
+    except AssertionError as e:
+        log.debug(f"{state_name} status event:\n{pformat(status_event)}")
+
+        cause = json.loads(status_event["taskFailedEventDetails"]["cause"])
+        log.error(f"Cause:\n{cause}")
+
+        raise e
+
+
+def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
+    """
+    Returns the Step Funciton execution event associated with the passed state name
+
+    Arguments:
+        execution_arn: Step Funciton execution ARN
+        state: State name within the Step Function definition
+        event_type: Step Function execution event type (e.g. taskScheduledEventDetails, stateExitedEventDetails)
+    """
+    sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
+    events = sf.get_execution_history(
+        executionArn=execution_arn, includeExecutionData=True
+    )["events"]
+
+    for event in events:
+        if event.get(event_type, {}).get("name", None) == state:
+            return event
+
+
+def get_terra_run_status_check_name(execution_arn: str, state: str) -> str:
+    """
+    Gets status check name for terra run states within Step Function execution
+
+    Arguments:
+        execution_arn: ARN of the Step Function execution
+        state: State name within the Step Function definition
+    """
+
+    state = get_sf_state_event(execution_arn, state, "taskScheduledEventDetails")
+    for env in json.loads(state["parameters"])["Overrides"]["ContainerOverrides"][0][
+        "Environment"
+    ].items():
+        if env["Name"] == "STATUS_CHECK_NAME":
+            return env["Value"]
