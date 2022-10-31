@@ -183,3 +183,7 @@ output "step_function_name" {
 output "ecs_endpoint_url" {
   value = var.ecs_endpoint_url
 }
+
+output "account_parent_cfg" {
+  value = module.mut_infrastructure_live_ci.account_parent_cfg
+}

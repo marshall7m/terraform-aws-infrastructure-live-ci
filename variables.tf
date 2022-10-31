@@ -470,7 +470,7 @@ variable "private_registry_custom_kms_key_arn" {
 
 variable "commit_status_config" {
   description = <<EOF
-Determine which commit statuses should be sent for each of the specified pipeline components. 
+Determines which commit statuses should be sent for each of the specified pipeline components. 
 The commit status will contain the current state (e.g pending, success, failure) and will link to 
 the component's associated AWS console page.
 
