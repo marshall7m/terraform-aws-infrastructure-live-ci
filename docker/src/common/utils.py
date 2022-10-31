@@ -79,6 +79,6 @@ def send_commit_status(state: str, target_url: str):
     log.info("Sending commit status")
     return commit.create_status(
         state=state,
-        context=os.environ["CONTEXT"],
+        context=os.environ["STATUS_CHECK_NAME"],
         target_url=target_url,
     )
