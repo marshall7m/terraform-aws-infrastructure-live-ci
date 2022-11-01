@@ -1,5 +1,6 @@
 import os
 import logging
+import time
 
 import pytest
 import github
@@ -36,6 +37,8 @@ def repo(request):
     log.info(f"Creating repo from template: {request.param}")
     repo = gh.get_repo(request.param)
     repo = gh.get_user().create_repo_from_template(request.param, repo)
+    # needs to wait or else raises error on empty repo
+    time.sleep(5)
     repo.edit(default_branch="master")
 
     yield repo
