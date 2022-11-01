@@ -36,6 +36,7 @@ def repo(request):
     log.info(f"Creating repo from template: {request.param}")
     repo = gh.get_repo(request.param)
     repo = gh.get_user().create_repo_from_template(request.param, repo)
+    repo.edit(default_branch="master")
 
     yield repo
 
