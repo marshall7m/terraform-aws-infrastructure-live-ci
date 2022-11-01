@@ -1,2 +1,4 @@
 PyGithub==1.54.1
-request_filter_groups==0.0.4
+mangum==0.15.1
+pydantic==1.10.2
+fastapi==0.85.1
