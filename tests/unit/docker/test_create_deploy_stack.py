@@ -94,10 +94,7 @@ def test_get_graph_deps(tmp_path_factory, repo):
 
 @patch.dict(
     os.environ,
-    {
-        "TG_BACKEND": "local",
-        "GITHUB_TOKEN": os.environ["TF_VAR_github_testing_token"],
-    },
+    {"TG_BACKEND": "local"},
 )
 def test_get_github_diff_paths(repo, tmp_path_factory):
     """
@@ -144,10 +141,7 @@ def test_get_github_diff_paths(repo, tmp_path_factory):
 
 @patch.dict(
     os.environ,
-    {
-        "TG_BACKEND": "local",
-        "GITHUB_TOKEN": os.environ["TF_VAR_github_testing_token"],
-    },
+    {"TG_BACKEND": "local"},
 )
 @patch(
     "docker.src.create_deploy_stack.create_deploy_stack.subprocess_run",
@@ -339,9 +333,10 @@ def test_update_executions_with_new_deploy_stack_query(create_stack):
         "PR_ID": "1",
         "COMMIT_ID": "mock-commit-id",
         "COMMIT_STATUS_CONFIG": json.dumps({"CreateDeployStack": True}),
-        "STATUS_CHECK_NAME": "foo",
+        "STATUS_CHECK_NAME": "CreateDeployStack",
         "GITHUB_TOKEN": "mock-token",
         "REPO_FULL_NAME": "owner/repo",
+        "ECS_CONTAINER_METADATA_URI": "http://mock-ecs-metadata-uri",
     },
 )
 @pytest.mark.parametrize(
