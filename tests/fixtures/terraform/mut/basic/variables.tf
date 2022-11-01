@@ -142,12 +142,6 @@ variable "create_metadb_subnet_group" {
   default     = false
 }
 
-variable "metadb_endpoint_url" {
-  description = "Endpoint URL that metadb setup queries will be directed to (used for local metadb testing)"
-  type        = string
-  default     = null
-}
-
 variable "metadb_cluster_arn" {
   description = "Metadb cluster ARN that will be used for metadb setup queries (used for local metadb testing)"
   type        = string
@@ -169,24 +163,6 @@ EOF
   default     = null
 }
 
-variable "moto_endpoint_url" {
-  description = "Endpoint URL for standalone moto server"
-  type        = string
-  default     = null
-}
-
-variable "sf_endpoint_url" {
-  description = "Endpoint URL for AWS Step Function"
-  type        = string
-  default     = null
-}
-
-variable "ecs_endpoint_url" {
-  description = "Endpoint URL for AWS ECS"
-  type        = string
-  default     = null
-}
-
 variable "local_task_common_env_vars" {
   description = "ECS task env vars to set for local testing terraform module"
   type = list(object({
@@ -194,28 +170,4 @@ variable "local_task_common_env_vars" {
     value = string
   }))
   default = []
-}
-
-variable "skip_credentials_validation" {
-  description = "Skip credentials validation via the STS API (set to True for local testing)"
-  type        = bool
-  default     = null
-}
-
-variable "skip_metadata_api_check" {
-  description = "Skip the AWS Metadata API check (set to True for local testing)"
-  type        = bool
-  default     = null
-}
-
-variable "skip_requesting_account_id" {
-  description = "Skip requesting the account ID"
-  type        = bool
-  default     = null
-}
-
-variable "s3_use_path_style" {
-  description = "Enable the request to use path-style addressing (set to True for local testing)"
-  type        = bool
-  default     = null
 }
