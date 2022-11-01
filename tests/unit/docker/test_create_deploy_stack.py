@@ -1,5 +1,4 @@
 import pytest
-from mock import Mock
 import os
 import logging
 from unittest.mock import patch
@@ -180,97 +179,6 @@ def test_get_plan_diff_paths(mock_run, repo, tmp_path_factory):
             "directory_dependency/dev-account/us-west-2/env-one/foo",
         ]
     )
-
-
-@patch.dict(os.environ, {"SCAN_TYPE": "graph"})
-@pytest.mark.parametrize(
-    "path,get_graph_deps,get_github_diff_paths,get_new_providers,expected",
-    [
-        pytest.param(
-            "directory_dependency/dev-account",
-            {
-                "directory_dependency/dev-account/us-west-2/env-one/doo": [],
-                "directory_dependency/dev-account/us-west-2/env-one/baz": [],
-                "directory_dependency/dev-account/us-west-2/env-one/foo": [
-                    "directory_dependency/dev-account/us-west-2/env-one/baz"
-                ],
-            },
-            [
-                "directory_dependency/dev-account/us-west-2/env-one/foo",
-                "directory_dependency/dev-account/us-west-2/env-one/baz",
-            ],
-            ["test/provider"],
-            [
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/baz",
-                    "cfg_deps": [],
-                    "new_providers": ["test/provider"],
-                },
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/foo",
-                    "cfg_deps": [
-                        "directory_dependency/dev-account/us-west-2/env-one/baz"
-                    ],
-                    "new_providers": ["test/provider"],
-                },
-            ],
-            id="multi_deps",
-        ),
-        pytest.param(
-            "directory_dependency/dev-account",
-            {
-                "directory_dependency/dev-account/us-west-2/env-one/doo": [],
-                "directory_dependency/dev-account/us-west-2/env-one/baz": [],
-                "directory_dependency/dev-account/us-west-2/env-one/foo": [
-                    "directory_dependency/dev-account/us-west-2/env-one/baz"
-                ],
-            },
-            [
-                "directory_dependency/dev-account/us-west-2/env-one/doo",
-            ],
-            ["test/provider"],
-            [
-                {
-                    "cfg_path": "directory_dependency/dev-account/us-west-2/env-one/doo",
-                    "cfg_deps": [],
-                    "new_providers": ["test/provider"],
-                }
-            ],
-            id="no_deps",
-        ),
-        pytest.param(
-            "directory_dependency/dev-account",
-            {
-                "directory_dependency/dev-account/us-west-2/env-one/doo": [],
-                "directory_dependency/dev-account/us-west-2/env-one/baz": [],
-                "directory_dependency/dev-account/us-west-2/env-one/foo": [
-                    "directory_dependency/dev-account/us-west-2/env-one/baz"
-                ],
-            },
-            [],
-            ["test/provider"],
-            [],
-            id="no_diff_paths",
-        ),
-    ],
-)
-def test_create_stack(
-    path, get_graph_deps, get_github_diff_paths, get_new_providers, expected
-):
-    """
-    Ensures create_stack() returns the correct list of directory configurations.
-    All mocked dependency methods within create_stack() contain side effects that are
-    parameterizable to produce different outcomes.
-    """
-    with patch.multiple(
-        task,
-        get_graph_deps=Mock(return_value=get_graph_deps),
-        get_github_diff_paths=Mock(return_value=get_github_diff_paths),
-        get_new_providers=Mock(return_value=get_new_providers),
-    ):
-        actual = task.create_stack(path, "mock-role-arn")
-
-        assert actual == expected
 
 
 @patch.dict(
