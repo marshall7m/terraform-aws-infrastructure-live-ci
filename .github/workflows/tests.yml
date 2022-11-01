@@ -63,7 +63,7 @@ jobs:
     # needs: precommit
     runs-on: ubuntu-latest
     env:
-      GITHUB_TESTING_TOKEN: ${{ secrets.GITHUB_TESTING_TOKEN }}
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
     permissions:
       id-token: write
       contents: read
@@ -71,7 +71,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: mask sensitive
-      run: echo "::add-mask::$GITHUB_TESTING_TOKEN"
+      run: echo "::add-mask::$TESTING_GITHUB_TOKEN"
 
     - name: Tests
       shell: bash
@@ -81,12 +81,12 @@ jobs:
     # needs: [precommit, unit]
     runs-on: ubuntu-latest
     env:
-      GITHUB_TESTING_TOKEN: ${{ secrets.GITHUB_TESTING_TOKEN }}
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
     steps:
     - uses: actions/checkout@v3
 
     - name: mask sensitive
-      run: echo "::add-mask::$GITHUB_TESTING_TOKEN"
+      run: echo "::add-mask::$TESTING_GITHUB_TOKEN"
 
     - name: Tests
       shell: bash
@@ -100,15 +100,15 @@ jobs:
       id-token: write
       contents: read
     env:
-      GITHUB_TESTING_TOKEN: ${{ secrets.GITHUB_TESTING_TOKEN }}
-      REGISTRY_PASSWORD: ${{ secrets.GITHUB_TESTING_TOKEN }}
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      REGISTRY_PASSWORD: ${{ secrets.TESTING_GITHUB_TOKEN }}
       APPROVAL_REQUEST_SENDER_EMAIL: ${{ secrets.APPROVAL_REQUEST_SENDER_EMAIL }}
     steps:
     - uses: actions/checkout@v3
 
     - name: mask sensitive
       run: |
-        echo "::add-mask::$GITHUB_TESTING_TOKEN"
+        echo "::add-mask::$TESTING_GITHUB_TOKEN"
         echo "::add-mask::$REGISTRY_PASSWORD"
         echo "::add-mask::$APPROVAL_REQUEST_SENDER_EMAIL"
 
