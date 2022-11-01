@@ -34,7 +34,7 @@ class ServerException(Exception):
 @pytest.fixture(scope="module")
 def repo(request):
     log.info(f"Creating repo from template: {request.param}")
-    repo = gh.create_repo_from_template(request.param)
+    repo = gh.get_user().create_repo_from_template(request.param)
 
     yield repo
 
