@@ -28,3 +28,6 @@ provider "aws" {
     sts            = var.moto_endpoint_url
   }
 }
+
+provider "github" {
+}
