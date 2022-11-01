@@ -12,6 +12,7 @@ log.setLevel(logging.DEBUG)
 sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
 
 
+@pytest.mark.skip("not implemented")
 @pytest.mark.parametrize(
     "case,expected_status,expected_states,expected_output_attr",
     [
