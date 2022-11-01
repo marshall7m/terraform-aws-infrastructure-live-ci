@@ -5,7 +5,6 @@ import logging
 from unittest.mock import patch
 import uuid
 import git
-import json
 import aurora_data_api
 from tests.helpers.utils import (
     dummy_configured_provider_resource,
@@ -318,79 +317,3 @@ def test_update_executions_with_new_deploy_stack_query(create_stack):
             count = cur.fetchone()[0]
 
         assert count == len(create_stack)
-
-
-# mock task's env vars
-@patch.dict(
-    os.environ,
-    {
-        "BASE_REF": "master",
-        "HEAD_REF": "test-feature",
-        "STATE_MACHINE_ARN": "mock",
-        "GITHUB_MERGE_LOCK_SSM_KEY": "mock-ssm-key",
-        "TRIGGER_SF_FUNCTION_NAME": "mock-lambda",
-        "TG_BACKEND": "local",
-        "PR_ID": "1",
-        "COMMIT_ID": "mock-commit-id",
-        "COMMIT_STATUS_CONFIG": json.dumps({"CreateDeployStack": True}),
-        "STATUS_CHECK_NAME": "CreateDeployStack",
-        "GITHUB_TOKEN": "mock-token",
-        "REPO_FULL_NAME": "owner/repo",
-        "ECS_CONTAINER_METADATA_URI": "http://mock-ecs-metadata-uri",
-    },
-)
-@pytest.mark.parametrize(
-    "update_side_effect,expected_state",
-    [
-        pytest.param(None, "success", id="success"),
-        pytest.param(Exception, "failure", id="failure"),
-    ],
-)
-@patch("docker.src.create_deploy_stack.create_deploy_stack.github")
-@patch("docker.src.create_deploy_stack.create_deploy_stack.ssm")
-@patch("docker.src.create_deploy_stack.create_deploy_stack.lb")
-@pytest.mark.usefixtures("aws_credentials")
-def test_main(mock_lambda, mock_ssm, mock_github, update_side_effect, expected_state):
-    """Ensures main() handles sub-method errors properly"""
-
-    class MockStatus:
-        def __init__(self):
-            self.target_url = "foo"
-            self.context = os.environ["STATUS_CHECK_NAME"]
-
-    mock_status = MockStatus()
-    mock_github.Github.return_value.get_repo.return_value.get_commit.return_value.get_statuses.return_value = [
-        mock_status
-    ]
-
-    with patch.object(
-        task, "update_executions_with_new_deploy_stack", side_effect=update_side_effect
-    ):
-        task.main()
-
-    if expected_state == "failure":
-        log.info("Assert merge lock value was reset")
-        mock_ssm.put_parameter.assert_called_with(
-            Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
-            Value="none",
-            Type="String",
-            Overwrite=True,
-        )
-
-        log.info("Assert Lambda Function was not invoked")
-        mock_lambda.invoke.assert_not_called()
-
-    elif expected_state == "success":
-        log.info("Assert merge lock value was set")
-        mock_ssm.put_parameter.assert_called_with(
-            Name=os.environ["GITHUB_MERGE_LOCK_SSM_KEY"],
-            Value=os.environ["PR_ID"],
-            Type="String",
-            Overwrite=True,
-        )
-
-        log.info("Assert Lambda Function was invoked")
-        mock_lambda.invoke.assert_called_once()
-
-    else:
-        raise Exception(f"Expected state is not handled: {expected_state}")
