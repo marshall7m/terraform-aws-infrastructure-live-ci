@@ -1,4 +1,4 @@
-variable "testing_github_token" {
+variable "github_testing_token" {
   description = <<EOF
 GitHub token used for the Terraform GitHub provider and the PyTest PyGithub API connection.
 The permissions for the token is dependent on if the repo has public or private visibility.

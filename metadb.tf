@@ -1,11 +1,13 @@
 locals {
-  metadb_name        = replace("${var.prefix}_metadb", "-", "_")
+  metadb_name        = coalesce(var.metadb_name, replace("${var.prefix}_metadb", "-", "_"))
   cluster_identifier = replace("${var.prefix}-cluster", "_", "-")
   metadb_setup_script = templatefile("${path.module}/sql/metadb_setup_script.sh", {
-    tf_module_path = path.module
-    cluster_arn    = aws_rds_cluster.metadb.arn
-    secret_arn     = aws_secretsmanager_secret_version.master_metadb_user.arn
-    db_name        = aws_rds_cluster.metadb.database_name
+    tf_module_path    = path.module
+    cluster_arn       = coalesce(var.metadb_cluster_arn, aws_rds_cluster.metadb.arn)
+    secret_arn        = coalesce(var.metadb_secret_arn, aws_secretsmanager_secret_version.master_metadb_user.arn)
+    db_name           = aws_rds_cluster.metadb.database_name
+    schema            = var.metadb_schema
+    endpoint_url_flag = var.metadb_endpoint_url != null ? "--endpoint-url=${var.metadb_endpoint_url}" : ""
     create_tables_sql = templatefile("${path.module}/sql/create_metadb_tables.sql", {
       metadb_schema = var.metadb_schema,
       metadb_name   = local.metadb_name
@@ -70,10 +72,12 @@ resource "aws_ssm_parameter" "metadb_ci_password" {
   value       = var.metadb_ci_password
 }
 
-resource "aws_db_subnet_group" "metadb" {
-  name       = local.cluster_identifier
-  subnet_ids = var.metadb_subnet_ids
-}
+
+# resource "aws_db_subnet_group" "metadb" {
+#   count = var.create_metadb_subnet_group ? 1 : 0
+#   name       = coalesce(var.metadb_subnet_group_name, local.cluster_identifier)
+#   subnet_ids = var.metadb_subnet_ids
+# }
 
 resource "aws_security_group" "metadb" {
   name        = "${var.prefix}-metadb"
@@ -90,6 +94,8 @@ resource "aws_rds_cluster" "metadb" {
   master_password    = var.metadb_password
   port               = var.metadb_port
   engine_mode        = "serverless"
+  engine_version     = "11.13"
+  storage_type       = "io1"
   scaling_configuration {
     min_capacity = 2
   }
@@ -98,7 +104,9 @@ resource "aws_rds_cluster" "metadb" {
   skip_final_snapshot  = true
 
   vpc_security_group_ids = concat([aws_security_group.metadb.id], var.metadb_security_group_ids)
-  db_subnet_group_name   = aws_db_subnet_group.metadb.name
+  # db_subnet_group_name   = try(aws_db_subnet_group.metadb[0].name, var.metadb_subnet_group_name)
+  # db_subnet_group_name   = var.metadb_subnet_group_name
+
 }
 
 resource "random_id" "metadb_users" {
@@ -106,7 +114,7 @@ resource "random_id" "metadb_users" {
 }
 
 resource "aws_secretsmanager_secret" "master_metadb_user" {
-  name = "${local.cluster_identifier}-data-api-${var.metadb_username}-credentials-${random_id.metadb_users.id}"
+  name = "${local.cluster_identifier}-data-api-${var.metadb_username}-credentials"
 }
 
 resource "aws_secretsmanager_secret_version" "master_metadb_user" {
@@ -118,7 +126,7 @@ resource "aws_secretsmanager_secret_version" "master_metadb_user" {
 }
 
 resource "aws_secretsmanager_secret" "ci_metadb_user" {
-  name = "${local.cluster_identifier}-data-api-${var.metadb_ci_username}-credentials-${random_id.metadb_users.id}"
+  name = "${local.cluster_identifier}-data-api-${var.metadb_ci_username}-credentials"
 }
 
 resource "aws_secretsmanager_secret_version" "ci_metadb_user" {

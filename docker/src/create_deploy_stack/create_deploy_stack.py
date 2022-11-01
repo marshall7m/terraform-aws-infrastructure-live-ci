@@ -16,6 +16,7 @@ from common.utils import (
     subprocess_run,
     TerragruntException,
     ClientException,
+    get_task_log_url,
 )
 
 log = logging.getLogger(__name__)
@@ -23,10 +24,10 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-ssm = boto3.client("ssm")
-lb = boto3.client("lambda")
+ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))
+lb = boto3.client("lambda", endpoint_url=os.environ.get("LAMBDA_ENDPOINT_URL"))
 rds_data_client = boto3.client(
-    "rds-data", endpoint_url=os.environ.get("METADB_LOCAL_ENDPOINT")
+    "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
 )
 
 
@@ -234,7 +235,15 @@ class CreateStack:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                SELECT *
+                SELECT
+                    account_name,
+                    account_path,
+                    account_deps::VARCHAR,
+                    min_approval_count,
+                    min_rejection_count,
+                    voters::VARCHAR,
+                    plan_role_arn,
+                    apply_role_arn
                 FROM account_dim
                 ORDER BY account_name
                 """
@@ -244,12 +253,21 @@ class CreateStack:
                 log.debug(f"Raw accounts records:\n{res}")
                 accounts = []
                 for account in res:
-                    accounts.append(dict(zip(cols, account)))
+                    record = dict(zip(cols, account))
+                    record["account_deps"] = (
+                        record["account_deps"]
+                        .removeprefix("{")
+                        .removesuffix("}")
+                        .split(",")
+                    )
+                    record["voters"] = (
+                        record["voters"].removeprefix("{").removesuffix("}").split(",")
+                    )
+                    accounts.append(record)
                 log.debug(f"Accounts:\n{accounts}")
 
                 if len(accounts) == 0:
-                    log.fatal("No account paths are defined in account_dim")
-                    sys.exit(1)
+                    Exception("No account paths are defined in account_dim")
 
                 try:
                     log.info("Getting account stacks")
@@ -339,6 +357,7 @@ class CreateStack:
                     Type="String",
                     Overwrite=True,
                 )
+                # raise after sending failed commit status
                 raise e
 
             log.info(
@@ -356,7 +375,7 @@ class CreateStack:
 
         commit_status_config = json.loads(os.environ["COMMIT_STATUS_CONFIG"])
         log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
-        if commit_status_config["CreateDeployStack"]:
+        if commit_status_config[os.environ["STATUS_CHECK_NAME"]]:
             commit = (
                 github.Github(os.environ["GITHUB_TOKEN"], retry=3)
                 .get_repo(os.environ["REPO_FULL_NAME"])
@@ -367,11 +386,7 @@ class CreateStack:
             commit.create_status(
                 state=state,
                 context=os.environ["STATUS_CHECK_NAME"],
-                target_url=[
-                    s.target_url
-                    for s in commit.get_statuses()
-                    if s.context == os.environ["STATUS_CHECK_NAME"]
-                ][0],
+                target_url=get_task_log_url(),
             )
 
 

@@ -202,10 +202,11 @@ variable "merge_lock_status_check_name" {
   type        = string
   default     = "Merge Lock"
 }
+
 variable "create_deploy_stack_status_check_name" {
   description = "Name of the create deploy stack GitHub status"
   type        = string
-  default     = "Create Deploy Stack"
+  default     = "CreateDeployStack"
 }
 
 variable "create_deploy_stack_cpu" {
@@ -228,8 +229,8 @@ EOF
 
 # GITHUB WEBHOOK #
 
-variable "repo_name" {
-  description = "Name of the pre-existing GitHub repository that is owned by the Github provider"
+variable "repo_clone_url" {
+  description = "Clone URL of the repository (e.g. ssh://host.xz/path/to/repo.git, https://host.xz/path/to/repo.git)"
   type        = string
 }
 
@@ -469,7 +470,7 @@ variable "private_registry_custom_kms_key_arn" {
 
 variable "commit_status_config" {
   description = <<EOF
-Determine which commit statuses should be sent for each of the specified pipeline components. 
+Determines which commit statuses should be sent for each of the specified pipeline components. 
 The commit status will contain the current state (e.g pending, success, failure) and will link to 
 the component's associated AWS console page.
 
@@ -490,4 +491,53 @@ EOF
     Execution         = optional(bool)
   })
   default = {}
+}
+
+
+variable "approval_sender_arn" {
+  description = "AWS SES identity ARN used to send approval emails"
+  type        = string
+  default     = null
+}
+
+variable "metadb_subnet_group_name" {
+  description = "Name of the metab subnet group name (defaults to metadb cluster identifier)"
+  type        = string
+  default     = null
+}
+
+variable "create_metadb_subnet_group" {
+  description = "Determines if a AWS RDS subnet group should be created for the metadb"
+  type        = bool
+  default     = false
+}
+
+variable "create_approval_sender_policy" {
+  description = "Determines if an identity policy should be attached to approval sender identity"
+  type        = bool
+  default     = true
+}
+
+variable "metadb_endpoint_url" {
+  description = "Endpoint URL that metadb setup queries will be directed to (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
+variable "metadb_cluster_arn" {
+  description = "Metadb cluster ARN that will be used for metadb setup queries (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
+variable "metadb_secret_arn" {
+  description = "Metadb secret ARN that will be used for metadb setup queries (used for local metadb testing)"
+  type        = string
+  default     = null
+}
+
+variable "metadb_name" {
+  description = "Name of the metadb"
+  type        = string
+  default     = null
 }

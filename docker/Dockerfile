@@ -38,8 +38,8 @@ ENV PATH="/usr/local/.tfenv/bin:$PATH"
 # uses virtual env instead of system-wide packages
 ENV PATH="$VIRTUAL_ENV/bin:$VIRTUAL_ENV/lib/python3.9/site-packages:$PATH"
 
-RUN apt-get -y update \
-    && apt-get install -y openssl git curl unzip jq \
+RUN apt-get -y update > /dev/null \
+    && apt-get install -y openssl git curl unzip jq > /dev/null \
     && ln -sf python3 /usr/local/bin/python \
     && python3 -m pip install /src \
     && tfenv install ${TERRAFORM_VERSION} \

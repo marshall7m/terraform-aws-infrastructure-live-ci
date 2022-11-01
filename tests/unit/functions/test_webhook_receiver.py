@@ -68,6 +68,8 @@ class TestInvoker:
             "PR_PLAN_TASK_CONTAINER_NAME": "mock-container-name",
             "PR_PLAN_COMMIT_STATUS_CONTEXT": "mock-context",
             "PR_PLAN_TASK_DEFINITION_ARN": "mock-ecs-task-def-arn",
+            "PR_PLAN_LOG_STREAM_PREFIX": "mock-plan-prefix",
+            "LOG_URL_PREFIX": "mock-log",
         },
     )
     @pytest.mark.parametrize(

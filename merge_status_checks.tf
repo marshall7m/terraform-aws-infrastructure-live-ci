@@ -2,11 +2,18 @@ locals {
   webhook_receiver_name         = "${var.prefix}-webhook-receiver"
   trigger_pr_plan_name          = "${var.prefix}-trigger-pr-plan"
   github_webhook_secret_ssm_key = "${local.webhook_receiver_name}-gh-secret"
+  repo_name                     = join("/", slice(split("/", local.repo_full_name), 1, length(split("/", local.repo_full_name))))
+  ecs_network_config = {
+    subnets        = var.ecs_subnet_ids
+    securityGroups = [aws_security_group.ecs_tasks.id]
+    assignPublicIp = local.ecs_assign_public_ip
+  }
 }
 
 resource "random_password" "github_webhook_secret" {
   length = 24
 }
+
 resource "aws_ssm_parameter" "github_webhook_secret" {
   name        = local.github_webhook_secret_ssm_key
   description = "Secret value used to authenticate GitHub webhook requests"
@@ -15,7 +22,7 @@ resource "aws_ssm_parameter" "github_webhook_secret" {
 }
 
 resource "github_repository_webhook" "this" {
-  repository = var.repo_name
+  repository = local.repo_name
 
   configuration {
     url          = module.lambda_webhook_receiver.lambda_function_url
@@ -126,11 +133,7 @@ module "lambda_webhook_receiver" {
 
     ECS_CLUSTER_ARN = aws_ecs_cluster.this.arn
     ECS_NETWORK_CONFIG = jsonencode({
-      awsvpcConfiguration = {
-        subnets        = var.ecs_subnet_ids
-        securityGroups = [aws_security_group.ecs_tasks.id]
-        assignPublicIp = local.ecs_assign_public_ip
-      }
+      awsvpcConfiguration = local.ecs_network_config
     })
 
     MERGE_LOCK_SSM_KEY           = aws_ssm_parameter.merge_lock.name
@@ -138,10 +141,14 @@ module "lambda_webhook_receiver" {
 
     PR_PLAN_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
     PR_PLAN_TASK_CONTAINER_NAME = local.pr_plan_container_name
+    PR_PLAN_LOG_STREAM_PREFIX   = local.pr_plan_log_stream_prefix
 
     CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN   = aws_ecs_task_definition.create_deploy_stack.arn
     CREATE_DEPLOY_STACK_COMMIT_STATUS_CONTEXT = var.create_deploy_stack_status_check_name
     CREATE_DEPLOY_STACK_TASK_CONTAINER_NAME   = local.create_deploy_stack_container_name
+    CREATE_DEPLOY_STACK_LOG_STREAM_PREFIX     = local.create_deploy_stack_log_stream_prefix
+
+    LOG_URL_PREFIX = local.log_url_prefix
 
     ACCOUNT_DIM = jsonencode(var.account_parent_cfg)
   }
@@ -165,7 +172,7 @@ module "lambda_webhook_receiver" {
 
 resource "github_branch_protection" "merge_lock" {
   count         = var.enable_branch_protection ? 1 : 0
-  repository_id = var.repo_name
+  repository_id = local.repo_name
 
   pattern          = var.base_branch
   enforce_admins   = var.enforce_admin_branch_protection

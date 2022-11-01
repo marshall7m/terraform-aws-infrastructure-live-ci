@@ -120,6 +120,16 @@ output "ecs_terra_run_task_container_name" {
   value       = local.terra_run_container_name
 }
 
+output "ecs_pr_plan_task_definition_arn" {
+  description = "AWS ECS terra run task defintion ARN"
+  value       = aws_ecs_task_definition.plan.arn
+}
+
+output "ecs_pr_plan_container_name" {
+  description = "Name of the pr plan ECS task container"
+  value       = local.pr_plan_container_name
+}
+
 output "step_function_arn" {
   description = "ARN of the Step Function"
   value       = aws_sfn_state_machine.this.arn
@@ -180,4 +190,31 @@ output "email_approval_secret" {
   description = "Secret value used for authenticating email approval responses"
   sensitive   = true
   value       = random_password.email_approval_secret.result
+}
+
+output "ecs_network_config" {
+  description = "VPC network configurations for ECS tasks"
+  value = {
+    awsvpcConfiguration = local.ecs_network_config
+  }
+}
+
+output "ecs_log_group_name" {
+  description = "Cloudwatch log group name for all ECS tasks"
+  value       = aws_cloudwatch_log_group.ecs_tasks.name
+}
+
+output "create_deploy_stack_log_stream_prefix" {
+  description = "Create Deploy Stack Cloudwatch log stream prefix"
+  value       = local.create_deploy_stack_log_stream_prefix
+}
+
+output "commit_status_config" {
+  description = "Determines which commit statuses should be sent for each of the specified pipeline components"
+  value       = local.commit_status_config
+}
+
+output "account_parent_cfg" {
+  description = "AWS account-level configurations"
+  value       = var.account_parent_cfg
 }

@@ -2,6 +2,7 @@ locals {
   approval_request_name  = "${var.prefix}-request"
   approval_response_name = "${var.prefix}-response"
   approval_logs          = "${var.prefix}-approval"
+  approval_sender_arn    = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn, var.approval_sender_arn)
 }
 
 resource "aws_sns_topic" "approval" {
@@ -94,7 +95,8 @@ module "lambda_approval_request" {
       source_arn = aws_sns_topic.approval.arn
     }
   }
-  publish = true
+  create_unqualified_alias_allowed_triggers = false
+  publish                                   = true
   policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     aws_iam_policy.lambda_approval_request.arn
@@ -186,7 +188,7 @@ module "lambda_approval_response" {
 }
 
 data "aws_ses_email_identity" "approval" {
-  count = var.send_verification_email == false ? 1 : 0
+  count = var.send_verification_email == false && var.approval_sender_arn == null ? 1 : 0
   email = var.approval_request_sender_email
 }
 
@@ -198,7 +200,7 @@ resource "aws_ses_email_identity" "approval" {
 data "aws_iam_policy_document" "approval" {
   statement {
     actions   = ["ses:SendEmail", "ses:SendBulkTemplatedEmail"]
-    resources = [try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn)]
+    resources = [local.approval_sender_arn]
 
     principals {
       identifiers = ["*"]
@@ -208,8 +210,9 @@ data "aws_iam_policy_document" "approval" {
 }
 
 resource "aws_ses_identity_policy" "approval" {
-  identity = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn)
-  name     = "infrastructure-live-ses-approval"
+  count    = var.create_approval_sender_policy ? 1 : 0
+  identity = local.approval_sender_arn
+  name     = "${var.prefix}-approval"
   policy   = data.aws_iam_policy_document.approval.json
 }
 

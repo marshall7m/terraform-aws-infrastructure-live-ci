@@ -17,5 +17,6 @@ __pycache__
 *personal_docker_setup.sh*
 /*.egg-info
 /build/
-tests/e2e/fixtures/builds/*.json
-tests/unit/tf-module-defaults/fixtures/builds/*.json
+**/builds/*
+*.task-compose*
+**tfvars**

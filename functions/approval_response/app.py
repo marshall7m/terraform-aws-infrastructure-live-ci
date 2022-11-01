@@ -22,7 +22,7 @@ log.setLevel(logging.DEBUG)
 
 sf = boto3.client("stepfunctions")
 rds_data_client = boto3.client(
-    "rds-data", endpoint_url=os.environ.get("METADB_LOCAL_ENDPOINT")
+    "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
 )
 ssm = boto3.client("ssm")
 

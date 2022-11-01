@@ -145,7 +145,7 @@ class E2E:
                 )
 
                 git_repo = git.Repo.clone_from(
-                    f'https://oauth2:{os.environ["TF_VAR_testing_github_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
+                    f'https://oauth2:{os.environ["TF_VAR_github_testing_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
                     dir,
                     branch=case_param["head_ref"],
                 )
