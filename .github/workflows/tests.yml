@@ -54,9 +54,9 @@ jobs:
         rm gh-md-toc
 
     - uses: stefanzweifel/git-auto-commit-action@v4
-      # if: ${{ !env.ACT }}
+      if: ${{ !env.ACT }}
       with:
-        skip_dirty_check: true
+        ref: ${{ github.head_ref }}
         commit_message: Auto update markdown TOC
 
   unit:
