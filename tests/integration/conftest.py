@@ -74,7 +74,7 @@ def reset_moto_server(request):
 @pytest.fixture(scope="session")
 def docker_ecs_task() -> python_on_whales.Image:
     """Builds Docker image for ECS tasks"""
-    img = docker.buildx.build(
+    img = docker.image.legacy_build(
         os.path.join(FILE_DIR, "../docker"),
         cache=True,
         tags=["terraform-aws-infrastructure-live-ci/tasks:latest"],
