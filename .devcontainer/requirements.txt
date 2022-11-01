@@ -1,4 +1,5 @@
 GitPython
+PyGithub
 awscli
 boto3
 aurora-data-api

@@ -2,10 +2,13 @@ import os
 import logging
 
 import pytest
+import github
 from tests.helpers.utils import commit
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
 
 
 @pytest.fixture(scope="function")
@@ -26,6 +29,17 @@ def aws_credentials():
 
 class ServerException(Exception):
     pass
+
+
+@pytest.fixture(scope="module")
+def repo(request):
+    log.info(f"Creating repo from template: {request.param}")
+    repo = gh.create_repo_from_template(request.param)
+
+    yield repo
+
+    log.info(f"Deleting repo: {request.param}")
+    repo.delete()
 
 
 @pytest.fixture

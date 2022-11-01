@@ -25,12 +25,7 @@ def pytest_generate_tests(metafunc):
     if "repo" in metafunc.fixturenames:
         metafunc.parametrize(
             "repo",
-            [
-                {
-                    "name": "marshall7m/infrastructure-live-testing-template",
-                    "is_fork": True,
-                }
-            ],
+            ["marshall7m/infrastructure-live-testing-template"],
             scope="module",
             indirect=True,
         )
