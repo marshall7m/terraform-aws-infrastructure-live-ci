@@ -53,6 +53,8 @@ def send_commit_status(push_changes, mut_output):
 
 @pytest.mark.usefixtures("truncate_executions", "send_commit_status")
 class TestCreateDeployStack:
+    # fixes VPC creation error on tf apply for local testing
+    @pytest.mark.skip("Waiting on moto PR #5618 within release 4.0.9")
     @pytest.mark.parametrize(
         "push_changes,expected_cfg_paths",
         [
