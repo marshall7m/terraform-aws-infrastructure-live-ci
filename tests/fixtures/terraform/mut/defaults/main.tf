@@ -1,18 +1,11 @@
-resource "random_string" "mut" {
-  length  = 8
-  lower   = true
-  upper   = false
-  special = false
-}
-
 module "mut_infrastructure_live_ci" {
-  source                        = "../../../..//"
-  prefix                        = "mut-${random_string.mut.id}"
+  source = "../../../../../../../..//"
+
+  prefix                        = "mut-defaults"
   approval_request_sender_email = "success@simulator.amazonses.com"
   send_verification_email       = true
-
   create_github_token_ssm_param = true
-  repo_name                     = var.repo_name
+  repo_clone_url                = "https://host.xz/path/to/repo.git"
   account_parent_cfg = [
     {
       name                = "test"
@@ -28,8 +21,7 @@ module "mut_infrastructure_live_ci" {
   metadb_ci_password          = "test-ci"
   metadb_password             = "test"
   tf_state_read_access_policy = "arn:aws:iam::123456789101:role/tf-apply"
-
-  vpc_id            = "vpc-123"
-  metadb_subnet_ids = ["subnet-123"]
-  ecs_subnet_ids    = ["subnet-123"]
+  vpc_id                      = "vpc-123"
+  metadb_subnet_ids           = ["subnet-123"]
+  ecs_subnet_ids              = ["subnet-123"]
 }

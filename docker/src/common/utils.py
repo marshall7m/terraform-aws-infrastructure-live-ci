@@ -54,9 +54,7 @@ def subprocess_run(cmd: str, check=True):
 
 
 def get_task_log_url():
-    metadata = requests.get(
-        os.environ["ECS_CONTAINER_METADATA_URI_V4"] + "/task"
-    ).json()
+    metadata = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"] + "/task").json()
     log.debug(f"Container metadata:\n{pformat(metadata)}")
     task_id = metadata["TaskARN"].split("/")[-1]
 
@@ -81,6 +79,6 @@ def send_commit_status(state: str, target_url: str):
     log.info("Sending commit status")
     return commit.create_status(
         state=state,
-        context=os.environ["CONTEXT"],
+        context=os.environ["STATUS_CHECK_NAME"],
         target_url=target_url,
     )

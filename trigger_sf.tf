@@ -48,7 +48,7 @@ module "lambda_trigger_sf" {
     GITHUB_MERGE_LOCK_SSM_KEY    = aws_ssm_parameter.merge_lock.name
     GITHUB_TOKEN_SSM_KEY         = local.github_token_ssm_key
     COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_name
-    REPO_FULL_NAME               = data.github_repository.this.full_name
+    REPO_FULL_NAME               = local.repo_full_name
     STATE_MACHINE_ARN            = local.state_machine_arn
 
     PGUSER             = var.metadb_ci_username
@@ -64,6 +64,7 @@ module "lambda_trigger_sf" {
       source_arn = aws_cloudwatch_event_rule.sf_execution.arn
     }
   }
+  create_unqualified_alias_allowed_triggers = false
 
   publish = true
 

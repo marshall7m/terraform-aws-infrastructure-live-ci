@@ -2,8 +2,15 @@ import uuid
 import logging
 import os
 import json
+import time
+from pprint import pformat
+import subprocess
+import shlex
+import requests
+
 import boto3
 import aurora_data_api
+import github
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -11,6 +18,51 @@ log.setLevel(logging.DEBUG)
 rds_data_client = boto3.client(
     "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
 )
+
+
+def terra_version(binary: str, version: str, overwrite=False):
+
+    """
+    Installs Terraform via tfenv or Terragrunt via tgswitch.
+    If version='min-required' for Terraform installations, tfenv will scan
+    the cwd for the minimum version required within Terraform blocks
+    Arguments:
+        binary: Binary to manage version for
+        version: Semantic version to install and/or use
+        overwrite: If true, version manager will install and/or switch to the
+        specified version even if the binary is found in $PATH.
+    """
+
+    if not overwrite:
+        check_version = subprocess.run(
+            shlex.split(f"{binary} --version"), capture_output=True, text=True
+        )
+        if check_version.returncode == 0:
+            log.info(f"{binary} version: {check_version.stdout} " "found in $PATH")
+            return
+        else:
+            log.info(f"{binary} version: {check_version.stdout} not found in $PATH")
+    if binary == "terragrunt" and version == "latest":
+        version = requests.get(
+            "https://warrensbox.github.io/terragunt-versions-list/"
+        ).json()["Versions"][0]
+
+    cmds = {
+        "terraform": f"tfenv install {version} && tfenv use {version}",
+        "terragrunt": f"tgswitch {version}",
+    }
+    log.debug(f"Running command: {cmds[binary]}")
+    try:
+        subprocess.run(
+            cmds[binary],
+            shell=True,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        log.error(e, exc_info=True)
+        raise e
 
 
 def tf_vars_to_json(tf_vars: dict) -> dict:
@@ -166,3 +218,130 @@ def check_ses_sender_email_auth(email_address: str, send_verify_email=False) -> 
             log.info("Sending SES verification email")
             ses.verify_email_identity(EmailAddress=email_address)
         return False
+
+
+def commit(repo, branch, changes, commit_message):
+    """Creates a local commit"""
+    elements = []
+    for filepath, content in changes.items():
+        log.debug(f"Creating file: {filepath}")
+        blob = repo.create_git_blob(content, "utf-8")
+        elements.append(
+            github.InputGitTreeElement(
+                path=filepath, mode="100644", type="blob", sha=blob.sha
+            )
+        )
+
+    head_sha = repo.get_branch(branch).commit.sha
+    base_tree = repo.get_git_tree(sha=head_sha)
+    tree = repo.create_git_tree(elements, base_tree)
+    parent = repo.get_git_commit(sha=head_sha)
+    commit = repo.create_git_commit(commit_message, tree, [parent])
+
+    return commit
+
+
+def push(repo, branch: str, changes=dict[str, str], commit_message="Adding test files"):
+    """Pushes changes to associated repo and returns the commit ID"""
+    try:
+        ref = repo.get_git_ref(f"heads/{branch}")
+    except Exception:
+        log.debug(f"Creating ref for branch: {branch}")
+        ref = repo.create_git_ref(
+            ref="refs/heads/" + branch,
+            sha=repo.get_branch(repo.default_branch).commit.sha,
+        )
+        log.debug(f"Ref: {ref.ref}")
+
+    commit_obj = commit(repo, branch, changes, commit_message)
+    log.debug(f"Pushing commit ID: {commit_obj.sha}")
+    ref.edit(sha=commit_obj.sha)
+
+    return commit_obj.sha
+
+
+def wait_for_finished_task(
+    cluster: str, task_arn: str, endpoint_url=None, sleep=5
+) -> str:
+    """Waits for ECS task to return a STOPPED status"""
+    ecs = boto3.client("ecs", endpoint_url=endpoint_url)
+    task_status = None
+
+    while task_status != "STOPPED":
+        time.sleep(sleep)
+        try:
+            task_status = ecs.describe_tasks(cluster=cluster, tasks=[task_arn],)[
+                "tasks"
+            ][0]["lastStatus"]
+            log.debug(f"Task Status: {task_status}")
+
+        except IndexError:
+            log.debug("Task does not exist yet")
+
+    return task_status
+
+
+def get_commit_status(
+    repo_full_name: str, commit_id: str, context: str, token: str = None, wait: int = 3
+) -> str:
+    """Returns commit status associated with the passed context argument"""
+    if not token:
+        token = os.environ["GITHUB_TOKEN"]
+
+    gh = github.Github(login_or_token=token)
+    repo = gh.get_repo(repo_full_name)
+    for status in repo.get_commit(commit_id).get_statuses():
+        if status.context == context:
+            return status.state
+
+
+def assert_sf_state_type(
+    execution_arn: str, state_name: str, expected_status: str
+) -> None:
+    """
+    Waits for the Step Function's associated task to finish and assert
+    that the task status matches the expected status
+
+    Arguments:
+        execution_arn: ARN of the Step Function execution
+        state_name: State name within the Step Function definition
+        expected_status: Expected task status
+    """
+    log.info(f"Waiting for Step Function task to finish: {state_name}")
+    exited_event = None
+    while not exited_event:
+        time.sleep(10)
+        exited_event = get_sf_state_event(
+            execution_arn, state_name, "stateExitedEventDetails"
+        )
+    status_event = [e for e in exited_event if e["id"] == exited_event["id"] - 1][0]
+
+    log.info(f"Assert state: {state_name} has the expected status: {expected_status}")
+    try:
+        assert status_event["type"] == expected_status
+    except AssertionError as e:
+        log.debug(f"{state_name} status event:\n{pformat(status_event)}")
+
+        cause = json.loads(status_event["taskFailedEventDetails"]["cause"])
+        log.error(f"Cause:\n{cause}")
+
+        raise e
+
+
+def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
+    """
+    Returns the Step Funciton execution event associated with the passed state name
+
+    Arguments:
+        execution_arn: Step Funciton execution ARN
+        state: State name within the Step Function definition
+        event_type: Step Function execution event type (e.g. taskScheduledEventDetails, stateExitedEventDetails)
+    """
+    sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
+    events = sf.get_execution_history(
+        executionArn=execution_arn, includeExecutionData=True
+    )["events"]
+
+    for event in events:
+        if event.get(event_type, {}).get("name", None) == state:
+            return event

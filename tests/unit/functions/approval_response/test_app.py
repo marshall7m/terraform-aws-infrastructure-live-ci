@@ -78,7 +78,7 @@ execution_id = "run-123"
         ),
     ],
 )
-@pytest.mark.usefixtures("truncate_executions")
+@pytest.mark.usefixtures("truncate_executions", "setup_metadb")
 @patch("app.sf")
 def test_update_vote(
     mock_sf,

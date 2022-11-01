@@ -7,7 +7,7 @@ import logging
 import timeout_decorator
 import aurora_data_api
 
-from tests.helpers.utils import rds_data_client
+from tests.helpers.utils import rds_data_client, terra_version
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -140,3 +140,17 @@ def aws_credentials():
     os.environ["AWS_SESSION_TOKEN"] = os.environ.get("AWS_SESSION_TOKEN", "testing")
     os.environ["AWS_REGION"] = os.environ.get("AWS_REGION", "us-west-2")
     os.environ["AWS_DEFAULT_REGION"] = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+
+
+@pytest.fixture(scope="session")
+def terraform_version(request):
+    """Terraform version that will be installed and used"""
+    terra_version("terraform", request.param, overwrite=True)
+    return request.param
+
+
+@pytest.fixture(scope="session")
+def terragrunt_version(request):
+    """Terragrunt version that will be installed and used"""
+    terra_version("terragrunt", request.param, overwrite=True)
+    return request.param

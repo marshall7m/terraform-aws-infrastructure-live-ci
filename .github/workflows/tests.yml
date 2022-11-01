@@ -39,6 +39,8 @@ jobs:
       contents: write
     steps:
     - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
     - name: Hooks
       shell: bash
       run: docker compose -f ./.devcontainer/docker-compose.yml run dev pre-commit run -a
@@ -59,10 +61,10 @@ jobs:
         commit_message: Auto update markdown TOC
 
   unit:
-    needs: precommit
+    # needs: precommit
     runs-on: ubuntu-latest
     env:
-      TF_VAR_testing_github_token: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
     permissions:
       id-token: write
       contents: read
@@ -70,46 +72,46 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: mask sensitive
-      run: echo "::add-mask::$TF_VAR_testing_github_token"
+      run: echo "::add-mask::$TESTING_GITHUB_TOKEN"
 
     - name: Tests
       shell: bash
       run: docker compose -f ./.devcontainer/docker-compose.yml run dev pytest -vv tests/unit
 
   integration:
-    needs: [precommit, unit]
+    # needs: [precommit, unit]
     runs-on: ubuntu-latest
+    env:
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
     steps:
     - uses: actions/checkout@v3
 
-    - name: Install Deps
-      shell: bash
-      run: python3 -m pip install -e .
+    - name: mask sensitive
+      run: echo "::add-mask::$TESTING_GITHUB_TOKEN"
 
     - name: Tests
       shell: bash
       run: docker compose -f ./.devcontainer/docker-compose.yml run dev pytest -vv tests/integration
 
   e2e:
-    needs: [precommit, unit]
+    needs: [precommit, unit, integration]
+    if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     env:
-      TF_VAR_testing_github_token: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
-      TF_VAR_registry_password: ${{ secrets.TF_VAR_TESTING_GITHUB_TOKEN }}
-      TF_VAR_github_token_ssm_value: ${{ secrets.TF_VAR_GITHUB_TOKEN_SSM_VALUE }}
-      TF_VAR_approval_request_sender_email: ${{ secrets.TF_VAR_APPROVAL_REQUEST_SENDER_EMAIL }}
+      TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      REGISTRY_PASSWORD: ${{ secrets.TESTING_GITHUB_TOKEN }}
+      APPROVAL_REQUEST_SENDER_EMAIL: ${{ secrets.APPROVAL_REQUEST_SENDER_EMAIL }}
     steps:
     - uses: actions/checkout@v3
 
     - name: mask sensitive
       run: |
-        echo "::add-mask::$TF_VAR_testing_github_token"
-        echo "::add-mask::$TF_VAR_registry_password"
-        echo "::add-mask::$TF_VAR_github_token_ssm_value"
-        echo "::add-mask::$TF_VAR_approval_request_sender_email"
+        echo "::add-mask::$TESTING_GITHUB_TOKEN"
+        echo "::add-mask::$REGISTRY_PASSWORD"
+        echo "::add-mask::$APPROVAL_REQUEST_SENDER_EMAIL"
 
     - name: Configure AWS Credentials for remote workflow
       uses: aws-actions/configure-aws-credentials@v1

@@ -35,7 +35,7 @@
     }
   },
   "StateMachines": {
-    "DeploymentFlowIntegration": {
+    "Placeholder": {
       "TestCases": {
         "ApplyFails": {
           "Apply": "MockedEcsFails",
@@ -58,6 +58,17 @@
         "RequestApprovalFails": {
           "Plan": "MockedEcsSuccess",
           "Request Approval": "MockedApprovalRequestFails"
+        },
+        "TestApply": {
+          "Plan": "MockedEcsSuccess",
+          "Request Approval": "MockedApprove"
+        },
+        "TestApprovalRequest": {
+          "Plan": "MockedEcsSuccess"
+        },
+        "TestPlan": {
+          "Apply": "MockedEcsSuccess",
+          "Request Approval": "MockedApprove"
         }
       }
     }

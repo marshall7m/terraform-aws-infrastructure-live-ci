@@ -11,10 +11,6 @@ locals {
   commit_status_config_name = "${var.prefix}-commit-status-config"
 }
 
-data "github_repository" "this" {
-  name = var.repo_name
-}
-
 data "aws_region" "current" {}
 
 data "aws_caller_identity" "current" {}

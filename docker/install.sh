@@ -4,8 +4,8 @@
 
 set -e
 
-apt-get -y update
-apt-get install -y wget
+apt-get -y update > /dev/null
+apt-get -y install wget > /dev/null
 
 python -m venv "$VIRTUAL_ENV"
 source "$VIRTUAL_ENV"/bin/activate

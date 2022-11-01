@@ -12,7 +12,7 @@ locals {
       "Value.$" = "$$.State.Name"
     },
     {
-      "Name"    = "CONTEXT"
+      "Name"    = "STATUS_CHECK_NAME"
       "Value.$" = "States.Format('{} {}: {}', $$.Execution.Name, $$.State.Name, $.cfg_path)"
     },
     {
@@ -20,6 +20,8 @@ locals {
       "Value.$" = "$.commit_id"
     },
   ])
+  repo_full_name        = trimsuffix(trim(regex("(?:(?P<scheme>[^:/?#]+):)?(?://(?P<authority>[^/?#]*))?(?P<path>[^?#]*)(?:\\?(?P<query>[^#]*))?(?:#(?P<fragment>.*))?", var.repo_clone_url).path, "/"), ".git")
+  sf_ecs_network_config = { for key, value in local.ecs_network_config : title(key) => value }
 }
 
 resource "aws_sfn_state_machine" "this" {
@@ -36,11 +38,7 @@ resource "aws_sfn_state_machine" "this" {
             TaskDefinition = aws_ecs_task_definition.terra_run.arn
             LaunchType     = "FARGATE"
             NetworkConfiguration = {
-              AwsvpcConfiguration = {
-                Subnets        = var.ecs_subnet_ids
-                SecurityGroups = [aws_security_group.ecs_tasks.id]
-                AssignPublicIp = local.ecs_assign_public_ip
-              }
+              AwsvpcConfiguration = local.sf_ecs_network_config
             }
             Overrides = {
               TaskRoleArn = module.plan_role.role_arn
@@ -124,11 +122,7 @@ resource "aws_sfn_state_machine" "this" {
             TaskDefinition = aws_ecs_task_definition.terra_run.arn
             LaunchType     = "FARGATE"
             NetworkConfiguration = {
-              AwsvpcConfiguration = {
-                Subnets        = var.ecs_subnet_ids
-                SecurityGroups = [aws_security_group.ecs_tasks.id]
-                AssignPublicIp = local.ecs_assign_public_ip
-              }
+              AwsvpcConfiguration = local.sf_ecs_network_config
             }
             Overrides = {
               TaskRoleArn = module.apply_role.role_arn

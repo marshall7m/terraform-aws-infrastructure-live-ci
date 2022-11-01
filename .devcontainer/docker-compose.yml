@@ -3,7 +3,6 @@ services:
   postgres:
     image: postgres:10.14-alpine
     restart: always
-    container_name: postgres
     ports:
     - 5432
     environment:
@@ -24,15 +23,14 @@ services:
 
   local-data-api:
     image: koxudaxi/local-data-api:0.6.12
-    container_name: metadb
     restart: always
     environment:
     - ENGINE=PostgresSQL
-    - POSTGRES_HOST=postgres
-    - POSTGRES_PORT=5432
-    - POSTGRES_USER=postgres
-    - POSTGRES_PASSWORD=postgres
-    - POSTGRES_DB=postgres
+    - POSTGRES_HOST=${POSTGRES_HOST}
+    - POSTGRES_PORT=${POSTGRES_PORT}
+    - POSTGRES_USER=${POSTGRES_USER}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=${POSTGRES_DB}
     - RESOURCE_ARN=${AURORA_CLUSTER_ARN}
     - SECRET_ARN=${AURORA_SECRET_ARN}
     ports:
@@ -45,20 +43,65 @@ services:
 
   local-sf-api:
     image: amazon/aws-stepfunctions-local:1.10.2
-    container_name: step-function-local
     volumes:
     - ../tests/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
     ports:
     - 8083
     environment:
     - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
+    - ECS_ENDPOINT=${ECS_ENDPOINT_URL}
     networks:
       terraform-aws-infrastructure-live-ci:
     # profiles: ["integration"]
 
+  local-ecs-api:
+    image: marshall7m/local-ecs-api:v0.0.4
+    restart: always
+    volumes:
+    - /usr/bin/docker:/usr/bin/docker
+    - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+    - 8000:8000
+    environment:
+    # directory generated docker compose files for local RunTask will be stored
+    - COMPOSE_DEST=/tmp/compose
+    # endpoint ecs tasks will use to retreive task role creds
+    - IAM_ENDPOINT=${MOTO_ENDPOINT_URL}
+    - STS_ENDPOINT=${MOTO_ENDPOINT_URL}
+    # endpoint used to retreive ecs task definition for RunTask API calls
+    - ECS_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+    - ECS_ENDPOINT_AWS_REGION=${AWS_REGION:-us-west-2}
+    - ECS_ENDPOINT_AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
+    - ECS_ENDPOINT_AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
+
+    - ECS_EXTERNAL_NETWORKS=${NETWORK_NAME}
+
+    - SSM_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+    - SECRET_MANAGER_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
+    - AWS_REGION=${AWS_REGION}
+    - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+    - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-mock-session-token}
+    - AWS_SESSION_EXPIRATION=${AWS_SESSION_EXPIRATION:-mock-aws-session-exp}
+    networks:
+      terraform-aws-infrastructure-live-ci:
+    # profiles: [integration]
+
+  moto:
+    # TODO: Bump 4.0.9 once PR is implemented: https://github.com/spulec/moto/pull/5618
+    image: motoserver/moto:4.0.8
+    ports:
+    - 5000:5000
+    networks:
+      terraform-aws-infrastructure-live-ci:
+        aliases:
+        - ${MOTO_ALIAS}
+    # profiles: [integration]
+
   dev:
     image: terraform-aws-infrastructure-live-ci/dev
-    container_name: dev
     volumes:
     - /usr/bin/docker:/usr/bin/docker
     - /var/run/docker.sock:/var/run/docker.sock
@@ -68,21 +111,35 @@ services:
     entrypoint: [/bin/bash, ./.devcontainer/entrypoint.sh]
     command: sleep infinity
     environment:
-    - AWS_ACCESS_KEY_ID=mock-aws-key
-    - AWS_SECRET_ACCESS_KEY=mock-aws-secret-key
-    - AWS_REGION=us-west-2
-    - AWS_DEFAULT_REGION=us-west-2
-    - AWS_SESSION_TOKEN=mock-session-token
-    - AWS_SESSION_EXPIRATION
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
+    - AWS_REGION=${AWS_REGION}
+    - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+    - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-mock-session-token}
+    - AWS_SESSION_EXPIRATION=${AWS_SESSION_EXPIRATION:-mock-aws-session-exp}
 
-    - METADB_NAME=${METADB_NAME}
-    - METADB_ENDPOINT_URL=http://local-data-api:80
+    - PGUSER=${POSTGRES_USER}
+    - PGPASSWORD=${POSTGRES_PASSWORD}
+    - PGDATABASE=${POSTGRES_DB}
+    - PGHOST=${POSTGRES_HOST}
+    - PGPORT=${POSTGRES_PORT}
+
+    - METADB_NAME=${POSTGRES_DB}
+    - METADB_ENDPOINT_URL=${METADB_ENDPOINT_URL}
+
     - AURORA_CLUSTER_ARN=${AURORA_CLUSTER_ARN}
     - AURORA_SECRET_ARN=${AURORA_SECRET_ARN}
 
-    - PGDATABASE=postgres
+    - MOTO_ENDPOINT_URL=${MOTO_ENDPOINT_URL}
+    - SF_ENDPOINT_URL=${SF_ENDPOINT_URL}
+    - ECS_ENDPOINT_URL=${ECS_ENDPOINT_URL}
 
-    - TF_VAR_testing_github_token
+    - REGISTRY_PASSWORD=${REGISTRY_PASSWORD}
+    - APPROVAL_REQUEST_SENDER_EMAIL=${APPROVAL_REQUEST_SENDER_EMAIL}
+    - GITHUB_TOKEN=${TESTING_GITHUB_TOKEN}
+    - TF_VAR_github_token=${TESTING_GITHUB_TOKEN}
+
+    - UNTIL_AWS_EXP=${UNTIL_AWS_EXP}
     networks:
       terraform-aws-infrastructure-live-ci:
     # TODO: use profiles to change what other services are spinned based on testing env
@@ -90,12 +147,14 @@ services:
     # profiles: [unit, integration, e2e, all]
     depends_on:
     - postgres
-    - local-data-api
     - local-sf-api
+    - local-data-api
+    - local-ecs-api
+    - moto
 
 networks:
   terraform-aws-infrastructure-live-ci:
-    name: terraform-aws-infrastructure-live-ci
+    name: ${NETWORK_NAME}
     driver: bridge
     ipam:
       driver: default
