@@ -247,7 +247,7 @@ def get_commit_status(
             return status.state
 
 
-def assert_terra_run_status(
+def assert_sf_state_type(
     execution_arn: str, state_name: str, expected_status: str
 ) -> None:
     """
@@ -297,20 +297,3 @@ def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
     for event in events:
         if event.get(event_type, {}).get("name", None) == state:
             return event
-
-
-def get_terra_run_status_check_name(execution_arn: str, state: str) -> str:
-    """
-    Gets status check name for terra run states within Step Function execution
-
-    Arguments:
-        execution_arn: ARN of the Step Function execution
-        state: State name within the Step Function definition
-    """
-
-    state = get_sf_state_event(execution_arn, state, "taskScheduledEventDetails")
-    for env in json.loads(state["parameters"])["Overrides"]["ContainerOverrides"][0][
-        "Environment"
-    ].items():
-        if env["Name"] == "STATUS_CHECK_NAME":
-            return env["Value"]
