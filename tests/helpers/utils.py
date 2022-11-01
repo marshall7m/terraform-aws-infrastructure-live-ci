@@ -4,6 +4,9 @@ import os
 import json
 import time
 from pprint import pformat
+import subprocess
+import shlex
+import requests
 
 import boto3
 import aurora_data_api
@@ -15,6 +18,51 @@ log.setLevel(logging.DEBUG)
 rds_data_client = boto3.client(
     "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
 )
+
+
+def terra_version(binary: str, version: str, overwrite=False):
+
+    """
+    Installs Terraform via tfenv or Terragrunt via tgswitch.
+    If version='min-required' for Terraform installations, tfenv will scan
+    the cwd for the minimum version required within Terraform blocks
+    Arguments:
+        binary: Binary to manage version for
+        version: Semantic version to install and/or use
+        overwrite: If true, version manager will install and/or switch to the
+        specified version even if the binary is found in $PATH.
+    """
+
+    if not overwrite:
+        check_version = subprocess.run(
+            shlex.split(f"{binary} --version"), capture_output=True, text=True
+        )
+        if check_version.returncode == 0:
+            log.info(f"{binary} version: {check_version.stdout} " "found in $PATH")
+            return
+        else:
+            log.info(f"{binary} version: {check_version.stdout} not found in $PATH")
+    if binary == "terragrunt" and version == "latest":
+        version = requests.get(
+            "https://warrensbox.github.io/terragunt-versions-list/"
+        ).json()["Versions"][0]
+
+    cmds = {
+        "terraform": f"tfenv install {version} && tfenv use {version}",
+        "terragrunt": f"tgswitch {version}",
+    }
+    log.debug(f"Running command: {cmds[binary]}")
+    try:
+        subprocess.run(
+            cmds[binary],
+            shell=True,
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        log.error(e, exc_info=True)
+        raise e
 
 
 def tf_vars_to_json(tf_vars: dict) -> dict:
