@@ -2,13 +2,13 @@
 
 <!--ts-->
 * [Terraform AWS Infrastructure Live CI](README.md#terraform-aws-infrastructure-live-ci)
-   * [Cost](README.md#cost)
    * [Requirements](README.md#requirements)
    * [Providers](README.md#providers)
    * [Modules](README.md#modules)
    * [Resources](README.md#resources)
    * [Inputs](README.md#inputs)
    * [Outputs](README.md#outputs)
+   * [Cost](README.md#cost)
    * [Deploy the Terraform Module](README.md#deploy-the-terraform-module)
       * [CLI Requirements](README.md#cli-requirements)
       * [Steps](README.md#steps)
