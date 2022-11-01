@@ -98,7 +98,7 @@ def git_repo(tmp_path_factory):
     log.debug(f"Scenario repo dir: {dir}")
 
     repo = git.Repo.clone_from(
-        f'https://oauth2:{os.environ["TF_VAR_github_testing_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
+        f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
         dir,
     )
 
