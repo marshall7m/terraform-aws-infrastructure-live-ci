@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+import uuid
 
 import pytest
 import github
@@ -36,7 +37,9 @@ class ServerException(Exception):
 def repo(request):
     log.info(f"Creating repo from template: {request.param}")
     repo = gh.get_repo(request.param)
-    repo = gh.get_user().create_repo_from_template(request.param, repo)
+    repo = gh.get_user().create_repo_from_template(
+        "test-infra-live-" + str(uuid.uuid4()), repo
+    )
     # needs to wait or else raises error on empty repo
     time.sleep(5)
     repo.edit(default_branch="master")
