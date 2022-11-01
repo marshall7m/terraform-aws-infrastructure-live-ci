@@ -90,8 +90,8 @@ services:
     # profiles: [integration]
 
   moto:
-    # image: motoserver/moto:4.0.8
-    image: moto-dev:latest
+    # TODO: Bump 4.0.9 once PR is implemented: https://github.com/spulec/moto/pull/5618
+    image: motoserver/moto:4.0.8
     ports:
     - 5000:5000
     networks:
