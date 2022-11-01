@@ -9,7 +9,7 @@ log.setLevel(logging.DEBUG)
 FILE_DIR = os.path.dirname(__file__)
 
 
-def test_plan(request):
+def test_plan(request, tfvars_files):
     """
     Ensure that the Terraform module produces a valid Terraform plan with just
     the module's required variables defined
@@ -21,8 +21,7 @@ def test_plan(request):
         tfdir=os.path.join(FILE_DIR, "../../fixtures/terraform/mut/defaults"),
         enable_cache=False,
         cache_dir=cache_dir,
-        env={"IS_REMOTE": "False"},
     )
 
-    tf.setup(cleanup_on_exit=True)
+    tf.setup(cleanup_on_exit=True, extra_files=tfvars_files)
     tf.plan(output=True)
