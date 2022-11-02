@@ -23,6 +23,8 @@ jobs:
   ecs_task:
     name: Push ECS task Docker image to GitHub Container Registry
     runs-on: ubuntu-latest
+    env:
+      IMG_ADDRESS: ghcr.io/${{ github.repository }}/tasks
     steps:
     - uses: actions/checkout@v3
       with:
@@ -49,8 +51,8 @@ jobs:
         context: docker
         push: true
         tags: |-
-          ghcr.io/${{ github.repository }}:latest
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+          ${{ env.IMG_ADDRESS }}:latest
+          ${{ env.IMG_ADDRESS }}:${{ github.sha }}
 
     - name: Build and push Docker release image
       uses: docker/build-push-action@v3
@@ -59,11 +61,13 @@ jobs:
         context: docker
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}/tasks:${{ github.event.release.tag_name }}
+          ${{ env.IMG_ADDRESS }}:${{ github.event.release.tag_name }}
 
   receiver:
     name: Push Lambda Receiver Docker image to GitHub Container Registry
     runs-on: ubuntu-latest
+    env:
+      IMG_ADDRESS: ghcr.io/${{ github.repository }}/receiver
     steps:
     - uses: actions/checkout@v3
       with:
@@ -90,8 +94,8 @@ jobs:
         context: functions/webhook_receiver
         push: true
         tags: |-
-          ghcr.io/${{ github.repository }}:latest
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+          ${{ env.IMG_ADDRESS }}:latest
+          ${{ env.IMG_ADDRESS }}:${{ github.sha }}
 
     - name: Build and push Docker release image
       uses: docker/build-push-action@v3
@@ -100,4 +104,4 @@ jobs:
         context: functions/webhook_receiver
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}/tasks:${{ github.event.release.tag_name }}
+          ${{ env.IMG_ADDRESS }}:${{ github.event.release.tag_name }}
