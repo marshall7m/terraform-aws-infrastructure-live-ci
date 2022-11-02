@@ -6,7 +6,6 @@ import hmac
 import hashlib
 import re
 
-
 import github
 import boto3
 from pydantic import (
@@ -18,11 +17,9 @@ from pydantic import (
     Json,
 )
 
-sys.path.append(os.path.dirname(__file__) + "/..")
-from common_lambda.utils import aws_encode  # noqa E402
-
 sys.path.append(os.path.dirname(__file__))
 from exceptions import InvalidSignatureError, FilePathsNotMatched
+from utils import aws_encode
 
 
 class Headers(BaseModel):

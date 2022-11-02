@@ -430,6 +430,15 @@ EOF
   default = null
 }
 
+variable "webhook_receiver_image_address" {
+  description = <<EOF
+Docker registry image to use for the webhok receiver Lambda Function. If not specified, this Terraform module's GitHub registry image
+will be used with the tag associated with the version of this module. 
+EOF
+  type        = string
+  default     = null
+}
+
 variable "private_registry_auth" {
   description = "Determines if authentification is required to pull the docker images used by the ECS tasks"
   type        = bool

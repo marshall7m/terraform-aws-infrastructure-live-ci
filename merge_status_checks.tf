@@ -113,16 +113,13 @@ module "lambda_webhook_receiver" {
   authorization_type         = "NONE"
   create_lambda_function_url = true
 
-  source_path = [
-    {
-      path             = "${path.module}/functions/webhook_receiver"
-      pip_requirements = true
-    },
-    {
-      path          = "${path.module}/functions/common_lambda"
-      prefix_in_zip = "common_lambda"
-    }
-  ]
+  image_uri = coalesce(
+    var.webhook_receiver_image_address,
+    "ghcr.io/marshall7m/terraform-aws-infrastructure-live/webhook-receiver:${local.module_docker_img_tag}"
+  )
+  create_package = false
+  package_type   = "Image"
+  architectures  = ["x86_64"]
 
   environment_variables = {
     GITHUB_TOKEN_SSM_KEY          = local.github_token_ssm_key
