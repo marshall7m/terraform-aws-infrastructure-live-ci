@@ -38,6 +38,8 @@ module "mut_infrastructure_live_ci" {
   registry_password              = var.registry_password
   ecs_image_address              = var.ecs_image_address
 
+  webhook_receiver_image_address = var.webhook_receiver_image_address
+
   # repo specific env vars required to conditionally set the terraform backend configurations
   ecs_tasks_common_env_vars = concat([
     {
