@@ -188,6 +188,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="input_terragrunt_version"></a> [terragrunt\_version](#input\_terragrunt\_version) | Terragrunt version used for create\_deploy\_stack and terra\_run tasks.<br>Version must be >= `0.31.0`.<br>If repo contains a variety of version constraints, implementing a <br>version manager is recommended (e.g. tgswitch). | `string` | `""` | no |
 | <a name="input_tf_state_read_access_policy"></a> [tf\_state\_read\_access\_policy](#input\_tf\_state\_read\_access\_policy) | AWS IAM policy ARN that allows create deploy stack ECS task to read from Terraform remote state resource | `string` | n/a | yes |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | AWS VPC ID to host the ECS container instances within.<br>The VPC should be associated with the subnet IDs specified under `var.ecs_subnet_ids` | `string` | n/a | yes |
+| <a name="input_webhook_receiver_image_address"></a> [webhook\_receiver\_image\_address](#input\_webhook\_receiver\_image\_address) | Docker registry image to use for the webhok receiver Lambda Function. If not specified, this Terraform module's GitHub registry image<br>will be used with the tag associated with the version of this module. | `string` | `null` | no |
 
 ## Outputs
 
