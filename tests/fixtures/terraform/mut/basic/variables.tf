@@ -163,15 +163,6 @@ EOF
   default     = null
 }
 
-variable "webhook_receiver_image_address" {
-  description = <<EOF
-Docker registry image to use for the webhok receiver Lambda Function. If not specified, this Terraform module's GitHub registry image
-will be used with the tag associated with the version of this module. 
-EOF
-  type        = string
-  default     = null
-}
-
 variable "local_task_common_env_vars" {
   description = "ECS task env vars to set for local testing terraform module"
   type = list(object({
