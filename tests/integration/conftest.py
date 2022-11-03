@@ -74,6 +74,7 @@ def reset_moto_server(request):
 @pytest.fixture(scope="session")
 def docker_ecs_task() -> python_on_whales.Image:
     """Builds Docker image for ECS tasks"""
+    # use legacy build since gh actions runner doesn't have buildx
     img = docker.image.legacy_build(
         os.path.join(FILE_DIR, "../docker"),
         cache=True,
@@ -84,7 +85,22 @@ def docker_ecs_task() -> python_on_whales.Image:
 
 
 @pytest.fixture(scope="session")
-def tfvars_files(tmp_path_factory, docker_ecs_task) -> List[str]:
+def docker_lambda_receiver() -> python_on_whales.Image:
+    """Builds Docker image for Lambda receiver function"""
+    # use legacy build since gh actions runner doesn't have buildx
+    img = docker.image.legacy_build(
+        os.path.join(FILE_DIR, "../functions/webhook_receiver"),
+        cache=True,
+        tags=["terraform-aws-infrastructure-live-ci/receiver:latest"],
+    )
+
+    return img
+
+
+@pytest.fixture(scope="session")
+def tfvars_files(
+    tmp_path_factory, docker_ecs_task, docker_lambda_receiver
+) -> List[str]:
     """Returns list of tfvars json files to be used for Terraform variables"""
     parent = tmp_path_factory.mktemp("tfvars")
     secret_env_vars = {
@@ -127,6 +143,7 @@ def tfvars_files(tmp_path_factory, docker_ecs_task) -> List[str]:
                 {"name": "S3_BACKEND_FORCE_PATH_STYLE", "value": True},
             ],
             "ecs_image_address": docker_ecs_task.repo_tags[0],
+            "webhook_receiver_image_address": docker_lambda_receiver.repo_tags[0],
             "approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
             "approval_request_sender_email": "fakesender@fake.com",
             "create_approval_sender_policy": "false",
