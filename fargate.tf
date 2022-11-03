@@ -71,9 +71,11 @@ locals {
     },
   ]
 
+  terraform_module_version = trimspace(file("${path.module}/source_version.txt"))
+
   ecs_image_address = coalesce(
     var.ecs_image_address,
-    "ghcr.io/marshall7m/terraform-aws-infrastructure-live:${local.module_docker_img_tag}"
+    "ghcr.io/marshall7m/terraform-aws-infrastructure-live:${local.terraform_module_version == "master" ? "latest" : local.terraform_module_version}"
   )
 }
 
