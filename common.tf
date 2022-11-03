@@ -9,8 +9,6 @@ locals {
     Execution         = true
   })
   commit_status_config_name = "${var.prefix}-commit-status-config"
-  terraform_module_version  = trimspace(file("${path.module}/source_version.txt"))
-  module_docker_img_tag     = local.terraform_module_version == "master" ? "latest" : local.terraform_module_version
 }
 
 data "aws_region" "current" {}
