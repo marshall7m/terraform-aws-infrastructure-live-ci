@@ -67,6 +67,10 @@ output "trigger_sf_function_name" {
   value = module.mut_infrastructure_live_ci.trigger_sf_function_name
 }
 
+output "receiver_function_name" {
+  value = module.mut_infrastructure_live_ci.receiver_function_name
+}
+
 output "approval_request_log_group_name" {
   value = module.mut_infrastructure_live_ci.approval_request_log_group_name
 }
@@ -186,4 +190,8 @@ output "ecs_endpoint_url" {
 
 output "account_parent_cfg" {
   value = module.mut_infrastructure_live_ci.account_parent_cfg
+}
+
+output "file_path_pattern" {
+  value = module.mut_infrastructure_live_ci.file_path_pattern
 }

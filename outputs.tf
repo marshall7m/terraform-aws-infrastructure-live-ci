@@ -160,6 +160,11 @@ output "github_webhook_id" {
   value       = github_repository_webhook.this.id
 }
 
+output "receiver_function_name" {
+  description = "Name of the Lambda Receiver Function"
+  value       = module.lambda_webhook_receiver.lambda_function_name
+}
+
 output "merge_lock_status_check_name" {
   description = "Context name of the merge lock GitHub commit status check"
   value       = var.merge_lock_status_check_name
@@ -217,4 +222,9 @@ output "commit_status_config" {
 output "account_parent_cfg" {
   description = "AWS account-level configurations"
   value       = var.account_parent_cfg
+}
+
+output "file_path_pattern" {
+  description = "Regex pattern to match webhook modified/new files to"
+  value       = var.file_path_pattern
 }
