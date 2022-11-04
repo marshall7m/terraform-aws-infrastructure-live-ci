@@ -14,8 +14,8 @@ from utils import aws_encode, ServerException  # noqa E402
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-ssm = boto3.client("ssm")
-ecs = boto3.client("ecs")
+ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))
+ecs = boto3.client("ecs", endpoint_url=os.environ.get("ECS_ENDPOINT_URL"))
 
 
 def merge_lock(repo_full_name, head_ref, logs_url):
@@ -25,7 +25,7 @@ def merge_lock(repo_full_name, head_ref, logs_url):
         "Value"
     ]
     log.info(f"Merge lock value: {merge_lock}")
-    gh = github.Github()
+    gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
 
     head = gh.get_repo(repo_full_name).get_branch(head_ref)
 
@@ -68,7 +68,7 @@ def trigger_pr_plan(
             PR plan ECS task
     """
 
-    gh = github.Github()
+    gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
 
     log.info("Getting diff files")
     diff_paths = list(
@@ -122,6 +122,7 @@ def trigger_pr_plan(
                         networkConfiguration=json.loads(
                             os.environ["ECS_NETWORK_CONFIG"]
                         ),
+                        startedBy=head_sha,
                         overrides={
                             "containerOverrides": [
                                 {
@@ -207,6 +208,7 @@ def trigger_create_deploy_stack(
             launchType="FARGATE",
             taskDefinition=os.environ["CREATE_DEPLOY_STACK_TASK_DEFINITION_ARN"],
             networkConfiguration=json.loads(os.environ["ECS_NETWORK_CONFIG"]),
+            startedBy=head_sha,
             overrides={
                 "containerOverrides": [
                     {
@@ -241,6 +243,6 @@ def trigger_create_deploy_stack(
     if send_commit_status:
         log.info("Sending commit status")
         log.debug(f"Status data:\n{pformat(status_data)}")
-        gh = github.Github()
+        gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
         head = gh.get_repo(repo_full_name).get_branch(head_ref)
         head.commit.create_status(**status_data)
