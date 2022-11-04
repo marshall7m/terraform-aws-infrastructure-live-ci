@@ -240,7 +240,7 @@ def test_invalid_filepaths(mut_output, open_pr_event, repo, pr, receiver_url):
     indirect=True,
 )
 def test_create_deploy_stack_success(mut_output, merge_event, repo, pr, receiver_url):
-    """Lambda Function should run the Create Deploy Stack task once for the valid merge event"""
+    """Lambda Function should run the Create Deploy Stack task once for the merge event"""
     res = requests.post(receiver_url, json=merge_event).json()
 
     assert res["statusCode"] == 200
@@ -263,14 +263,15 @@ def test_create_deploy_stack_success(mut_output, merge_event, repo, pr, receiver
             "base_ref": "master",
             "head_ref": "feature-" + str(uuid.uuid4()),
             "changes": {
-                "directory_dependency/dev-account/us-west-2/env-one/doo/main.tf": "bar"
+                "directory_dependency/dev-account/us-west-2/env-one/bar/main.tf": "new",
+                "directory_dependency/dev-account/us-west-2/env-one/baz/main.tf": "new",
             },
         }
     ],
     indirect=True,
 )
 def test_pr_plan_success(mut_output, open_pr_event, repo, pr, receiver_url):
-    """Lambda Function should run the PR Plan task for each selected directory witin the valid open PR event"""
+    """Lambda Function should run the PR Plan task for each changed directory witin the open PR event"""
     res = requests.post(receiver_url, json=open_pr_event).json()
 
     assert res["statusCode"] == 200
