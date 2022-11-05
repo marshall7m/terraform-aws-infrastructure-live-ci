@@ -22,6 +22,9 @@ class ServerException(Exception):
     pass
 
 
+voter_actions = ["approve", "reject"]
+
+
 def aws_encode(value):
     """Encodes value into AWS friendly URL component"""
     value = urllib.parse.quote_plus(value)
@@ -81,18 +84,3 @@ def get_email_approval_sig(
     ).hexdigest()
 
     return sig
-
-
-def validate_sig(actual_sig: str, expected_sig: str):
-    """
-    Authenticates request by comparing the request's SHA256
-    signature value to the expected SHA-256 value
-    """
-
-    log.debug(f"Actual: {actual_sig}")
-    log.debug(f"Expected: {expected_sig}")
-
-    authorized = hmac.compare_digest(str(actual_sig), str(expected_sig))
-
-    if not authorized:
-        raise ClientException("Header signature and expected signature do not match")
