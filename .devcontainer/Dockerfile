@@ -1,4 +1,4 @@
-FROM ghcr.io/marshall7m/terrace:v0.1.17
+FROM ghcr.io/marshall7m/terrace:v0.1.19
 WORKDIR /workspace
 
 COPY requirements.txt /tmp/deps/requirements.txt
