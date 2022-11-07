@@ -150,6 +150,16 @@ output "approval_url" {
   value       = module.lambda_approval_response.lambda_function_url
 }
 
+output "approval_response_function_name" {
+  description = "Name of the Lambda Function used for handling approval responses"
+  value       = module.lambda_approval_response.lambda_function_name
+}
+
+output "approval_response_role_arn" {
+  description = "IAM Role ARN of the Lambda Function used for handling approval responses"
+  value       = module.lambda_approval_response.lambda_role_arn
+}
+
 output "approval_request_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses"
   value       = module.lambda_approval_request.lambda_cloudwatch_log_group_name
@@ -242,4 +252,10 @@ output "file_path_pattern" {
 output "github_webhook_secret_ssm_key" {
   description = "Key for the AWS SSM Parameter Store used to store GitHub webhook secret"
   value       = aws_ssm_parameter.github_webhook_secret.name
+}
+
+output "approval_response_ses_secret" {
+  description = "Secret value used for authenticating AWS SES approvals within the approval response Lambda Function"
+  value       = aws_ssm_parameter.email_approval_secret.name
+  sensitive   = true
 }
