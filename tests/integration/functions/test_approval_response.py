@@ -12,10 +12,9 @@ import aurora_data_api
 
 from functions.approval_response.utils import (
     get_email_approval_sig,
-    aws_decode,
     aws_encode,
 )
-from tests.helpers.utils import insert_records, get_sf_approval_state_msg
+from tests.helpers.utils import insert_records
 
 log = logging.getLogger("tftest")
 log.setLevel(logging.DEBUG)
@@ -25,11 +24,19 @@ rds_data_client = boto3.client(
 )
 ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))
 
+execution_id = "run-123"
+
 ses_event = {
     "body": "{}",
     "headers": {},
     "isBase64Encoded": False,
-    "queryStringParameters": {},
+    "queryStringParameters": {
+        "taskToken": "token-123",
+        "recipient": aws_encode("voter-123"),
+        "action": "approve",
+        "ex": "run-123",
+        "exArn": "arn-123",
+    },
     "rawPath": "/ses",
     "rawQueryString": "parameter1=value1&parameter1=value2&parameter2=value",
     "requestContext": {
@@ -53,6 +60,23 @@ ses_event = {
     "routeKey": "$default",
     "version": "2.0",
 }
+sf_input = json.dumps(
+    {
+        "plan_command": "terraform plan",
+        "apply_command": "terraform apply -auto-approve",
+        "apply_role_arn": "apply-role-arn",
+        "cfg_path": "foo/bar",
+        "execution_id": execution_id,
+        "is_rollback": False,
+        "new_providers": [],
+        "plan_role_arn": "plan-role-arn",
+        "commit_id": "commit-123",
+        "account_name": "dev",
+        "pr_id": 1,
+        "voters": [ses_event["queryStringParameters"]["recipient"]],
+    }
+)
+
 lb = boto3.client("lambda", endpoint_url=os.environ.get("MOTO_ENDPOINT_URL"))
 sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
 
@@ -113,11 +137,6 @@ def approval_response_url(request, mut_output, docker_lambda_approval_response):
 @pytest.mark.usefixtures("mock_sf_cfg")
 def test_handler_invalid_ses_sig(approval_response_url):
     """Request contains invalid GitHub signature"""
-    ses_event["queryStringParameters"]["taskToken"] = "token-123"
-    ses_event["queryStringParameters"]["recipient"] = "voter-123"
-    ses_event["queryStringParameters"]["action"] = "approve"
-    ses_event["queryStringParameters"]["ex"] = "run-123"
-    ses_event["queryStringParameters"]["exArn"] = "arn-123"
     ses_event["queryStringParameters"]["X-SES-Signature-256"] = "invalid-sig"
 
     res = requests.post(approval_response_url, json=ses_event).json()
@@ -132,8 +151,6 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
     Send approval request that should update the approval count and send a
     success Step Function task token
     """
-    execution_id = "run-123"
-    action = "approve"
     case = "TestApprovalRequest"
 
     record = insert_records(
@@ -151,22 +168,7 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
     arn = sf.start_execution(
         name=f"test-{case}-{uuid.uuid4()}",
         stateMachineArn=mut_output["step_function_arn"] + "#" + case,
-        input=json.dumps(
-            {
-                "plan_command": "terraform plan",
-                "apply_command": "terraform apply -auto-approve",
-                "apply_role_arn": "apply-role-arn",
-                "cfg_path": "foo/bar",
-                "execution_id": "run-123",
-                "is_rollback": False,
-                "new_providers": [],
-                "plan_role_arn": "plan-role-arn",
-                "commit_id": "commit-123",
-                "account_name": "dev",
-                "pr_id": 1,
-                "voters": ["voter-1"],
-            }
-        ),
+        input=sf_input,
     )["executionArn"]
 
     time.sleep(5)
@@ -181,20 +183,14 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
     # Give mock execution time to finish
     time.sleep(5)
 
-    msg = get_sf_approval_state_msg(arn)
-    recipient = msg["Voters"][0]
-    ses_event["queryStringParameters"]["taskToken"] = msg["TaskToken"]
-    ses_event["queryStringParameters"]["recipient"] = aws_encode(recipient)
-    ses_event["queryStringParameters"]["action"] = action
-    ses_event["queryStringParameters"]["ex"] = execution_id
-    ses_event["queryStringParameters"]["exArn"] = "arn-123"
+    ses_event["queryStringParameters"]["exArn"] = arn
     ses_event["queryStringParameters"][
         "X-SES-Signature-256"
     ] = "sha256=" + get_email_approval_sig(
         secret=mut_output["approval_response_ses_secret"],
-        execution_id=execution_id,
-        recipient=aws_decode(recipient),
-        action=action,
+        execution_id=ses_event["queryStringParameters"]["ex"],
+        recipient=ses_event["queryStringParameters"]["recipient"],
+        action=ses_event["queryStringParameters"]["action"],
     )
 
     res = requests.post(approval_response_url, json=ses_event).json()
@@ -216,7 +212,7 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
 
         record = cur.fetchone()
 
-    assert record[0] == [recipient]
+    assert record[0] == [ses_event["queryStringParameters"]["recipient"]]
 
     status = "RUNNING"
     while status == "RUNNING":
@@ -229,8 +225,6 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
 
 @pytest.mark.usefixtures("truncate_executions", "mock_sf_cfg")
 def test_handler_vote_count_not_met(mut_output, approval_response_url):
-    execution_id = "run-123"
-    recipient = "voter-123"
     case = "TestApprovalRequest"
 
     insert_records(
@@ -248,35 +242,13 @@ def test_handler_vote_count_not_met(mut_output, approval_response_url):
     arn = sf.start_execution(
         name=f"test-{case}-{uuid.uuid4()}",
         stateMachineArn=mut_output["step_function_arn"] + "#" + case,
-        input=json.dumps(
-            {
-                "plan_command": "terraform plan",
-                "apply_command": "terraform apply -auto-approve",
-                "apply_role_arn": "apply-role-arn",
-                "cfg_path": "foo/bar",
-                "execution_id": execution_id,
-                "is_rollback": False,
-                "new_providers": [],
-                "plan_role_arn": "plan-role-arn",
-                "commit_id": "commit-123",
-                "account_name": "dev",
-                "pr_id": 1,
-                "voters": [recipient],
-            }
-        ),
+        input=sf_input,
     )["executionArn"]
 
     # Give mock execution time to finish
     time.sleep(5)
 
-    msg = get_sf_approval_state_msg(arn)
-    recipient = msg["Voters"][0]
-
-    ses_event["queryStringParameters"]["taskToken"] = msg["TaskToken"]
-    ses_event["queryStringParameters"]["recipient"] = recipient
-    ses_event["queryStringParameters"]["action"] = "approve"
-    ses_event["queryStringParameters"]["ex"] = execution_id
-    ses_event["queryStringParameters"]["exArn"] = "arn-123"
+    ses_event["queryStringParameters"]["exArn"] = arn
     ses_event["queryStringParameters"][
         "X-SES-Signature-256"
     ] = "sha256=" + get_email_approval_sig(
@@ -303,29 +275,9 @@ def test_handler_expired_vote(mut_output, approval_response_url):
     arn = sf.start_execution(
         name=f"test-{case}-{uuid.uuid4()}",
         stateMachineArn=mut_output["step_function_arn"] + "#" + case,
-        input=json.dumps(
-            {
-                "plan_command": "terraform plan",
-                "apply_command": "terraform apply -auto-approve",
-                "apply_role_arn": "apply-role-arn",
-                "cfg_path": "foo/bar",
-                "execution_id": "run-123",
-                "is_rollback": False,
-                "new_providers": [],
-                "plan_role_arn": "plan-role-arn",
-                "commit_id": "commit-123",
-                "account_name": "dev",
-                "pr_id": 1,
-                "voters": ["voter-1"],
-            }
-        ),
+        input=sf_input,
     )["executionArn"]
-
-    ses_event["queryStringParameters"]["taskToken"] = "token-123"
-    ses_event["queryStringParameters"]["recipient"] = "voter-123"
-    ses_event["queryStringParameters"]["action"] = "approve"
-    ses_event["queryStringParameters"]["ex"] = "run-123"
-    ses_event["queryStringParameters"]["exArn"] = "arn-123"
+    ses_event["queryStringParameters"]["exArn"] = arn
     ses_event["queryStringParameters"][
         "X-SES-Signature-256"
     ] = "sha256=" + get_email_approval_sig(
