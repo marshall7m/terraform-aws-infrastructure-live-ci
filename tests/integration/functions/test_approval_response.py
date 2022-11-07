@@ -14,7 +14,7 @@ from functions.approval_response.utils import (
     get_email_approval_sig,
     aws_encode,
 )
-from tests.helpers.utils import insert_records
+from tests.helpers.utils import insert_records, get_sf_approval_state_msg
 
 log = logging.getLogger("tftest")
 log.setLevel(logging.DEBUG)
@@ -34,7 +34,7 @@ ses_event = {
         "taskToken": "token-123",
         "recipient": aws_encode("voter-123"),
         "action": "approve",
-        "ex": "run-123",
+        "ex": execution_id,
         "exArn": "arn-123",
     },
     "rawPath": "/ses",
@@ -83,6 +83,7 @@ sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"
 
 @pytest.fixture(scope="module", autouse=True)
 def approval_response_url(request, mut_output, docker_lambda_approval_response):
+    """Starts the Lambda Function within a docker container and yields the invoke URL"""
     port = "8080"
     alias = "approval_response"
     base_env_vars = lb.get_function(
@@ -114,6 +115,9 @@ def approval_response_url(request, mut_output, docker_lambda_approval_response):
             "METADB_ENDPOINT_URL": os.environ.get("METADB_ENDPOINT_URL", ""),
             "SF_ENDPOINT_URL": os.environ.get("SF_ENDPOINT_URL", ""),
             "SSM_ENDPOINT_URL": os.environ.get("MOTO_ENDPOINT_URL", ""),
+            "AURORA_CLUSTER_ARN": os.environ.get("AURORA_CLUSTER_ARN"),
+            "AURORA_SECRET_ARN": os.environ.get("AURORA_SECRET_ARN"),
+            "METADB_NAME": os.environ.get("METADB_NAME"),
         }
 
     container = docker.run(
@@ -136,7 +140,7 @@ def approval_response_url(request, mut_output, docker_lambda_approval_response):
 
 @pytest.mark.usefixtures("mock_sf_cfg")
 def test_handler_invalid_ses_sig(approval_response_url):
-    """Request contains invalid GitHub signature"""
+    """Test request that contains invalid authorization signature"""
     ses_event["queryStringParameters"]["X-SES-Signature-256"] = "invalid-sig"
 
     res = requests.post(approval_response_url, json=ses_event).json()
@@ -148,8 +152,7 @@ def test_handler_invalid_ses_sig(approval_response_url):
 @pytest.mark.usefixtures("truncate_executions", "mock_sf_cfg")
 def test_handler_vote_count_met(mut_output, approval_response_url):
     """
-    Send approval request that should update the approval count and send a
-    success Step Function task token
+    Send approval request that causes the execution to meet it's associated approval count
     """
     case = "TestApprovalRequest"
 
@@ -173,17 +176,10 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
 
     time.sleep(5)
 
-    events = sf.get_execution_history(executionArn=arn, includeExecutionData=True)[
-        "events"
-    ]
-    from pprint import pformat
-
-    log.debug(pformat(events))
-
-    # Give mock execution time to finish
-    time.sleep(5)
+    msg = get_sf_approval_state_msg(arn)
 
     ses_event["queryStringParameters"]["exArn"] = arn
+    ses_event["queryStringParameters"]["taskToken"] = msg["TaskToken"]
     ses_event["queryStringParameters"][
         "X-SES-Signature-256"
     ] = "sha256=" + get_email_approval_sig(
@@ -218,34 +214,38 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
     while status == "RUNNING":
         time.sleep(3)
         status = sf.describe_execution(executionArn=arn)["status"]
-
-    assert sf.describe_execution(executionArn=arn)["output"]["status"] == "succeeded"
     assert status == "SUCCEEDED"
+
+    assert (
+        json.loads(sf.describe_execution(executionArn=arn)["output"])["status"]
+        == "succeeded"
+    )
 
 
 @pytest.mark.usefixtures("truncate_executions", "mock_sf_cfg")
 def test_handler_vote_count_not_met(mut_output, approval_response_url):
-    case = "TestApprovalRequest"
-
+    """
+    Send approval request that doesn't cause the execution to meet it's associated approval count
+    """
     insert_records(
         "executions",
         [
             {
                 "execution_id": execution_id,
                 "approval_voters": [],
-                "min_approval_count": 10,
+                "min_approval_count": 10,  # min approval count should not be met
             }
         ],
         enable_defaults=True,
     )
 
+    case = "TestApprovalRequest"
     arn = sf.start_execution(
         name=f"test-{case}-{uuid.uuid4()}",
         stateMachineArn=mut_output["step_function_arn"] + "#" + case,
         input=sf_input,
     )["executionArn"]
 
-    # Give mock execution time to finish
     time.sleep(5)
 
     ses_event["queryStringParameters"]["exArn"] = arn
@@ -264,19 +264,23 @@ def test_handler_vote_count_not_met(mut_output, approval_response_url):
     assert json.loads(res["body"])["message"] == "Vote was successfully submitted"
     assert res["statusCode"] == 200
 
-    time.sleep(5)
-
+    time.sleep(3)
+    # since the approval count isn't met the SF execution should still be running
     assert sf.describe_execution(executionArn=arn)["status"] == "RUNNING"
 
 
 @pytest.mark.usefixtures("truncate_executions", "mock_sf_cfg")
 def test_handler_expired_vote(mut_output, approval_response_url):
+    """
+    Send approval request to an execution that has already finished
+    """
     case = "CompleteSuccess"
     arn = sf.start_execution(
         name=f"test-{case}-{uuid.uuid4()}",
         stateMachineArn=mut_output["step_function_arn"] + "#" + case,
         input=sf_input,
     )["executionArn"]
+
     ses_event["queryStringParameters"]["exArn"] = arn
     ses_event["queryStringParameters"][
         "X-SES-Signature-256"

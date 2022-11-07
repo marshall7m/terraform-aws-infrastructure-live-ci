@@ -202,7 +202,7 @@ def mut_output(request, reset_moto_server, tfvars_files):
         cache_dir=cache_dir,
     )
 
-    tf.setup(cleanup_on_exit=False, extra_files=tfvars_files, use_cache=True)
+    tf.setup(cleanup_on_exit=True, extra_files=tfvars_files, use_cache=True)
     tf.apply(auto_approve=True, use_cache=True)
 
     return tf.output(use_cache=True)
