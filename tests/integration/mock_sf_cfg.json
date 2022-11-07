@@ -64,6 +64,7 @@
           "Request Approval": "MockedApprove"
         },
         "TestApprovalRequest": {
+          "Apply": "MockedEcsSuccess",
           "Plan": "MockedEcsSuccess"
         },
         "TestPlan": {
