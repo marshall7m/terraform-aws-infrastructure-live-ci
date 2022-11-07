@@ -19,7 +19,7 @@ rds_data_client = boto3.client(
 )
 
 
-def update_vote(self, execution_arn: str, action: str, voter: str, task_token: str):
+def update_vote(execution_arn: str, action: str, voter: str, task_token: str):
     execution = sf.describe_execution(executionArn=execution_arn)
     status = execution["status"]
     execution_id = execution["name"]
