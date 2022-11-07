@@ -83,6 +83,19 @@ output "approval_request_function_name" {
   value = module.mut_infrastructure_live_ci.approval_request_function_name
 }
 
+output "approval_response_function_name" {
+  value = module.mut_infrastructure_live_ci.approval_response_function_name
+}
+
+output "approval_response_ses_secret" {
+  value     = module.mut_infrastructure_live_ci.approval_response_ses_secret
+  sensitive = true
+}
+
+output "approval_response_role_arn" {
+  value = module.mut_infrastructure_live_ci.approval_response_role_arn
+}
+
 output "base_branch" {
   value = module.mut_infrastructure_live_ci.base_branch
 }

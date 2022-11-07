@@ -18,6 +18,7 @@ import boto3
 from pprint import pformat
 import requests
 from tests.e2e import utils
+from tests.helpers.utils import get_sf_approval_state_msg
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -864,22 +865,10 @@ class E2E:
             )["executions"]
             if execution["name"] == record["execution_id"]
         ][0]
-        events = sf.get_execution_history(
-            executionArn=execution_arn, includeExecutionData=True
-        )["events"]
-
-        for event in events:
-            if (
-                event.get("taskScheduledEventDetails", {}).get("resource")
-                == "publish.waitForTaskToken"
-            ):
-                msg = json.loads(event["taskScheduledEventDetails"]["parameters"])[
-                    "Message"
-                ]
-                approval_url = msg["ApprovalURL"]
-                task_token = msg["TaskToken"]
-                voter = msg["Voters"][0]
-                break
+        msg = get_sf_approval_state_msg(execution_arn)
+        approval_url = msg["ApprovalURL"]
+        task_token = msg["TaskToken"]
+        voter = msg["Voters"][0]
 
         log.debug(f"Approval URL: {approval_url}")
         log.debug(f"Voter: {voter}")

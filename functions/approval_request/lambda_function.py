@@ -6,7 +6,11 @@ import sys
 from pprint import pformat
 
 sys.path.append(os.path.dirname(__file__) + "/..")
-from common_lambda.utils import aws_encode, get_email_approval_sig  # noqa : E402
+from common_lambda.utils import (
+    aws_encode,
+    get_email_approval_sig,
+    voter_actions,
+)  # noqa : E402
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -31,10 +35,9 @@ def get_ses_urls(msg: dict, secret: str, recipient: str) -> dict:
         "recipient": recipient,
         "taskToken": msg["TaskToken"],
     }
-    actions = ["approve", "reject"]
     urls = {}
 
-    for action in actions:
+    for action in voter_actions:
         query_params = {
             **common_params,
             **{

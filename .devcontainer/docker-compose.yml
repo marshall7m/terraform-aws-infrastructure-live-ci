@@ -44,12 +44,20 @@ services:
   local-sf-api:
     image: amazon/aws-stepfunctions-local:1.10.2
     volumes:
-    - ../tests/integration/step-function/mock_sf_cfg.json:/src/mock_sf_cfg.json
+    - ../tests/integration/mock_sf_cfg.json:/src/mock_sf_cfg.json
     ports:
     - 8083
     environment:
     - SFN_MOCK_CONFIG=/src/mock_sf_cfg.json
     - ECS_ENDPOINT=${ECS_ENDPOINT_URL}
+    - SNS_ENDPOINT=${MOTO_ENDPOINT_URL}
+
+    - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock-aws-key}
+    - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock-aws-secret-key}
+    - AWS_REGION=${AWS_REGION}
+    - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2}
+    - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-mock-session-token}
+    - AWS_SESSION_EXPIRATION=${AWS_SESSION_EXPIRATION:-mock-aws-session-exp}
     networks:
       terraform-aws-infrastructure-live-ci:
     # profiles: ["integration"]

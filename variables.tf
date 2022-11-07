@@ -406,6 +406,15 @@ EOF
   default = null
 }
 
+variable "approval_response_image_address" {
+  description = <<EOF
+Docker registry image to use for the approval repsonse Lambda Function. If not specified, this Terraform module's GitHub registry image
+will be used with the tag associated with the version of this module. 
+EOF
+  type        = string
+  default     = null
+}
+
 variable "lambda_trigger_sf_vpc_config" {
   description = <<EOF
 VPC configuration for Lambda trigger_sf function.
@@ -432,7 +441,7 @@ EOF
 
 variable "webhook_receiver_image_address" {
   description = <<EOF
-Docker registry image to use for the webhok receiver Lambda Function. If not specified, this Terraform module's GitHub registry image
+Docker registry image to use for the webhook receiver Lambda Function. If not specified, this Terraform module's GitHub registry image
 will be used with the tag associated with the version of this module. 
 EOF
   type        = string

@@ -345,3 +345,20 @@ def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
     for event in events:
         if event.get(event_type, {}).get("name", None) == state:
             return event
+
+
+def get_sf_approval_state_msg(arn: str) -> dict:
+    """Returns Step Function execution's SNS approval message parameters"""
+    sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
+    events = sf.get_execution_history(executionArn=arn, includeExecutionData=True)[
+        "events"
+    ]
+
+    for event in events:
+        if (
+            event.get("taskScheduledEventDetails", {}).get("resource")
+            == "publish.waitForTaskToken"
+        ):
+            return json.loads(event["taskScheduledEventDetails"]["parameters"])[
+                "Message"
+            ]

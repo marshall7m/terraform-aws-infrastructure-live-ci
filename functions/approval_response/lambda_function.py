@@ -1,51 +1,62 @@
 import logging
 import sys
-from pprint import pformat
 import os
 
-sys.path.append(os.path.dirname(__file__))
-from app import App, ApprovalHandler
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from fastapi import FastAPI
+from mangum import Mangum
 
-sys.path.append(os.path.dirname(__file__) + "/..")
-from common_lambda.utils import aws_response, ClientException
+sys.path.append(os.path.dirname(__file__))
+from app import update_vote
+from exceptions import InvalidSignatureError, ExpiredVote
+from models import SESEvent
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-
-app = App()
-
-
-@app.vote(method="post", path="/ses")
-@app.validate_ses_request
-def ses_approve(event):
-    try:
-        response = app.update_vote(
-            execution_arn=event["queryStringParameters"]["exArn"],
-            action=event["queryStringParameters"]["action"],
-            voter=event["queryStringParameters"]["recipient"],
-            task_token=event["queryStringParameters"]["taskToken"],
-        )
-    except ClientException as e:
-        response = {"statusCode": 400, "body": e}
-    except Exception as e:
-        log.error(e, exc_info=True)
-        response = {
-            "statusCode": 500,
-            "body": "Internal server error -- Unable to process vote",
-        }
-    finally:
-        return aws_response(response)
+app = FastAPI()
 
 
-def lambda_handler(event, context):
-    """
-    Handler will direct the request to the approriate function by the event's
-    method and path
-    """
-    log.info(f"Event:\n{pformat(event)}")
+@app.exception_handler(ValueError)
+async def value_error_exception_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=400,
+        content={"message": str(exc)},
+    )
 
-    handler = ApprovalHandler(app=app)
-    response = handler.handle(event, context)
-    log.debug(f"Response:\n{response}")
-    return response
+
+@app.exception_handler(InvalidSignatureError)
+async def invalid_signature_error_exception_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=403,
+        content={"message": str(exc)},
+    )
+
+
+@app.exception_handler(ExpiredVote)
+async def expired_vote_error_exception_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=410,
+        content={"message": str(exc)},
+    )
+
+
+@app.post("/ses")
+def ses_approve(request: Request):
+    event = SESEvent(**request.scope["aws.event"])
+    update_vote(
+        execution_arn=event.queryStringParameters.exArn,
+        execution_id=event.queryStringParameters.ex,
+        action=event.queryStringParameters.action,
+        voter=event.queryStringParameters.recipient,
+        task_token=event.queryStringParameters.taskToken,
+    )
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": "Vote was successfully submitted"},
+    )
+
+
+handler = Mangum(app, lifespan="off")
