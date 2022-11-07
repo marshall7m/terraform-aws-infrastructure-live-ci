@@ -39,34 +39,6 @@ def aws_decode(value):
     return urllib.parse.unquote_plus(value)
 
 
-def aws_response(
-    response, status_code=200, content_type="application/json", isBase64Encoded=False
-):
-    if isinstance(response, str):
-        return {
-            "statusCode": status_code,
-            "body": response,
-            "headers": {"content-type": content_type},
-            "isBase64Encoded": isBase64Encoded,
-        }
-
-    elif isinstance(response, dict):
-        return {
-            "statusCode": response.get("statusCode", status_code),
-            "body": str(response.get("body", "")),
-            "headers": {"content-type": response.get("content-type", content_type)},
-            "isBase64Encoded": response.get("isBase64Encoded", isBase64Encoded),
-        }
-
-    elif isinstance(response, Exception):
-        return {
-            "statusCode": 500,
-            "body": str(response),
-            "headers": {"content-type": content_type},
-            "isBase64Encoded": isBase64Encoded,
-        }
-
-
 def get_email_approval_sig(
     secret, execution_id: str, recipient: str, action: str
 ) -> str:
