@@ -47,12 +47,13 @@ def ses_approve(request: Request):
     event = SESEvent(**request.scope["aws.event"])
     update_vote(
         execution_arn=event.queryStringParameters.exArn,
+        execution_id=event.queryStringParameters.ex,
         action=event.queryStringParameters.action,
         voter=event.queryStringParameters.recipient,
         task_token=event.queryStringParameters.taskToken,
     )
 
-    JSONResponse(
+    return JSONResponse(
         status_code=200,
         content={"message": "Vote was successfully submitted"},
     )
