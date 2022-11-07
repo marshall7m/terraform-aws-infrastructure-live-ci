@@ -46,10 +46,10 @@ async def expired_vote_error_exception_handler(request: Request, exc: ValueError
 def ses_approve(request: Request):
     event = SESEvent(**request.scope["aws.event"])
     update_vote(
-        execution_arn=event["queryStringParameters"]["exArn"],
-        action=event["queryStringParameters"]["action"],
-        voter=event["queryStringParameters"]["recipient"],
-        task_token=event["queryStringParameters"]["taskToken"],
+        execution_arn=event.queryStringParameters.exArn,
+        action=event.queryStringParameters.action,
+        voter=event.queryStringParameters.recipient,
+        task_token=event.queryStringParameters.taskToken,
     )
 
     JSONResponse(
