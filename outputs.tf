@@ -256,6 +256,6 @@ output "github_webhook_secret_ssm_key" {
 
 output "approval_response_ses_secret" {
   description = "Secret value used for authenticating AWS SES approvals within the approval response Lambda Function"
-  value       = aws_ssm_parameter.email_approval_secret.name
+  value       = aws_ssm_parameter.email_approval_secret.value
   sensitive   = true
 }
