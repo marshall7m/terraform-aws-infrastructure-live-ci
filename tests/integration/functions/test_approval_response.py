@@ -10,7 +10,11 @@ import boto3
 import requests
 import aurora_data_api
 
-from functions.approval_response.utils import get_email_approval_sig
+from functions.approval_response.utils import (
+    get_email_approval_sig,
+    aws_decode,
+    aws_encode,
+)
 from tests.helpers.utils import insert_records, get_sf_approval_state_msg
 
 log = logging.getLogger("tftest")
@@ -118,8 +122,8 @@ def test_handler_invalid_ses_sig(approval_response_url):
 
     res = requests.post(approval_response_url, json=ses_event).json()
     log.debug(res)
-    assert res["statusCode"] == 403
     assert json.loads(res["body"])["message"] == "Signature is not a valid sha256 value"
+    assert res["statusCode"] == 403
 
 
 @pytest.mark.usefixtures("truncate_executions", "mock_sf_cfg")
@@ -179,17 +183,8 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
 
     msg = get_sf_approval_state_msg(arn)
     recipient = msg["Voters"][0]
-    log.debug("zozo")
-    log.debug(
-        get_email_approval_sig(
-            secret=mut_output["approval_response_ses_secret"],
-            execution_id=execution_id,
-            recipient=recipient,
-            action=action,
-        )
-    )
     ses_event["queryStringParameters"]["taskToken"] = msg["TaskToken"]
-    ses_event["queryStringParameters"]["recipient"] = recipient
+    ses_event["queryStringParameters"]["recipient"] = aws_encode(recipient)
     ses_event["queryStringParameters"]["action"] = action
     ses_event["queryStringParameters"]["ex"] = execution_id
     ses_event["queryStringParameters"]["exArn"] = "arn-123"
@@ -198,7 +193,7 @@ def test_handler_vote_count_met(mut_output, approval_response_url):
     ] = "sha256=" + get_email_approval_sig(
         secret=mut_output["approval_response_ses_secret"],
         execution_id=execution_id,
-        recipient=recipient,
+        recipient=aws_decode(recipient),
         action=action,
     )
 
@@ -291,7 +286,11 @@ def test_handler_vote_count_not_met(mut_output, approval_response_url):
         action=ses_event["queryStringParameters"]["action"],
     )
 
-    requests.post(approval_response_url, json=ses_event).json()
+    res = requests.post(approval_response_url, json=ses_event).json()
+
+    log.debug(res)
+    assert json.loads(res["body"])["message"] == "Vote was successfully submitted"
+    assert res["statusCode"] == 200
 
     time.sleep(5)
 
@@ -343,4 +342,9 @@ def test_handler_expired_vote(mut_output, approval_response_url):
 
     res = requests.post(approval_response_url, json=ses_event).json()
     log.debug(res)
+    assert (
+        json.loads(res["body"])["message"]
+        == "Approval submissions are not available anymore -- Execution Status: "
+        + status
+    )
     assert res["statusCode"] == 410
