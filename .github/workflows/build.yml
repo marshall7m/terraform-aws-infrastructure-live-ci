@@ -10,6 +10,7 @@ on:
     paths:
     - docker/**
     - functions/webhook_receiver/**
+    - functions/approval_response/**
     - .github/workflows/build.yml
 
   release:
@@ -17,6 +18,7 @@ on:
     paths:
     - docker/**
     - functions/webhook_receiver/**
+    - functions/approval_response/**s
     - .github/workflows/build.yml
 
 jobs:
@@ -104,4 +106,47 @@ jobs:
         context: functions/webhook_receiver
         push: true
         tags: |
+          ${{ env.IMG_ADDRESS }}:${{ github.event.release.tag_name }}
+
+  approval-response:
+    name: Push Lambda Approval Response Docker image to GitHub Container Registry
+    runs-on: ubuntu-latest
+    env:
+      IMG_ADDRESS: ghcr.io/${{ github.repository }}/approval-response
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Get changed files
+      id: changed-files
+      uses: tj-actions/changed-files@v34
+      with:
+        files: |
+          functions/approval_response/**
+
+    - name: Log into GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker master image
+      uses: docker/build-push-action@v3
+      if: ${{ (github.event_name == 'push') && (steps.changed-files.outputs.any_changed == 'true') }}
+      with:
+        context: functions/approval_response
+        push: true
+        tags: |-
+          ${{ env.IMG_ADDRESS }}:latest
+          ${{ env.IMG_ADDRESS }}:${{ github.sha }}
+
+    - name: Build and push Docker release image
+      uses: docker/build-push-action@v3
+      if: ${{ github.event_name == 'release' }}
+      with:
+        context: functions/approval_response
+        push: true
+        tags: |-
           ${{ env.IMG_ADDRESS }}:${{ github.event.release.tag_name }}
