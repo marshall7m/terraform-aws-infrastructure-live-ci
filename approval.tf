@@ -150,16 +150,14 @@ module "lambda_approval_response" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
 
-  source_path = [
-    {
-      path             = "${path.module}/functions/approval_response"
-      pip_requirements = true
-    },
-    {
-      path          = "${path.module}/functions/common_lambda"
-      prefix_in_zip = "common_lambda"
-    }
-  ]
+  image_uri = coalesce(
+    var.approval_response_image_address,
+    "ghcr.io/marshall7m/terraform-aws-infrastructure-live/approval-response:${local.module_docker_img_tag}"
+  )
+  create_package = false
+  package_type   = "Image"
+  architectures  = ["x86_64"]
+
   timeout = 180
   environment_variables = {
     METADB_NAME                   = local.metadb_name
