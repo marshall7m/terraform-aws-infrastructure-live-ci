@@ -8,7 +8,7 @@ import aurora_data_api
 import boto3
 
 sys.path.append(os.path.dirname(__file__))
-from utils import ExpiredVote
+from exceptions import ExpiredVote
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -17,7 +17,6 @@ sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"
 rds_data_client = boto3.client(
     "rds-data", endpoint_url=os.environ.get("METADB_ENDPOINT_URL")
 )
-ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))
 
 
 def update_vote(self, execution_arn: str, action: str, voter: str, task_token: str):
