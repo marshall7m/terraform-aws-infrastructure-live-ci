@@ -270,6 +270,68 @@ def test_handler_vote_count_not_met(mut_output, approval_response_url):
 
 
 @pytest.mark.usefixtures("truncate_executions", "mock_sf_cfg")
+def test_handler_vote_updated(mut_output, approval_response_url):
+    """
+    Send approval request for the same voter with different approval action
+    """
+    insert_records(
+        "executions",
+        [
+            {
+                "execution_id": execution_id,
+                "rejection_voters": [],
+                "approval_voters": [ses_event["queryStringParameters"]["recipient"]],
+            }
+        ],
+        enable_defaults=True,
+    )
+
+    case = "TestApprovalRequest"
+    arn = sf.start_execution(
+        name=f"test-{case}-{uuid.uuid4()}",
+        stateMachineArn=mut_output["step_function_arn"] + "#" + case,
+        input=sf_input,
+    )["executionArn"]
+
+    time.sleep(5)
+
+    ses_event["queryStringParameters"]["exArn"] = arn
+    ses_event["queryStringParameters"]["action"] = "reject"
+    ses_event["queryStringParameters"][
+        "X-SES-Signature-256"
+    ] = "sha256=" + get_email_approval_sig(
+        secret=mut_output["approval_response_ses_secret"],
+        execution_id=ses_event["queryStringParameters"]["ex"],
+        recipient=ses_event["queryStringParameters"]["recipient"],
+        action=ses_event["queryStringParameters"]["action"],
+    )
+
+    res = requests.post(approval_response_url, json=ses_event).json()
+
+    log.debug(res)
+    assert json.loads(res["body"])["message"] == "Vote was successfully submitted"
+    assert res["statusCode"] == 200
+
+    log.info("Assert approval_voters and rejection_voters columns were updated")
+    with aurora_data_api.connect(
+        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
+    ) as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""
+        SELECT approval_voters, rejection_voters
+        FROM executions
+        WHERE execution_id = '{execution_id}'
+        """
+        )
+
+        record = cur.fetchone()
+    log.debug("zozo")
+    log.debug(record)
+    assert record[0] == []
+    assert record[1] == [ses_event["queryStringParameters"]["recipient"]]
+
+
+@pytest.mark.usefixtures("truncate_executions", "mock_sf_cfg")
 def test_handler_expired_vote(mut_output, approval_response_url):
     """
     Send approval request to an execution that has already finished

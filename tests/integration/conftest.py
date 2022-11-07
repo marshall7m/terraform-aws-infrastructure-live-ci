@@ -245,7 +245,7 @@ def mock_sf_cfg(mut_output):
     )
 
     with open(mock_path, "w") as f:
-        json.dump(cfg, f)
+        json.dump(cfg, f, indent=4, sort_keys=True)
 
     yield mock_path
 
