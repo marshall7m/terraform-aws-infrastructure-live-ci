@@ -138,6 +138,8 @@ services:
     - GITHUB_TOKEN=${TESTING_GITHUB_TOKEN}
     - TF_VAR_github_token=${TESTING_GITHUB_TOKEN}
 
+    - NETWORK_NAME=${NETWORK_NAME}
+
     - UNTIL_AWS_EXP=${UNTIL_AWS_EXP}
     networks:
       terraform-aws-infrastructure-live-ci:

@@ -130,6 +130,11 @@ output "ecs_pr_plan_container_name" {
   value       = local.pr_plan_container_name
 }
 
+output "ecs_pr_plan_family" {
+  description = "AWS ECS task definition family for the PR plan task"
+  value       = aws_ecs_task_definition.plan.family
+}
+
 output "step_function_arn" {
   description = "ARN of the Step Function"
   value       = aws_sfn_state_machine.this.arn
@@ -158,6 +163,16 @@ output "approval_request_function_name" {
 output "github_webhook_id" {
   description = "GitHub webhook ID used for sending pull request activity to the Lambda Receiver Function"
   value       = github_repository_webhook.this.id
+}
+
+output "receiver_function_name" {
+  description = "Name of the Lambda Receiver Function"
+  value       = module.lambda_webhook_receiver.lambda_function_name
+}
+
+output "receiver_role_arn" {
+  description = "ARN of the Lambda Receiver Function"
+  value       = module.lambda_webhook_receiver.lambda_role_arn
 }
 
 output "merge_lock_status_check_name" {
@@ -217,4 +232,14 @@ output "commit_status_config" {
 output "account_parent_cfg" {
   description = "AWS account-level configurations"
   value       = var.account_parent_cfg
+}
+
+output "file_path_pattern" {
+  description = "Regex pattern to match webhook modified/new files to"
+  value       = var.file_path_pattern
+}
+
+output "github_webhook_secret_ssm_key" {
+  description = "Key for the AWS SSM Parameter Store used to store GitHub webhook secret"
+  value       = aws_ssm_parameter.github_webhook_secret.name
 }

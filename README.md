@@ -212,13 +212,16 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_ecs_network_config"></a> [ecs\_network\_config](#output\_ecs\_network\_config) | VPC network configurations for ECS tasks |
 | <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
 | <a name="output_ecs_pr_plan_container_name"></a> [ecs\_pr\_plan\_container\_name](#output\_ecs\_pr\_plan\_container\_name) | Name of the pr plan ECS task container |
+| <a name="output_ecs_pr_plan_family"></a> [ecs\_pr\_plan\_family](#output\_ecs\_pr\_plan\_family) | AWS ECS task definition family for the PR plan task |
 | <a name="output_ecs_pr_plan_task_definition_arn"></a> [ecs\_pr\_plan\_task\_definition\_arn](#output\_ecs\_pr\_plan\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#output\_ecs\_security\_group\_ids) | List of security groups IDs used ECS tasks |
 | <a name="output_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#output\_ecs\_subnet\_ids) | AWS VPC subnets IDs that the ECS tasks will be hosted in |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_email_approval_secret"></a> [email\_approval\_secret](#output\_email\_approval\_secret) | Secret value used for authenticating email approval responses |
+| <a name="output_file_path_pattern"></a> [file\_path\_pattern](#output\_file\_path\_pattern) | Regex pattern to match webhook modified/new files to |
 | <a name="output_github_webhook_id"></a> [github\_webhook\_id](#output\_github\_webhook\_id) | GitHub webhook ID used for sending pull request activity to the Lambda Receiver Function |
+| <a name="output_github_webhook_secret_ssm_key"></a> [github\_webhook\_secret\_ssm\_key](#output\_github\_webhook\_secret\_ssm\_key) | Key for the AWS SSM Parameter Store used to store GitHub webhook secret |
 | <a name="output_lambda_trigger_sf_arn"></a> [lambda\_trigger\_sf\_arn](#output\_lambda\_trigger\_sf\_arn) | ARN of the Lambda Function used for triggering Step Function execution(s) |
 | <a name="output_merge_lock_ssm_key"></a> [merge\_lock\_ssm\_key](#output\_merge\_lock\_ssm\_key) | SSM Parameter Store key used for storing the current PR ID that has been merged and is being process by the CI flow |
 | <a name="output_merge_lock_status_check_name"></a> [merge\_lock\_status\_check\_name](#output\_merge\_lock\_status\_check\_name) | Context name of the merge lock GitHub commit status check |
@@ -232,6 +235,8 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_metadb_secret_manager_ci_arn"></a> [metadb\_secret\_manager\_ci\_arn](#output\_metadb\_secret\_manager\_ci\_arn) | Secret Manager ARN of the metadb CI user credentials |
 | <a name="output_metadb_secret_manager_master_arn"></a> [metadb\_secret\_manager\_master\_arn](#output\_metadb\_secret\_manager\_master\_arn) | Secret Manager ARN of the metadb master user credentials |
 | <a name="output_metadb_username"></a> [metadb\_username](#output\_metadb\_username) | Master username for the metadb |
+| <a name="output_receiver_function_name"></a> [receiver\_function\_name](#output\_receiver\_function\_name) | Name of the Lambda Receiver Function |
+| <a name="output_receiver_role_arn"></a> [receiver\_role\_arn](#output\_receiver\_role\_arn) | ARN of the Lambda Receiver Function |
 | <a name="output_scan_type_ssm_param_name"></a> [scan\_type\_ssm\_param\_name](#output\_scan\_type\_ssm\_param\_name) | Name of the AWS SSM Parameter store value used to determine the scan type within the create deploy stack task |
 | <a name="output_step_function_arn"></a> [step\_function\_arn](#output\_step\_function\_arn) | ARN of the Step Function |
 | <a name="output_step_function_name"></a> [step\_function\_name](#output\_step\_function\_name) | Name of the Step Function |

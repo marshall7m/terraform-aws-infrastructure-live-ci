@@ -3,14 +3,19 @@ import os
 import datetime
 import re
 import logging
+import time
+import uuid
 
+import github
 import timeout_decorator
 import aurora_data_api
 
-from tests.helpers.utils import rds_data_client, terra_version
+from tests.helpers.utils import rds_data_client, terra_version, commit
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
+
+gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
 
 
 def pytest_addoption(parser):
@@ -154,3 +159,68 @@ def terragrunt_version(request):
     """Terragrunt version that will be installed and used"""
     terra_version("terragrunt", request.param, overwrite=True)
     return request.param
+
+
+@pytest.fixture(scope="module")
+def repo(request):
+    log.info(f"Creating repo from template: {request.param}")
+    repo = gh.get_repo(request.param)
+    repo = gh.get_user().create_repo_from_template(
+        "test-infra-live-" + str(uuid.uuid4()), repo
+    )
+    # needs to wait or else raises error on empty repo
+    time.sleep(5)
+    repo.edit(default_branch="master")
+
+    yield repo
+
+    log.info(f"Deleting repo: {request.param}")
+    repo.delete()
+
+
+@pytest.fixture
+def pr(repo, request):
+    """
+    Creates the PR used for testing the function calls to the GitHub API.
+    Current implementation creates all PR changes within one commit.
+    """
+
+    param = request.param
+    base_commit = repo.get_branch(param["base_ref"])
+    base_commit_id = base_commit.commit.sha
+    head_ref = repo.create_git_ref(
+        ref="refs/heads/" + param["head_ref"], sha=base_commit_id
+    )
+    commit_id = commit(
+        repo,
+        param["head_ref"],
+        param["changes"],
+        param.get("commit_message", "test commit"),
+    ).sha
+    head_ref.edit(sha=commit_id)
+
+    log.info("Creating PR")
+    pr = repo.create_pull(
+        title=param.get("title", f"test-{param['head_ref']}"),
+        body=param.get("body", "Test PR"),
+        base=param["base_ref"],
+        head=param["head_ref"],
+    )
+
+    yield {
+        "full_name": repo.full_name,
+        "number": pr.number,
+        "base_commit_id": base_commit_id,
+        "head_commit_id": commit_id,
+        "base_ref": param["base_ref"],
+        "head_ref": param["head_ref"],
+    }
+
+    log.info(f"Removing PR head ref branch: {param['head_ref']}")
+    head_ref.delete()
+
+    log.info(f"Closing PR: #{pr.number}")
+    try:
+        pr.edit(state="closed")
+    except Exception:
+        log.info("PR is merged or already closed")

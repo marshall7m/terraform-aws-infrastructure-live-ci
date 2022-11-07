@@ -67,6 +67,14 @@ output "trigger_sf_function_name" {
   value = module.mut_infrastructure_live_ci.trigger_sf_function_name
 }
 
+output "receiver_function_name" {
+  value = module.mut_infrastructure_live_ci.receiver_function_name
+}
+
+output "receiver_role_arn" {
+  value = module.mut_infrastructure_live_ci.receiver_role_arn
+}
+
 output "approval_request_log_group_name" {
   value = module.mut_infrastructure_live_ci.approval_request_log_group_name
 }
@@ -97,6 +105,10 @@ output "ecs_create_deploy_stack_container_name" {
 
 output "ecs_pr_plan_container_name" {
   value = module.mut_infrastructure_live_ci.ecs_pr_plan_container_name
+}
+
+output "ecs_pr_plan_family" {
+  value = module.mut_infrastructure_live_ci.ecs_pr_plan_family
 }
 
 output "ecs_create_deploy_stack_role_arn" {
@@ -186,4 +198,12 @@ output "ecs_endpoint_url" {
 
 output "account_parent_cfg" {
   value = module.mut_infrastructure_live_ci.account_parent_cfg
+}
+
+output "file_path_pattern" {
+  value = module.mut_infrastructure_live_ci.file_path_pattern
+}
+
+output "github_webhook_secret_ssm_key" {
+  value = module.mut_infrastructure_live_ci.github_webhook_secret_ssm_key
 }

@@ -3,7 +3,7 @@ import os
 import logging
 
 from starlette.requests import Request
-from starlette.responses import Response, JSONResponse
+from starlette.responses import JSONResponse
 from fastapi import FastAPI
 from mangum import Mangum
 
@@ -38,7 +38,10 @@ def open_pr(request: Request):
         event.body.commit_status_config.get("PrPlan"),
     )
 
-    return Response("foo")
+    return JSONResponse(
+        status_code=200,
+        content={"message": "Request was successful"},
+    )
 
 
 @app.post("/merge")
@@ -56,6 +59,11 @@ def merged_pr(request: Request):
         event.body.commit_status_config.get("CreateDeployStack"),
     )
 
+    return JSONResponse(
+        status_code=200,
+        content={"message": "Request was successful"},
+    )
+
 
 @app.exception_handler(ValueError)
 async def value_error_exception_handler(request: Request, exc: ValueError):
@@ -66,7 +74,9 @@ async def value_error_exception_handler(request: Request, exc: ValueError):
 
 
 @app.exception_handler(InvalidSignatureError)
-async def invalid_signature_error_exception_handler(request: Request, exc: ValueError):
+async def invalid_signature_error_exception_handler(
+    request: Request, exc: InvalidSignatureError
+):
     return JSONResponse(
         status_code=403,
         content={"message": str(exc)},
@@ -75,7 +85,7 @@ async def invalid_signature_error_exception_handler(request: Request, exc: Value
 
 @app.exception_handler(FilePathsNotMatched)
 async def filepath_not_mtached_error_exception_handler(
-    request: Request, exc: ValueError
+    request: Request, exc: FilePathsNotMatched
 ):
     return JSONResponse(
         status_code=200,
@@ -87,6 +97,7 @@ async def filepath_not_mtached_error_exception_handler(
 @app.middleware("http")
 async def add_resource_path(request: Request, call_next):
     body = await request.json()
+
     merged = body.get("pull_request", {}).get("merged")
     if body.get("action") in ["opened", "edited", "reopened"] and merged is False:
         request.scope["path"] = "/open"
