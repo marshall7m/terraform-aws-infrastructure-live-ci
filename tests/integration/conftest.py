@@ -98,8 +98,24 @@ def docker_lambda_receiver() -> python_on_whales.Image:
 
 
 @pytest.fixture(scope="session")
+def docker_lambda_approval_response() -> python_on_whales.Image:
+    """Builds Docker image for Lambda approval response function"""
+    # use legacy build since gh actions runner doesn't have buildx
+    img = docker.image.legacy_build(
+        os.path.join(FILE_DIR, "../functions/approval_response"),
+        cache=True,
+        tags=["terraform-aws-infrastructure-live-ci/approval-response:latest"],
+    )
+
+    return img
+
+
+@pytest.fixture(scope="session")
 def tfvars_files(
-    tmp_path_factory, docker_ecs_task, docker_lambda_receiver
+    tmp_path_factory,
+    docker_ecs_task,
+    docker_lambda_receiver,
+    docker_lambda_approval_response,
 ) -> List[str]:
     """Returns list of tfvars json files to be used for Terraform variables"""
     parent = tmp_path_factory.mktemp("tfvars")
@@ -144,6 +160,9 @@ def tfvars_files(
             ],
             "ecs_image_address": docker_ecs_task.repo_tags[0],
             "webhook_receiver_image_address": docker_lambda_receiver.repo_tags[0],
+            "approval_response_image_address": docker_lambda_approval_response.repo_tags[
+                0
+            ],
             "approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
             "approval_request_sender_email": "fakesender@fake.com",
             "create_approval_sender_policy": "false",
@@ -204,3 +223,39 @@ def push_changes(mut_output, request):
     log.debug(f"Deleting branch: {branch}")
     ref = repo.get_git_ref(f"heads/{branch}")
     ref.delete()
+
+
+@pytest.fixture
+def mock_sf_cfg(mut_output):
+    """
+    Overwrites Step Function State Machine placeholder name with name from Terraform module.
+    See here for more info on mock config file:
+    https://docs.aws.amazon.com/step-functions/latest/dg/sfn-local-mock-cfg-file.html
+    """
+    log.info(
+        "Replacing placholder state machine name with: "
+        + mut_output["step_function_name"]
+    )
+    mock_path = os.path.join(os.path.dirname(__file__), "mock_sf_cfg.json")
+    with open(mock_path, "r") as f:
+        cfg = json.load(f)
+
+    cfg["StateMachines"][mut_output["step_function_name"]] = cfg["StateMachines"].pop(
+        "Placeholder"
+    )
+
+    with open(mock_path, "w") as f:
+        json.dump(cfg, f, indent=2, sort_keys=True)
+
+    yield mock_path
+
+    log.info("Replacing state machine name back with placholder")
+    with open(mock_path, "r") as f:
+        cfg = json.load(f)
+
+    cfg["StateMachines"]["Placeholder"] = cfg["StateMachines"].pop(
+        mut_output["step_function_name"]
+    )
+
+    with open(mock_path, "w") as f:
+        json.dump(cfg, f, indent=4, sort_keys=True)
