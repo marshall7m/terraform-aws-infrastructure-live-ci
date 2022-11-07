@@ -281,6 +281,8 @@ def test_handler_vote_updated(mut_output, approval_response_url):
                 "execution_id": execution_id,
                 "rejection_voters": [],
                 "approval_voters": [ses_event["queryStringParameters"]["recipient"]],
+                "min_rejection_count": 10,
+                "min_approval_count": 10,
             }
         ],
         enable_defaults=True,
@@ -325,8 +327,7 @@ def test_handler_vote_updated(mut_output, approval_response_url):
         )
 
         record = cur.fetchone()
-    log.debug("zozo")
-    log.debug(record)
+
     assert record[0] == []
     assert record[1] == [ses_event["queryStringParameters"]["recipient"]]
 
