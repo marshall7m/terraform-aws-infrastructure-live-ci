@@ -20,7 +20,7 @@ ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))
 
 
 class RequestContext(BaseModel):
-    http: str
+    http: dict
 
 
 class QueryStringParameters(BaseModel):
@@ -29,9 +29,9 @@ class QueryStringParameters(BaseModel):
     action: str
     exArn: str
     taskToken: str
-    x_ses_signature_256: str = Field(alias="X-SES-Signature-256")
+    x_ses_signature_256: str = Field(alias="X-SES-Signature-256", default="invalid")
 
-    @validator("X-SES-Signature-256")
+    @validator("x_ses_signature_256")
     def validate_sig_content(cls, v, values, **kwargs):
         if not v.startswith("sha256="):
             raise InvalidSignatureError("Signature is not a valid sha256 value")
@@ -42,9 +42,9 @@ class QueryStringParameters(BaseModel):
 
         expected_sig = get_email_approval_sig(
             secret,
-            values["ex"],
-            aws_decode(values["recipient"]),
-            values["action"],
+            values.get("ex", ""),
+            aws_decode(values.get("recipient", "")),
+            values.get("action", ""),
         )
 
         authorized = hmac.compare_digest(v.rsplit("=", maxsplit=1)[-1], expected_sig)
@@ -54,7 +54,7 @@ class QueryStringParameters(BaseModel):
                 "Header signature and expected signature do not match"
             )
 
-        return values
+        return v
 
     @validator("action")
     def validate_action(cls, v):
