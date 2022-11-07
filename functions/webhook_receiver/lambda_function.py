@@ -84,7 +84,7 @@ async def invalid_signature_error_exception_handler(
 
 
 @app.exception_handler(FilePathsNotMatched)
-async def filepath_not_mtached_error_exception_handler(
+async def filepath_not_matched_error_exception_handler(
     request: Request, exc: FilePathsNotMatched
 ):
     return JSONResponse(
