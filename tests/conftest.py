@@ -17,7 +17,7 @@ import python_on_whales
 import requests
 from python_on_whales import docker
 
-from tests.helpers.utils import rds_data_client, terra_version, commit
+from tests.helpers.utils import rds_data_client, terra_version, push
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -204,18 +204,8 @@ def pr(repo, request):
     """
 
     param = request.param
-    base_commit = repo.get_branch(param["base_ref"])
-    base_commit_id = base_commit.commit.sha
-    head_ref = repo.create_git_ref(
-        ref="refs/heads/" + param["head_ref"], sha=base_commit_id
-    )
-    commit_id = commit(
-        repo,
-        param["head_ref"],
-        param["changes"],
-        param.get("commit_message", "test commit"),
-    ).sha
-    head_ref.edit(sha=commit_id)
+    base_commit_id = repo.get_branch(param["base_ref"]).commit.sha
+    head_commit_id = push(repo, param["head_ref"], param["changes"])
 
     log.info("Creating PR")
     pr = repo.create_pull(
@@ -229,13 +219,13 @@ def pr(repo, request):
         "full_name": repo.full_name,
         "number": pr.number,
         "base_commit_id": base_commit_id,
-        "head_commit_id": commit_id,
+        "head_commit_id": head_commit_id,
         "base_ref": param["base_ref"],
         "head_ref": param["head_ref"],
     }
 
     log.info(f"Removing PR head ref branch: {param['head_ref']}")
-    head_ref.delete()
+    repo.get_git_ref(f"heads/{param['head_ref']}").delete()
 
     log.info(f"Closing PR: #{pr.number}")
     try:
