@@ -115,60 +115,6 @@ def git_repo(tmp_path_factory):
     return repo
 
 
-@pytest.fixture(scope="module")
-def merge_pr(repo, git_repo, mut_output):
-
-    merge_commits = {}
-
-    def _merge(base_ref=None, head_ref=None):
-        if base_ref is not None and head_ref is not None:
-            log.info("Merging PR")
-            merge_commits[head_ref] = repo.merge(base_ref, head_ref)
-
-        return merge_commits
-
-    yield _merge
-
-    log.info(f'Removing PR changes from base branch: {mut_output["base_branch"]}')
-
-    log.debug("Pulling remote changes")
-    git_repo.git.reset("--hard")
-    git_repo.git.pull()
-
-    log.debug(
-        "Removing admin enforcement from branch protection to allow revert pushes to trunk branch"
-    )
-    branch = repo.get_branch(branch=mut_output["base_branch"])
-    branch.remove_admin_enforcement()
-
-    log.debug("Removing required status checks")
-    status_checks = branch.get_required_status_checks().contexts
-    branch.edit_required_status_checks(contexts=[])
-    current_status_checks = status_checks
-    while len(current_status_checks) > 0:
-        sleep(3)
-        current_status_checks = branch.get_required_status_checks().contexts
-
-    log.debug("Reverting all changes from testing PRs")
-    try:
-        for ref, commit in reversed(merge_commits.items()):
-            log.debug(f"Merge Commit ID: {commit.sha}")
-
-            git_repo.git.revert("-m", "1", "--no-commit", str(commit.sha))
-            git_repo.git.commit(
-                "-m", f"Revert changes from PR: {ref} within fixture teardown"
-            )
-            git_repo.git.push("origin", "--force")
-    except Exception as e:
-        raise e
-    finally:
-        log.debug("Adding admin enforcement back")
-        branch.set_admin_enforcement()
-
-        log.debug("Adding required status checks back")
-        branch.edit_required_status_checks(contexts=status_checks)
-
-
 @pytest.fixture(scope="module", autouse=True)
 def truncate_executions(request, mut_output):
     # table setup is within tf module
