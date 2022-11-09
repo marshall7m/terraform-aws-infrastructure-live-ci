@@ -281,8 +281,19 @@ def wait_for_finished_task(
     return task_status
 
 
+def get_finished_commit_status(context, repo, commit_id, wait=3, token=None):
+    state = None
+    while state in [None, "pending"]:
+        log.debug(f"Waiting {wait} seconds")
+        time.sleep(wait)
+        status = get_commit_status(repo.full_name, commit_id, context, token)
+        log.debug(f"Status state: {status.state}")
+
+    return status
+
+
 def get_commit_status(
-    repo_full_name: str, commit_id: str, context: str, token: str = None, wait: int = 3
+    repo_full_name: str, commit_id: str, context: str, token: str = None
 ) -> str:
     """Returns commit status associated with the passed context argument"""
     if not token:
@@ -292,7 +303,7 @@ def get_commit_status(
     repo = gh.get_repo(repo_full_name)
     for status in repo.get_commit(commit_id).get_statuses():
         if status.context == context:
-            return status.state
+            return status
 
 
 def assert_sf_state_type(
