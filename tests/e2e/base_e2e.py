@@ -47,21 +47,6 @@ class E2E:
         yield _add
 
     @pytest.fixture(scope="class", autouse=True)
-    def set_scan_type(self, case_param, mut_output):
-        ssm = boto3.client("ssm")
-
-        scan_type = case_param.get("scan_type", "graph")
-        log.info(f"Case scan type: {scan_type}")
-
-        ssm.put_parameter(
-            Name=mut_output["scan_type_ssm_param_name"],
-            Value=scan_type,
-            Type="String",
-            Overwrite=True,
-        )
-        yield None
-
-    @pytest.fixture(scope="class", autouse=True)
     def pr(
         self,
         request,
