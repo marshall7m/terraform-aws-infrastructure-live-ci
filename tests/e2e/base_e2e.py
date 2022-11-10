@@ -230,48 +230,12 @@ class E2E:
             pr["head_commit_id"],
         )
 
-    def trigger_sf_log_errors(self, create_deploy_stack_task_status, request):
-        # gets the current tests parameter value
-        test_param = int(
-            re.search(r"(?<=\[).+(?=\])", os.environ.get("PYTEST_CURRENT_TEST")).group(
-                0
-            )
-        )
-        if int(request.node.callspec.id) + 1 != len(request.cls.executions):
-            # needed for the wait_for_lambda_invocation() start_time arg within the next test_trigger_sf iteration to
-            # ensure that the logs are only associated with the current target_execution parameter
-            test_param = test_param + 1
-
-        request.cls.executions[test_param]["testing_start_time"] = int(
-            datetime.now().timestamp() * 1000
-        )
-
-        utils.wait_for_lambda_invocation(
-            mut_output["trigger_sf_function_name"],
-            datetime.utcfromtimestamp(
-                request.cls.executions[int(request.node.callspec.id)][
-                    "testing_start_time"
-                ]
-                / 1000
-            ),
-            expected_count=1,
-            timeout=60,
-        )
-
-        return utils.get_latest_log_stream_errs(
-            mut_output["trigger_sf_log_group_name"],
-            start_time=request.cls.testing_start_time,
-            end_time=int(datetime.now().timestamp() * 1000),
-        )
-
     @timeout_decorator.timeout(
         300,
         exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')",
     )
     @pytest.mark.usefixtures("target_execution")
-    def target_execution_record(
-        self, request, mut_output, pr, case_param, trigger_sf_log_errors
-    ):
+    def target_execution_record(self, request, mut_output, pr, case_param):
         """Queries metadb until the target execution record exists and adds record to request fixture"""
         log.debug(f"Already tested execution IDs:\n{request.cls.tested_execution_ids}")
 
