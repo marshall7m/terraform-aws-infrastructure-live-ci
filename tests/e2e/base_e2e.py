@@ -4,22 +4,18 @@ import json
 import time
 from datetime import datetime
 import timeout_decorator
-import random
-import string
-import re
 from pprint import pformat
 
 import pytest
-import github
-import git
 import aurora_data_api
 import boto3
 import requests
 
-from functions.common_lambda.utils import get_email_approval_sig, aws_encode
-from tests.e2e.conftest import mut_output
-from tests.e2e import utils
-from tests.helpers.utils import get_sf_approval_state_msg, get_finished_commit_status
+from tests.helpers.utils import (
+    get_finished_commit_status,
+    get_execution_arn,
+    get_state_finished_status,
+)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -29,7 +25,10 @@ sf = boto3.client("stepfunctions")
 
 
 class E2E:
-    executions = []
+    """
+    Fixtures that interact with the CI/CD pipeline and/or retrieves data
+    associated with the pipeline execution
+    """
 
     @pytest.fixture(scope="class")
     def case_param(self, request):
@@ -90,14 +89,6 @@ class E2E:
             ]
         return statuses
 
-    def test_pr_plan_pending_statuses(pr_plan_pending_statuses):
-        expected_status = "pending"
-        log.info(f"Assert plan commit statuses were set to {expected_status}")
-        for status in pr_plan_pending_statuses:
-            log.debug(f"Context: {status.context}")
-            log.debug(f"Logs URL: {status.target_url}")
-            assert status.state == expected_status
-
     @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
     def pr_plan_finished_statuses(
@@ -124,24 +115,6 @@ class E2E:
             log.debug(f"Finished count: {len(statuses)}")
 
         return statuses
-
-    def test_pr_plan_finished_statuses(
-        self, pr_plan_finished_statuses, case_param_modified_dirs
-    ):
-        log.info("Assert plan commit statuses were set to expected status")
-        for status in pr_plan_finished_statuses:
-            expected_status = "success"
-            for path, cfg in case_param_modified_dirs.items():
-                # checks if the case directory's associated commit status is expected to fail
-                if re.match(f"Plan: {re.escape(path)}$", status.context) and cfg.get(
-                    "expect_failed_pr_plan", False
-                ):
-                    expected_status = "failure"
-                    break
-            log.debug(f"Expected status: {expected_status}")
-            log.debug(f"Context: {status.context}")
-            log.debug(f"Logs URL: {status.target_url}")
-            assert status.state == expected_status
 
     @timeout_decorator.timeout(30)
     @pytest.fixture(scope="class")
@@ -216,14 +189,6 @@ class E2E:
         self, request, repo, case_param, mut_output, pr, merge_pr
     ):
         """Assert create deploy stack status matches it's expected status"""
-
-        # needed for the wait_for_lambda_invocation() start_time arg within the first test_trigger_sf iteration so
-        # the log group filter will have a wide enough time range
-        log.info("Setting first target execution start time")
-        request.cls.execution_testing_start_time = int(
-            datetime.now().timestamp() * 1000
-        )
-
         return get_finished_commit_status(
             mut_output["create_deploy_stack_status_check_name"],
             repo,
@@ -234,8 +199,9 @@ class E2E:
         300,
         exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')",
     )
-    @pytest.mark.usefixtures("target_execution")
-    def target_execution_record(self, request, mut_output, pr, case_param):
+    def target_execution_record(
+        self, request, mut_output, pr, create_deploy_stack_task_status, target_execution
+    ):
         """Queries metadb until the target execution record exists and adds record to request fixture"""
         log.debug(f"Already tested execution IDs:\n{request.cls.tested_execution_ids}")
 
@@ -298,11 +264,11 @@ class E2E:
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.mark.dependency()
     def terra_run_plan_status(self, request, mut_output, record, target_execution):
-        execution_arn = utils.get_execution_arn(
+        execution_arn = get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
 
-        return utils.get_state_finished_status(execution_arn, "Plan")
+        return get_state_finished_status(execution_arn, "Plan")
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     def approval_request_status_code(self, execution_arn):
@@ -338,7 +304,7 @@ class E2E:
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     def terra_run_apply_status(self, approval_response, execution_arn):
-        return utils.get_state_finished_status(execution_arn, "Apply")
+        return get_state_finished_status(execution_arn, "Apply")
 
     # runs cleanup tasks only if step function deploy task was executed
     @pytest.mark.usefixtures("destroy_scenario_tf_resources")

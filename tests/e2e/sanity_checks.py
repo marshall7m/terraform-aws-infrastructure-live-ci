@@ -1,8 +1,39 @@
+import logging
+
 import pytest
 from pytest_dependency import depends
 
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
+
 
 class SanityChecks:
+    def test_pr_plan_pending_statuses(self, pr_plan_pending_statuses):
+        expected_status = "pending"
+        log.info(f"Assert plan commit statuses were set to {expected_status}")
+        for status in pr_plan_pending_statuses:
+            log.debug(f"Context: {status.context}")
+            log.debug(f"Logs URL: {status.target_url}")
+            assert status.state == expected_status
+
+    def test_pr_plan_finished_statuses(
+        self, pr_plan_finished_statuses, case_param_modified_dirs
+    ):
+        log.info("Assert plan commit statuses were set to expected status")
+        for status in pr_plan_finished_statuses:
+            expected_status = "success"
+            for path, cfg in case_param_modified_dirs.items():
+                # checks if the case directory's associated commit status is expected to fail
+                if re.match(f"Plan: {re.escape(path)}$", status.context) and cfg.get(
+                    "expect_failed_pr_plan", False
+                ):
+                    expected_status = "failure"
+                    break
+            log.debug(f"Expected status: {expected_status}")
+            log.debug(f"Context: {status.context}")
+            log.debug(f"Logs URL: {status.target_url}")
+            assert status.state == expected_status
+
     def test_create_deploy_stack_task_status(
         self, case_param, create_deploy_stack_task_status
     ):
@@ -11,7 +42,6 @@ class SanityChecks:
         else:
             assert create_deploy_stack_task_status.state == "success"
 
-    @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
     def test_trigger_sf(self, case_param, trigger_sf_log_errors):
         """
@@ -72,7 +102,6 @@ class SanityChecks:
                 == "none"
             )
 
-    @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
     def test_sf_execution_aborted(self, request, mut_output, case_param):
         """
