@@ -1,22 +1,23 @@
-import pytest
 import os
 import logging
 import json
 import time
 from datetime import datetime
-from functions.common_lambda.utils import get_email_approval_sig, aws_encode
-import github
-import git
-from tests.e2e.conftest import mut_output
 import timeout_decorator
 import random
 import string
 import re
-from pytest_dependency import depends
+from pprint import pformat
+
+import pytest
+import github
+import git
 import aurora_data_api
 import boto3
-from pprint import pformat
 import requests
+
+from functions.common_lambda.utils import get_email_approval_sig, aws_encode
+from tests.e2e.conftest import mut_output
 from tests.e2e import utils
 from tests.helpers.utils import get_sf_approval_state_msg, get_finished_commit_status
 
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ecs = boto3.client("ecs")
+sf = boto3.client("stepfunctions")
 
 
 class E2E:
