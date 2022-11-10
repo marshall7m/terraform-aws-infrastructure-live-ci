@@ -212,7 +212,6 @@ class E2E:
             branch.edit_required_status_checks(contexts=status_checks)
 
     @timeout_decorator.timeout(600)
-    @pytest.mark.dependency()
     def create_deploy_stack_task_status(
         self, request, repo, case_param, mut_output, pr, merge_pr
     ):
@@ -230,14 +229,6 @@ class E2E:
             repo,
             pr["head_commit_id"],
         )
-
-    def test_create_deploy_stack_task_status(
-        self, case_param, create_deploy_stack_task_status
-    ):
-        if case_param.get("expect_failed_create_deploy_stack", False):
-            assert create_deploy_stack_task_status.state == "failure"
-        else:
-            assert create_deploy_stack_task_status.state == "success"
 
     def trigger_sf_log_errors(self, create_deploy_stack_task_status, request):
         # gets the current tests parameter value
@@ -273,35 +264,16 @@ class E2E:
             end_time=int(datetime.now().timestamp() * 1000),
         )
 
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_trigger_sf(self, case_param, trigger_sf_log_errors):
-        """
-        Assert that there are no errors within the latest invocation of the trigger Step Function Lambda
-
-        Depends on create deploy stack task status to be successful to ensure that errors produce by
-        the Lambda function are not caused by the task
-        """
-        if case_param.get("expect_failed_trigger_sf", False):
-            assert len(trigger_sf_log_errors) > 0
-        else:
-            assert len(trigger_sf_log_errors) == 0
-
     @timeout_decorator.timeout(
         300,
         exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')",
     )
     @pytest.mark.usefixtures("target_execution")
-    def test_target_execution_record_exists(
+    def target_execution_record(
         self, request, mut_output, pr, case_param, trigger_sf_log_errors
     ):
         """Queries metadb until the target execution record exists and adds record to request fixture"""
-        tested_executions = [
-            e["record"]["execution_id"]
-            for e in request.cls.executions
-            if e.get("record", False)
-        ]
-        log.debug(f"Already tested execution IDs:\n{tested_executions}")
+        log.debug(f"Already tested execution IDs:\n{request.cls.tested_execution_ids}")
 
         results = None
         while not results:
@@ -319,7 +291,7 @@ class E2E:
                         FROM {mut_output["metadb_schema"]}.executions
                         WHERE commit_id = '{pr["head_commit_id"]}'
                         AND "status" IN ('running', 'aborted', 'failed')
-                        AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
+                        AND NOT (execution_id = ANY (ARRAY{request.cls.tested_execution_ids}::TEXT[]))
                         LIMIT 1
                     """
                     )
@@ -332,82 +304,22 @@ class E2E:
 
         log.debug(f"Target Execution Record:\n{pformat(record)}")
 
+        return record
+
+    def approval_action(self, record, case_param):
+
         if record["is_rollback"]:
-            request.cls.executions[int(request.node.callspec.id)][
-                "action"
-            ] = case_param["executions"][record["cfg_path"]]["actions"][
+            return case_param["executions"][record["cfg_path"]]["actions"][
                 "rollback_providers"
             ]
         else:
-            request.cls.executions[int(request.node.callspec.id)]["action"] = (
+            return (
                 case_param["executions"][record["cfg_path"]]
                 .get("actions", {})
                 .get("apply", None)
             )
 
-        log.info("Putting record into request execution dict")
-        request.cls.executions[int(request.node.callspec.id)]["record"] = record
-
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_sf_execution_aborted(self, request, mut_output, case_param):
-        """
-        Assert that the execution record has an assoicated Step Function execution that is aborted or doesn't exist if
-        the upstream execution was rejected before the target Step Function execution was created
-        """
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        sf = boto3.client("stepfunctions")
-
-        log.debug(f'Target Execution Status: {record["status"]}')
-        if record["status"] != "aborted":
-            pytest.skip("Execution approval action is not set to `aborted`")
-
-        try:
-            execution_arn = [
-                execution["executionArn"]
-                for execution in sf.list_executions(
-                    stateMachineArn=mut_output["state_machine_arn"]
-                )["executions"]
-                if execution["name"] == record["execution_id"]
-            ][0]
-        except IndexError:
-            log.info(
-                "Execution record status was set to aborted before associated Step Function execution was created"
-            )
-            assert (
-                case_param["executions"][record["cfg_path"]]["sf_execution_exists"]
-                is False
-            )
-        else:
-            assert (
-                sf.describe_execution(executionArn=execution_arn)["status"] == "ABORTED"
-            )
-
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_sf_execution_exists(self, request, mut_output):
-        """Assert execution record has an associated Step Function execution that hasn't been aborted"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        sf = boto3.client("stepfunctions")
-
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        if record["status"] == "aborted":
-            pytest.skip("Execution approval action is set to `aborted`")
+    def sf_execution(self, request, mut_output, record, target_execution):
 
         execution_arn = [
             execution["executionArn"]
@@ -417,53 +329,19 @@ class E2E:
             if execution["name"] == record["execution_id"]
         ][0]
 
-        assert sf.describe_execution(executionArn=execution_arn)["status"] in [
-            "RUNNING",
-            "SUCCEEDED",
-            "FAILED",
-            "TIMED_OUT",
-        ]
+        return sf.describe_execution(executionArn=execution_arn)
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.usefixtures("target_execution")
     @pytest.mark.dependency()
-    def test_terra_run_plan(self, request, mut_output):
-        """Assert terra run plan task within Step Function execution succeeded"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_sf_execution_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
+    def terra_run_plan_status(self, request, mut_output, record, target_execution):
         execution_arn = utils.get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
 
-        utils.assert_terra_run_status(execution_arn, "Plan", "TaskSucceeded")
+        return utils.get_state_finished_status(execution_arn, "Plan")
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.dependency()
-    @pytest.mark.usefixtures("target_execution")
-    def test_approval_request(self, request, mut_output):
-        """Assert that there are no errors within the latest invocation of the approval request Lambda function"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_terra_run_plan[{request.node.callspec.id}]"
-            ],
-        )
-
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        execution_arn = utils.get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
-        sf = boto3.client("stepfunctions")
-
+    def approval_request_status_code(self, execution_arn):
         status_code = None
         while not status_code:
             time.sleep(10)
@@ -478,94 +356,30 @@ class E2E:
                     == "publish.waitForTaskToken"
                 ):
                     out = json.loads(event["taskSubmittedEventDetails"]["output"])
-                    status_code = out["SdkHttpMetadata"]["HttpStatusCode"]
+                    return out["SdkHttpMetadata"]["HttpStatusCode"]
 
-        log.info("Assert approval request succeeded")
-        assert status_code == 200
-
-    @pytest.mark.dependency()
-    @pytest.mark.usefixtures("target_execution")
-    def test_approval_response(self, request, mut_output):
-        """Assert that the approval response returns a success status code"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]"
-            ],
-        )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-        sf = boto3.client("stepfunctions")
-
-        log.info("Testing Approval Task")
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == record["execution_id"]
-        ][0]
-        msg = get_sf_approval_state_msg(execution_arn)
-        approval_url = msg["ApprovalURL"]
-        task_token = msg["TaskToken"]
-        voter = msg["Voters"][0]
-
-        log.debug(f"Approval URL: {approval_url}")
-        log.debug(f"Voter: {voter}")
-        headers = {
-            "content-type": "application/json",
-        }
-        query_params = {
-            "X-SES-Signature-256": get_email_approval_sig(
-                mut_output["email_approval_secret"],
-                record["execution_id"],
-                voter,
-                request.cls.executions[int(request.node.callspec.id)]["action"],
-            ),
-            "taskToken": task_token,
-            "recipient": voter,
-            "action": request.cls.executions[int(request.node.callspec.id)]["action"],
-            "ex": record["execution_id"],
-            "exArn": execution_arn,
-        }
-        approval_url = (
-            approval_url
-            + "ses?"
-            + "&".join([f"{k}={aws_encode(v)}" for k, v in query_params.items()])
-        )
-
+    def ses_approval_response(self, request, mut_output, execution_arn, action):
+        approval_url = ""
+        headers = ""
+        # look into using mechanize to interact with html forum
+        # and submit via click()
+        # if not able to, parse html for forum data and use
+        # requests POST()
         response = requests.post(approval_url, headers=headers)
         log.debug(f"Response:\n{response.text}")
 
         response.raise_for_status()
 
-    @pytest.mark.dependency()
-    @pytest.mark.usefixtures("target_execution")
-    def test_approval_denied(self, request, mut_output):
-        """Assert that the Reject task state is executed and that the Step Function output includes a failed status attribute"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
-            ],
-        )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-        sf = boto3.client("stepfunctions")
+        return response
 
-        if request.cls.executions[int(request.node.callspec.id)]["action"] == "approve":
-            pytest.skip("Approval action is set to `approve`")
+    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
+    def terra_run_apply_status(self, approval_response, execution_arn):
+        return utils.get_state_finished_status(execution_arn, "Apply")
 
-        if record["is_rollback"]:
-            request.cls.expect_failed_trigger_sf = True
-        else:
-            request.cls.executions[int(request.node.callspec.id) + 1][
-                "test_rollback_providers_executions_exists"
-            ] = True
-
-        execution_arn = utils.get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
+    # runs cleanup tasks only if step function deploy task was executed
+    @pytest.mark.usefixtures("destroy_scenario_tf_resources")
+    def finished_sf_execution(self, terra_run_apply_status, execution_arn):
+        """Assert Step Function execution succeeded"""
         log.info("Waiting for execution to finish")
         execution_status = None
         while execution_status not in ["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]:
@@ -574,123 +388,4 @@ class E2E:
             execution_status = response["status"]
             log.debug(f"Execution status: {execution_status}")
 
-        out = json.loads(response["output"])
-        log.debug(f"Execution output: {pformat(out)}")
-
-        log.info(
-            "Assert that the Reject task passed a failed status within execution output"
-        )
-        assert out["status"] == "failed"
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_terra_run_deploy(self, request, mut_output):
-        """Assert terra run deploy task within Step Function execution succeeded"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
-            ],
-        )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        if request.cls.executions[int(request.node.callspec.id)]["action"] == "reject":
-            pytest.skip("Approval action is set to `reject`")
-
-        execution_arn = utils.get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
-        utils.assert_terra_run_status(execution_arn, "Apply", "TaskSucceeded")
-
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    # runs cleanup tasks only if step function deploy task was executed
-    @pytest.mark.usefixtures("destroy_scenario_tf_resources")
-    def test_sf_execution_status(self, request, mut_output):
-        """Assert Step Function execution succeeded"""
-        sf = boto3.client("stepfunctions")
-
-        # ensure that if test_target_execution_record_exists fails/skips and doesn't
-        # create the request.executions 'action' key, this test won't raise a key error
-        # finding the 'action' key within the second dependency logic below and results in skipping the test entirely
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        if request.cls.executions[int(request.node.callspec.id)]["action"] == "approve":
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_terra_run_deploy[{request.node.callspec.id}]"
-                ],
-            )
-        else:
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]"
-                ],
-            )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == record["execution_id"]
-        ][0]
-        response = sf.describe_execution(executionArn=execution_arn)
-        assert response["status"] == "SUCCEEDED"
-
-    @pytest.mark.dependency()
-    def test_merge_lock_unlocked(self, request, mut_output, case_param):
-        """Assert that the merge lock is unlocked after the deploy stack is finished"""
-        ssm = boto3.client("ssm")
-
-        # if trigger SF fails, the merge lock will not be unlocked
-        if getattr(request.cls, "expect_failed_trigger_sf", False):
-            pytest.skip("One of the trigger sf Lambda invocations was expected to fail")
-
-        elif case_param.get("expect_failed_create_deploy_stack", False):
-            # merge lock should be unlocked if error is caught within
-            # task's update_executions_with_new_deploy_stack()
-            log.info("Assert merge lock is unlocked")
-            assert (
-                ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
-                    "Value"
-                ]
-                == "none"
-            )
-
-        else:
-            last_execution = request.cls.executions[len(request.cls.executions) - 1]
-
-            log.debug(f"Last execution request dict:\n{pformat(last_execution)}")
-
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_sf_execution_status[{len(request.cls.executions) - 1}]"
-                ],
-            )
-
-            utils.wait_for_lambda_invocation(
-                mut_output["trigger_sf_function_name"],
-                datetime.utcfromtimestamp(last_execution["testing_start_time"] / 1000),
-                expected_count=1,
-                timeout=60,
-            )
-
-            log.info("Assert merge lock is unlocked")
-            assert (
-                ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
-                    "Value"
-                ]
-                == "none"
-            )
+        return response
