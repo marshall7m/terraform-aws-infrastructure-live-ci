@@ -1,8 +1,9 @@
 locals {
-  approval_request_name  = "${var.prefix}-request"
-  approval_response_name = "${var.prefix}-response"
-  approval_logs          = "${var.prefix}-approval"
-  approval_sender_arn    = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn, var.approval_sender_arn)
+  approval_request_name         = "${var.prefix}-request"
+  approval_response_name        = "${var.prefix}-response"
+  approval_logs                 = "${var.prefix}-approval"
+  approval_sender_arn           = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn, var.approval_sender_arn)
+  ses_approval_subject_template = "${local.step_function_name} - Need Approval for Path: {{path}}"
 }
 
 resource "aws_sns_topic" "approval" {
@@ -216,6 +217,6 @@ resource "aws_ses_identity_policy" "approval" {
 
 resource "aws_ses_template" "approval" {
   name    = local.approval_request_name
-  subject = "${local.step_function_name} - Need Approval for Path: {{path}}"
+  subject = local.ses_approval_subject_template
   html    = file("${path.module}/approval_template.html")
 }

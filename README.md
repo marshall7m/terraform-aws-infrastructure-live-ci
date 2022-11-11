@@ -242,6 +242,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_receiver_function_name"></a> [receiver\_function\_name](#output\_receiver\_function\_name) | Name of the Lambda Receiver Function |
 | <a name="output_receiver_role_arn"></a> [receiver\_role\_arn](#output\_receiver\_role\_arn) | ARN of the Lambda Receiver Function |
 | <a name="output_scan_type_ssm_param_name"></a> [scan\_type\_ssm\_param\_name](#output\_scan\_type\_ssm\_param\_name) | Name of the AWS SSM Parameter store value used to determine the scan type within the create deploy stack task |
+| <a name="output_ses_approval_subject_template"></a> [ses\_approval\_subject\_template](#output\_ses\_approval\_subject\_template) | Template used for formulating SES approval email subject line |
 | <a name="output_step_function_arn"></a> [step\_function\_arn](#output\_step\_function\_arn) | ARN of the Step Function |
 | <a name="output_step_function_name"></a> [step\_function\_name](#output\_step\_function\_name) | Name of the Step Function |
 | <a name="output_trigger_sf_function_name"></a> [trigger\_sf\_function\_name](#output\_trigger\_sf\_function\_name) | Name of the Lambda Function used for triggering Step Function execution(s) |

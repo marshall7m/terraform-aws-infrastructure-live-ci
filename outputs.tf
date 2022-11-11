@@ -259,3 +259,8 @@ output "approval_response_ses_secret" {
   value       = aws_ssm_parameter.email_approval_secret.value
   sensitive   = true
 }
+
+output "ses_approval_subject_template" {
+  description = "Template used for formulating SES approval email subject line"
+  value       = local.ses_approval_subject_template
+}
