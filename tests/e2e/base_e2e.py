@@ -44,7 +44,7 @@ class E2E:
     @pytest.fixture(scope="class")
     def pr(self, repo, mut_output, request):
         """
-        Creates and destroys GitHub PR.
+        Manages lifecycle of GitHub PR associated with the test case.
         Current implementation creates all PR changes within one commit.
         """
         base_commit_id = repo.get_branch(mut_output["base_branch"]).commit.sha
@@ -85,7 +85,7 @@ class E2E:
     @timeout_decorator.timeout(30)
     @pytest.fixture(scope="class")
     def merge_lock_pr_status(self, repo, mut_output, pr):
-        """Gets merge lock commit status"""
+        """Returns merge lock finished commit status"""
 
         return get_finished_commit_status(
             mut_output["merge_lock_status_check_name"], repo, pr["head_commit_id"]
@@ -94,8 +94,7 @@ class E2E:
     @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
     def pr_plan_pending_statuses(self, request, mut_output, pr, repo):
-        """Assert PR plan tasks initial commit statuses were created"""
-
+        """Returns list of PR plan tasks' initial commit statuses"""
         log.info("Waiting for all PR plan commit statuses to be created")
         expected_count = len(
             [
@@ -121,8 +120,7 @@ class E2E:
     @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
     def pr_plan_finished_statuses(self, pr_plan_pending_statuses, mut_output, pr, repo):
-        """Assert PR plan tasks commit statuses were updated"""
-
+        """Returns list of PR plan tasks' finished commit statuses"""
         log.info("Waiting for all PR plan commit statuses to be updated")
         wait = 15
         statuses = []
@@ -211,7 +209,7 @@ class E2E:
     @timeout_decorator.timeout(600)
     @pytest.fixture(scope="class")
     def create_deploy_stack_task_status(self, request, repo, mut_output, pr, merge_pr):
-        """Assert create deploy stack status matches it's expected status"""
+        """Returns create deploy stack finished status"""
         return get_finished_commit_status(
             mut_output["create_deploy_stack_status_check_name"],
             repo,
@@ -262,7 +260,7 @@ class E2E:
 
     @pytest.fixture(scope="class")
     def action(self, request, record):
-
+        """Returns the voter approval action associated with Step Function execution"""
         if record["is_rollback"]:
             return request.cls.case["executions"][record["cfg_path"]]["actions"][
                 "rollback_providers"
@@ -276,6 +274,7 @@ class E2E:
 
     @pytest.fixture(scope="class")
     def execution_arn(mut_output, record):
+        """Returns Step Function execution's ARN"""
         return get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
@@ -283,11 +282,13 @@ class E2E:
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.fixture(scope="class")
     def terra_run_plan_status(self, request, mut_output, record, execution_arn):
+        """Returns Step Function execution's Plan state finished status"""
         return get_sf_state_event(execution_arn, "Plan", "stateExitedEventDetails")
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.fixture(scope="class")
     def approval_request(self, execution_arn, terra_run_plan_status):
+        """Returns approval request Lambda Function's response"""
         status_code = None
         while not status_code:
             time.sleep(10)
@@ -306,6 +307,7 @@ class E2E:
 
     @pytest.fixture(scope="class")
     def ses_approval_response(self, mut_output, action, approval_request):
+        """Returns approval response Lambda Function's response to voter's email client"""
         res = ses_approval(
             os.environ.get("APPROVAL_RECIPIENT_EMAIL"),
             os.environ.get("APPROVAL_RECIPIENT_PASSWORD"),
@@ -319,11 +321,12 @@ class E2E:
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.fixture(scope="class")
     def terra_run_apply_status(self, ses_approval_response, execution_arn):
+        """Returns Step Function execution's Apply state finished status"""
         return get_sf_state_event(execution_arn, "Apply", "stateExitedEventDetails")
 
     @pytest.fixture(scope="class")
     def finished_sf_execution(self, terra_run_apply_status, execution_arn):
-        """Assert Step Function execution succeeded"""
+        """Returns Step Function execution finished status"""
         log.info("Waiting for execution to finish")
         execution_status = None
         while execution_status not in ["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]:
