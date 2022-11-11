@@ -101,6 +101,41 @@ resource "aws_iam_policy" "webhook_receiver" {
   policy = data.aws_iam_policy_document.webhook_receiver.json
 }
 
+module "ecr_receiver" {
+  count                   = var.webhook_receiver_image_address == null ? 1 : 0
+  source                  = "terraform-aws-modules/ecr/aws"
+  version                 = "1.5.0"
+  repository_name         = "${var.prefix}/receiver"
+  repository_force_delete = true
+  repository_type         = "private"
+  repository_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1,
+        description  = "Keep last 5 images",
+        selection = {
+          tagStatus     = "tagged",
+          tagPrefixList = ["v"],
+          countType     = "imageCountMoreThan",
+          countNumber   = 5
+        },
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "docker_registry_image" "ecr_receiver" {
+  count = var.webhook_receiver_image_address == null ? 1 : 0
+  name  = "${module.ecr_receiver[0].repository_url}:${local.module_docker_img_tag}"
+
+  build {
+    context = "${path.module}/functions/webhook_receiver"
+  }
+}
+
 module "lambda_webhook_receiver" {
   source  = "terraform-aws-modules/lambda/aws"
   version = "3.3.1"
@@ -113,10 +148,7 @@ module "lambda_webhook_receiver" {
   authorization_type         = "NONE"
   create_lambda_function_url = true
 
-  image_uri = coalesce(
-    var.webhook_receiver_image_address,
-    "ghcr.io/marshall7m/terraform-aws-infrastructure-live/receiver:${local.module_docker_img_tag}"
-  )
+  image_uri      = try(docker_registry_image.ecr_receiver[0].name, var.webhook_receiver_image_address)
   create_package = false
   package_type   = "Image"
   architectures  = ["x86_64"]
@@ -124,7 +156,7 @@ module "lambda_webhook_receiver" {
   environment_variables = {
     GITHUB_TOKEN_SSM_KEY          = local.github_token_ssm_key
     GITHUB_WEBHOOK_SECRET_SSM_KEY = aws_ssm_parameter.github_webhook_secret.name
-    COMMIT_STATUS_CONFIG_SSM_KEY  = local.commit_status_config_name
+    COMMIT_STATUS_CONFIG_SSM_KEY  = local.commit_status_config_ssm_key
     FILE_PATH_PATTERN             = trimspace(var.file_path_pattern)
     BASE_BRANCH                   = var.base_branch
 

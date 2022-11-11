@@ -71,10 +71,43 @@ locals {
     },
   ]
 
-  ecs_image_address = coalesce(
-    var.ecs_image_address,
-    "ghcr.io/marshall7m/terraform-aws-infrastructure-live:${local.module_docker_img_tag}"
-  )
+  ecs_image_address      = try(docker_registry_image.ecr_ecs_tasks[0].name, var.ecs_image_address)
+  repository_credentials = local.private_registry_secret_manager_arn != null ? { credentialsParameter = local.private_registry_secret_manager_arn } : null
+}
+
+module "ecr_ecs_tasks" {
+  count                   = var.ecs_image_address == null ? 1 : 0
+  source                  = "terraform-aws-modules/ecr/aws"
+  version                 = "1.5.0"
+  repository_name         = "${var.prefix}/tasks"
+  repository_force_delete = true
+  repository_type         = "private"
+  repository_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1,
+        description  = "Keep last 5 images",
+        selection = {
+          tagStatus     = "tagged",
+          tagPrefixList = ["v"],
+          countType     = "imageCountMoreThan",
+          countNumber   = 5
+        },
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "docker_registry_image" "ecr_ecs_tasks" {
+  count = var.ecs_image_address == null ? 1 : 0
+  name  = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}"
+
+  build {
+    context = "${path.module}/docker"
+  }
 }
 
 resource "aws_ssm_parameter" "scan_type" {
@@ -92,7 +125,7 @@ resource "aws_ecs_cluster" "this" {
 }
 
 module "ecs_execution_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.ecs_execution_role_name
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
@@ -133,7 +166,7 @@ resource "aws_cloudwatch_log_group" "ecs_tasks" {
 }
 
 module "plan_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name               = local.pr_plan_task_family
   custom_role_policy_arns = [aws_iam_policy.github_token_ssm_read_access.arn]
   statements = [
@@ -172,13 +205,11 @@ resource "aws_ecs_task_definition" "plan" {
   family = local.pr_plan_task_family
   container_definitions = jsonencode([
     {
-      name      = local.pr_plan_container_name
-      essential = true
-      image     = local.ecs_image_address
-      command   = ["python", "/src/pr_plan/plan.py"]
-      repositoryCredentials = {
-        credentialsParameter = local.private_registry_secret_manager_arn
-      }
+      name                  = local.pr_plan_container_name
+      essential             = true
+      image                 = local.ecs_image_address
+      command               = ["python", "/src/pr_plan/plan.py"]
+      repositoryCredentials = local.repository_credentials
       portMappings = [
         {
           containerPort = 80
@@ -237,7 +268,7 @@ resource "aws_ecs_task_definition" "plan" {
 }
 
 module "create_deploy_stack_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.create_deploy_stack_family
   custom_role_policy_arns = [
     aws_iam_policy.github_token_ssm_read_access.arn,
@@ -274,13 +305,11 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
   family = local.create_deploy_stack_family
   container_definitions = jsonencode([
     {
-      name      = local.create_deploy_stack_container_name
-      essential = true
-      image     = local.ecs_image_address
-      command   = ["python", "/src/create_deploy_stack/create_deploy_stack.py"]
-      repositoryCredentials = {
-        credentialsParameter = local.private_registry_secret_manager_arn
-      }
+      name                  = local.create_deploy_stack_container_name
+      essential             = true
+      image                 = local.ecs_image_address
+      command               = ["python", "/src/create_deploy_stack/create_deploy_stack.py"]
+      repositoryCredentials = local.repository_credentials
       portMappings = [
         {
           containerPort = 80
@@ -368,7 +397,7 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
 }
 
 module "apply_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.terra_run_family
   custom_role_policy_arns = [
     aws_iam_policy.github_token_ssm_read_access.arn,
@@ -399,13 +428,11 @@ resource "aws_ecs_task_definition" "terra_run" {
   family = local.terra_run_family
   container_definitions = jsonencode([
     {
-      name      = local.terra_run_container_name
-      essential = true
-      image     = local.ecs_image_address
-      command   = ["python", "/src/terra_run/run.py"]
-      repositoryCredentials = {
-        credentialsParameter = local.private_registry_secret_manager_arn
-      }
+      name                  = local.terra_run_container_name
+      essential             = true
+      image                 = local.ecs_image_address
+      command               = ["python", "/src/terra_run/run.py"]
+      repositoryCredentials = local.repository_credentials
       portMappings = [
         {
           containerPort = 80

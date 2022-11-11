@@ -143,6 +143,41 @@ resource "aws_iam_policy" "approval_response" {
   policy      = data.aws_iam_policy_document.approval_response.json
 }
 
+module "ecr_approval_response" {
+  count                   = var.approval_response_image_address == null ? 1 : 0
+  source                  = "terraform-aws-modules/ecr/aws"
+  version                 = "1.5.0"
+  repository_name         = "${var.prefix}/approval-response"
+  repository_force_delete = true
+  repository_type         = "private"
+  repository_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1,
+        description  = "Keep last 5 images",
+        selection = {
+          tagStatus     = "tagged",
+          tagPrefixList = ["v"],
+          countType     = "imageCountMoreThan",
+          countNumber   = 5
+        },
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "docker_registry_image" "ecr_approval_response" {
+  count = var.approval_response_image_address == null ? 1 : 0
+  name  = "${module.ecr_approval_response[0].repository_url}:${local.module_docker_img_tag}"
+
+  build {
+    context = "${path.module}/functions/approval_response"
+  }
+}
+
 module "lambda_approval_response" {
   source  = "terraform-aws-modules/lambda/aws"
   version = "3.3.1"
@@ -151,10 +186,7 @@ module "lambda_approval_response" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
 
-  image_uri = coalesce(
-    var.approval_response_image_address,
-    "ghcr.io/marshall7m/terraform-aws-infrastructure-live/approval-response:${local.module_docker_img_tag}"
-  )
+  image_uri      = try(docker_registry_image.ecr_approval_response[0].name, var.approval_response_image_address)
   create_package = false
   package_type   = "Image"
   architectures  = ["x86_64"]
