@@ -54,9 +54,7 @@ class E2E:
                     os.path.join(dir, str(uuid.uuid4()) + ".tf"): content
                     for content in cfg["pr_files_content"]
                 }
-                head_commit_id = push(
-                    repo, request.cls.case["head_ref"], request.cls.case["changes"]
-                )
+                head_commit_id = push(repo, request.cls.case["head_ref"], changes)
 
         log.info("Creating PR")
         pr = repo.create_pull(
@@ -108,6 +106,7 @@ class E2E:
         )
         log.debug(f"Expected count: {expected_count}")
         wait = 10
+        statuses = []
         while len(statuses) != expected_count:
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
@@ -126,6 +125,7 @@ class E2E:
 
         log.info("Waiting for all PR plan commit statuses to be updated")
         wait = 15
+        statuses = []
         while len(statuses) != len(pr_plan_pending_statuses):
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
