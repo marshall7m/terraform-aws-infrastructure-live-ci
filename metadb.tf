@@ -66,18 +66,17 @@ locals {
 }
 
 resource "aws_ssm_parameter" "metadb_ci_password" {
-  name        = "${local.metadb_name}_${var.metadb_ci_username}"
+  name        = "${var.prefix}_${local.metadb_name}_${var.metadb_ci_username}"
   description = "Metadb password used by ECS tasks"
   type        = "SecureString"
   value       = var.metadb_ci_password
 }
 
 
-# resource "aws_db_subnet_group" "metadb" {
-#   count = var.create_metadb_subnet_group ? 1 : 0
-#   name       = coalesce(var.metadb_subnet_group_name, local.cluster_identifier)
-#   subnet_ids = var.metadb_subnet_ids
-# }
+resource "aws_db_subnet_group" "metadb" {
+  name       = local.cluster_identifier
+  subnet_ids = var.metadb_subnet_ids
+}
 
 resource "aws_security_group" "metadb" {
   name        = "${var.prefix}-metadb"
@@ -95,7 +94,6 @@ resource "aws_rds_cluster" "metadb" {
   port               = var.metadb_port
   engine_mode        = "serverless"
   engine_version     = "11.13"
-  storage_type       = "io1"
   scaling_configuration {
     min_capacity = 2
   }
@@ -104,9 +102,7 @@ resource "aws_rds_cluster" "metadb" {
   skip_final_snapshot  = true
 
   vpc_security_group_ids = concat([aws_security_group.metadb.id], var.metadb_security_group_ids)
-  # db_subnet_group_name   = try(aws_db_subnet_group.metadb[0].name, var.metadb_subnet_group_name)
-  # db_subnet_group_name   = var.metadb_subnet_group_name
-
+  db_subnet_group_name   = aws_db_subnet_group.metadb.name
 }
 
 resource "random_id" "metadb_users" {
