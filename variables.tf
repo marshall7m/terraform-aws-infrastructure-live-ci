@@ -502,11 +502,11 @@ Apply: CloudWatch log stream displaying the Terraform apply output for a directo
 Execution: AWS Step Function page for the deployment flow execution 
 EOF
   type = object({
-    PrPlan            = optional(bool)
-    CreateDeployStack = optional(bool)
-    Plan              = optional(bool)
-    Apply             = optional(bool)
-    Execution         = optional(bool)
+    PrPlan            = optional(bool, true)
+    CreateDeployStack = optional(bool, true)
+    Plan              = optional(bool, true)
+    Apply             = optional(bool, true)
+    Execution         = optional(bool, true)
   })
   default = {}
 }
