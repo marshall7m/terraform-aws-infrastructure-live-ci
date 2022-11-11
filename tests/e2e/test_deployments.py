@@ -1,9 +1,10 @@
-from tests.e2e import base_e2e
-from tests.helpers.utils import dummy_tf_output
 import uuid
 
+from tests.e2e import base_e2e, sanity_checks
+from tests.helpers.utils import dummy_tf_output
 
-class TestSucceededDeployment(base_e2e.E2E):
+
+class TestApproveDeployment(base_e2e.E2E, sanity_checks.SanityChecks):
     """
     Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
     See the account_dim table to see the account dependency testing layout.
@@ -28,7 +29,7 @@ class TestSucceededDeployment(base_e2e.E2E):
     }
 
 
-class TestRejectedDeployment(base_e2e.E2E):
+class TestRejectedDeployment(base_e2e.E2E, sanity_checks.SanityChecks):
     """
     Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
     See the account_dim table to see the account dependency testing layout.
