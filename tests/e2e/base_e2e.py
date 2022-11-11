@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 import timeout_decorator
 from pprint import pformat
+import uuid
 
 import pytest
 import aurora_data_api
@@ -14,7 +15,9 @@ import requests
 from tests.helpers.utils import (
     get_finished_commit_status,
     get_execution_arn,
-    get_state_finished_status,
+    get_sf_state_event,
+    ses_approval,
+    push,
 )
 
 log = logging.getLogger(__name__)
@@ -31,21 +34,47 @@ class E2E:
     """
 
     @pytest.fixture(scope="class")
-    def case_param(self, request):
-        """Class case fixture used to determine the actions within the CI flow and the expected test assertions"""
-        return request.cls.case
+    def pr(self, repo, mut_output, request):
+        """
+        Creates and destroys GitHub PR.
+        Current implementation creates all PR changes within one commit.
+        """
+        base_commit_id = repo.get_branch(mut_output["source_branch"]).commit.sha
+        for dir, cfg in request.cls.case["executions"].items():
+            if "pr_files_content" in cfg:
+                changes = {
+                    os.path.join(dir, str(uuid.uuid4()) + ".tf"): content
+                    for content in cfg["pr_files_content"]
+                }
+                head_commit_id = push(
+                    repo, request.cls.case["head_ref"], request.cls.case["changes"]
+                )
 
-    @pytest.fixture(scope="module")
-    def tf_destroy_commit_ids(self, mut_output):
-        """Creates a list of commit Ids to be used for the source version of the teardown Terragrunt destroy tasks"""
-        commit_ids = [mut_output["base_branch"]]
+        log.info("Creating PR")
+        pr = repo.create_pull(
+            title=request.cls.case.get("title", f"test-{request.cls.case['head_ref']}"),
+            body=request.cls.case.get("body", "Test PR"),
+            base=mut_output["source_branch"],
+            head=request.cls.case["head_ref"],
+        )
 
-        def _add(id=None):
-            if id:
-                commit_ids.append(id)
-            return commit_ids
+        yield {
+            "full_name": repo.full_name,
+            "number": pr.number,
+            "base_commit_id": base_commit_id,
+            "head_commit_id": head_commit_id,
+            "base_ref": pr.base.ref,
+            "head_ref": pr.head.ref,
+        }
 
-        yield _add
+        log.info(f"Removing PR head ref branch: {request.cls.case['head_ref']}")
+        repo.get_git_ref(f"heads/{request.cls.case['head_ref']}").delete()
+
+        log.info(f"Closing PR: #{pr.number}")
+        try:
+            pr.edit(state="closed")
+        except Exception:
+            log.info("PR is merged or already closed")
 
     @timeout_decorator.timeout(30)
     @pytest.fixture(scope="class")
@@ -56,28 +85,20 @@ class E2E:
             mut_output["merge_lock_status_check_name"], repo, pr["head_commit_id"]
         )
 
-    @pytest.fixture(scope="class")
-    def case_param_modified_dirs(self, case_param):
-        """
-        Returns a list of directory paths that contains added or modified files
-        from the testing class's case attribute
-        """
-        return {
-            path: cfg
-            for path, cfg in case_param["executions"].items()
-            if cfg.get("pr_files_content", False)
-        }
-
     @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
-    def pr_plan_pending_statuses(self, mut_output, pr, repo, case_param_modified_dirs):
+    def pr_plan_pending_statuses(self, request, mut_output, pr, repo):
         """Assert PR plan tasks initial commit statuses were created"""
 
         log.info("Waiting for all PR plan commit statuses to be created")
-        expected_count = len(case_param_modified_dirs)
+        expected_count = len(
+            [
+                1
+                for cfg in request.cls.case["executions"].values()
+                if "pr_files_content" in cfg
+            ]
+        )
         log.debug(f"Expected count: {expected_count}")
-
-        statuses = {}
         wait = 10
         while len(statuses) != expected_count:
             log.debug(f"Waiting {wait} seconds")
@@ -87,22 +108,17 @@ class E2E:
                 for status in repo.get_commit(pr["head_commit_id"]).get_statuses()
                 if status.context != mut_output["merge_lock_status_check_name"]
             ]
+
         return statuses
 
     @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
-    def pr_plan_finished_statuses(
-        self, pr_plan_pending_statuses, mut_output, pr, repo, case_param_modified_dirs
-    ):
+    def pr_plan_finished_statuses(self, pr_plan_pending_statuses, mut_output, pr, repo):
         """Assert PR plan tasks commit statuses were updated"""
 
         log.info("Waiting for all PR plan commit statuses to be updated")
-        expected_count = len(case_param_modified_dirs)
-        log.debug(f"Expected count: {expected_count}")
-
-        statuses = []
         wait = 15
-        while len(statuses) != expected_count:
+        while len(statuses) != len(pr_plan_pending_statuses):
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
             statuses = [
@@ -185,9 +201,8 @@ class E2E:
             branch.edit_required_status_checks(contexts=status_checks)
 
     @timeout_decorator.timeout(600)
-    def create_deploy_stack_task_status(
-        self, request, repo, case_param, mut_output, pr, merge_pr
-    ):
+    @pytest.fixture(scope="class")
+    def create_deploy_stack_task_status(self, request, repo, mut_output, pr, merge_pr):
         """Assert create deploy stack status matches it's expected status"""
         return get_finished_commit_status(
             mut_output["create_deploy_stack_status_check_name"],
@@ -199,10 +214,11 @@ class E2E:
         300,
         exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')",
     )
-    def target_execution_record(
+    @pytest.fixture(scope="class")
+    def record(
         self, request, mut_output, pr, create_deploy_stack_task_status, target_execution
     ):
-        """Queries metadb until the target execution record exists and adds record to request fixture"""
+        """Queries metadb until the target execution record exists"""
         log.debug(f"Already tested execution IDs:\n{request.cls.tested_execution_ids}")
 
         results = None
@@ -236,42 +252,34 @@ class E2E:
 
         return record
 
-    def approval_action(self, record, case_param):
+    @pytest.fixture(scope="class")
+    def action(self, request, record):
 
         if record["is_rollback"]:
-            return case_param["executions"][record["cfg_path"]]["actions"][
+            return request.cls.case["executions"][record["cfg_path"]]["actions"][
                 "rollback_providers"
             ]
         else:
             return (
-                case_param["executions"][record["cfg_path"]]
+                request.cls.case["executions"][record["cfg_path"]]
                 .get("actions", {})
                 .get("apply", None)
             )
 
-    def sf_execution(self, request, mut_output, record, target_execution):
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == record["execution_id"]
-        ][0]
-
-        return sf.describe_execution(executionArn=execution_arn)
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.dependency()
-    def terra_run_plan_status(self, request, mut_output, record, target_execution):
-        execution_arn = get_execution_arn(
+    @pytest.fixture(scope="class")
+    def execution_arn(mut_output, record):
+        return get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
         )
 
-        return get_state_finished_status(execution_arn, "Plan")
+    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
+    @pytest.fixture(scope="class")
+    def terra_run_plan_status(self, request, mut_output, record, execution_arn):
+        return get_sf_state_event(execution_arn, "Plan", "stateExitedEventDetails")
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    def approval_request_status_code(self, execution_arn):
+    @pytest.fixture(scope="class")
+    def approval_request(self, execution_arn, terra_run_plan_status):
         status_code = None
         while not status_code:
             time.sleep(10)
@@ -286,28 +294,26 @@ class E2E:
                     == "publish.waitForTaskToken"
                 ):
                     out = json.loads(event["taskSubmittedEventDetails"]["output"])
-                    return out["SdkHttpMetadata"]["HttpStatusCode"]
+                    return out["SdkHttpMetadata"]
 
-    def ses_approval_response(self, request, mut_output, execution_arn, action):
-        approval_url = ""
-        headers = ""
-        # look into using mechanize to interact with html forum
-        # and submit via click()
-        # if not able to, parse html for forum data and use
-        # requests POST()
-        response = requests.post(approval_url, headers=headers)
-        log.debug(f"Response:\n{response.text}")
+    @pytest.fixture(scope="class")
+    def ses_approval_response(self, mut_output, action, approval_request):
+        res = ses_approval(
+            os.environ.get("APPROVAL_RECIPIENT_EMAIL"),
+            os.environ.get("APPROVAL_RECIPIENT_PASSWORD"),
+            os.environ.get("APPROVAL_REQUEST_SENDER_EMAIL"),
+            mut_output["ses_approval_subject_template"],
+            action,
+        )
 
-        response.raise_for_status()
-
-        return response
+        return res
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    def terra_run_apply_status(self, approval_response, execution_arn):
-        return get_state_finished_status(execution_arn, "Apply")
+    @pytest.fixture(scope="class")
+    def terra_run_apply_status(self, ses_approval_response, execution_arn):
+        return get_sf_state_event(execution_arn, "Apply", "stateExitedEventDetails")
 
-    # runs cleanup tasks only if step function deploy task was executed
-    @pytest.mark.usefixtures("destroy_scenario_tf_resources")
+    @pytest.fixture(scope="class")
     def finished_sf_execution(self, terra_run_apply_status, execution_arn):
         """Assert Step Function execution succeeded"""
         log.info("Waiting for execution to finish")
