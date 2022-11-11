@@ -9,3 +9,4 @@ python-on-whales
 starlette
 fastapi
 mangum
+mechanize

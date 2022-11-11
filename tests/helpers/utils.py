@@ -7,10 +7,15 @@ from pprint import pformat
 import subprocess
 import shlex
 import requests
+import imaplib
+import email
 
 import boto3
 import aurora_data_api
 import github
+from mechanize._form import parse_forms
+from mechanize._html import content_parser
+from mechanize import urlopen
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -373,3 +378,74 @@ def get_sf_approval_state_msg(arn: str) -> dict:
             return json.loads(event["taskScheduledEventDetails"]["parameters"])[
                 "Message"
             ]
+
+
+def ses_approval(
+    username: str,
+    password: str,
+    msg_from: str,
+    msg_subject: str,
+    action: str,
+    host=None,
+):
+    """
+    Finds the approval email within email inbox, extracts approval action
+    form from email and clicks on the requested approval action button
+
+    Arguments:
+        username: Email username
+        password: Email password/token
+        msg_from: Sender email address to filter the incoming emails from
+        msg_subject: Email subject to filter the incoming emails from
+        action: Approval action to choose within form
+        host: Email's associated host
+    """
+    url = "http://placeholder.com"
+    if not host:
+        if username.split("@")[-1] == "gmail.com":
+            host = "imap.gmail.com"
+        else:
+            raise Exception("Could not identify host")
+
+    with imaplib.IMAP4_SSL(host=host, port=imaplib.IMAP4_SSL_PORT) as imap_ssl:
+        log.debug("Logging into mailbox")
+        imap_ssl.login(username, password)
+
+        # filters messages by sender and subject
+        _, mails = imap_ssl.search(None, f'(FROM "{msg_from}" Subject "{msg_subject}")')
+        mail_ids = mails[0].decode().split()
+        log.debug(f"Total Mail IDs : {len(mail_ids)}")
+
+        for mail_id in mail_ids[-2:]:
+            _, mail_data = imap_ssl.fetch(mail_id, "(RFC822)")
+
+            message = email.message_from_bytes(mail_data[0][1])
+            for part in message.walk():
+                # parses only html data
+                if part.get_content_type() == "text/html":
+                    html = f"{part.get_payload(decode=True)}".replace("b'", "")
+                    # parses form data from html
+                    root = content_parser(html, url)
+                    form, _ = parse_forms(root, url)
+                    for f in form:
+                        # finds submit button within form
+                        if f.find_control(type="submit").value == action:
+                            # gets request instance associated with clicking on the button
+                            req = f.click()
+                            return urlopen(req)
+
+
+def get_execution_arn(arn: str, name: str) -> str:
+    """
+    Gets the Step Function execution ARN associated with the passed execution name
+
+    Arguments:
+        arn: ARN of the Step Function state machine
+        execution_id: Name of the Step Function execution
+    """
+    sf = boto3.client("stepfunctions")
+    for execution in sf.list_executions(stateMachineArn=arn)["executions"]:
+        if execution["name"] == name:
+            return execution["executionArn"]
+
+    raise Exception(f"No Step Function execution exists with name: {name}")
