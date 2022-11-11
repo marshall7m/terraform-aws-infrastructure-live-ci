@@ -167,7 +167,6 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="input_metadb_schema"></a> [metadb\_schema](#input\_metadb\_schema) | Schema for AWS RDS Postgres db | `string` | `"prod"` | no |
 | <a name="input_metadb_secret_arn"></a> [metadb\_secret\_arn](#input\_metadb\_secret\_arn) | Metadb secret ARN that will be used for metadb setup queries (used for local metadb testing) | `string` | `null` | no |
 | <a name="input_metadb_security_group_ids"></a> [metadb\_security\_group\_ids](#input\_metadb\_security\_group\_ids) | Additional AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
-| <a name="input_metadb_subnet_group_name"></a> [metadb\_subnet\_group\_name](#input\_metadb\_subnet\_group\_name) | Name of the metab subnet group name (defaults to metadb cluster identifier) | `string` | `null` | no |
 | <a name="input_metadb_subnet_ids"></a> [metadb\_subnet\_ids](#input\_metadb\_subnet\_ids) | AWS VPC subnet IDs to host the metadb within | `list(string)` | n/a | yes |
 | <a name="input_metadb_username"></a> [metadb\_username](#input\_metadb\_username) | Master username of the metadb | `string` | `"root"` | no |
 | <a name="input_plan_cpu"></a> [plan\_cpu](#input\_plan\_cpu) | Number of CPU units the PR plan task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |

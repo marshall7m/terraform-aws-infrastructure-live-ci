@@ -130,12 +130,6 @@ variable "create_approval_sender_policy" {
   default     = true
 }
 
-variable "metadb_subnet_group_name" {
-  description = "Name of the metab subnet group name (defaults to metadb cluster identifier)"
-  type        = string
-  default     = null
-}
-
 variable "create_metadb_subnet_group" {
   description = "Determines if a AWS RDS subnet group should be created for the metadb"
   type        = bool

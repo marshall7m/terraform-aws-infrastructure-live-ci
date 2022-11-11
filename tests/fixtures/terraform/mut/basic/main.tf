@@ -62,7 +62,6 @@ module "mut_infrastructure_live_ci" {
 
   approval_sender_arn           = var.approval_sender_arn
   create_approval_sender_policy = var.create_approval_sender_policy
-  metadb_subnet_group_name      = var.metadb_subnet_group_name
   create_metadb_subnet_group    = var.create_metadb_subnet_group
 
   account_parent_cfg = [
