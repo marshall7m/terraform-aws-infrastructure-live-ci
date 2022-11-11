@@ -17,7 +17,7 @@ import python_on_whales
 import requests
 from python_on_whales import docker
 
-from tests.helpers.utils import rds_data_client, terra_version, push
+from tests.helpers.utils import rds_data_client, push
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -165,20 +165,6 @@ def aws_credentials():
     os.environ["AWS_DEFAULT_REGION"] = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
 
 
-@pytest.fixture(scope="session")
-def terraform_version(request):
-    """Terraform version that will be installed and used"""
-    terra_version("terraform", request.param, overwrite=True)
-    return request.param
-
-
-@pytest.fixture(scope="session")
-def terragrunt_version(request):
-    """Terragrunt version that will be installed and used"""
-    terra_version("terragrunt", request.param, overwrite=True)
-    return request.param
-
-
 @pytest.fixture(scope="module")
 def repo(request):
     log.info(f"Creating repo from template: {request.param}")
@@ -309,6 +295,7 @@ def tfvars_files(
     secret_env_vars = {
         "registry_password": os.environ.get("REGISTRY_PASSWORD"),
         "github_token_ssm_value": os.environ.get("GITHUB_TOKEN"),
+        "approval_recipient_email": os.environ.get("APPROVAL_RECIPIENT_EMAIL"),
     }
 
     secret_filepath = parent / "secret.auto.tfvars.json"
@@ -386,7 +373,7 @@ def mut_output(request, reset_moto_server, tfvars_files):
         cache_dir=cache_dir,
     )
 
-    tf.setup(cleanup_on_exit=True, extra_files=tfvars_files, use_cache=True)
+    tf.setup(cleanup_on_exit=False, extra_files=tfvars_files, use_cache=True)
     tf.apply(auto_approve=True, use_cache=True)
 
     return tf.output(use_cache=True)
