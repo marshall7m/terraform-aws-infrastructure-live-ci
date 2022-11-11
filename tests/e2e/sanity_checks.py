@@ -58,7 +58,9 @@ class SanityChecks:
         )
 
     @pytest.mark.dependency()
-    def test_sf_execution_aborted(self, request, mut_output, record, sf_execution):
+    def test_sf_execution_aborted(
+        self, request, mut_output, record, finished_sf_execution
+    ):
         """
         Assert that the execution record has an assoicated Step Function execution that is aborted or doesn't exist if
         the upstream execution was rejected before the target Step Function execution was created
@@ -71,8 +73,8 @@ class SanityChecks:
             pytest.skip("Execution approval action is not set to `aborted`")
 
         # execution may have been aborted before creating SF execution
-        if sf_execution:
-            assert sf_execution["status"] == "ABORTED"
+        if finished_sf_execution:
+            assert finished_sf_execution["status"] == "ABORTED"
 
     @pytest.mark.dependency()
     def test_sf_execution_exists(sf_execution, record):
