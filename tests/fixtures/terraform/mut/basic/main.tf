@@ -5,6 +5,9 @@ locals {
 }
 
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+data "aws_ecr_authorization_token" "token" {}
 
 module "mut_infrastructure_live_ci" {
   source = "../../../../../../../..//"
@@ -32,11 +35,7 @@ module "mut_infrastructure_live_ci" {
   vpc_id         = module.vpc.vpc_id
   ecs_subnet_ids = module.vpc.public_subnets
 
-  private_registry_auth          = true
-  create_private_registry_secret = true
-  registry_username              = var.registry_username
-  registry_password              = var.registry_password
-  ecs_image_address              = var.ecs_image_address
+  ecs_image_address = var.ecs_image_address
 
   webhook_receiver_image_address = var.webhook_receiver_image_address
 
