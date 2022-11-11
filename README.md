@@ -26,8 +26,9 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >=1.3.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 3.44 |
+| <a name="requirement_docker"></a> [docker](#requirement\_docker) | >=2.23.0 |
 | <a name="requirement_github"></a> [github](#requirement\_github) | >= 4.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >=3.2.0 |
 
@@ -36,7 +37,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | Name | Version |
 |------|---------|
 | <a name="provider_aws"></a> [aws](#provider\_aws) | >= 3.44 |
-| <a name="provider_docker"></a> [docker](#provider\_docker) | n/a |
+| <a name="provider_docker"></a> [docker](#provider\_docker) | >=2.23.0 |
 | <a name="provider_github"></a> [github](#provider\_github) | >= 4.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | n/a |
 | <a name="provider_random"></a> [random](#provider\_random) | >=3.2.0 |
@@ -104,9 +105,9 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | [aws_ssm_parameter.merge_lock](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.scan_type](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [docker_registry_image.ecr_approval_response](https://registry.terraform.io/providers/hashicorp/docker/latest/docs/resources/registry_image) | resource |
-| [docker_registry_image.ecr_ecs_tasks](https://registry.terraform.io/providers/hashicorp/docker/latest/docs/resources/registry_image) | resource |
-| [docker_registry_image.ecr_receiver](https://registry.terraform.io/providers/hashicorp/docker/latest/docs/resources/registry_image) | resource |
+| [docker_registry_image.ecr_approval_response](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
+| [docker_registry_image.ecr_ecs_tasks](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
+| [docker_registry_image.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
 | [github_repository_webhook.this](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_webhook) | resource |
 | [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |

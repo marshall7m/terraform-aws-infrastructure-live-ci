@@ -236,7 +236,7 @@ output "create_deploy_stack_log_stream_prefix" {
 
 output "commit_status_config" {
   description = "Determines which commit statuses should be sent for each of the specified pipeline components"
-  value       = local.commit_status_config
+  value       = var.commit_status_config
 }
 
 output "account_parent_cfg" {

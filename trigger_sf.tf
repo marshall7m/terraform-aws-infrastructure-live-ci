@@ -47,7 +47,7 @@ module "lambda_trigger_sf" {
   environment_variables = {
     GITHUB_MERGE_LOCK_SSM_KEY    = aws_ssm_parameter.merge_lock.name
     GITHUB_TOKEN_SSM_KEY         = local.github_token_ssm_key
-    COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_name
+    COMMIT_STATUS_CONFIG_SSM_KEY = local.commit_status_config_ssm_key
     REPO_FULL_NAME               = local.repo_full_name
     STATE_MACHINE_ARN            = local.state_machine_arn
 
