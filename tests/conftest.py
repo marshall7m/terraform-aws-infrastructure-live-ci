@@ -301,8 +301,8 @@ def tfvars_files(
         secret_env_vars["approval_request_sender_email"] = os.environ[
             "APPROVAL_REQUEST_SENDER_EMAIL"
         ]
-        secret_env_vars["approval_recipient_emails"] = os.environ[
-            "APPROVAL_RECIPIENT_EMAIL"
+        secret_env_vars["approval_recipient_emails"] = [
+            os.environ["APPROVAL_RECIPIENT_EMAIL"]
         ]
         env_vars = {}
     else:
