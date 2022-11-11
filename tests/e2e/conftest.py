@@ -11,39 +11,8 @@ from tests.helpers.utils import check_ses_sender_email_auth
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-# needs explicit import of parent conftest.py
-pytest_plugins = [
-    "tests.conftest",
-]
-
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--skip-truncate", action="store_true", help="skips truncating execution table"
-    )
-
 
 def pytest_generate_tests(metafunc):
-    if metafunc.config.getoption("skip_truncate"):
-        metafunc.parametrize(
-            "truncate_executions",
-            [True],
-            scope="session",
-            ids=["skip_truncate"],
-            indirect=True,
-        )
-
-    tf_versions = [pytest.param("latest")]
-    if "terraform_version" in metafunc.fixturenames:
-        tf_versions = [pytest.param("latest")]
-        metafunc.parametrize(
-            "terraform_version",
-            tf_versions,
-            indirect=True,
-            scope="session",
-            ids=[f"tf_{v.values[0]}" for v in tf_versions],
-        )
-
     if hasattr(metafunc.cls, "case"):
         if "target_execution" in metafunc.fixturenames:
             # gets expected count of tf directories that will have their
@@ -73,23 +42,15 @@ def pytest_generate_tests(metafunc):
 @pytest.fixture(scope="session", autouse=True)
 def verify_ses_sender_email():
     if check_ses_sender_email_auth(
-        os.environ["TF_VAR_approval_request_sender_email"], send_verify_email=True
+        os.environ.get("APPROVAL_REQUEST_SENDER_EMAIL"), send_verify_email=True
     ):
         log.info(
-            f'Testing sender email address is verified: {os.environ["TF_VAR_approval_request_sender_email"]}'
+            f'Testing sender email address is verified: {os.environ["APPROVAL_REQUEST_SENDER_EMAIL"]}'
         )
     else:
         pytest.skip(
-            f'Testing sender email address is not verified: {os.environ["TF_VAR_approval_request_sender_email"]}'
+            f'Testing sender email address is not verified: {os.environ["APPROVAL_REQUEST_SENDER_EMAIL"]}'
         )
-
-
-@pytest.fixture(scope="session")
-def tf(tf_factory):
-    # using tf_factory() instead parametrizing terra-fixt's tf() fixture via pytest_generate_tests()
-    # since pytest_generate_tests() parametrization causes the session, module and class scoped fixture teardowns
-    # to be called after every test that uses the tf fixture
-    yield tf_factory(f"{os.path.dirname(os.path.realpath(__file__))}/fixtures")
 
 
 @pytest.fixture(scope="module")
@@ -113,26 +74,6 @@ def git_repo(tmp_path_factory):
     ).release()
 
     return repo
-
-
-@pytest.fixture(scope="module", autouse=True)
-def truncate_executions(request, mut_output):
-    # table setup is within tf module
-    # yielding none to define truncation as pytest teardown logic
-    yield None
-    if getattr(request, "param", False):
-        log.info("Skip truncating execution table")
-    else:
-        log.info("Truncating executions table")
-        with aurora_data_api.connect(
-            aurora_cluster_arn=mut_output["metadb_arn"],
-            secret_arn=mut_output["metadb_secret_manager_master_arn"],
-            database=mut_output["metadb_name"],
-            # recommended for DDL statements
-            continue_after_timeout=True,
-        ) as conn:
-            with conn.cursor() as cur:
-                cur.execute(f"TRUNCATE {mut_output['metadb_schema']}.executions")
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -169,13 +110,3 @@ def abort_hanging_sf_executions(mut_output):
             error="IntegrationTestsError",
             cause="Failed tests prevented execution from finishing",
         )
-
-
-@pytest.fixture(scope="module")
-def cleanup_dummy_repo(gh, request):
-    yield request.param
-    try:
-        log.info(f"Deleting dummy GitHub repo: {request.param}")
-        gh.get_user().get_repo(request.param).delete()
-    except github.UnknownObjectException:
-        log.info("GitHub repo does not exist")
