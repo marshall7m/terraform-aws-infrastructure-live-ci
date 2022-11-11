@@ -54,12 +54,12 @@ def verify_ses_sender_email():
 
 
 @pytest.fixture(scope="module")
-def git_repo(tmp_path_factory):
+def git_repo(tmp_path_factory, mut_output):
     dir = str(tmp_path_factory.mktemp("scenario-repo-"))
     log.debug(f"Scenario repo dir: {dir}")
 
     repo = git.Repo.clone_from(
-        f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
+        f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{mut_output["repo_full_name"]}.git',
         dir,
     )
 
