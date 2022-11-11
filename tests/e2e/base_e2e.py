@@ -11,6 +11,7 @@ import pytest
 import aurora_data_api
 import boto3
 import requests
+import github
 
 from tests.helpers.utils import (
     get_finished_commit_status,
@@ -30,8 +31,15 @@ sf = boto3.client("stepfunctions")
 class E2E:
     """
     Fixtures that interact with the CI/CD pipeline and/or retrieves data
-    associated with the pipeline execution
+    associated with the pipeline execution. Fixture dependencies reflect the order
+    of the CI/CD workflow.
     """
+
+    @pytest.fixture(scope="class")
+    def repo(self, mut_output):
+        return github.Github(os.environ["GITHUB_TOKEN"], retry=3).get_repo(
+            mut_output["repo_full_name"]
+        )
 
     @pytest.fixture(scope="class")
     def pr(self, repo, mut_output, request):
@@ -39,7 +47,7 @@ class E2E:
         Creates and destroys GitHub PR.
         Current implementation creates all PR changes within one commit.
         """
-        base_commit_id = repo.get_branch(mut_output["source_branch"]).commit.sha
+        base_commit_id = repo.get_branch(mut_output["base_branch"]).commit.sha
         for dir, cfg in request.cls.case["executions"].items():
             if "pr_files_content" in cfg:
                 changes = {
@@ -54,7 +62,7 @@ class E2E:
         pr = repo.create_pull(
             title=request.cls.case.get("title", f"test-{request.cls.case['head_ref']}"),
             body=request.cls.case.get("body", "Test PR"),
-            base=mut_output["source_branch"],
+            base=mut_output["base_branch"],
             head=request.cls.case["head_ref"],
         )
 
