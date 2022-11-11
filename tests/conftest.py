@@ -295,20 +295,16 @@ def tfvars_files(
     secret_env_vars = {
         "registry_password": os.environ.get("REGISTRY_PASSWORD"),
         "github_token_ssm_value": os.environ.get("GITHUB_TOKEN"),
-        "approval_recipient_email": os.environ.get("APPROVAL_RECIPIENT_EMAIL"),
     }
 
-    secret_filepath = parent / "secret.auto.tfvars.json"
-
-    with secret_filepath.open("w", encoding="utf-8") as f:
-        json.dump(secret_env_vars, f, indent=4, sort_keys=True)
-
     if os.environ.get("IS_REMOTE", False):
-        env_vars = {
-            "approval_request_sender_email": os.environ[
-                "APPROVAL_REQUEST_SENDER_EMAIL"
-            ],
-        }
+        secret_env_vars["approval_request_sender_email"] = os.environ[
+            "APPROVAL_REQUEST_SENDER_EMAIL"
+        ]
+        secret_env_vars["approval_recipient_emails"] = os.environ[
+            "APPROVAL_RECIPIENT_EMAIL"
+        ]
+        env_vars = {}
     else:
         # maps local endpoint URLs to terraform variables
         env_vars = {
@@ -351,6 +347,10 @@ def tfvars_files(
             "s3_use_path_style": True,
         }
 
+    secret_filepath = parent / "secret.auto.tfvars.json"
+    with secret_filepath.open("w", encoding="utf-8") as f:
+        json.dump(secret_env_vars, f, indent=4, sort_keys=True)
+
     testing_filepath = parent / "testing.auto.tfvars.json"
     with testing_filepath.open("w", encoding="utf-8") as f:
         json.dump(env_vars, f, indent=4, sort_keys=True)
@@ -376,4 +376,6 @@ def mut_output(request, reset_moto_server, tfvars_files):
     tf.setup(cleanup_on_exit=False, extra_files=tfvars_files, use_cache=True)
     tf.apply(auto_approve=True, use_cache=True)
 
-    return tf.output(use_cache=True)
+    yield tf.output(use_cache=True)
+
+    # tf.destroy(auto_approve=True)
