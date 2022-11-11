@@ -70,7 +70,7 @@ module "mut_infrastructure_live_ci" {
       name                = "dev"
       path                = "directory_dependency/dev-account"
       dependencies        = ["shared_services"]
-      voters              = ["success@simulator.amazonses.com"]
+      voters              = var.approval_recipient_emails
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
@@ -80,7 +80,7 @@ module "mut_infrastructure_live_ci" {
       name                = "shared_services"
       path                = "directory_dependency/shared-services-account"
       dependencies        = []
-      voters              = ["success@simulator.amazonses.com"]
+      voters              = var.approval_recipient_emails
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"

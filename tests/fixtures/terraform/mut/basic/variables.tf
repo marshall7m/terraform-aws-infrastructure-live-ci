@@ -180,3 +180,9 @@ variable "local_task_common_env_vars" {
   }))
   default = []
 }
+
+variable "approval_recipient_emails" {
+  description = "List of email addresses that will be sent approval request to"
+  type        = list(string)
+  default     = ["success@simulator.amazonses.com"]
+}

@@ -220,3 +220,7 @@ output "file_path_pattern" {
 output "github_webhook_secret_ssm_key" {
   value = module.mut_infrastructure_live_ci.github_webhook_secret_ssm_key
 }
+
+output "ses_approval_subject_template" {
+  value = module.mut_infrastructure_live_ci.ses_approval_subject_template
+}
