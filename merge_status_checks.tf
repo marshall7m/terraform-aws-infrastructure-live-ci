@@ -115,7 +115,7 @@ module "lambda_webhook_receiver" {
 
   image_uri = coalesce(
     var.webhook_receiver_image_address,
-    "ghcr.io/marshall7m/terraform-aws-infrastructure-live/webhook-receiver:${local.module_docker_img_tag}"
+    "ghcr.io/marshall7m/terraform-aws-infrastructure-live/receiver:${local.module_docker_img_tag}"
   )
   create_package = false
   package_type   = "Image"
