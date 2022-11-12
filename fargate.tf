@@ -106,8 +106,7 @@ resource "docker_registry_image" "ecr_ecs_tasks" {
   name  = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}"
 
   build {
-    no_cache = true
-    context  = "${path.module}/docker"
+    context = "${path.module}/docker"
   }
 }
 

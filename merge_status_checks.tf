@@ -132,8 +132,7 @@ resource "docker_registry_image" "ecr_receiver" {
   name  = "${module.ecr_receiver[0].repository_url}:${local.module_docker_img_tag}"
 
   build {
-    no_cache = true
-    context  = "${path.module}/functions/webhook_receiver"
+    context = "${path.module}/functions/webhook_receiver"
   }
 }
 
