@@ -284,7 +284,7 @@ EOF
 # SSM #
 
 variable "create_github_token_ssm_param" {
-  description = "Determines if the merge lock AWS SSM Parameter Store value should be created"
+  description = "Determines if a AWS SSM Parameter Store value should be created for the GitHub token"
   type        = bool
 }
 
