@@ -112,7 +112,7 @@ def trigger_pr_plan(
             log.info("Running ECS tasks")
             for path in account_diff_paths:
                 log.info(f"Directory: {path}")
-                context = f"Plan: {path}"
+                status_check_name = f"Plan: {path}"
                 try:
                     task = ecs.run_task(
                         cluster=os.environ["ECS_CLUSTER_ARN"],
@@ -145,7 +145,10 @@ def trigger_pr_plan(
                                             "name": "ROLE_ARN",
                                             "value": account["plan_role_arn"],
                                         },
-                                        {"name": "CONTEXT", "value": context},
+                                        {
+                                            "name": "STATUS_CHECK_NAME",
+                                            "value": status_check_name,
+                                        },
                                     ],
                                 }
                             ]
@@ -157,7 +160,7 @@ def trigger_pr_plan(
                     status_data = {
                         "state": "pending",
                         "description": "Terraform Plan",
-                        "context": context,
+                        "context": status_check_name,
                         "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["PR_PLAN_TASK_CONTAINER_NAME"] + "/" + task_id)}',
                     }
                 except Exception as e:
@@ -165,7 +168,7 @@ def trigger_pr_plan(
                     status_data = {
                         "state": "failure",
                         "description": "Terraform Plan",
-                        "context": context,
+                        "context": status_check_name,
                         "target_url": logs_url,
                     }
 
