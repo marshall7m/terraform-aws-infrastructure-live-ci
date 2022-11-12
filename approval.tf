@@ -174,7 +174,8 @@ resource "docker_registry_image" "ecr_approval_response" {
   name  = "${module.ecr_approval_response[0].repository_url}:${local.module_docker_img_tag}"
 
   build {
-    context = "${path.module}/functions/approval_response"
+    no_cache = true
+    context  = "${path.module}/functions/approval_response"
   }
 }
 
