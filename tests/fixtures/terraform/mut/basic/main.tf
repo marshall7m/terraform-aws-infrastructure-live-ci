@@ -51,8 +51,8 @@ module "mut_infrastructure_live_ci" {
     }
   ], var.local_task_common_env_vars)
 
-  tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
-
+  tf_state_read_access_policy   = aws_iam_policy.trigger_sf_tf_state_access.arn
+  ecs_assign_public_ip          = true
   create_github_token_ssm_param = var.create_github_token_ssm_param
   github_token_ssm_value        = var.github_token_ssm_value
 
