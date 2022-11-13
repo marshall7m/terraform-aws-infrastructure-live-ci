@@ -412,6 +412,10 @@ def ses_approval(
         log.debug("Logging into mailbox")
         imap_ssl.login(username, password)
 
+        _, mail_count = imap_ssl.select(mailbox="INBOX", readonly=True)
+        if mail_count == 0:
+            _, mail_count = imap_ssl.select(mailbox="[Gmail]/Spam", readonly=True)
+
         # filters messages by sender and subject
         _, mails = imap_ssl.search(None, f'(FROM "{msg_from}" Subject "{msg_subject}")')
         mail_ids = mails[0].decode().split()
