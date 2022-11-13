@@ -42,7 +42,8 @@ def get_ses_urls(msg: dict, secret: str, recipient: str) -> dict:
             **common_params,
             **{
                 "action": action,
-                "X-SES-Signature-256": get_email_approval_sig(
+                "X-SES-Signature-256": "sha256="
+                + get_email_approval_sig(
                     secret, msg["ExecutionName"], recipient, action
                 ),
             },
@@ -69,7 +70,7 @@ def send_approval(msg: dict, secret: str) -> dict:
 
     template_data = {
         "path": msg["Path"],
-        "logs_url": msg["LogsUrl"],
+        "logs_url": msg["PlanOutput"]["LogsUrl"],
         "execution_name": msg["ExecutionName"],
         "account_name": msg["AccountName"],
         "pr_id": msg["PullRequestID"],
