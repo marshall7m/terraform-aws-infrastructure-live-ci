@@ -269,13 +269,13 @@ class E2E:
         if record["is_rollback"]:
             return request.cls.case["executions"][record["cfg_path"]]["actions"][
                 "rollback_providers"
-            ]
+            ].capitalize()
         else:
             return (
                 request.cls.case["executions"][record["cfg_path"]]
                 .get("actions", {})
                 .get("apply", None)
-            )
+            ).capitalize()
 
     @pytest.fixture(scope="class")
     def execution_arn(self, mut_output, record):
@@ -311,13 +311,15 @@ class E2E:
                     return out["SdkHttpMetadata"]
 
     @pytest.fixture(scope="class")
-    def ses_approval_response(self, mut_output, action, approval_request):
+    def ses_approval_response(self, mut_output, action, record, approval_request):
         """Returns approval response Lambda Function's response to voter's email client"""
         res = ses_approval(
             os.environ.get("APPROVAL_RECIPIENT_EMAIL"),
             os.environ.get("APPROVAL_RECIPIENT_PASSWORD"),
             os.environ.get("APPROVAL_REQUEST_SENDER_EMAIL"),
-            mut_output["ses_approval_subject_template"],
+            mut_output["ses_approval_subject_template"].replace(
+                "{{path}}", record["cfg_path"]
+            ),
             action,
         )
 
