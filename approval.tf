@@ -95,7 +95,7 @@ module "lambda_approval_request" {
       source_arn = aws_sns_topic.approval.arn
     }
   }
-  create_unqualified_alias_allowed_triggers = false
+  create_unqualified_alias_allowed_triggers = true
   publish                                   = true
   policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
