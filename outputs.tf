@@ -102,12 +102,17 @@ output "scan_type_ssm_param_name" {
 
 output "ecs_apply_role_arn" {
   description = "IAM role ARN the AWS ECS terra run task can assume"
-  value       = module.apply_role.role_arn
+  value       = module.terra_run_apply_role.role_arn
 }
 
-output "ecs_plan_role_arn" {
-  description = "IAM role ARN the AWS ECS pr plan and terra run task can assume"
-  value       = module.plan_role.role_arn
+output "ecs_pr_plan_role_arn" {
+  description = "IAM role ARN the AWS ECS pr plan task can assume"
+  value       = module.pr_plan_role.role_arn
+}
+
+output "ecs_terra_run_plan_role_arn" {
+  description = "IAM role ARN the Terra Run AWS ECS plan task can assume"
+  value       = module.terra_run_plan_role.role_arn
 }
 
 output "ecs_terra_run_task_definition_arn" {
@@ -122,7 +127,7 @@ output "ecs_terra_run_task_container_name" {
 
 output "ecs_pr_plan_task_definition_arn" {
   description = "AWS ECS terra run task defintion ARN"
-  value       = aws_ecs_task_definition.plan.arn
+  value       = aws_ecs_task_definition.pr_plan.arn
 }
 
 output "ecs_pr_plan_container_name" {
@@ -132,7 +137,7 @@ output "ecs_pr_plan_container_name" {
 
 output "ecs_pr_plan_family" {
   description = "AWS ECS task definition family for the PR plan task"
-  value       = aws_ecs_task_definition.plan.family
+  value       = aws_ecs_task_definition.pr_plan.family
 }
 
 output "step_function_arn" {

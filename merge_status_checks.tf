@@ -70,7 +70,7 @@ data "aws_iam_policy_document" "webhook_receiver" {
       values   = [aws_ecs_cluster.this.arn]
     }
     resources = [
-      aws_ecs_task_definition.plan.arn,
+      aws_ecs_task_definition.pr_plan.arn,
       aws_ecs_task_definition.create_deploy_stack.arn
     ]
   }
@@ -90,7 +90,7 @@ data "aws_iam_policy_document" "webhook_receiver" {
     ]
     resources = [
       module.ecs_execution_role.role_arn,
-      module.plan_role.role_arn,
+      module.pr_plan_role.role_arn,
       module.create_deploy_stack_role.role_arn
     ]
   }
@@ -132,7 +132,8 @@ resource "docker_registry_image" "ecr_receiver" {
   name  = "${module.ecr_receiver[0].repository_url}:${local.module_docker_img_tag}"
 
   build {
-    context = "${path.module}/functions/webhook_receiver"
+    pull_parent = true
+    context     = "${path.module}/functions/webhook_receiver"
   }
 }
 
@@ -168,7 +169,7 @@ module "lambda_webhook_receiver" {
     MERGE_LOCK_SSM_KEY           = aws_ssm_parameter.merge_lock.name
     MERGE_LOCK_STATUS_CHECK_NAME = var.merge_lock_status_check_name
 
-    PR_PLAN_TASK_DEFINITION_ARN = aws_ecs_task_definition.plan.arn
+    PR_PLAN_TASK_DEFINITION_ARN = aws_ecs_task_definition.pr_plan.arn
     PR_PLAN_TASK_CONTAINER_NAME = local.pr_plan_container_name
     PR_PLAN_LOG_STREAM_PREFIX   = local.pr_plan_log_stream_prefix
 

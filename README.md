@@ -228,12 +228,13 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_ecs_create_deploy_stack_role_arn"></a> [ecs\_create\_deploy\_stack\_role\_arn](#output\_ecs\_create\_deploy\_stack\_role\_arn) | AWS ECS create deploy stack task IAM role ARN |
 | <a name="output_ecs_log_group_name"></a> [ecs\_log\_group\_name](#output\_ecs\_log\_group\_name) | Cloudwatch log group name for all ECS tasks |
 | <a name="output_ecs_network_config"></a> [ecs\_network\_config](#output\_ecs\_network\_config) | VPC network configurations for ECS tasks |
-| <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
 | <a name="output_ecs_pr_plan_container_name"></a> [ecs\_pr\_plan\_container\_name](#output\_ecs\_pr\_plan\_container\_name) | Name of the pr plan ECS task container |
 | <a name="output_ecs_pr_plan_family"></a> [ecs\_pr\_plan\_family](#output\_ecs\_pr\_plan\_family) | AWS ECS task definition family for the PR plan task |
+| <a name="output_ecs_pr_plan_role_arn"></a> [ecs\_pr\_plan\_role\_arn](#output\_ecs\_pr\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan task can assume |
 | <a name="output_ecs_pr_plan_task_definition_arn"></a> [ecs\_pr\_plan\_task\_definition\_arn](#output\_ecs\_pr\_plan\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#output\_ecs\_security\_group\_ids) | List of security groups IDs used ECS tasks |
 | <a name="output_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#output\_ecs\_subnet\_ids) | AWS VPC subnets IDs that the ECS tasks will be hosted in |
+| <a name="output_ecs_terra_run_plan_role_arn"></a> [ecs\_terra\_run\_plan\_role\_arn](#output\_ecs\_terra\_run\_plan\_role\_arn) | IAM role ARN the Terra Run AWS ECS plan task can assume |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_email_approval_secret"></a> [email\_approval\_secret](#output\_email\_approval\_secret) | Secret value used for authenticating email approval responses |

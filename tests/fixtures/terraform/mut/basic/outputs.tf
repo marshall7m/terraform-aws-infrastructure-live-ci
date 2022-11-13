@@ -152,8 +152,12 @@ output "ecs_apply_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_apply_role_arn
 }
 
-output "ecs_plan_role_arn" {
-  value = module.mut_infrastructure_live_ci.ecs_plan_role_arn
+output "ecs_pr_plan_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_pr_plan_role_arn
+}
+
+output "ecs_terra_run_plan_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_terra_run_plan_role_arn
 }
 
 output "email_approval_secret" {
