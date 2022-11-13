@@ -1,23 +1,24 @@
-import pytest
-import os
 import datetime
-import re
+import json
 import logging
+import os
+import re
+import shutil
 import time
 import uuid
-import json
-import shutil
 from typing import List
 
-import github
-import timeout_decorator
 import aurora_data_api
-import tftest
+import github
+import pytest
+from tftest import TerraformTestError
 import python_on_whales
 import requests
+import tftest
+import timeout_decorator
 from python_on_whales import docker
 
-from tests.helpers.utils import rds_data_client, push
+from tests.helpers.utils import push, rds_data_client
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -374,8 +375,15 @@ def mut_output(request, reset_moto_server, tfvars_files):
     )
 
     tf.setup(cleanup_on_exit=False, extra_files=tfvars_files, use_cache=True)
-    tf.apply(auto_approve=True, use_cache=True)
+
+    log.debug("Running terraform apply")
+    try:
+        tf.apply(auto_approve=True, use_cache=True)
+    except TerraformTestError as err:
+        log.debug(err, exc_info=True)
+        pytest.skip("terraform apply failed")
 
     yield tf.output(use_cache=True)
 
+    # log.debug("Running terraform destroy")
     # tf.destroy(auto_approve=True)
