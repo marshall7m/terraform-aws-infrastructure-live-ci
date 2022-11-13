@@ -292,7 +292,8 @@ def get_finished_commit_status(context, repo, commit_id, wait=3, token=None):
         log.debug(f"Waiting {wait} seconds")
         time.sleep(wait)
         status = get_commit_status(repo.full_name, commit_id, context, token)
-        log.debug(f"Status state: {status.state}")
+        state = getattr(status, "state", None)
+        log.debug(f"Status state: {state}")
 
     return status
 
