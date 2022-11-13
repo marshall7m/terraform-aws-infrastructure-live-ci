@@ -112,21 +112,27 @@ def main() -> None:
         print(e)
         state = "failure"
 
+    log_url = get_task_log_url()
+
     try:
-        if os.environ["STATE_NAME"] == "Apply":
+        if os.environ["STATE_NAME"] == "Plan":
+            sf = boto3.client(
+                "stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL")
+            )
+            # send ECS task log url with task token to allow Request Approval state to use log url
+            # within approval email
+            if state == "success":
+                output = json.dumps({"LogsUrl": log_url})
+                sf.send_task_success(taskToken=os.environ["TASK_TOKEN"], output=output)
+            else:
+                sf.send_task_failure(taskToken=os.environ["TASK_TOKEN"])
+
+        elif os.environ["STATE_NAME"] == "Apply":
             update_new_resources()
+
     except Exception as e:
         log.error(e, exc_info=True)
         state = "failure"
-
-    log_url = get_task_log_url()
-    sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
-
-    if state == "success":
-        output = json.dumps({"LogsUrl": log_url})
-        sf.send_task_success(taskToken=os.environ["TASK_TOKEN"], output=output)
-    else:
-        sf.send_task_failure(taskToken=os.environ["TASK_TOKEN"])
 
     try:
         send = json.loads(os.environ["COMMIT_STATUS_CONFIG"])[os.environ["STATE_NAME"]]
@@ -134,6 +140,7 @@ def main() -> None:
         log.error(
             f"Update SSM parameter for commit status config to include: {os.environ['STATE_NAME']}"
         )
+
     if send:
         send_commit_status(state, log_url)
 
