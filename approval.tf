@@ -21,10 +21,9 @@ data "aws_iam_policy_document" "lambda_approval_request" {
     sid    = "SESAccess"
     effect = "Allow"
     actions = [
-      "ses:SendRawEmail",
-      "ses:SendEmail"
+      "ses:SendBulkTemplatedEmail"
     ]
-    resources = ["*"]
+    resources = [aws_ses_template.approval.arn]
     condition {
       test     = "StringEquals"
       variable = "ses:FromAddress"
