@@ -136,3 +136,35 @@ resource "aws_iam_policy" "commit_status_config" {
   description = "Allows read/write access to commit status config SSM Parameter Store value"
   policy      = data.aws_iam_policy_document.commit_status_config.json
 }
+
+data "aws_iam_policy_document" "ecs_plan" {
+  statement {
+    sid       = "CrossAccountTerraformPlanAccess"
+    effect    = "Allow"
+    actions   = ["sts:AssumeRole"]
+    resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
+  }
+}
+
+resource "aws_iam_policy" "ecs_plan" {
+  name        = "${var.prefix}-ecs-plan-access"
+  description = "Allows task to assume Terraform plan role ARNs"
+  policy      = data.aws_iam_policy_document.commit_status_config.json
+}
+
+data "aws_iam_policy_document" "ecs_write_logs" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
+  }
+}
+
+resource "aws_iam_policy" "ecs_write_logs" {
+  name        = "${var.prefix}-ecs-logs-write-access"
+  description = "Allows task to write to centralized CloudWatch log group"
+  policy      = data.aws_iam_policy_document.ecs_write_logs.json
+}
