@@ -44,6 +44,10 @@ resource "aws_iam_policy" "merge_lock_ssm_param_full_access" {
   policy      = data.aws_iam_policy_document.merge_lock_ssm_param_full_access.json
 }
 
+data "aws_kms_key" "ssm_kms_key" {
+  key_id = "alias/aws/ssm"
+}
+
 data "aws_iam_policy_document" "github_token_ssm_read_access" {
   statement {
     effect    = "Allow"
@@ -58,6 +62,14 @@ data "aws_iam_policy_document" "github_token_ssm_read_access" {
       "ssm:GetParameters"
     ]
     resources = [local.github_token_arn]
+  }
+  statement {
+    sid    = "DecryptGitHubTokenSSMParameter"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt"
+    ]
+    resources = [data.aws_kms_key.ssm_kms_key.arn]
   }
 }
 
