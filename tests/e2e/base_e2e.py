@@ -35,6 +35,8 @@ class E2E:
     of the CI/CD workflow.
     """
 
+    tested_execution_ids = []
+
     @pytest.fixture(scope="class")
     def repo(self, mut_output):
         return github.Github(os.environ["GITHUB_TOKEN"], retry=3).get_repo(
@@ -117,7 +119,6 @@ class E2E:
 
         return statuses
 
-    @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
     def pr_plan_finished_statuses(self, pr_plan_pending_statuses, mut_output, pr, repo):
         """Returns list of PR plan tasks' finished commit statuses"""
@@ -214,6 +215,7 @@ class E2E:
             mut_output["create_deploy_stack_status_check_name"],
             repo,
             pr["head_commit_id"],
+            wait=10,
         )
 
     @timeout_decorator.timeout(
@@ -256,6 +258,9 @@ class E2E:
 
         log.debug(f"Target Execution Record:\n{pformat(record)}")
 
+        # ensures other parametrized record fixtures don't use this record
+        request.cls.tested_execution_ids.append(record["execution_id"])
+
         return record
 
     @pytest.fixture(scope="class")
@@ -273,7 +278,7 @@ class E2E:
             )
 
     @pytest.fixture(scope="class")
-    def execution_arn(mut_output, record):
+    def execution_arn(self, mut_output, record):
         """Returns Step Function execution's ARN"""
         return get_execution_arn(
             mut_output["state_machine_arn"], record["execution_id"]
@@ -281,7 +286,7 @@ class E2E:
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.fixture(scope="class")
-    def terra_run_plan_status(self, request, mut_output, record, execution_arn):
+    def terra_run_plan_status(self, execution_arn):
         """Returns Step Function execution's Plan state finished status"""
         return get_sf_state_event(execution_arn, "Plan", "stateExitedEventDetails")
 
