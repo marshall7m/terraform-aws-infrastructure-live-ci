@@ -41,7 +41,7 @@ resource "aws_sfn_state_machine" "this" {
               AwsvpcConfiguration = local.sf_ecs_network_config
             }
             Overrides = {
-              TaskRoleArn = module.plan_role.role_arn
+              TaskRoleArn = module.terra_run_plan_role.role_arn
               ContainerOverrides = [
                 {
                   Name = local.terra_run_container_name
@@ -61,9 +61,9 @@ resource "aws_sfn_state_machine" "this" {
               ]
             }
           }
-          Resource   = "arn:aws:states:::ecs:runTask.sync"
+          Resource   = "arn:aws:states:::ecs:runTask.waitForTaskToken"
           Type       = "Task"
-          ResultPath = "$.PlanOutput"
+          ResultPath = "$.LogsUrl"
           Catch = [
             {
               ErrorEquals = ["States.ALL"]
@@ -86,7 +86,7 @@ resource "aws_sfn_state_machine" "this" {
               "ExecutionName.$"   = "$$.Execution.Name"
               "AccountName.$"     = "$.account_name"
               "PullRequestID.$"   = "$.pr_id"
-              "PlanOutput"        = "$.PlanOutput"
+              "LogsUrl"           = "$.LogsUrl"
             }
           }
           Resource   = "arn:aws:states:::sns:publish.waitForTaskToken"
@@ -125,7 +125,7 @@ resource "aws_sfn_state_machine" "this" {
               AwsvpcConfiguration = local.sf_ecs_network_config
             }
             Overrides = {
-              TaskRoleArn = module.apply_role.role_arn
+              TaskRoleArn = module.terra_run_apply_role.role_arn
               ContainerOverrides = [
                 {
                   Name = local.terra_run_container_name
@@ -248,8 +248,8 @@ module "sf_role" {
       ]
       resources = [
         module.ecs_execution_role.role_arn,
-        module.plan_role.role_arn,
-        module.apply_role.role_arn
+        module.terra_run_plan_role.role_arn,
+        module.terra_run_apply_role.role_arn
       ]
     },
     {

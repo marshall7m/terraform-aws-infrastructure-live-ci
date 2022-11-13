@@ -106,7 +106,8 @@ resource "docker_registry_image" "ecr_ecs_tasks" {
   name  = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}"
 
   build {
-    context = "${path.module}/docker"
+    pull_parent = true
+    context     = "${path.module}/docker"
   }
 }
 
@@ -165,27 +166,11 @@ resource "aws_cloudwatch_log_group" "ecs_tasks" {
   retention_in_days = var.ecs_task_logs_retention_in_days
 }
 
-module "plan_role" {
+module "pr_plan_role" {
   source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name               = local.pr_plan_task_family
   custom_role_policy_arns = [aws_iam_policy.github_token_ssm_read_access.arn]
-  statements = [
-    {
-      sid       = "CrossAccountTerraformPlanAccess"
-      effect    = "Allow"
-      actions   = ["sts:AssumeRole"]
-      resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ]
-      resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
-    }
-  ]
-  trusted_services = ["ecs-tasks.amazonaws.com"]
+  trusted_services        = ["ecs-tasks.amazonaws.com"]
 }
 
 resource "aws_security_group" "ecs_tasks" {
@@ -201,7 +186,7 @@ resource "aws_security_group" "ecs_tasks" {
   }
 }
 
-resource "aws_ecs_task_definition" "plan" {
+resource "aws_ecs_task_definition" "pr_plan" {
   family = local.pr_plan_task_family
   container_definitions = jsonencode([
     {
@@ -258,7 +243,7 @@ resource "aws_ecs_task_definition" "plan" {
   cpu                      = var.plan_cpu
   memory                   = var.plan_memory
   execution_role_arn       = module.ecs_execution_role.role_arn
-  task_role_arn            = module.plan_role.role_arn
+  task_role_arn            = module.pr_plan_role.role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   runtime_platform {
@@ -274,6 +259,8 @@ module "create_deploy_stack_role" {
     aws_iam_policy.github_token_ssm_read_access.arn,
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.ecs_write_logs.arn,
+    aws_iam_policy.ecs_plan.arn,
     var.tf_state_read_access_policy
   ]
   statements = [
@@ -282,14 +269,6 @@ module "create_deploy_stack_role" {
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ]
-      resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
     },
     {
       sid       = "LambdaTriggerSFAccess"
@@ -396,13 +375,35 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
   }
 }
 
-module "apply_role" {
+module "terra_run_plan_role" {
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
+  role_name = "${local.terra_run_family}-plan"
+  custom_role_policy_arns = [
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.ecs_write_logs.arn,
+    var.tf_state_read_access_policy
+  ]
+  statements = [
+    {
+      effect = "Allow"
+      actions = [
+        "states:SendTaskSuccess",
+        "states:SendTaskFailure"
+      ]
+      resources = [local.state_machine_arn]
+    }
+  ]
+  trusted_services = ["ecs-tasks.amazonaws.com"]
+}
+
+module "terra_run_apply_role" {
   source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.terra_run_family
   custom_role_policy_arns = [
     aws_iam_policy.github_token_ssm_read_access.arn,
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.ecs_write_logs.arn,
     var.tf_state_read_access_policy
   ]
   statements = [
@@ -411,14 +412,6 @@ module "apply_role" {
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = var.account_parent_cfg[*].apply_role_arn
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ]
-      resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
     }
   ]
   trusted_services = ["ecs-tasks.amazonaws.com"]

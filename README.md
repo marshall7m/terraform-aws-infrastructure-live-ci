@@ -46,7 +46,6 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_apply_role"></a> [apply\_role](#module\_apply\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
 | <a name="module_create_deploy_stack_role"></a> [create\_deploy\_stack\_role](#module\_create\_deploy\_stack\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
 | <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
 | <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
@@ -58,8 +57,10 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_lambda_webhook_receiver"></a> [lambda\_webhook\_receiver](#module\_lambda\_webhook\_receiver) | terraform-aws-modules/lambda/aws | 3.3.1 |
-| <a name="module_plan_role"></a> [plan\_role](#module\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_pr_plan_role"></a> [pr\_plan\_role](#module\_pr\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
 | <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_terra_run_apply_role"></a> [terra\_run\_apply\_role](#module\_terra\_run\_apply\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_terra_run_plan_role"></a> [terra\_run\_plan\_role](#module\_terra\_run\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
 
 ## Resources
 
@@ -73,7 +74,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | [aws_db_subnet_group.metadb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group) | resource |
 | [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
 | [aws_ecs_task_definition.create_deploy_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
-| [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
+| [aws_ecs_task_definition.pr_plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_iam_policy.approval_response](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
