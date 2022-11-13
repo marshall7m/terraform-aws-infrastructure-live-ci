@@ -63,7 +63,7 @@ resource "aws_sfn_state_machine" "this" {
           }
           Resource   = "arn:aws:states:::ecs:runTask.waitForTaskToken"
           Type       = "Task"
-          ResultPath = "$.LogsUrl"
+          ResultPath = "$.PlanOutput"
           Catch = [
             {
               ErrorEquals = ["States.ALL"]
@@ -86,7 +86,7 @@ resource "aws_sfn_state_machine" "this" {
               "ExecutionName.$"   = "$$.Execution.Name"
               "AccountName.$"     = "$.account_name"
               "PullRequestID.$"   = "$.pr_id"
-              "LogsUrl"           = "$.LogsUrl"
+              "PlanOutput.$"      = "$.PlanOutput"
             }
           }
           Resource   = "arn:aws:states:::sns:publish.waitForTaskToken"
