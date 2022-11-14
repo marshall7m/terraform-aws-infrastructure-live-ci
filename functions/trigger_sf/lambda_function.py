@@ -29,13 +29,18 @@ class ExecutionFinished:
         is_rollback: bool,
         commit_id: str,
         cfg_path: str,
+        account_id: str,
     ):
         """
         Handles AWS EventBridge rule event that's triggered by finished Step
         Function executions
 
         Arguments:
-            status: Step Funciton execution event data from EventBridge rule
+            execution: Step Funciton execution's output execution_id value
+            status: Step Funciton execution's output status value
+            is_rollback: Step Funciton execution's output is_rollback value
+            commit_id: Step Funciton execution's output commit_id value
+            cfg_path: Step Funciton execution's output cfg_path value
             account_id: AWS account ID of the Step Function machine
         """
         self.execution_id = execution_id
@@ -43,6 +48,7 @@ class ExecutionFinished:
         self.is_rollback = is_rollback
         self.commit_id = commit_id
         self.cfg_path = cfg_path
+        self.account_id = account_id
 
     def update_status(self) -> None:
         """Updates finished Step Function execution's associated metadb record status"""
@@ -98,12 +104,12 @@ class ExecutionFinished:
                     log.debug(f"Rollback records:\n{rollback_records}")
 
     def abort_sf_executions(self, ids):
+        """Aborts running Step Function executions with passed id"""
         sf = boto3.client("stepfunctions")
         log.info("Aborting Step Function executions")
         for _id in ids:
             log.debug(f"Execution ID: {_id}")
             try:
-                print(sf)
                 execution_arn = [
                     execution["executionArn"]
                     for execution in sf.list_executions(
@@ -125,6 +131,7 @@ class ExecutionFinished:
             )
 
     def abort_commit_records(self) -> List[str]:
+        """Sets metadb record status value to "aborted" for all records with specified commit ID"""
         with aurora_data_api.connect(
             database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
         ) as conn, conn.cursor() as cur:
@@ -215,6 +222,7 @@ def get_target_execution_ids() -> List[str]:
 
 
 def start_sf_executions() -> None:
+    """Sets metadb record statuses to "running" and starts Step Function executions for each record"""
     ids = get_target_execution_ids()
     log.debug(f"IDs: {ids}")
     log.debug(f"Count: {len(ids)}")
@@ -261,7 +269,7 @@ def lambda_handler(event, context):
     Otherwise runs the Step Function deployment flow or resets the SSM Parameter Store merge
     lock value if deployment stack is empty.
     """
-    log.debug(f"Event:\n{event}")
+    log.debug(f"Event:\n{json.dumps(event, indent=4)}")
     try:
         if event.get("execution"):
             output = event["execution"].get("output")
@@ -274,15 +282,11 @@ def lambda_handler(event, context):
                     **{"status": event["execution"]["status"].lower()},
                 }
 
-            log.info(f"Triggered via Step Function Event:\n{execution}")
-
-            send_commit_status = json.loads(
-                ssm.get_parameter(Name=os.environ["COMMIT_STATUS_CONFIG_SSM_KEY"])[
-                    "Parameter"
-                ]["Value"]
-            ).get("Execution")
+            log.info("Triggered via Step Function Event")
+            log.debug("Execution event: \n%s", json.dumps(execution, indent=4))
 
             execution = ExecutionFinished(
+                execution_id=execution["execution_id"],
                 status=execution["status"],
                 is_rollback=execution["is_rollback"],
                 commit_id=execution["commit_id"],
@@ -291,7 +295,7 @@ def lambda_handler(event, context):
             )
 
             execution.update_status()
-            execution.send_commit_status(send_commit_status)
+            execution.send_commit_status()
             execution.handle_failed_execution()
 
         running = check_executions_running()
