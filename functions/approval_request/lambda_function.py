@@ -2,7 +2,6 @@ import logging
 import json
 import os
 import sys
-from pprint import pformat
 
 import boto3
 
@@ -77,7 +76,7 @@ def send_approval(msg: dict, secret: str) -> dict:
         "account_name": msg["AccountName"],
         "pr_id": msg["PullRequestID"],
     }
-    log.debug(f"Default Template Data:\n{template_data}")
+    log.debug(f"Default Template Data:\n{json.dumps(template_data, indent=4)}")
 
     destinations = []
     # need to create a separate destination object for each address since the
@@ -95,7 +94,7 @@ def send_approval(msg: dict, secret: str) -> dict:
                 ),
             }
         )
-    log.debug(f"Destinations\n {destinations}")
+    log.debug(f"Destinations\n {json.dumps(destinations, indent=4)}")
 
     log.info("Sending bulk email")
     output = ses.send_bulk_templated_email(
@@ -105,7 +104,7 @@ def send_approval(msg: dict, secret: str) -> dict:
         Destinations=destinations,
     )
 
-    log.debug(f"Response:\n{output}")
+    log.debug(f"Response:\n{json.dumps(output, indent=4)}")
     failed_count = 0
     for msg in output["Status"]:
         if msg["Status"] != "Success":
@@ -126,7 +125,7 @@ def send_approval(msg: dict, secret: str) -> dict:
 
 def lambda_handler(event, context):
     """Sends approval request email to email addresses associated with Terragrunt path"""
-    log.debug(f"Lambda Event:\n{pformat(event)}")
+    log.debug(f"Lambda Event:\n{json.dumps(event, indent=4)}")
 
     msg = json.loads(event["Records"][0]["Sns"]["Message"])
 

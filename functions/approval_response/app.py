@@ -1,7 +1,7 @@
 import sys
 import os
 import json
-from pprint import pformat
+import logging
 
 import aurora_data_api
 import boto3
@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(__file__))
 from utils import get_logger
 
 log = get_logger()
+log.setLevel(logging.DEBUG)
 
 sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
 rds_data_client = boto3.client(
@@ -55,7 +56,7 @@ def update_vote(execution_id: str, action: str, voter: str, task_token: str):
                     )
                 )
 
-    log.debug(f"Record:\n{pformat(record)}")
+    log.debug(f"Record:\n{json.dumps(record, indent=4)}")
     if (
         len(record["approval_voters"]) == record["min_approval_count"]
         or len(record["rejection_voters"]) == record["min_rejection_count"]
