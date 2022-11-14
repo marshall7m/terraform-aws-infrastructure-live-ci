@@ -8,12 +8,10 @@ import boto3
 import aurora_data_api
 import github
 
-sys.path.append(os.path.dirname(__file__) + "/..")
-from common_lambda.utils import ClientException
+sys.path.append(os.path.dirname(__file__))
+from utils import get_logger, ClientException
 
-log = logging.getLogger(__name__)
-stream = logging.StreamHandler(sys.stdout)
-log.addHandler(stream)
+log = get_logger()
 log.setLevel(logging.DEBUG)
 
 sf = boto3.client("stepfunctions")

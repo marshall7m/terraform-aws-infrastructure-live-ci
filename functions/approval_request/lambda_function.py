@@ -1,18 +1,20 @@
-import boto3
 import logging
 import json
 import os
 import sys
 from pprint import pformat
 
-sys.path.append(os.path.dirname(__file__) + "/..")
-from common_lambda.utils import (
+import boto3
+
+sys.path.append(os.path.dirname(__file__))
+from utils import (
     aws_encode,
     get_email_approval_sig,
     voter_actions,
+    get_logger,
 )  # noqa : E402
 
-log = logging.getLogger(__name__)
+log = get_logger()
 log.setLevel(logging.DEBUG)
 
 ssm = boto3.client("ssm")
