@@ -7,7 +7,10 @@ locals {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-data "aws_ecr_authorization_token" "token" {}
+data "aws_ecr_authorization_token" "token" {
+  # count is needed since if running locally, tf will fail since moto currently doesn't support endpoint
+  count = var.is_remote ? 1 : 0
+}
 
 module "mut_infrastructure_live_ci" {
   source = "../../../../../../../..//"

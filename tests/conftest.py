@@ -305,10 +305,11 @@ def tfvars_files(
         secret_env_vars["approval_recipient_emails"] = [
             os.environ["APPROVAL_RECIPIENT_EMAIL"]
         ]
-        env_vars = {}
+        env_vars = {"is_remote": True}
     else:
         # maps local endpoint URLs to terraform variables
         env_vars = {
+            "is_remote": False,
             "local_task_common_env_vars": [
                 {"name": "SSM_ENDPOINT_URL", "value": os.environ["MOTO_ENDPOINT_URL"]},
                 {

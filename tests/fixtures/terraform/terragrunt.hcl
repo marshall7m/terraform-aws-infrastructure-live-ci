@@ -110,5 +110,11 @@ variable "s3_use_path_style" {
   type        = bool
   default     = null
 }
+
+variable "is_remote" {
+  description = "Determines if module under testing is provisioned locally or not"
+  type = bool
+  default = true
+}
 EOF
 }
