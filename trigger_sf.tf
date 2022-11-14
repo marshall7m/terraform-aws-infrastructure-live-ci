@@ -64,9 +64,8 @@ module "lambda_trigger_sf" {
       source_arn = aws_cloudwatch_event_rule.sf_execution.arn
     }
   }
-  create_unqualified_alias_allowed_triggers = false
-
-  publish = true
+  create_unqualified_alias_allowed_triggers = true
+  publish                                   = true
 
   attach_policies               = true
   number_of_policies            = 6
