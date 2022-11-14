@@ -381,7 +381,7 @@ def mut_output(request, reset_moto_server, tfvars_files):
         tf.apply(auto_approve=True, use_cache=True)
     except TerraformTestError as err:
         log.debug(err, exc_info=True)
-        pytest.skip("terraform apply failed")
+        pytest.fail("terraform apply failed")
 
     yield tf.output(use_cache=True)
 
