@@ -106,12 +106,13 @@ class CreateStack:
         log.info("Running Graph Scan")
         target_diff_paths = []
 
-        parent = repo.get_commit(os.environ["COMMIT_ID"] + "^")
         log.debug(
-            f'Getting git differences between commits: {parent.sha} and {os.environ["COMMIT_ID"]}'
+            "Getting git differences between commits: %s and %s",
+            os.environ["BASE_COMMIT_ID"],
+            os.environ["COMMIT_ID"],
         )
         for diff in repo.compare(
-            os.environ["COMMIT_ID"] + "^", os.environ["COMMIT_ID"]
+            os.environ["BASE_COMMIT_ID"], os.environ["COMMIT_ID"]
         ).files:
             # collects directories that contain new, modified and removed .hcl/.tf files
             if diff.status in ["added", "modified", "removed"]:
