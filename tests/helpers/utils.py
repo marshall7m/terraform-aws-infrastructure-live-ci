@@ -7,15 +7,16 @@ from pprint import pformat
 import subprocess
 import shlex
 import requests
+from requests.models import Response
 import imaplib
 import email
 
 import boto3
 import aurora_data_api
 import github
+import timeout_decorator
 from mechanize._form import parse_forms
 from mechanize._html import content_parser
-from mechanize import urlopen
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -286,14 +287,23 @@ def wait_for_finished_task(
     return task_status
 
 
-def get_finished_commit_status(context, repo, commit_id, wait=3, token=None):
+def get_finished_commit_status(
+    context, repo, commit_id, wait=3, token=None, max_attempts=30
+):
+    attempts = 0
     state = None
     while state in [None, "pending"]:
+        if attempts == max_attempts:
+            raise TimeoutError(
+                "Max Attempts reached -- Finished commit status is not found"
+            )
         log.debug(f"Waiting {wait} seconds")
         time.sleep(wait)
         status = get_commit_status(repo.full_name, commit_id, context, token)
         state = getattr(status, "state", None)
         log.debug(f"Status state: {state}")
+
+        attempts += 1
 
     return status
 
@@ -312,6 +322,18 @@ def get_commit_status(
             return status
 
 
+def get_sf_status_event(arn, state, wait=10):
+    exited_event = None
+    log.debug(f"Waiting on state to finish: {state}")
+    while not exited_event:
+        time.sleep(wait)
+        exited_event = get_sf_state_event(arn, state, "stateExitedEventDetails")
+    status_event = [e for e in exited_event if e["id"] == exited_event["id"] - 1][0]
+    "taskFailedEventDetails"
+    return status_event
+
+
+# TODO: remove and replace with get_sf_status_event() in integration tests
 def assert_sf_state_type(
     execution_arn: str, state_name: str, expected_status: str
 ) -> None:
@@ -345,6 +367,7 @@ def assert_sf_state_type(
         raise e
 
 
+@timeout_decorator.timeout(30)
 def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
     """
     Returns the Step Funciton execution event associated with the passed state name
@@ -355,6 +378,7 @@ def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
         event_type: Step Function execution event type (e.g. taskScheduledEventDetails, stateExitedEventDetails)
     """
     sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
+
     events = sf.get_execution_history(
         executionArn=execution_arn, includeExecutionData=True
     )["events"]
@@ -388,13 +412,13 @@ def ses_approval(
     msg_subject: str,
     action: str,
     host=None,
-):
+) -> Response:
     """
     Finds the approval email within email inbox, extracts approval action
     form from email and clicks on the requested approval action button
 
     Arguments:
-        username: Email username
+        username: Email username/address
         password: Email password/token
         msg_from: Sender email address to filter the incoming emails from
         msg_subject: Email subject to filter the incoming emails from
@@ -417,27 +441,35 @@ def ses_approval(
             _, mail_count = imap_ssl.select(mailbox="[Gmail]/Spam", readonly=True)
 
         # filters messages by sender and subject
-        _, mails = imap_ssl.search(None, f'(FROM "{msg_from}" Subject "{msg_subject}")')
-        mail_ids = mails[0].decode().split()
+        _, mails = imap_ssl.search(
+            None, f'(FROM "{msg_from}" Subject "{msg_subject}" To "{username}")'
+        )
+
+        mail_ids = sorted(mails[0].decode().split())
         log.debug(f"Total Mail IDs : {len(mail_ids)}")
 
-        for mail_id in mail_ids[-2:]:
-            _, mail_data = imap_ssl.fetch(mail_id, "(RFC822)")
+        try:
+            # gets largest email ID which is the most recent
+            mail_id = mail_ids[-1]
+        except IndexError:
+            raise Exception("Message is not found")
 
-            message = email.message_from_bytes(mail_data[0][1])
-            for part in message.walk():
-                # parses only html data
-                if part.get_content_type() == "text/html":
-                    html = f"{part.get_payload(decode=True)}".replace("b'", "")
-                    # parses form data from html
-                    root = content_parser(html, url)
-                    form, _ = parse_forms(root, url)
-                    for f in form:
-                        # finds submit button within form
-                        if f.find_control(type="submit").value == action:
-                            # gets request instance associated with clicking on the button
-                            req = f.click()
-                            return urlopen(req)
+        _, mail_data = imap_ssl.fetch(mail_id, "(RFC822)")
+        message = email.message_from_bytes(mail_data[0][1])
+
+        for part in message.walk():
+            # parses only html data
+            if part.get_content_type() == "text/html":
+                html = f"{part.get_payload(decode=True)}".replace("b'", "")
+                # parses form data from html
+                root = content_parser(html, url)
+                form, _ = parse_forms(root, url)
+                for f in form:
+                    # finds submit button within form
+                    if f.find_control(type="submit").value == action:
+                        # gets request instance associated with clicking on the button
+                        req = f.click()
+                        return requests.post(req.full_url)
 
 
 def get_execution_arn(arn: str, name: str) -> str:
