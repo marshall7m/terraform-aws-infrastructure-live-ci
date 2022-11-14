@@ -4,10 +4,7 @@ import re
 import urllib.parse
 import urllib
 import logging
-
-
-log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+import sys
 
 
 class ClientException(Exception):
@@ -22,6 +19,26 @@ class ServerException(Exception):
     pass
 
 
+voter_actions = ["approve", "reject"]
+
+
+def get_logger():
+    if len(logging.getLogger().handlers) > 0:
+        # within lambda env
+        # creates custom handler that doesn't propagate configurations
+        # to parent lambda logger
+        h = logging.StreamHandler(sys.stdout)
+        h.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+        log = logging.getLogger(__name__)
+        log.addHandler(h)
+        log.propagate = False
+    else:
+        # within local env
+        log = logging.getLogger(__name__)
+
+    return log
+
+
 def aws_encode(value):
     """Encodes value into AWS friendly URL component"""
     value = urllib.parse.quote_plus(value)
@@ -34,34 +51,6 @@ def aws_decode(value):
     value = urllib.parse.unquote_plus(re.sub(r"\$", "%", value))
     value = re.sub(r"\s", "+", value)
     return urllib.parse.unquote_plus(value)
-
-
-def aws_response(
-    response, status_code=200, content_type="application/json", isBase64Encoded=False
-):
-    if isinstance(response, str):
-        return {
-            "statusCode": status_code,
-            "body": response,
-            "headers": {"content-type": content_type},
-            "isBase64Encoded": isBase64Encoded,
-        }
-
-    elif isinstance(response, dict):
-        return {
-            "statusCode": response.get("statusCode", status_code),
-            "body": str(response.get("body", "")),
-            "headers": {"content-type": response.get("content-type", content_type)},
-            "isBase64Encoded": response.get("isBase64Encoded", isBase64Encoded),
-        }
-
-    elif isinstance(response, Exception):
-        return {
-            "statusCode": 500,
-            "body": str(response),
-            "headers": {"content-type": content_type},
-            "isBase64Encoded": isBase64Encoded,
-        }
 
 
 def get_email_approval_sig(
@@ -81,18 +70,3 @@ def get_email_approval_sig(
     ).hexdigest()
 
     return sig
-
-
-def validate_sig(actual_sig: str, expected_sig: str):
-    """
-    Authenticates request by comparing the request's SHA256
-    signature value to the expected SHA-256 value
-    """
-
-    log.debug(f"Actual: {actual_sig}")
-    log.debug(f"Expected: {expected_sig}")
-
-    authorized = hmac.compare_digest(str(actual_sig), str(expected_sig))
-
-    if not authorized:
-        raise ClientException("Header signature and expected signature do not match")
