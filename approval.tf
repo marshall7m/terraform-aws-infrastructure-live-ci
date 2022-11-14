@@ -1,6 +1,9 @@
 locals {
-  approval_request_name         = "${var.prefix}-request"
-  approval_response_name        = "${var.prefix}-response"
+  approval_request_name = "${var.prefix}-request"
+
+  approval_response_name    = "${var.prefix}-response"
+  approval_response_context = "${path.module}/functions/approval_response"
+
   approval_logs                 = "${var.prefix}-approval"
   approval_sender_arn           = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn, var.approval_sender_arn)
   ses_approval_subject_template = "${local.step_function_name} - Need Approval for Path: {{path}}"
@@ -168,13 +171,27 @@ module "ecr_approval_response" {
   })
 }
 
+resource "docker_image" "ecr_approval_response" {
+  count        = var.approval_response_image_address == null ? 1 : 0
+  name         = "${module.ecr_approval_response[0].repository_url}:${local.module_docker_img_tag}"
+  keep_locally = true
+  build {
+    path     = local.approval_response_context
+    no_cache = true
+  }
+  triggers = { for f in fileset(local.approval_response_context, "**") :
+  f => filesha256(format("${local.approval_response_context}/%s", f)) }
+}
+
+resource "docker_tag" "ecr_approval_response" {
+  count        = var.approval_response_image_address == null ? 1 : 0
+  source_image = docker_image.ecr_approval_response[0].image_id
+  target_image = "${module.ecr_approval_response[0].repository_url}:${local.module_docker_img_tag}-${split(":", docker_image.ecr_approval_response[0].image_id)[1]}"
+}
+
 resource "docker_registry_image" "ecr_approval_response" {
   count = var.approval_response_image_address == null ? 1 : 0
-  name  = "${module.ecr_approval_response[0].repository_url}:${local.module_docker_img_tag}"
-
-  build {
-    context = "${path.module}/functions/approval_response"
-  }
+  name  = docker_tag.ecr_approval_response[0].target_image
 }
 
 module "lambda_approval_response" {

@@ -8,6 +8,8 @@ locals {
     securityGroups = [aws_security_group.ecs_tasks.id]
     assignPublicIp = local.ecs_assign_public_ip
   }
+
+  receiver_context = "${path.module}/functions/webhook_receiver"
 }
 
 resource "random_password" "github_webhook_secret" {
@@ -127,14 +129,27 @@ module "ecr_receiver" {
   })
 }
 
+resource "docker_image" "ecr_receiver" {
+  count        = var.webhook_receiver_image_address == null ? 1 : 0
+  name         = "${module.ecr_receiver[0].repository_url}:${local.module_docker_img_tag}"
+  keep_locally = true
+  build {
+    path     = local.receiver_context
+    no_cache = true
+  }
+  triggers = { for f in fileset(local.receiver_context, "**") :
+  f => filesha256(format("${local.receiver_context}/%s", f)) }
+}
+
+resource "docker_tag" "ecr_receiver" {
+  count        = var.webhook_receiver_image_address == null ? 1 : 0
+  source_image = docker_image.ecr_receiver[0].image_id
+  target_image = "${module.ecr_receiver[0].repository_url}:${local.module_docker_img_tag}-${split(":", docker_image.ecr_receiver[0].image_id)[1]}"
+}
+
 resource "docker_registry_image" "ecr_receiver" {
   count = var.webhook_receiver_image_address == null ? 1 : 0
-  name  = "${module.ecr_receiver[0].repository_url}:${local.module_docker_img_tag}"
-
-  build {
-    pull_parent = true
-    context     = "${path.module}/functions/webhook_receiver"
-  }
+  name  = docker_tag.ecr_receiver[0].target_image
 }
 
 module "lambda_webhook_receiver" {

@@ -108,9 +108,15 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | [aws_ssm_parameter.merge_lock](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.scan_type](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [docker_image.ecr_approval_response](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
+| [docker_image.ecr_ecs_tasks](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
+| [docker_image.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
 | [docker_registry_image.ecr_approval_response](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
 | [docker_registry_image.ecr_ecs_tasks](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
 | [docker_registry_image.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
+| [docker_tag.ecr_approval_response](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/tag) | resource |
+| [docker_tag.ecr_ecs_tasks](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/tag) | resource |
+| [docker_tag.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/tag) | resource |
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
 | [github_repository_webhook.this](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_webhook) | resource |
 | [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |

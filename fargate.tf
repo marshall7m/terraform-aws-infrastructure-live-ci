@@ -2,6 +2,7 @@ locals {
   ecs_cluster_name = "${var.prefix}-ecs"
 
   ecs_execution_role_name = "${var.prefix}-ecs-execution"
+  ecs_tasks_context       = "${path.module}/docker"
 
   ecs_assign_public_ip      = var.ecs_assign_public_ip ? "ENABLED" : "DISABLED"
   pr_plan_task_family       = "${var.prefix}-pr-plan"
@@ -101,14 +102,27 @@ module "ecr_ecs_tasks" {
   })
 }
 
+resource "docker_image" "ecr_ecs_tasks" {
+  count        = var.ecs_image_address == null ? 1 : 0
+  name         = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}"
+  keep_locally = true
+  build {
+    path     = local.ecs_tasks_context
+    no_cache = true
+  }
+  triggers = { for f in fileset(local.ecs_tasks_context, "**") :
+  f => filesha256(format("${local.ecs_tasks_context}/%s", f)) }
+}
+
+resource "docker_tag" "ecr_ecs_tasks" {
+  count        = var.ecs_image_address == null ? 1 : 0
+  source_image = docker_image.ecr_ecs_tasks[0].image_id
+  target_image = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}-${split(":", docker_image.ecr_ecs_tasks[0].image_id)[1]}"
+}
+
 resource "docker_registry_image" "ecr_ecs_tasks" {
   count = var.ecs_image_address == null ? 1 : 0
-  name  = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}"
-
-  build {
-    pull_parent = true
-    context     = "${path.module}/docker"
-  }
+  name  = docker_tag.ecr_ecs_tasks[0].target_image
 }
 
 resource "aws_ssm_parameter" "scan_type" {
