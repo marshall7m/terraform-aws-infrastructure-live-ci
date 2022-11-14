@@ -37,6 +37,8 @@ resource "aws_sfn_state_machine" "this" {
             Cluster        = aws_ecs_cluster.this.arn
             TaskDefinition = aws_ecs_task_definition.terra_run.arn
             LaunchType     = "FARGATE"
+            # TODO: add once StartedBy parameter is supported: https://repost.aws/questions/QUFtDBO45hTWq3wxnMbsWWKg/aws-step-function-ecs-started-by-parameter-support
+            # StartedBy = "States.Format('{}-Plan', $.execution_id)"
             NetworkConfiguration = {
               AwsvpcConfiguration = local.sf_ecs_network_config
             }
@@ -121,6 +123,8 @@ resource "aws_sfn_state_machine" "this" {
             Cluster        = aws_ecs_cluster.this.arn
             TaskDefinition = aws_ecs_task_definition.terra_run.arn
             LaunchType     = "FARGATE"
+            # TODO: add once StartedBy parameter is supported: https://repost.aws/questions/QUFtDBO45hTWq3wxnMbsWWKg/aws-step-function-ecs-started-by-parameter-support
+            # StartedBy = "States.Format('{}-Apply', $.execution_id)"
             NetworkConfiguration = {
               AwsvpcConfiguration = local.sf_ecs_network_config
             }
