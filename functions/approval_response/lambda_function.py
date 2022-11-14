@@ -11,8 +11,9 @@ sys.path.append(os.path.dirname(__file__))
 from app import update_vote
 from exceptions import InvalidSignatureError, ExpiredVote
 from models import SESEvent
+from utils import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger()
 log.setLevel(logging.DEBUG)
 
 app = FastAPI()
@@ -27,7 +28,9 @@ async def value_error_exception_handler(request: Request, exc: ValueError):
 
 
 @app.exception_handler(InvalidSignatureError)
-async def invalid_signature_error_exception_handler(request: Request, exc: ValueError):
+async def invalid_signature_error_exception_handler(
+    request: Request, exc: InvalidSignatureError
+):
     return JSONResponse(
         status_code=403,
         content={"message": str(exc)},
@@ -35,7 +38,7 @@ async def invalid_signature_error_exception_handler(request: Request, exc: Value
 
 
 @app.exception_handler(ExpiredVote)
-async def expired_vote_error_exception_handler(request: Request, exc: ValueError):
+async def expired_vote_error_exception_handler(request: Request, exc: ExpiredVote):
     return JSONResponse(
         status_code=410,
         content={"message": str(exc)},
@@ -58,6 +61,15 @@ async def ses_approve(request: Request, background_tasks: BackgroundTasks):
         status_code=200,
         content={"message": "Vote was successfully submitted"},
     )
+
+
+@app.middleware("http")
+async def log_exchange(request: Request, call_next):
+    log.debug("Method: %s Path: %s", request.method, request.url.path)
+    response = await call_next(request)
+    log.debug("Status Code: %s", response.status_code)
+
+    return response
 
 
 handler = Mangum(app, lifespan="off")
