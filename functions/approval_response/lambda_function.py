@@ -4,7 +4,7 @@ import os
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from mangum import Mangum
 
 sys.path.append(os.path.dirname(__file__))
@@ -43,10 +43,11 @@ async def expired_vote_error_exception_handler(request: Request, exc: ValueError
 
 
 @app.post("/ses")
-def ses_approve(request: Request):
+async def ses_approve(request: Request, background_tasks: BackgroundTasks):
     event = SESEvent(**request.scope["aws.event"])
-    update_vote(
-        execution_arn=event.queryStringParameters.exArn,
+
+    background_tasks.add_task(
+        update_vote,
         execution_id=event.queryStringParameters.ex,
         action=event.queryStringParameters.action,
         voter=event.queryStringParameters.recipient,
