@@ -115,6 +115,11 @@ output "ecs_terra_run_plan_role_arn" {
   value       = module.terra_run_plan_role.role_arn
 }
 
+output "ecs_terra_run_family" {
+  description = "AWS ECS task definition family for the Terra Run task"
+  value       = aws_ecs_task_definition.terra_run.family
+}
+
 output "ecs_terra_run_task_definition_arn" {
   description = "AWS ECS terra run task defintion ARN"
   value       = aws_ecs_task_definition.terra_run.arn

@@ -234,6 +234,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_ecs_pr_plan_task_definition_arn"></a> [ecs\_pr\_plan\_task\_definition\_arn](#output\_ecs\_pr\_plan\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#output\_ecs\_security\_group\_ids) | List of security groups IDs used ECS tasks |
 | <a name="output_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#output\_ecs\_subnet\_ids) | AWS VPC subnets IDs that the ECS tasks will be hosted in |
+| <a name="output_ecs_terra_run_family"></a> [ecs\_terra\_run\_family](#output\_ecs\_terra\_run\_family) | AWS ECS task definition family for the Terra Run task |
 | <a name="output_ecs_terra_run_plan_role_arn"></a> [ecs\_terra\_run\_plan\_role\_arn](#output\_ecs\_terra\_run\_plan\_role\_arn) | IAM role ARN the Terra Run AWS ECS plan task can assume |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |

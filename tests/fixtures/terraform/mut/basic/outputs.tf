@@ -124,6 +124,10 @@ output "ecs_pr_plan_family" {
   value = module.mut_infrastructure_live_ci.ecs_pr_plan_family
 }
 
+output "ecs_terra_run_family" {
+  value = module.mut_infrastructure_live_ci.ecs_terra_run_family
+}
+
 output "ecs_create_deploy_stack_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn
 }
