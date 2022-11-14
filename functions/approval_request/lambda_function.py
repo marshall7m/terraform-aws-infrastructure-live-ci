@@ -79,7 +79,7 @@ def send_approval(msg: dict, secret: str) -> dict:
 
     destinations = []
     # need to create a separate destination object for each address since the
-    # approval URL is specifc to the address
+    # approval URL is specific to the address
     for address in msg["Voters"]:
         urls = get_ses_urls(msg, secret, address)
         destinations.append(
@@ -96,28 +96,30 @@ def send_approval(msg: dict, secret: str) -> dict:
     log.debug(f"Destinations\n {destinations}")
 
     log.info("Sending bulk email")
-    response = ses.send_bulk_templated_email(
+    output = ses.send_bulk_templated_email(
         Template=os.environ["SES_TEMPLATE"],
         Source=os.environ["SENDER_EMAIL_ADDRESS"],
         DefaultTemplateData=json.dumps(template_data),
         Destinations=destinations,
     )
 
-    log.debug(f"Response:\n{response}")
+    log.debug(f"Response:\n{output}")
     failed_count = 0
-    for msg in response["Status"]:
+    for msg in output["Status"]:
         if msg["Status"] != "Success":
             failed_count += 1
             log.error("Email was not successfully sent")
             log.debug(f"Email Status:\n{msg}")
 
+    res = {"statusCode": 200, "message": "All emails were successfully sent"}
     if failed_count > 0:
-        return {
+        res = {
             "statusCode": 500,
-            "message": f'{failed_count}/{len(response["Status"])} emails failed to send',
+            "message": f'{failed_count}/{len(output["Status"])} emails failed to send',
         }
 
-    return {"statusCode": 200, "message": "All emails were successfully sent"}
+    log.info(f"Sending response:\n{res}")
+    return res
 
 
 def lambda_handler(event, context):
