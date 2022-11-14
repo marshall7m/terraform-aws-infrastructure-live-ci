@@ -16,7 +16,7 @@ import github
 from tests.helpers.utils import (
     get_finished_commit_status,
     get_execution_arn,
-    get_sf_state_event,
+    get_sf_status_event,
     ses_approval,
     push,
 )
@@ -83,15 +83,6 @@ class E2E:
             pr.edit(state="closed")
         except Exception:
             log.info("PR is merged or already closed")
-
-    @timeout_decorator.timeout(30)
-    @pytest.fixture(scope="class")
-    def merge_lock_pr_status(self, repo, mut_output, pr):
-        """Returns merge lock finished commit status"""
-
-        return get_finished_commit_status(
-            mut_output["merge_lock_status_check_name"], repo, pr["head_commit_id"]
-        )
 
     @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
@@ -210,7 +201,7 @@ class E2E:
     @timeout_decorator.timeout(600)
     @pytest.fixture(scope="class")
     def create_deploy_stack_task_status(self, request, repo, mut_output, pr, merge_pr):
-        """Returns create deploy stack finished status"""
+        """Returns create deploy stack finished commit status"""
         return get_finished_commit_status(
             mut_output["create_deploy_stack_status_check_name"],
             repo,
@@ -229,8 +220,13 @@ class E2E:
         """Queries metadb until the target execution record exists"""
         log.debug(f"Already tested execution IDs:\n{request.cls.tested_execution_ids}")
 
+        log.info("Getting next target execution record")
+        max_attempts = 3
+        attempt = 0
         results = None
         while not results:
+            if attempt == max_attempts:
+                pytest.fail("Max attempts reached -- record is not found")
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
@@ -250,6 +246,7 @@ class E2E:
                     """
                     )
                     results = cur.fetchone()
+            attempt += 1
 
         record = {}
         row = [value for value in results]
@@ -284,15 +281,37 @@ class E2E:
             mut_output["state_machine_arn"], record["execution_id"]
         )
 
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.fixture(scope="class")
-    def terra_run_plan_status(self, execution_arn):
-        """Returns Step Function execution's Plan state finished status"""
-        return get_sf_state_event(execution_arn, "Plan", "stateExitedEventDetails")
+    def terra_run_plan_commit_status(self, repo, record):
+        """Returns terra run plan finished commit status"""
+        return get_finished_commit_status(
+            f'{record["execution_id"]} Plan: {record["cfg_path"]}',
+            repo,
+            record["commit_id"],
+            wait=10,
+            max_attempts=24,
+        )
+
+    @pytest.fixture(scope="class")
+    def terra_run_plan_finished_task(self, mut_output, record):
+        """Returns Step Function execution's Plan finished task"""
+        task_arns = ecs.list_tasks(
+            cluster=mut_output["ecs_cluster_arn"],
+            startedBy=f"{record['execution_id']}-Plan",
+            family=mut_output["ecs_terra_run_family"],
+        )["taskArns"]
+
+        waiter = ecs.get_waiter("tasks_stopped")
+        waiter.wait(tasks=task_arns, WaiterConfig={"Delay": 10, "MaxAttempts": 24})
+
+        res = ecs.describe_tasks(tasks=task_arns)
+        log.debug(f"Finished task describe response:\n{pformat(res)}")
+
+        return res
 
     @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.fixture(scope="class")
-    def approval_request(self, execution_arn, terra_run_plan_status):
+    def approval_request(self, execution_arn, terra_run_plan_commit_status):
         """Returns approval request Lambda Function's response"""
         status_code = None
         while not status_code:
@@ -325,14 +344,36 @@ class E2E:
 
         return res
 
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
     @pytest.fixture(scope="class")
-    def terra_run_apply_status(self, ses_approval_response, execution_arn):
-        """Returns Step Function execution's Apply state finished status"""
-        return get_sf_state_event(execution_arn, "Apply", "stateExitedEventDetails")
+    def terra_run_apply_commit_status(self, ses_approval_response, repo, record):
+        """Returns terra run apply finished commit status"""
+        return get_finished_commit_status(
+            f'{record["execution_id"]} Apply: {record["cfg_path"]}',
+            repo,
+            record["commit_id"],
+            wait=10,
+            max_attempts=24,
+        )
 
     @pytest.fixture(scope="class")
-    def finished_sf_execution(self, terra_run_apply_status, execution_arn):
+    def terra_run_apply_finished_task(self, ses_approval_response, mut_output, record):
+        """Returns Step Function execution's Apply finished task"""
+        task_arns = ecs.list_tasks(
+            cluster=mut_output["ecs_cluster_arn"],
+            startedBy=f"{record['execution_id']}-Apply",
+            family=mut_output["ecs_terra_run_family"],
+        )["taskArns"]
+
+        waiter = ecs.get_waiter("tasks_stopped")
+        waiter.wait(tasks=task_arns, WaiterConfig={"Delay": 10, "MaxAttempts": 24})
+
+        res = ecs.describe_tasks(tasks=task_arns)
+        log.debug(f"Finished task describe response:\n{pformat(res)}")
+
+        return res
+
+    @pytest.fixture(scope="class")
+    def finished_sf_execution(self, terra_run_apply_commit_status, execution_arn):
         """Returns Step Function execution finished status"""
         log.info("Waiting for execution to finish")
         execution_status = None
