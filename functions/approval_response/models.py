@@ -27,6 +27,7 @@ class QueryStringParameters(BaseModel):
 
     @root_validator(skip_on_failure=True)
     def validate_sig_content(cls, values):
+        values = {k: aws_decode(v) for k, v in values.items()}
         if not values["x_ses_signature_256"].startswith("sha256="):
             raise InvalidSignatureError("Signature is not a valid sha256 value")
 
