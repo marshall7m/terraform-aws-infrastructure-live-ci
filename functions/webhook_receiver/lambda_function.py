@@ -51,13 +51,14 @@ def merged_pr(request: Request):
     context = Context(**request.scope["aws.context"].__dict__)
 
     trigger_create_deploy_stack(
-        event.body.repository.full_name,
-        event.body.pull_request.base.ref,
-        event.body.pull_request.head.ref,
-        event.body.pull_request.head.sha,
-        event.body.pull_request.number,
-        context.logs_url,
-        event.body.commit_status_config.get("CreateDeployStack"),
+        repo_full_name=event.body.repository.full_name,
+        base_ref=event.body.pull_request.base.ref,
+        head_ref=event.body.pull_request.head.ref,
+        base_sha=event.body.pull_request.base.sha,
+        head_sha=event.body.pull_request.head.sha,
+        pr_id=event.body.pull_request.number,
+        logs_url=context.logs_url,
+        send_commit_status=event.body.commit_status_config.get("CreateDeployStack"),
     )
 
     return JSONResponse(
