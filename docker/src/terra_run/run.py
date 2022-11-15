@@ -17,6 +17,7 @@ from common.utils import (
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
+stream.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
