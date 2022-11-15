@@ -440,21 +440,21 @@ def ses_approval(
         if mail_count == 0:
             _, mail_count = imap_ssl.select(mailbox="[Gmail]/Spam", readonly=True)
 
-        # filters messages by sender and subject
+        # filters messages by sender, subject and recipient
         _, mails = imap_ssl.search(
             None, f'(FROM "{msg_from}" Subject "{msg_subject}" To "{username}")'
         )
 
-        mail_ids = sorted(mails[0].decode().split())
+        mail_ids = [int(i) for i in mails[0].decode().split()]
         log.debug(f"Total Mail IDs : {len(mail_ids)}")
 
         try:
             # gets largest email ID which is the most recent
-            mail_id = mail_ids[-1]
-        except IndexError:
+            mail_id = max(mail_ids)
+        except ValueError:
             raise Exception("Message is not found")
 
-        _, mail_data = imap_ssl.fetch(mail_id, "(RFC822)")
+        _, mail_data = imap_ssl.fetch(str(mail_id), "(RFC822)")
         message = email.message_from_bytes(mail_data[0][1])
 
         for part in message.walk():
