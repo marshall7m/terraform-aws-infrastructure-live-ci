@@ -234,7 +234,7 @@ def trigger_create_deploy_stack(
                 ]
             },
         )
-        log.debug(f"Run task response:\n{json.dumps(task, indent=4)}")
+        log.debug(f"Run task response:\n{pformat(task)}")
 
         task_id = task["tasks"][0]["taskArn"].split("/")[-1]
         status_data = {
