@@ -219,6 +219,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_approval_request_function_name"></a> [approval\_request\_function\_name](#output\_approval\_request\_function\_name) | Name of the Lambda Function used for sending approval requests |
 | <a name="output_approval_request_log_group_name"></a> [approval\_request\_log\_group\_name](#output\_approval\_request\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
 | <a name="output_approval_response_function_name"></a> [approval\_response\_function\_name](#output\_approval\_response\_function\_name) | Name of the Lambda Function used for handling approval responses |
+| <a name="output_approval_response_image_address"></a> [approval\_response\_image\_address](#output\_approval\_response\_image\_address) | Docker registry image used for the approval response Lambda Function |
 | <a name="output_approval_response_role_arn"></a> [approval\_response\_role\_arn](#output\_approval\_response\_role\_arn) | IAM Role ARN of the Lambda Function used for handling approval responses |
 | <a name="output_approval_response_ses_secret"></a> [approval\_response\_ses\_secret](#output\_approval\_response\_ses\_secret) | Secret value used for authenticating AWS SES approvals within the approval response Lambda Function |
 | <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | Lambda Function URL used for casting deployment approval votes |

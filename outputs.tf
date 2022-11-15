@@ -170,6 +170,11 @@ output "approval_response_role_arn" {
   value       = module.lambda_approval_response.lambda_role_arn
 }
 
+output "approval_response_image_address" {
+  description = "Docker registry image used for the approval response Lambda Function"
+  value       = try(docker_registry_image.ecr_approval_response[0].name, var.approval_response_image_address)
+}
+
 output "approval_request_log_group_name" {
   description = "Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses"
   value       = module.lambda_approval_request.lambda_cloudwatch_log_group_name

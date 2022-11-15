@@ -96,6 +96,10 @@ output "approval_response_role_arn" {
   value = module.mut_infrastructure_live_ci.approval_response_role_arn
 }
 
+output "approval_response_image_address" {
+  value = module.mut_infrastructure_live_ci.approval_response_image_address
+}
+
 output "base_branch" {
   value = module.mut_infrastructure_live_ci.base_branch
 }
