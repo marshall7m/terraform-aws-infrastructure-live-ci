@@ -88,6 +88,20 @@ def reset_merge_lock_ssm_value(request, mut_output):
     )
 
 
+@pytest.fixture(scope="class", autouse=True)
+def truncate_executions(mut_output):
+    """Removes all rows from execution table after test class"""
+    yield None
+
+    log.info("Truncating executions table")
+    with aurora_data_api.connect(
+        aurora_cluster_arn=mut_output["metadb_arn"],
+        secret_arn=mut_output["metadb_secret_manager_master_arn"],
+        database=mut_output["metadb_name"],
+    ) as conn, conn.cursor() as cur:
+        cur.execute("TRUNCATE executions")
+
+
 @pytest.fixture(scope="module", autouse=True)
 def abort_hanging_sf_executions(mut_output):
     yield None
