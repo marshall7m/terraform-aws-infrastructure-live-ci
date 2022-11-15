@@ -11,9 +11,8 @@ sys.path.append(os.path.dirname(__file__))
 from models import Event, Context
 from invoker import merge_lock, trigger_pr_plan, trigger_create_deploy_stack
 from exceptions import InvalidSignatureError, FilePathsNotMatched
-from utils import get_logger
 
-log = get_logger()
+log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 app = FastAPI()

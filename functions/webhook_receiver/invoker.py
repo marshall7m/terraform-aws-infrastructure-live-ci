@@ -9,9 +9,9 @@ import boto3
 import github
 
 sys.path.append(os.path.dirname(__file__))
-from utils import aws_encode, ServerException, get_logger  # noqa E402
+from utils import aws_encode, ServerException  # noqa E402
 
-log = get_logger()
+log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))

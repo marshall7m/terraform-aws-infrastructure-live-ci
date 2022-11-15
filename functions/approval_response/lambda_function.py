@@ -11,9 +11,8 @@ sys.path.append(os.path.dirname(__file__))
 from app import update_vote
 from exceptions import InvalidSignatureError, ExpiredVote
 from models import SESEvent
-from utils import get_logger
 
-log = get_logger()
+log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 app = FastAPI()

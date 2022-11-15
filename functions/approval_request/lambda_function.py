@@ -10,10 +10,9 @@ from utils import (
     aws_encode,
     get_email_approval_sig,
     voter_actions,
-    get_logger,
 )  # noqa : E402
 
-log = get_logger()
+log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ssm = boto3.client("ssm")

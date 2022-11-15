@@ -7,9 +7,8 @@ import aurora_data_api
 import boto3
 
 sys.path.append(os.path.dirname(__file__))
-from utils import get_logger
 
-log = get_logger()
+log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))

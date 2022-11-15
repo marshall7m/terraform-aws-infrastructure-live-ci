@@ -3,8 +3,6 @@ import hmac
 import re
 import urllib.parse
 import urllib
-import logging
-import sys
 
 
 class ClientException(Exception):
@@ -20,23 +18,6 @@ class ServerException(Exception):
 
 
 voter_actions = ["approve", "reject"]
-
-
-def get_logger():
-    if len(logging.getLogger().handlers) > 0:
-        # within lambda env
-        # creates custom handler that doesn't propagate configurations
-        # to parent lambda logger
-        h = logging.StreamHandler(sys.stdout)
-        h.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
-        log = logging.getLogger(__name__)
-        log.addHandler(h)
-        log.propagate = False
-    else:
-        # within local env
-        log = logging.getLogger(__name__)
-
-    return log
 
 
 def aws_encode(value):
