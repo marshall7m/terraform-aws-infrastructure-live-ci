@@ -486,3 +486,20 @@ def get_execution_arn(arn: str, name: str) -> str:
             return execution["executionArn"]
 
     raise Exception(f"No Step Function execution exists with name: {name}")
+
+
+def get_finished_sf_execution(arn: str, wait=5, max_attempts=3):
+    """Waits till Step Function execution is finished and returns descrive execution response"""
+    sf = boto3.client("stepfunctions")
+    status = None
+    attempts = 0
+    while status not in ["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]:
+        if attempts == max_attempts:
+            raise TimeoutError("Max attempts reached -- Execution is still running")
+
+        response = sf.describe_execution(executionArn=arn)
+        status = response["status"]
+        log.debug(f"Execution status: {status}")
+
+        attempts += 1
+        time.sleep(wait)
