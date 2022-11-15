@@ -2,7 +2,6 @@ import os
 import logging
 import json
 import time
-from datetime import datetime
 import timeout_decorator
 from pprint import pformat
 import uuid
@@ -10,15 +9,14 @@ import uuid
 import pytest
 import aurora_data_api
 import boto3
-import requests
 import github
 
 from tests.helpers.utils import (
     get_finished_commit_status,
     get_execution_arn,
-    get_sf_status_event,
     ses_approval,
     push,
+    get_finished_sf_execution,
 )
 
 log = logging.getLogger(__name__)
@@ -206,7 +204,7 @@ class E2E:
             mut_output["create_deploy_stack_status_check_name"],
             repo,
             pr["head_commit_id"],
-            wait=10,
+            wait=24,
         )
 
     @timeout_decorator.timeout(
@@ -345,8 +343,13 @@ class E2E:
         return res
 
     @pytest.fixture(scope="class")
-    def terra_run_apply_commit_status(self, ses_approval_response, repo, record):
+    def terra_run_apply_commit_status(
+        self, ses_approval_response, action, repo, record
+    ):
         """Returns terra run apply finished commit status"""
+        if action == "reject":
+            pytest.skip("Approval action is set to reject")
+
         return get_finished_commit_status(
             f'{record["execution_id"]} Apply: {record["cfg_path"]}',
             repo,
@@ -373,14 +376,19 @@ class E2E:
         return res
 
     @pytest.fixture(scope="class")
-    def finished_sf_execution(self, terra_run_apply_commit_status, execution_arn):
+    def approved_sf_execution(self, terra_run_apply_commit_status, execution_arn):
         """Returns Step Function execution finished status"""
         log.info("Waiting for execution to finish")
-        execution_status = None
-        while execution_status not in ["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]:
-            time.sleep(5)
-            response = sf.describe_execution(executionArn=execution_arn)
-            execution_status = response["status"]
-            log.debug(f"Execution status: {execution_status}")
+        res = get_finished_sf_execution(execution_arn)
+        log.debug(f"Finished Step Function describe response:\n{pformat(res)}")
 
-        return response
+        return res
+
+    @pytest.fixture(scope="class")
+    def rejected_sf_execution(self, ses_approval_response, execution_arn):
+        """Returns Step Function execution finished status"""
+        log.info("Waiting for execution to finish")
+        res = get_finished_sf_execution(execution_arn)
+        log.debug(f"Finished Step Function describe response:\n{pformat(res)}")
+
+        return res
