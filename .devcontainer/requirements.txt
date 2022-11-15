@@ -10,3 +10,4 @@ starlette
 fastapi
 mangum
 mechanize
+diagrams
