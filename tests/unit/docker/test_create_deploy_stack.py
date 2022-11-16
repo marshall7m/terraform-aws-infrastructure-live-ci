@@ -100,6 +100,7 @@ def test_get_github_diff_paths(repo, tmp_path_factory):
     os.environ["SOURCE_REPO_PATH"] = git_root
     branch = f"test-{uuid.uuid4()}"
     path = "directory_dependency/dev-account/global"
+    os.environ["BASE_COMMIT_ID"] = repo.get_branch(branch).commit.sha
 
     push(
         repo=repo,

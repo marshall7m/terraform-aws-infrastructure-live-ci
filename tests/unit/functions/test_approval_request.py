@@ -50,7 +50,7 @@ msg = {
     "StateMachineArn": "mock-state-machine-arn",
     "TaskToken": "mock-token",
     "PullRequestID": "1",
-    "LogsUrl": "mock-log-url",
+    "PlanOuput": {"LogsUrl": "mock-log-url"},
 }
 
 
@@ -77,7 +77,7 @@ def test_get_ses_urls():
         assert params["recipient"][0] == aws_encode(voter)
         assert params["taskToken"][0] == msg["TaskToken"]
         assert params["action"][0] == action
-        assert len(params["X-SES-Signature-256"][0]) == 64
+        assert params["X-SES-Signature-256"][0].startswith("sha256=")
 
 
 @pytest.mark.parametrize(
