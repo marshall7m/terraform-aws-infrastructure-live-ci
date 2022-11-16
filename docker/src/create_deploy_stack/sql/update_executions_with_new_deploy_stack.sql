@@ -47,9 +47,9 @@ SELECT  -- noqa: L034, L036
     '{apply_role_arn}',
     {pr_id},  -- noqa: L019
     'terragrunt plan --terragrunt-working-dir ' || stack.cfg_path
-    || ' --terragrunt-iam-role ' || '{plan_role_arn}',
+    || ' --terragrunt-iam-role ' || '{plan_role_arn}' || ' -no-color',
     'terragrunt apply --terragrunt-working-dir ' || stack.cfg_path
-    || ' --terragrunt-iam-role ' || '{apply_role_arn}' || ' -auto-approve'
+    || ' --terragrunt-iam-role ' || '{apply_role_arn}' || ' -no-color -auto-approve'
 FROM (
     VALUES {stack}
 ) stack(cfg_path, cfg_deps, new_providers)  -- noqa: L011, L025
