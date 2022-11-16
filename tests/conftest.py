@@ -221,27 +221,6 @@ def pr(repo, request):
         log.info("PR is merged or already closed")
 
 
-def pytest_generate_tests(metafunc):
-    tf_versions = [pytest.param("latest")]
-    if "terraform_version" in metafunc.fixturenames:
-        tf_versions = [pytest.param("latest")]
-        metafunc.parametrize(
-            "terraform_version",
-            tf_versions,
-            indirect=True,
-            scope="session",
-            ids=[f"tf_{v.values[0]}" for v in tf_versions],
-        )
-
-    if "tf" in metafunc.fixturenames:
-        metafunc.parametrize(
-            "tf",
-            [f"{os.path.dirname(__file__)}/fixtures"],
-            indirect=True,
-            scope="session",
-        )
-
-
 @pytest.fixture(scope="session")
 def reset_moto_server(request):
     if not os.environ.get("IS_REMOTE", False):
@@ -252,7 +231,7 @@ def reset_moto_server(request):
 
     yield None
 
-    if os.environ.get("IS_REMOTE", False):
+    if not os.environ.get("IS_REMOTE", False):
         skip = request.config.getoption("skip_moto_reset")
         if skip:
             log.info("Skip resetting moto server")
@@ -375,7 +354,7 @@ def mut_output(request, reset_moto_server, tfvars_files):
         cache_dir=cache_dir,
     )
 
-    tf.setup(cleanup_on_exit=False, extra_files=tfvars_files, use_cache=True)
+    tf.setup(cleanup_on_exit=True, extra_files=tfvars_files, use_cache=True)
 
     log.debug("Running terraform apply")
     try:
