@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import time
+from typing import Union
 from pprint import pformat
 import subprocess
 import shlex
@@ -412,6 +413,9 @@ def ses_approval(
     msg_subject: str,
     action: str,
     host=None,
+    mailboxes=["INBOX"],
+    wait=5,
+    max_attempts=3,
 ) -> Response:
     """
     Finds the approval email within email inbox, extracts approval action
@@ -424,6 +428,9 @@ def ses_approval(
         msg_subject: Email subject to filter the incoming emails from
         action: Approval action to choose within form
         host: Email's associated host
+        mailboxes: Mailboxes to check within
+        wait: Seconds to wait before refreshing inbox
+        max_attempts: Maximum number of attempts to retreive approval email
     """
     url = "http://placeholder.com"
     if not host:
@@ -436,27 +443,35 @@ def ses_approval(
         log.debug("Logging into mailbox")
         imap_ssl.login(username, password)
 
-        _, mail_count = imap_ssl.select(mailbox="INBOX", readonly=True)
-        if mail_count == 0:
-            _, mail_count = imap_ssl.select(mailbox="[Gmail]/Spam", readonly=True)
+        attempt = 0
+        mail_ids = []
+        while len(mail_ids) == 0:
+            if attempt == max_attempts:
+                raise TimeoutError("Timeout reached -- Message is not found")
 
-        # filters messages by sender, subject and recipient
-        _, mails = imap_ssl.search(
-            None, f'(FROM "{msg_from}" Subject "{msg_subject}" To "{username}")'
-        )
+            time.sleep(wait)
+            imap_ssl.noop()
 
-        mail_ids = [int(i) for i in mails[0].decode().split()]
-        log.debug(f"Total Mail IDs : {len(mail_ids)}")
+            for box in mailboxes:
+                imap_ssl.select(mailbox=box, readonly=True)
+                # filters messages by sender, subject and recipient
+                _, mails = imap_ssl.search(
+                    None, f'(FROM "{msg_from}" Subject "{msg_subject}" To "{username}")'
+                )
+                mail_ids = [int(i) for i in mails[0].decode().split()]
+                log.debug(f"Total Mail IDs : {len(mail_ids)}")
 
-        try:
-            # gets largest email ID which is the most recent
-            mail_id = max(mail_ids)
-        except ValueError:
-            raise Exception("Message is not found")
+                if len(mail_ids) > 0:
+                    # gets largest email ID which is the most recent
+                    log.debug("Found message in mailbox: %s", box)
+                    mail_id = max(mail_ids)
+                    break
 
+            attempt += 1
+
+        log.debug("Mail ID: %s", mail_id)
         _, mail_data = imap_ssl.fetch(str(mail_id), "(RFC822)")
         message = email.message_from_bytes(mail_data[0][1])
-
         for part in message.walk():
             # parses only html data
             if part.get_content_type() == "text/html":
@@ -471,8 +486,13 @@ def ses_approval(
                         req = f.click()
                         return requests.post(req.full_url)
 
+                log.debug(
+                    "Action was not found in any HTML form -- check if action is valid: %s",
+                    action,
+                )
 
-def get_execution_arn(arn: str, name: str) -> str:
+
+def get_execution_arn(arn: str, name: str) -> Union[str, None]:
     """
     Gets the Step Function execution ARN associated with the passed execution name
 
@@ -485,11 +505,9 @@ def get_execution_arn(arn: str, name: str) -> str:
         if execution["name"] == name:
             return execution["executionArn"]
 
-    raise Exception(f"No Step Function execution exists with name: {name}")
-
 
 def get_finished_sf_execution(arn: str, wait=5, max_attempts=3):
-    """Waits till Step Function execution is finished and returns descrive execution response"""
+    """Waits till Step Function execution is finished and returns describe execution response"""
     sf = boto3.client("stepfunctions")
     status = None
     attempts = 0
@@ -503,3 +521,5 @@ def get_finished_sf_execution(arn: str, wait=5, max_attempts=3):
 
         attempts += 1
         time.sleep(wait)
+
+    return response
