@@ -6,7 +6,7 @@ locals {
 
   approval_logs                 = "${var.prefix}-approval"
   approval_sender_arn           = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn, var.approval_sender_arn)
-  ses_approval_subject_template = "${local.step_function_name} - Need Approval for Path: {{path}}"
+  ses_approval_subject_template = "Approval Request: {{execution_name}}"
 }
 
 resource "aws_sns_topic" "approval" {
