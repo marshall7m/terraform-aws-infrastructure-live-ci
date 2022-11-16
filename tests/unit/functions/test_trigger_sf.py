@@ -369,6 +369,7 @@ def test_start_executions(mock_sf, records, expected_running_ids):
     assert mock_sf.start_execution.call_count == len(expected_running_ids)
 
 
+# TODO: Put into integration test where function is runned within container
 @pytest.mark.parametrize(
     "records,expect_unlocked_merge_lock",
     [
