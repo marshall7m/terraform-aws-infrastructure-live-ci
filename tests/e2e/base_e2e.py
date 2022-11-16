@@ -2,7 +2,6 @@ import os
 import logging
 import json
 import time
-import timeout_decorator
 from pprint import pformat
 import uuid
 
@@ -82,7 +81,6 @@ class E2E:
         except Exception:
             log.info("PR is merged or already closed")
 
-    @timeout_decorator.timeout(300)
     @pytest.fixture(scope="class")
     def pr_plan_pending_statuses(self, request, mut_output, pr, repo):
         """Returns list of PR plan tasks' initial commit statuses"""
@@ -128,7 +126,6 @@ class E2E:
 
         return statuses
 
-    @timeout_decorator.timeout(30)
     @pytest.fixture(scope="class")
     def merge_pr(self, pr_plan_finished_statuses, mut_output, pr, repo, git_repo):
         """Ensure that the PR merges without error"""
@@ -196,7 +193,6 @@ class E2E:
             log.debug("Adding required status checks back")
             branch.edit_required_status_checks(contexts=status_checks)
 
-    @timeout_decorator.timeout(600)
     @pytest.fixture(scope="class")
     def create_deploy_stack_task_status(self, request, repo, mut_output, pr, merge_pr):
         """Returns create deploy stack finished commit status"""
@@ -204,13 +200,10 @@ class E2E:
             mut_output["create_deploy_stack_status_check_name"],
             repo,
             pr["head_commit_id"],
-            wait=24,
+            wait=10,
+            max_attempts=10,
         )
 
-    @timeout_decorator.timeout(
-        300,
-        exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')",
-    )
     @pytest.fixture(scope="class")
     def record(
         self, request, mut_output, pr, create_deploy_stack_task_status, target_execution
@@ -259,136 +252,45 @@ class E2E:
         return record
 
     @pytest.fixture(scope="class")
-    def action(self, request, record):
-        """Returns the voter approval action associated with Step Function execution"""
-        if record["is_rollback"]:
-            return request.cls.case["executions"][record["cfg_path"]]["actions"][
-                "rollback_providers"
-            ].capitalize()
-        else:
-            return (
-                request.cls.case["executions"][record["cfg_path"]]
-                .get("actions", {})
-                .get("apply", None)
-            ).capitalize()
-
-    @pytest.fixture(scope="class")
-    def execution_arn(self, mut_output, record):
-        """Returns Step Function execution's ARN"""
-        return get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
-    @pytest.fixture(scope="class")
-    def terra_run_plan_commit_status(self, repo, record):
-        """Returns terra run plan finished commit status"""
-        return get_finished_commit_status(
-            f'{record["execution_id"]} Plan: {record["cfg_path"]}',
-            repo,
-            record["commit_id"],
-            wait=10,
-            max_attempts=24,
-        )
-
-    @pytest.fixture(scope="class")
-    def terra_run_plan_finished_task(self, mut_output, record):
-        """Returns Step Function execution's Plan finished task"""
-        task_arns = ecs.list_tasks(
-            cluster=mut_output["ecs_cluster_arn"],
-            startedBy=f"{record['execution_id']}-Plan",
-            family=mut_output["ecs_terra_run_family"],
-        )["taskArns"]
-
-        waiter = ecs.get_waiter("tasks_stopped")
-        waiter.wait(tasks=task_arns, WaiterConfig={"Delay": 10, "MaxAttempts": 24})
-
-        res = ecs.describe_tasks(tasks=task_arns)
-        log.debug(f"Finished task describe response:\n{pformat(res)}")
-
-        return res
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.fixture(scope="class")
-    def approval_request(self, execution_arn, terra_run_plan_commit_status):
-        """Returns approval request Lambda Function's response"""
-        status_code = None
-        while not status_code:
-            time.sleep(10)
-
-            events = sf.get_execution_history(
-                executionArn=execution_arn, includeExecutionData=True
-            )["events"]
-
-            for event in events:
-                if (
-                    event.get("taskSubmittedEventDetails", {}).get("resource")
-                    == "publish.waitForTaskToken"
-                ):
-                    out = json.loads(event["taskSubmittedEventDetails"]["output"])
-                    return out["SdkHttpMetadata"]
-
-    @pytest.fixture(scope="class")
-    def ses_approval_response(self, mut_output, action, record, approval_request):
+    def ses_approval_responses(self, request, mut_output, record) -> dict:
         """Returns approval response Lambda Function's response to voter's email client"""
-        res = ses_approval(
-            os.environ.get("APPROVAL_RECIPIENT_EMAIL"),
-            os.environ.get("APPROVAL_RECIPIENT_PASSWORD"),
-            os.environ.get("APPROVAL_REQUEST_SENDER_EMAIL"),
-            mut_output["ses_approval_subject_template"].replace(
-                "{{path}}", record["cfg_path"]
-            ),
-            action,
-        )
+        if record["status"] in ["failed", "aborted"]:
+            pytest.skip(f"Execution approval action is set to {record['status']}")
 
-        return res
+        vote_config = request.cls.case["executions"][record["cfg_path"]]
+        if record["is_rollback"]:
+            votes = vote_config.get("rollback_votes", {}).get("email")
+        else:
+            votes = vote_config.get("deploy_votes", {}).get("email")
+        if not votes:
+            pytest.fail("Approval action is not set for record")
 
-    @pytest.fixture(scope="class")
-    def terra_run_apply_commit_status(
-        self, ses_approval_response, action, repo, record
-    ):
-        """Returns terra run apply finished commit status"""
-        if action == "reject":
-            pytest.skip("Approval action is set to reject")
+        responses = {}
+        for address, action in votes.items():
+            log.debug("Sending vote for address: %s", address)
+            log.debug("Action: %s", action)
+            res = ses_approval(
+                username=address,
+                password=os.environ.get("APPROVAL_RECIPIENT_PASSWORD"),
+                msg_from=os.environ.get("APPROVAL_REQUEST_SENDER_EMAIL"),
+                msg_subject=mut_output["ses_approval_subject_template"].replace(
+                    "{{execution_name}}", record["execution_id"]
+                ),
+                action=action.capitalize(),
+                mailboxes=["INBOX", "[Gmail]/Spam"],
+                max_attempts=10,
+            )
 
-        return get_finished_commit_status(
-            f'{record["execution_id"]} Apply: {record["cfg_path"]}',
-            repo,
-            record["commit_id"],
-            wait=10,
-            max_attempts=24,
-        )
+            responses[address] = res
 
-    @pytest.fixture(scope="class")
-    def terra_run_apply_finished_task(self, ses_approval_response, mut_output, record):
-        """Returns Step Function execution's Apply finished task"""
-        task_arns = ecs.list_tasks(
-            cluster=mut_output["ecs_cluster_arn"],
-            startedBy=f"{record['execution_id']}-Apply",
-            family=mut_output["ecs_terra_run_family"],
-        )["taskArns"]
-
-        waiter = ecs.get_waiter("tasks_stopped")
-        waiter.wait(tasks=task_arns, WaiterConfig={"Delay": 10, "MaxAttempts": 24})
-
-        res = ecs.describe_tasks(tasks=task_arns)
-        log.debug(f"Finished task describe response:\n{pformat(res)}")
-
-        return res
+        return responses
 
     @pytest.fixture(scope="class")
-    def approved_sf_execution(self, terra_run_apply_commit_status, execution_arn):
+    def finished_sf_execution(self, mut_output, record, ses_approval_responses):
         """Returns Step Function execution finished status"""
         log.info("Waiting for execution to finish")
-        res = get_finished_sf_execution(execution_arn)
-        log.debug(f"Finished Step Function describe response:\n{pformat(res)}")
-
-        return res
-
-    @pytest.fixture(scope="class")
-    def rejected_sf_execution(self, ses_approval_response, execution_arn):
-        """Returns Step Function execution finished status"""
-        log.info("Waiting for execution to finish")
-        res = get_finished_sf_execution(execution_arn)
+        arn = get_execution_arn(mut_output["state_machine_arn"], record["execution_id"])
+        res = get_finished_sf_execution(arn, wait=10, max_attempts=100)
         log.debug(f"Finished Step Function describe response:\n{pformat(res)}")
 
         return res

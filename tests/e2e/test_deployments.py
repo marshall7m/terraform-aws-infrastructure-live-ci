@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from tests.e2e import base_e2e, sanity_checks
@@ -14,7 +15,9 @@ class TestApproveDeployment(base_e2e.E2E, sanity_checks.SanityChecks):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/shared-services-account/us-west-2/env-one/doo": {
-                "actions": {"apply": "approve"},
+                "deploy_votes": {
+                    "email": {os.environ["APPROVAL_RECIPIENT_EMAIL"]: "approve"}
+                },
                 "pr_files_content": [
                     dummy_tf_output(),
                     dummy_tf_output(),
@@ -22,7 +25,9 @@ class TestApproveDeployment(base_e2e.E2E, sanity_checks.SanityChecks):
                 ],
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "actions": {"apply": "approve"},
+                "deploy_votes": {
+                    "email": {os.environ["APPROVAL_RECIPIENT_EMAIL"]: "approve"}
+                },
                 "pr_files_content": [dummy_tf_output()],
             },
         },
@@ -41,11 +46,12 @@ class TestRejectedDeployment(base_e2e.E2E, sanity_checks.SanityChecks):
         "head_ref": f"feature-{uuid.uuid4()}",
         "executions": {
             "directory_dependency/shared-services-account/us-west-2/env-one/doo": {
-                "actions": {"apply": "reject"},
+                "deploy_votes": {
+                    "email": {os.environ["APPROVAL_RECIPIENT_EMAIL"]: "reject"}
+                },
                 "pr_files_content": [dummy_tf_output()],
             },
             "directory_dependency/dev-account/us-west-2/env-one/doo": {
-                "sf_execution_exists": False,
                 "pr_files_content": [dummy_tf_output()],
             },
         },
