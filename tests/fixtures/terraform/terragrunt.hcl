@@ -51,6 +51,7 @@ provider "aws" {
     ssm            = var.moto_endpoint_url
     sts            = var.moto_endpoint_url
     kms = var.moto_endpoint_url
+    ecr = var.moto_endpoint_url
   }
 }
 
