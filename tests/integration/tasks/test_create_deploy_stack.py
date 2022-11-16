@@ -144,7 +144,6 @@ def run_task(mut_output, push_changes):
                 f"directory_dependency/shared-services-account/us-west-2/env-one/doo/{uuid.uuid4()}.tf": dummy_tf_output()
             },
             ["directory_dependency/shared-services-account/us-west-2/env-one/doo"],
-            id="one_node",
         )
     ],
     indirect=["push_changes"],
@@ -180,7 +179,9 @@ def test_successful_execution(expected_cfg_paths, mut_output, push_changes, run_
         pytest.param(
             {
                 f"directory_dependency/shared-services-account/us-west-2/env-one/doo/{uuid.uuid4()}.tf": dummy_tf_output(),
-                f"directory_dependency/shared-services-account/us-west-2/env-one/doo/{uuid.uuid4()}.tf": dummy_tf_output(),
+                f"directory_dependency/dev-account/us-west-2/env-one/doo/{uuid.uuid4()}.tf": dummy_tf_output(
+                    "1_invalid_address"
+                ),  # tf errors on addresses that start with number
             }
         )
     ],
@@ -188,12 +189,11 @@ def test_successful_execution(expected_cfg_paths, mut_output, push_changes, run_
 )
 def test_failed_execution(mut_output, push_changes, run_task):
     """
-    Case covers a simple 2 node deployment with one node having an account-level dependency on the other.
-    See the account_dim table to see the account dependency testing layout.
-    The error caused by the invalid Terraform configuration(s) within the dev-account should cause the create_deploy_stack.py script to
-    rollback the shared-services account's execution records and fail the build entirely without any other downstream services being invoked.
+    The first account's execution records will be successfully inserted into
+    metadb but given the second account terraform configuration is invalid,
+    all records associated with the commit should be rolled back and the task's
+    associated commit status should set to failure.
     """
-
     actual_cfg_paths = get_commit_cfg_paths(push_changes["commit_id"], mut_output)
 
     log.info(
