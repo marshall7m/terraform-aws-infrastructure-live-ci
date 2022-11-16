@@ -16,7 +16,7 @@ from functions.approval_response.utils import (
 )
 from tests.helpers.utils import insert_records, get_sf_approval_state_msg
 
-log = logging.getLogger("tftest")
+log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 rds_data_client = boto3.client(
@@ -91,21 +91,7 @@ def approval_response_url(request, mut_output, docker_lambda_approval_response):
     )["Configuration"]["Environment"]["Variables"]
 
     if os.environ.get("IS_REMOTE"):
-        # TODO: create assume role policy in tf fixture dir to allow IAM user associated with dev container to assume
-        # lambda role
-        sts = boto3.client("sts")
-        creds = sts.assume_role(
-            RoleArn=mut_output["approval_response_role_arn"],
-            RoleSessionName=f"Integration-{uuid.uuid4()}",
-        )["Credentials"]
-
-        testing_env_vars = {
-            "AWS_ACCESS_KEY_ID": creds["AccessKeyId"],
-            "AWS_SECRET_ACCESS_KEY": creds["SecretAccessKey"],
-            "AWS_SESSION_TOKEN": creds["SessionToken"],
-            "AWS_REGION": mut_output["aws_region"],
-            "AWS_DEFAULT_REGION": mut_output["aws_region"],
-        }
+        pytest.skip("Integration test is not supported remotely")
     else:
         testing_env_vars = {
             "AWS_ACCESS_KEY_ID": "mock-key",
