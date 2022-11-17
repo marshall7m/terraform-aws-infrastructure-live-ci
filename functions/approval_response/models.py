@@ -26,12 +26,9 @@ class QueryStringParameters(BaseModel):
     taskToken: str
     x_ses_signature_256: str = Field(alias="X-SES-Signature-256")
 
-    @validator("*", pre=True)
-    def decode(cls, v):
-        return aws_decode(v)
-
-    @root_validator(skip_on_failure=True)
+    @root_validator(pre=True)
     def validate_sig_content(cls, values):
+        values = {k: aws_decode(v) for k, v in values.items()}
         if not values["x_ses_signature_256"].startswith("sha256="):
             raise InvalidSignatureError("Signature is not a valid sha256 value")
 
