@@ -99,11 +99,11 @@ FROM (
         'terragrunt plan --terragrunt-working-dir ' || cfg_path
         || ' --terragrunt-iam-role ' || plan_role_arn || target_resources(
             new_resources
-        ) || ' -destroy' AS plan_command,
+        ) || ' -no-color' -destroy' AS plan_command,
         'terragrunt destroy --terragrunt-working-dir ' || cfg_path
         || ' --terragrunt-iam-role ' || apply_role_arn || target_resources(
             new_resources
-        ) || ' -auto-approve' AS apply_command
+        ) || ' -no-color -auto-approve' AS apply_command
     FROM executions
     WHERE commit_id = '{commit_id}'
           AND cardinality(new_resources) > 0
