@@ -15,7 +15,6 @@ from tftest import TerraformTestError
 import python_on_whales
 import requests
 import tftest
-import timeout_decorator
 from python_on_whales import docker
 
 from tests.helpers.utils import push, rds_data_client
@@ -108,39 +107,9 @@ def aws_session_expiration_check(request):
         log.info("Neither --until-aws-exp nor $UNTIL_AWS_EXP was set -- skipping check")
 
 
-@timeout_decorator.timeout(30)
-@pytest.fixture(scope="session")
-def setup_metadb():
-    """Creates `account_dim` and `executions` table"""
-    log.info("Creating metadb tables")
-    with aurora_data_api.connect(
-        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
-    ) as conn, conn.cursor() as cur:
-        with open(
-            f"{os.path.dirname(os.path.realpath(__file__))}/../sql/create_metadb_tables.sql",
-            "r",
-        ) as f:
-            cur.execute(
-                f.read()
-                .replace("$", "")
-                .format(
-                    metadb_schema="testing",
-                    metadb_name=os.environ["PGDATABASE"],
-                )
-            )
-    yield None
-
-    log.info("Dropping metadb tables")
-    with aurora_data_api.connect(
-        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
-    ) as conn, conn.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS executions, account_dim")
-
-
 @pytest.fixture(scope="function")
-def truncate_executions(setup_metadb):
+def truncate_executions():
     """Removes all rows from execution table after every test"""
-
     yield None
 
     log.info("Teardown: Truncating executions table")
@@ -384,5 +353,5 @@ def mut_output(request, reset_moto_server, tfvars_files):
 
     yield tf.output(use_cache=True)
 
-    log.debug("Running terraform destroy")
-    tf.destroy(auto_approve=True)
+    # log.debug("Running terraform destroy")
+    # tf.destroy(auto_approve=True)
