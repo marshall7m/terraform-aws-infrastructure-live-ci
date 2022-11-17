@@ -20,7 +20,7 @@ def setup_metadb():
         database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
     ) as conn, conn.cursor() as cur:
         with open(
-            f"{os.path.dirname(os.path.realpath(__file__))}/../sql/create_metadb_tables.sql",
+            f"{os.path.dirname(os.path.realpath(__file__))}/../../sql/create_metadb_tables.sql",
             "r",
         ) as f:
             cur.execute(
