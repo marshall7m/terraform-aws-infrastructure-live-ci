@@ -166,6 +166,15 @@ EOF
   default     = null
 }
 
+variable "approval_response_image_address" {
+  description = <<EOF
+Docker registry image to use for the approval repsonse Lambda Function. If not specified, this Terraform module's GitHub registry image
+will be used with the tag associated with the version of this module. 
+EOF
+  type        = string
+  default     = null
+}
+
 variable "local_task_common_env_vars" {
   description = "ECS task env vars to set for local testing terraform module"
   type = list(object({
