@@ -17,9 +17,11 @@ def push_changes(mut_output, request):
     gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"], retry=3)
     branch = f"test-{uuid.uuid4()}"
     repo = gh.get_repo(mut_output["repo_full_name"])
+    commit_id = push(repo, branch, request.param)
 
     yield {
-        "commit_id": push(repo, branch, request.param),
+        "commit_id": commit_id,
+        "base_commit_id": repo.get_commit(commit_id).parents[-1].sha,
         "branch": branch,
         "changes": request.param,
     }
