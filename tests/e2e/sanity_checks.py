@@ -59,8 +59,10 @@ class SanityChecks:
         """Assert that the approval response returns a success status code"""
         fail_test = False
         for address, response in ses_approval_responses.items():
-            log.debug("Address: %s", address)
-            log.debug("Response: \n%s", response.text)
+            log.debug(
+                f"Address: {address}",
+            )
+            log.debug(f"Response: \n{response.text}")
             try:
                 response.raise_for_status()
             # TODO: get exact exception
@@ -95,7 +97,7 @@ class SanityChecks:
                 merge_lock = ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])[
                     "Parameter"
                 ]["Value"]
-                log.debug("Merge lock value: %s", merge_lock)
+                log.debug(f"Merge lock value: {merge_lock}")
 
                 time.sleep(10)
                 attempt += 1

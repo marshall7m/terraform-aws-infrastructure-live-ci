@@ -108,9 +108,7 @@ class CreateStack:
         target_diff_paths = []
 
         log.debug(
-            "Getting git differences between commits: %s and %s",
-            os.environ["BASE_COMMIT_ID"],
-            os.environ["COMMIT_ID"],
+            f"Getting git differences between commits: {os.environ['BASE_COMMIT_ID']} and {os.environ['COMMIT_ID']}"
         )
         for diff in repo.compare(
             os.environ["BASE_COMMIT_ID"], os.environ["COMMIT_ID"]

@@ -463,13 +463,13 @@ def ses_approval(
 
                 if len(mail_ids) > 0:
                     # gets largest email ID which is the most recent
-                    log.debug("Found message in mailbox: %s", box)
+                    log.debug(f"Found message in mailbox: {box}")
                     mail_id = max(mail_ids)
                     break
 
             attempt += 1
 
-        log.debug("Mail ID: %s", mail_id)
+        log.debug(f"Mail ID: {mail_id}")
         _, mail_data = imap_ssl.fetch(str(mail_id), "(RFC822)")
         message = email.message_from_bytes(mail_data[0][1])
         for part in message.walk():
@@ -487,8 +487,7 @@ def ses_approval(
                         return requests.post(req.full_url)
 
                 log.debug(
-                    "Action was not found in any HTML form -- check if action is valid: %s",
-                    action,
+                    f"Action was not found in any HTML form -- check if action is valid: {action}"
                 )
 
 

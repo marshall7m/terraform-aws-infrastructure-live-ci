@@ -64,9 +64,9 @@ async def ses_approve(request: Request, background_tasks: BackgroundTasks):
 
 @app.middleware("http")
 async def log_exchange(request: Request, call_next):
-    log.debug("Method: %s Path: %s", request.method, request.url.path)
+    log.debug(f"Method: {request.method} Path: {request.url.path}")
     response = await call_next(request)
-    log.debug("Status Code: %s", response.status_code)
+    log.debug(f"Status Code: {response.status_code}")
 
     return response
 

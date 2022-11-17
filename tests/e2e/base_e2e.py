@@ -267,8 +267,8 @@ class E2E:
 
         responses = {}
         for address, action in votes.items():
-            log.debug("Sending vote for address: %s", address)
-            log.debug("Action: %s", action)
+            log.debug(f"Sending vote for address: {address}")
+            log.debug(f"Action: {action}")
             res = ses_approval(
                 username=address,
                 password=os.environ.get("APPROVAL_RECIPIENT_PASSWORD"),

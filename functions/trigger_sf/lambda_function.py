@@ -283,7 +283,7 @@ def lambda_handler(event, context):
                 }
 
             log.info("Triggered via Step Function Event")
-            log.debug("Execution event: \n%s", json.dumps(execution, indent=4))
+            log.debug(f"Execution event: \n{json.dumps(execution, indent=4)}")
 
             execution = ExecutionFinished(
                 execution_id=execution["execution_id"],

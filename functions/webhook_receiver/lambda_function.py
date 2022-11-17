@@ -106,7 +106,7 @@ async def add_resource_path(request: Request, call_next):
     elif body.get("action") == "closed" and merged is True:
         request.scope["path"] = "/merge"
 
-    log.debug("Resource Path: %s", request.scope["path"])
+    log.debug(f"Resource Path: {request.scope['path']}")
 
     response = await call_next(request)
     return response
