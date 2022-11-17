@@ -267,7 +267,7 @@ def docker_lambda_receiver() -> python_on_whales.Image:
 
 
 @pytest.fixture(scope="session")
-def docker_approval_response() -> python_on_whales.Image:
+def docker_lambda_approval_response() -> python_on_whales.Image:
     """Builds Docker image for Lambda approval response function"""
     # use legacy build since gh actions runner doesn't have buildx
     img = docker.image.legacy_build(
@@ -281,7 +281,10 @@ def docker_approval_response() -> python_on_whales.Image:
 
 @pytest.fixture(scope="session")
 def tfvars_files(
-    tmp_path_factory, docker_ecs_task, docker_lambda_receiver
+    tmp_path_factory,
+    docker_ecs_task,
+    docker_lambda_receiver,
+    docker_lambda_approval_response,
 ) -> List[str]:
     """Returns list of tfvars json files to be used for Terraform variables"""
     parent = tmp_path_factory.mktemp("tfvars")
@@ -324,7 +327,9 @@ def tfvars_files(
             ],
             "ecs_image_address": docker_ecs_task.repo_tags[0],
             "webhook_receiver_image_address": docker_lambda_receiver.repo_tags[0],
-            "approval_response_image_address": docker_approval_response.repo_tags[0],
+            "approval_response_image_address": docker_lambda_approval_response.repo_tags[
+                0
+            ],
             "approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
             "approval_request_sender_email": "fakesender@fake.com",
             "create_approval_sender_policy": "false",
