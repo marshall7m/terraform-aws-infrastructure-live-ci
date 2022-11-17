@@ -11,39 +11,8 @@ from tests.helpers.utils import check_ses_sender_email_auth
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-# needs explicit import of parent conftest.py
-pytest_plugins = [
-    "tests.conftest",
-]
-
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--skip-truncate", action="store_true", help="skips truncating execution table"
-    )
-
 
 def pytest_generate_tests(metafunc):
-    if metafunc.config.getoption("skip_truncate"):
-        metafunc.parametrize(
-            "truncate_executions",
-            [True],
-            scope="session",
-            ids=["skip_truncate"],
-            indirect=True,
-        )
-
-    tf_versions = [pytest.param("latest")]
-    if "terraform_version" in metafunc.fixturenames:
-        tf_versions = [pytest.param("latest")]
-        metafunc.parametrize(
-            "terraform_version",
-            tf_versions,
-            indirect=True,
-            scope="session",
-            ids=[f"tf_{v.values[0]}" for v in tf_versions],
-        )
-
     if hasattr(metafunc.cls, "case"):
         if "target_execution" in metafunc.fixturenames:
             # gets expected count of tf directories that will have their
@@ -73,32 +42,24 @@ def pytest_generate_tests(metafunc):
 @pytest.fixture(scope="session", autouse=True)
 def verify_ses_sender_email():
     if check_ses_sender_email_auth(
-        os.environ["TF_VAR_approval_request_sender_email"], send_verify_email=True
+        os.environ.get("APPROVAL_REQUEST_SENDER_EMAIL"), send_verify_email=True
     ):
         log.info(
-            f'Testing sender email address is verified: {os.environ["TF_VAR_approval_request_sender_email"]}'
+            f'Testing sender email address is verified: {os.environ["APPROVAL_REQUEST_SENDER_EMAIL"]}'
         )
     else:
         pytest.skip(
-            f'Testing sender email address is not verified: {os.environ["TF_VAR_approval_request_sender_email"]}'
+            f'Testing sender email address is not verified: {os.environ["APPROVAL_REQUEST_SENDER_EMAIL"]}'
         )
 
 
-@pytest.fixture(scope="session")
-def tf(tf_factory):
-    # using tf_factory() instead parametrizing terra-fixt's tf() fixture via pytest_generate_tests()
-    # since pytest_generate_tests() parametrization causes the session, module and class scoped fixture teardowns
-    # to be called after every test that uses the tf fixture
-    yield tf_factory(f"{os.path.dirname(os.path.realpath(__file__))}/fixtures")
-
-
 @pytest.fixture(scope="module")
-def git_repo(tmp_path_factory):
+def git_repo(tmp_path_factory, mut_output):
     dir = str(tmp_path_factory.mktemp("scenario-repo-"))
     log.debug(f"Scenario repo dir: {dir}")
 
     repo = git.Repo.clone_from(
-        f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
+        f'https://oauth2:{os.environ["GITHUB_TOKEN"]}@github.com/{mut_output["repo_full_name"]}.git',
         dir,
     )
 
@@ -115,80 +76,6 @@ def git_repo(tmp_path_factory):
     return repo
 
 
-@pytest.fixture(scope="module")
-def merge_pr(repo, git_repo, mut_output):
-
-    merge_commits = {}
-
-    def _merge(base_ref=None, head_ref=None):
-        if base_ref is not None and head_ref is not None:
-            log.info("Merging PR")
-            merge_commits[head_ref] = repo.merge(base_ref, head_ref)
-
-        return merge_commits
-
-    yield _merge
-
-    log.info(f'Removing PR changes from base branch: {mut_output["base_branch"]}')
-
-    log.debug("Pulling remote changes")
-    git_repo.git.reset("--hard")
-    git_repo.git.pull()
-
-    log.debug(
-        "Removing admin enforcement from branch protection to allow revert pushes to trunk branch"
-    )
-    branch = repo.get_branch(branch=mut_output["base_branch"])
-    branch.remove_admin_enforcement()
-
-    log.debug("Removing required status checks")
-    status_checks = branch.get_required_status_checks().contexts
-    branch.edit_required_status_checks(contexts=[])
-    current_status_checks = status_checks
-    while len(current_status_checks) > 0:
-        sleep(3)
-        current_status_checks = branch.get_required_status_checks().contexts
-
-    log.debug("Reverting all changes from testing PRs")
-    try:
-        for ref, commit in reversed(merge_commits.items()):
-            log.debug(f"Merge Commit ID: {commit.sha}")
-
-            git_repo.git.revert("-m", "1", "--no-commit", str(commit.sha))
-            git_repo.git.commit(
-                "-m", f"Revert changes from PR: {ref} within fixture teardown"
-            )
-            git_repo.git.push("origin", "--force")
-    except Exception as e:
-        raise e
-    finally:
-        log.debug("Adding admin enforcement back")
-        branch.set_admin_enforcement()
-
-        log.debug("Adding required status checks back")
-        branch.edit_required_status_checks(contexts=status_checks)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def truncate_executions(request, mut_output):
-    # table setup is within tf module
-    # yielding none to define truncation as pytest teardown logic
-    yield None
-    if getattr(request, "param", False):
-        log.info("Skip truncating execution table")
-    else:
-        log.info("Truncating executions table")
-        with aurora_data_api.connect(
-            aurora_cluster_arn=mut_output["metadb_arn"],
-            secret_arn=mut_output["metadb_secret_manager_master_arn"],
-            database=mut_output["metadb_name"],
-            # recommended for DDL statements
-            continue_after_timeout=True,
-        ) as conn:
-            with conn.cursor() as cur:
-                cur.execute(f"TRUNCATE {mut_output['metadb_schema']}.executions")
-
-
 @pytest.fixture(scope="module", autouse=True)
 def reset_merge_lock_ssm_value(request, mut_output):
     ssm = boto3.client("ssm")
@@ -199,6 +86,20 @@ def reset_merge_lock_ssm_value(request, mut_output):
         Type="String",
         Overwrite=True,
     )
+
+
+@pytest.fixture(scope="class", autouse=True)
+def truncate_executions(mut_output):
+    """Removes all rows from execution table after test class"""
+    yield None
+
+    log.info("Truncating executions table")
+    with aurora_data_api.connect(
+        aurora_cluster_arn=mut_output["metadb_arn"],
+        secret_arn=mut_output["metadb_secret_manager_master_arn"],
+        database=mut_output["metadb_name"],
+    ) as conn, conn.cursor() as cur:
+        cur.execute("TRUNCATE executions")
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -223,13 +124,3 @@ def abort_hanging_sf_executions(mut_output):
             error="IntegrationTestsError",
             cause="Failed tests prevented execution from finishing",
         )
-
-
-@pytest.fixture(scope="module")
-def cleanup_dummy_repo(gh, request):
-    yield request.param
-    try:
-        log.info(f"Deleting dummy GitHub repo: {request.param}")
-        gh.get_user().get_repo(request.param).delete()
-    except github.UnknownObjectException:
-        log.info("GitHub repo does not exist")

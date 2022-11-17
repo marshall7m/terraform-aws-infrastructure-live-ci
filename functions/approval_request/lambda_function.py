@@ -1,12 +1,12 @@
-import boto3
 import logging
 import json
 import os
 import sys
-from pprint import pformat
 
-sys.path.append(os.path.dirname(__file__) + "/..")
-from common_lambda.utils import (
+import boto3
+
+sys.path.append(os.path.dirname(__file__))
+from utils import (
     aws_encode,
     get_email_approval_sig,
     voter_actions,
@@ -42,7 +42,8 @@ def get_ses_urls(msg: dict, secret: str, recipient: str) -> dict:
             **common_params,
             **{
                 "action": action,
-                "X-SES-Signature-256": get_email_approval_sig(
+                "X-SES-Signature-256": "sha256="
+                + get_email_approval_sig(
                     secret, msg["ExecutionName"], recipient, action
                 ),
             },
@@ -69,16 +70,16 @@ def send_approval(msg: dict, secret: str) -> dict:
 
     template_data = {
         "path": msg["Path"],
-        "logs_url": msg["LogsUrl"],
+        "logs_url": msg["PlanOutput"]["LogsUrl"],
         "execution_name": msg["ExecutionName"],
         "account_name": msg["AccountName"],
         "pr_id": msg["PullRequestID"],
     }
-    log.debug(f"Default Template Data:\n{template_data}")
+    log.debug(f"Default Template Data:\n{json.dumps(template_data, indent=4)}")
 
     destinations = []
     # need to create a separate destination object for each address since the
-    # approval URL is specifc to the address
+    # approval URL is specific to the address
     for address in msg["Voters"]:
         urls = get_ses_urls(msg, secret, address)
         destinations.append(
@@ -92,36 +93,38 @@ def send_approval(msg: dict, secret: str) -> dict:
                 ),
             }
         )
-    log.debug(f"Destinations\n {destinations}")
+    log.debug(f"Destinations\n {json.dumps(destinations, indent=4)}")
 
     log.info("Sending bulk email")
-    response = ses.send_bulk_templated_email(
+    output = ses.send_bulk_templated_email(
         Template=os.environ["SES_TEMPLATE"],
         Source=os.environ["SENDER_EMAIL_ADDRESS"],
         DefaultTemplateData=json.dumps(template_data),
         Destinations=destinations,
     )
 
-    log.debug(f"Response:\n{response}")
+    log.debug(f"Response:\n{json.dumps(output, indent=4)}")
     failed_count = 0
-    for msg in response["Status"]:
+    for msg in output["Status"]:
         if msg["Status"] != "Success":
             failed_count += 1
             log.error("Email was not successfully sent")
             log.debug(f"Email Status:\n{msg}")
 
+    res = {"statusCode": 200, "message": "All emails were successfully sent"}
     if failed_count > 0:
-        return {
+        res = {
             "statusCode": 500,
-            "message": f'{failed_count}/{len(response["Status"])} emails failed to send',
+            "message": f'{failed_count}/{len(output["Status"])} emails failed to send',
         }
 
-    return {"statusCode": 200, "message": "All emails were successfully sent"}
+    log.info(f"Sending response:\n{res}")
+    return res
 
 
 def lambda_handler(event, context):
     """Sends approval request email to email addresses associated with Terragrunt path"""
-    log.debug(f"Lambda Event:\n{pformat(event)}")
+    log.debug(f"Lambda Event:\n{json.dumps(event, indent=4)}")
 
     msg = json.loads(event["Records"][0]["Sns"]["Message"])
 

@@ -1,6 +1,5 @@
 terraform {
-  required_version = ">=1.0.0"
-  experiments      = [module_variable_optional_attrs]
+  required_version = ">=1.3.0"
   required_providers {
     random = {
       source  = "hashicorp/random"
@@ -13,6 +12,10 @@ terraform {
     github = {
       source  = "integrations/github"
       version = ">=4.9.3"
+    }
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = ">=2.23.0"
     }
   }
 }

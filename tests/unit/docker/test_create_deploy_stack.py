@@ -98,9 +98,9 @@ def test_get_github_diff_paths(repo, tmp_path_factory):
     os.environ["REPO_FULL_NAME"] = repo.full_name
     git_root = str(tmp_path_factory.mktemp(f"test-{uuid.uuid4()}"))
     os.environ["SOURCE_REPO_PATH"] = git_root
-    branch = f"test-{uuid.uuid4()}"
+    branch = "master"
     path = "directory_dependency/dev-account/global"
-
+    os.environ["BASE_COMMIT_ID"] = repo.get_branch(branch).commit.sha
     push(
         repo=repo,
         branch=branch,
@@ -114,11 +114,11 @@ def test_get_github_diff_paths(repo, tmp_path_factory):
     # need to cd into git dir in order for directories within Terragrunt
     # command output to be relative to git root
     os.chdir(git_root)
-
     graph_deps = task.get_graph_deps(
         "directory_dependency/dev-account", "mock-role-arn"
     )
     log.debug(f"Graph deps: {graph_deps}")
+
     actual = task.get_github_diff_paths(graph_deps, "directory_dependency/dev-account")
 
     assert sorted(actual) == sorted(

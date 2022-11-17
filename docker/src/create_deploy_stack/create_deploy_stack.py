@@ -1,15 +1,15 @@
 import os
 import sys
 import logging
-import github
-import aurora_data_api
 import re
-import boto3
-from pprint import pformat
 import json
 from typing import List
 from collections import defaultdict
 import fnmatch
+
+import github
+import aurora_data_api
+import boto3
 
 sys.path.append(os.path.dirname(__file__) + "/..")
 from common.utils import (
@@ -21,6 +21,7 @@ from common.utils import (
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
+stream.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
@@ -106,12 +107,11 @@ class CreateStack:
         log.info("Running Graph Scan")
         target_diff_paths = []
 
-        parent = repo.get_commit(os.environ["COMMIT_ID"] + "^")
         log.debug(
-            f'Getting git differences between commits: {parent.sha} and {os.environ["COMMIT_ID"]}'
+            f"Getting git differences between commits: {os.environ['BASE_COMMIT_ID']} and {os.environ['COMMIT_ID']}"
         )
         for diff in repo.compare(
-            os.environ["COMMIT_ID"] + "^", os.environ["COMMIT_ID"]
+            os.environ["BASE_COMMIT_ID"], os.environ["COMMIT_ID"]
         ).files:
             # collects directories that contain new, modified and removed .hcl/.tf files
             if diff.status in ["added", "modified", "removed"]:
@@ -191,7 +191,7 @@ class CreateStack:
             raise ClientException(f"Account path does not exist within repo: {path}")
 
         graph_deps = self.get_graph_deps(path, role_arn)
-        log.debug(f"Graph Dependency mapping: \n{pformat(graph_deps)}")
+        log.debug(f"Graph Dependency mapping: \n{json.dumps(graph_deps, indent=4)}")
 
         log.debug(f'Scan type: {os.environ["SCAN_TYPE"]}')
 
@@ -250,7 +250,7 @@ class CreateStack:
                 )
                 cols = [desc[0] for desc in cur.description]
                 res = cur.fetchall()
-                log.debug(f"Raw accounts records:\n{res}")
+                log.debug(f"Raw accounts records:\n{json.dumps(res, indent=4)}")
                 accounts = []
                 for account in res:
                     record = dict(zip(cols, account))
@@ -264,7 +264,7 @@ class CreateStack:
                         record["voters"].removeprefix("{").removesuffix("}").split(",")
                     )
                     accounts.append(record)
-                log.debug(f"Accounts:\n{accounts}")
+                log.debug(f"Accounts:\n{json.dumps(accounts, indent=4)}")
 
                 if len(accounts) == 0:
                     Exception("No account paths are defined in account_dim")
@@ -374,7 +374,9 @@ class CreateStack:
             state = "failure"
 
         commit_status_config = json.loads(os.environ["COMMIT_STATUS_CONFIG"])
-        log.debug(f"Commit status config:\n{pformat(commit_status_config)}")
+        log.debug(
+            f"Commit status config:\n{json.dumps(commit_status_config, indent=4)}"
+        )
         if commit_status_config[os.environ["STATUS_CHECK_NAME"]]:
             commit = (
                 github.Github(os.environ["GITHUB_TOKEN"], retry=3)

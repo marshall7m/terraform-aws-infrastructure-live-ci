@@ -9,6 +9,7 @@ from common.utils import get_task_log_url
 
 log = logging.getLogger(__name__)
 stream = logging.StreamHandler(sys.stdout)
+stream.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
@@ -23,11 +24,11 @@ def main() -> None:
     log.debug(f"Command: {cmd}")
     try:
         run = subprocess.run(cmd.split(" "), capture_output=True, text=True, check=True)
-        print(run.stdout)
+        log.info(run.stdout)
         state = "success"
     except subprocess.CalledProcessError as e:
-        print(e.stderr)
-        print(e)
+        log.info(e.stderr)
+        log.info(e)
         state = "failure"
 
     commit_status_config = json.loads(os.environ["COMMIT_STATUS_CONFIG"])

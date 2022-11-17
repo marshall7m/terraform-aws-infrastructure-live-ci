@@ -6,7 +6,7 @@ import re
 from docker.src.common.utils import subprocess_run
 import aurora_data_api
 
-from tests.helpers.utils import rds_data_client, insert_records
+from tests.helpers.utils import rds_data_client, insert_records, terra_version
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -97,6 +97,20 @@ tg_versions = [
     pytest.param("latest"),
     pytest.param("0.31.0"),
 ]
+
+
+@pytest.fixture(scope="session")
+def terraform_version(request):
+    """Terraform version that will be installed and used"""
+    terra_version("terraform", request.param, overwrite=True)
+    return request.param
+
+
+@pytest.fixture(scope="session")
+def terragrunt_version(request):
+    """Terragrunt version that will be installed and used"""
+    terra_version("terragrunt", request.param, overwrite=True)
+    return request.param
 
 
 def pytest_generate_tests(metafunc):

@@ -1,21 +1,29 @@
-import pytest
-import os
 import datetime
-import re
+import json
 import logging
+import os
+import re
+import shutil
 import time
 import uuid
+from typing import List
 
-import github
-import timeout_decorator
 import aurora_data_api
+import github
+import pytest
+from tftest import TerraformTestError
+import python_on_whales
+import requests
+import tftest
+from python_on_whales import docker
 
-from tests.helpers.utils import rds_data_client, terra_version, commit
+from tests.helpers.utils import push, rds_data_client
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 gh = github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+FILE_DIR = os.path.dirname(__file__)
 
 
 def pytest_addoption(parser):
@@ -24,6 +32,16 @@ def pytest_addoption(parser):
         action="store",
         default=os.environ.get("UNTIL_AWS_EXP", False),
         help="The least amount of time until the AWS session token expires in minutes (e.g. 10m) or hours (e.g. 2h)",
+    )
+
+    parser.addoption(
+        "--skip-moto-reset", action="store_true", help="skips resetting moto server"
+    )
+
+    parser.addoption(
+        "--setup-reset-moto-server",
+        action="store_true",
+        help="Resets moto server on session setup",
     )
 
 
@@ -89,39 +107,9 @@ def aws_session_expiration_check(request):
         log.info("Neither --until-aws-exp nor $UNTIL_AWS_EXP was set -- skipping check")
 
 
-@timeout_decorator.timeout(30)
-@pytest.fixture(scope="session")
-def setup_metadb():
-    """Creates `account_dim` and `executions` table"""
-    log.info("Creating metadb tables")
-    with aurora_data_api.connect(
-        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
-    ) as conn, conn.cursor() as cur:
-        with open(
-            f"{os.path.dirname(os.path.realpath(__file__))}/../sql/create_metadb_tables.sql",
-            "r",
-        ) as f:
-            cur.execute(
-                f.read()
-                .replace("$", "")
-                .format(
-                    metadb_schema="testing",
-                    metadb_name=os.environ["PGDATABASE"],
-                )
-            )
-    yield None
-
-    log.info("Dropping metadb tables")
-    with aurora_data_api.connect(
-        database=os.environ["METADB_NAME"], rds_data_client=rds_data_client
-    ) as conn, conn.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS executions, account_dim")
-
-
 @pytest.fixture(scope="function")
-def truncate_executions(setup_metadb):
+def truncate_executions():
     """Removes all rows from execution table after every test"""
-
     yield None
 
     log.info("Teardown: Truncating executions table")
@@ -145,20 +133,6 @@ def aws_credentials():
     os.environ["AWS_SESSION_TOKEN"] = os.environ.get("AWS_SESSION_TOKEN", "testing")
     os.environ["AWS_REGION"] = os.environ.get("AWS_REGION", "us-west-2")
     os.environ["AWS_DEFAULT_REGION"] = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
-
-
-@pytest.fixture(scope="session")
-def terraform_version(request):
-    """Terraform version that will be installed and used"""
-    terra_version("terraform", request.param, overwrite=True)
-    return request.param
-
-
-@pytest.fixture(scope="session")
-def terragrunt_version(request):
-    """Terragrunt version that will be installed and used"""
-    terra_version("terragrunt", request.param, overwrite=True)
-    return request.param
 
 
 @pytest.fixture(scope="module")
@@ -186,18 +160,8 @@ def pr(repo, request):
     """
 
     param = request.param
-    base_commit = repo.get_branch(param["base_ref"])
-    base_commit_id = base_commit.commit.sha
-    head_ref = repo.create_git_ref(
-        ref="refs/heads/" + param["head_ref"], sha=base_commit_id
-    )
-    commit_id = commit(
-        repo,
-        param["head_ref"],
-        param["changes"],
-        param.get("commit_message", "test commit"),
-    ).sha
-    head_ref.edit(sha=commit_id)
+    base_commit_id = repo.get_branch(param["base_ref"]).commit.sha
+    head_commit_id = push(repo, param["head_ref"], param["changes"])
 
     log.info("Creating PR")
     pr = repo.create_pull(
@@ -211,16 +175,183 @@ def pr(repo, request):
         "full_name": repo.full_name,
         "number": pr.number,
         "base_commit_id": base_commit_id,
-        "head_commit_id": commit_id,
+        "head_commit_id": head_commit_id,
         "base_ref": param["base_ref"],
         "head_ref": param["head_ref"],
     }
 
     log.info(f"Removing PR head ref branch: {param['head_ref']}")
-    head_ref.delete()
+    repo.get_git_ref(f"heads/{param['head_ref']}").delete()
 
     log.info(f"Closing PR: #{pr.number}")
     try:
         pr.edit(state="closed")
     except Exception:
         log.info("PR is merged or already closed")
+
+
+@pytest.fixture(scope="session")
+def reset_moto_server(request):
+    if not os.environ.get("IS_REMOTE", False):
+        reset = request.config.getoption("setup_reset_moto_server")
+        if reset:
+            log.info("Resetting moto server on setup")
+            requests.post(f"{os.environ['MOTO_ENDPOINT_URL']}/moto-api/reset")
+
+    yield None
+
+    if not os.environ.get("IS_REMOTE", False):
+        skip = request.config.getoption("skip_moto_reset")
+        if skip:
+            log.info("Skip resetting moto server")
+        else:
+            log.info("Resetting moto server")
+            requests.post(f"{os.environ['MOTO_ENDPOINT_URL']}/moto-api/reset")
+
+
+@pytest.fixture(scope="session")
+def docker_ecs_task() -> python_on_whales.Image:
+    """Builds Docker image for ECS tasks"""
+    # use legacy build since gh actions runner doesn't have buildx
+    img = docker.image.legacy_build(
+        os.path.join(FILE_DIR, "../docker"),
+        cache=True,
+        tags=["terraform-aws-infrastructure-live-ci/tasks:latest"],
+    )
+
+    return img
+
+
+@pytest.fixture(scope="session")
+def docker_lambda_receiver() -> python_on_whales.Image:
+    """Builds Docker image for Lambda receiver function"""
+    # use legacy build since gh actions runner doesn't have buildx
+    img = docker.image.legacy_build(
+        os.path.join(FILE_DIR, "../functions/webhook_receiver"),
+        cache=True,
+        tags=["terraform-aws-infrastructure-live-ci/receiver:latest"],
+    )
+
+    return img
+
+
+@pytest.fixture(scope="session")
+def docker_lambda_approval_response() -> python_on_whales.Image:
+    """Builds Docker image for Lambda approval response function"""
+    # use legacy build since gh actions runner doesn't have buildx
+    img = docker.image.legacy_build(
+        os.path.join(FILE_DIR, "../functions/approval_response"),
+        cache=True,
+        tags=["terraform-aws-infrastructure-live-ci/approval-response:latest"],
+    )
+
+    return img
+
+
+@pytest.fixture(scope="session")
+def tfvars_files(
+    tmp_path_factory,
+    docker_ecs_task,
+    docker_lambda_receiver,
+    docker_lambda_approval_response,
+) -> List[str]:
+    """Returns list of tfvars json files to be used for Terraform variables"""
+    parent = tmp_path_factory.mktemp("tfvars")
+    secret_env_vars = {
+        "registry_password": os.environ.get("REGISTRY_PASSWORD"),
+        "github_token_ssm_value": os.environ.get("GITHUB_TOKEN"),
+    }
+
+    if os.environ.get("IS_REMOTE", False):
+        secret_env_vars["approval_request_sender_email"] = os.environ[
+            "APPROVAL_REQUEST_SENDER_EMAIL"
+        ]
+        secret_env_vars["approval_recipient_emails"] = [
+            os.environ["APPROVAL_RECIPIENT_EMAIL"]
+        ]
+        env_vars = {"is_remote": True}
+    else:
+        # maps local endpoint URLs to terraform variables
+        env_vars = {
+            "is_remote": False,
+            "local_task_common_env_vars": [
+                {"name": "SSM_ENDPOINT_URL", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {
+                    "name": "LAMBDA_ENDPOINT_URL",
+                    "value": os.environ["MOTO_ENDPOINT_URL"],
+                },
+                {"name": "SF_ENDPOINT_URL", "value": os.environ["SF_ENDPOINT_URL"]},
+                {"name": "AWS_S3_ENDPOINT", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {
+                    "name": "AWS_DYNAMODB_ENDPOINT",
+                    "value": os.environ["MOTO_ENDPOINT_URL"],
+                },
+                {"name": "AWS_IAM_ENDPOINT", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {"name": "AWS_STS_ENDPOINT", "value": os.environ["MOTO_ENDPOINT_URL"]},
+                {
+                    "name": "METADB_ENDPOINT_URL",
+                    "value": os.environ["METADB_ENDPOINT_URL"],
+                },
+                {"name": "S3_BACKEND_FORCE_PATH_STYLE", "value": True},
+            ],
+            "ecs_image_address": docker_ecs_task.repo_tags[0],
+            "webhook_receiver_image_address": docker_lambda_receiver.repo_tags[0],
+            "approval_response_image_address": docker_lambda_approval_response.repo_tags[
+                0
+            ],
+            "approval_sender_arn": "arn:aws:ses:us-west-2:123456789012:identity/fakesender@fake.com",
+            "approval_request_sender_email": "fakesender@fake.com",
+            "create_approval_sender_policy": "false",
+            "moto_endpoint_url": os.environ["MOTO_ENDPOINT_URL"],
+            "metadb_endpoint_url": os.environ["METADB_ENDPOINT_URL"],
+            "sf_endpoint_url": os.environ["SF_ENDPOINT_URL"],
+            "ecs_endpoint_url": os.environ["ECS_ENDPOINT_URL"],
+            "metadb_cluster_arn": os.environ["AURORA_CLUSTER_ARN"],
+            "metadb_secret_arn": os.environ["AURORA_SECRET_ARN"],
+            "metadb_username": os.environ["PGUSER"],
+            "metadb_name": os.environ["PGDATABASE"],
+            "skip_credentials_validation": True,
+            "skip_metadata_api_check": True,
+            "skip_requesting_account_id": True,
+            "s3_use_path_style": True,
+        }
+
+    secret_filepath = parent / "secret.auto.tfvars.json"
+    with secret_filepath.open("w", encoding="utf-8") as f:
+        json.dump(secret_env_vars, f, indent=4, sort_keys=True)
+
+    testing_filepath = parent / "testing.auto.tfvars.json"
+    with testing_filepath.open("w", encoding="utf-8") as f:
+        json.dump(env_vars, f, indent=4, sort_keys=True)
+    filepaths = [testing_filepath, secret_filepath]
+
+    yield filepaths
+
+    shutil.rmtree(parent)
+
+
+@pytest.fixture(scope="session")
+def mut_output(request, reset_moto_server, tfvars_files):
+    """Returns dictionary of Terraform output command results"""
+    cache_dir = str(request.config.cache.makedir("tftest"))
+    log.info(f"Caching Tftest results to {cache_dir}")
+
+    tf = tftest.TerragruntTest(
+        tfdir=os.path.join(FILE_DIR, "fixtures/terraform/mut/basic"),
+        enable_cache=True,
+        cache_dir=cache_dir,
+    )
+
+    tf.setup(cleanup_on_exit=True, extra_files=tfvars_files, use_cache=True)
+
+    log.debug("Running terraform apply")
+    try:
+        tf.apply(auto_approve=True, use_cache=True)
+    except TerraformTestError as err:
+        log.debug(err, exc_info=True)
+        pytest.fail("terraform apply failed")
+
+    yield tf.output(use_cache=True)
+
+    # log.debug("Running terraform destroy")
+    # tf.destroy(auto_approve=True)

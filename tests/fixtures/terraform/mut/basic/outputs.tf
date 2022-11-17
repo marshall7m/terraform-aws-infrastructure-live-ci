@@ -96,6 +96,10 @@ output "approval_response_role_arn" {
   value = module.mut_infrastructure_live_ci.approval_response_role_arn
 }
 
+output "approval_response_image_address" {
+  value = module.mut_infrastructure_live_ci.approval_response_image_address
+}
+
 output "base_branch" {
   value = module.mut_infrastructure_live_ci.base_branch
 }
@@ -122,6 +126,10 @@ output "ecs_pr_plan_container_name" {
 
 output "ecs_pr_plan_family" {
   value = module.mut_infrastructure_live_ci.ecs_pr_plan_family
+}
+
+output "ecs_terra_run_family" {
+  value = module.mut_infrastructure_live_ci.ecs_terra_run_family
 }
 
 output "ecs_create_deploy_stack_role_arn" {
@@ -152,8 +160,12 @@ output "ecs_apply_role_arn" {
   value = module.mut_infrastructure_live_ci.ecs_apply_role_arn
 }
 
-output "ecs_plan_role_arn" {
-  value = module.mut_infrastructure_live_ci.ecs_plan_role_arn
+output "ecs_pr_plan_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_pr_plan_role_arn
+}
+
+output "ecs_terra_run_plan_role_arn" {
+  value = module.mut_infrastructure_live_ci.ecs_terra_run_plan_role_arn
 }
 
 output "email_approval_secret" {
@@ -219,4 +231,8 @@ output "file_path_pattern" {
 
 output "github_webhook_secret_ssm_key" {
   value = module.mut_infrastructure_live_ci.github_webhook_secret_ssm_key
+}
+
+output "ses_approval_subject_template" {
+  value = module.mut_infrastructure_live_ci.ses_approval_subject_template
 }

@@ -1,5 +1,3 @@
-data "aws_region" "current" {}
-
 resource "random_password" "metadb" {
   for_each = toset(["master", "ci"])
   length   = 16
@@ -7,7 +5,7 @@ resource "random_password" "metadb" {
 }
 
 resource "random_string" "mut" {
-  length  = 8
+  length  = 9
   lower   = true
   upper   = false
   special = false
@@ -51,17 +49,18 @@ resource "aws_s3_bucket_versioning" "testing_tf_state" {
 
 
 module "plan_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.plan_role_name
   trusted_entities = [
     module.mut_infrastructure_live_ci.ecs_create_deploy_stack_role_arn,
-    module.mut_infrastructure_live_ci.ecs_plan_role_arn
+    module.mut_infrastructure_live_ci.ecs_pr_plan_role_arn,
+    module.mut_infrastructure_live_ci.ecs_terra_run_plan_role_arn
   ]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
 }
 
 module "apply_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name               = local.apply_role_name
   trusted_entities        = [module.mut_infrastructure_live_ci.ecs_apply_role_arn]
   custom_role_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]

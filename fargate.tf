@@ -2,6 +2,7 @@ locals {
   ecs_cluster_name = "${var.prefix}-ecs"
 
   ecs_execution_role_name = "${var.prefix}-ecs-execution"
+  ecs_tasks_context       = "${path.module}/docker"
 
   ecs_assign_public_ip      = var.ecs_assign_public_ip ? "ENABLED" : "DISABLED"
   pr_plan_task_family       = "${var.prefix}-pr-plan"
@@ -71,10 +72,57 @@ locals {
     },
   ]
 
-  ecs_image_address = coalesce(
-    var.ecs_image_address,
-    "ghcr.io/marshall7m/terraform-aws-infrastructure-live:${local.module_docker_img_tag}"
-  )
+  ecs_image_address      = try(docker_registry_image.ecr_ecs_tasks[0].name, var.ecs_image_address)
+  repository_credentials = local.private_registry_secret_manager_arn != null ? { credentialsParameter = local.private_registry_secret_manager_arn } : null
+}
+
+module "ecr_ecs_tasks" {
+  count                   = var.ecs_image_address == null ? 1 : 0
+  source                  = "terraform-aws-modules/ecr/aws"
+  version                 = "1.5.0"
+  repository_name         = "${var.prefix}/tasks"
+  repository_force_delete = true
+  repository_type         = "private"
+  repository_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1,
+        description  = "Keep last 5 images",
+        selection = {
+          tagStatus     = "tagged",
+          tagPrefixList = ["v"],
+          countType     = "imageCountMoreThan",
+          countNumber   = 5
+        },
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "docker_image" "ecr_ecs_tasks" {
+  count        = var.ecs_image_address == null ? 1 : 0
+  name         = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}"
+  keep_locally = true
+  build {
+    path     = local.ecs_tasks_context
+    no_cache = true
+  }
+  triggers = { for f in fileset(local.ecs_tasks_context, "**") :
+  f => filesha256(format("${local.ecs_tasks_context}/%s", f)) }
+}
+
+resource "docker_tag" "ecr_ecs_tasks" {
+  count        = var.ecs_image_address == null ? 1 : 0
+  source_image = docker_image.ecr_ecs_tasks[0].image_id
+  target_image = "${module.ecr_ecs_tasks[0].repository_url}:${local.module_docker_img_tag}-${split(":", docker_image.ecr_ecs_tasks[0].image_id)[1]}"
+}
+
+resource "docker_registry_image" "ecr_ecs_tasks" {
+  count = var.ecs_image_address == null ? 1 : 0
+  name  = docker_tag.ecr_ecs_tasks[0].target_image
 }
 
 resource "aws_ssm_parameter" "scan_type" {
@@ -92,7 +140,7 @@ resource "aws_ecs_cluster" "this" {
 }
 
 module "ecs_execution_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.ecs_execution_role_name
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
@@ -132,27 +180,11 @@ resource "aws_cloudwatch_log_group" "ecs_tasks" {
   retention_in_days = var.ecs_task_logs_retention_in_days
 }
 
-module "plan_role" {
-  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+module "pr_plan_role" {
+  source                  = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name               = local.pr_plan_task_family
   custom_role_policy_arns = [aws_iam_policy.github_token_ssm_read_access.arn]
-  statements = [
-    {
-      sid       = "CrossAccountTerraformPlanAccess"
-      effect    = "Allow"
-      actions   = ["sts:AssumeRole"]
-      resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ]
-      resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
-    }
-  ]
-  trusted_services = ["ecs-tasks.amazonaws.com"]
+  trusted_services        = ["ecs-tasks.amazonaws.com"]
 }
 
 resource "aws_security_group" "ecs_tasks" {
@@ -168,17 +200,15 @@ resource "aws_security_group" "ecs_tasks" {
   }
 }
 
-resource "aws_ecs_task_definition" "plan" {
+resource "aws_ecs_task_definition" "pr_plan" {
   family = local.pr_plan_task_family
   container_definitions = jsonencode([
     {
-      name      = local.pr_plan_container_name
-      essential = true
-      image     = local.ecs_image_address
-      command   = ["python", "/src/pr_plan/plan.py"]
-      repositoryCredentials = {
-        credentialsParameter = local.private_registry_secret_manager_arn
-      }
+      name                  = local.pr_plan_container_name
+      essential             = true
+      image                 = local.ecs_image_address
+      command               = ["python", "/src/pr_plan/plan.py"]
+      repositoryCredentials = local.repository_credentials
       portMappings = [
         {
           containerPort = 80
@@ -227,7 +257,7 @@ resource "aws_ecs_task_definition" "plan" {
   cpu                      = var.plan_cpu
   memory                   = var.plan_memory
   execution_role_arn       = module.ecs_execution_role.role_arn
-  task_role_arn            = module.plan_role.role_arn
+  task_role_arn            = module.pr_plan_role.role_arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   runtime_platform {
@@ -237,12 +267,14 @@ resource "aws_ecs_task_definition" "plan" {
 }
 
 module "create_deploy_stack_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.create_deploy_stack_family
   custom_role_policy_arns = [
     aws_iam_policy.github_token_ssm_read_access.arn,
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.ecs_write_logs.arn,
+    aws_iam_policy.ecs_plan.arn,
     var.tf_state_read_access_policy
   ]
   statements = [
@@ -251,14 +283,6 @@ module "create_deploy_stack_role" {
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = flatten([for account in var.account_parent_cfg : account.plan_role_arn])
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ]
-      resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
     },
     {
       sid       = "LambdaTriggerSFAccess"
@@ -274,13 +298,11 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
   family = local.create_deploy_stack_family
   container_definitions = jsonencode([
     {
-      name      = local.create_deploy_stack_container_name
-      essential = true
-      image     = local.ecs_image_address
-      command   = ["python", "/src/create_deploy_stack/create_deploy_stack.py"]
-      repositoryCredentials = {
-        credentialsParameter = local.private_registry_secret_manager_arn
-      }
+      name                  = local.create_deploy_stack_container_name
+      essential             = true
+      image                 = local.ecs_image_address
+      command               = ["python", "/src/create_deploy_stack/create_deploy_stack.py"]
+      repositoryCredentials = local.repository_credentials
       portMappings = [
         {
           containerPort = 80
@@ -367,13 +389,35 @@ resource "aws_ecs_task_definition" "create_deploy_stack" {
   }
 }
 
-module "apply_role" {
-  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+module "terra_run_plan_role" {
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
+  role_name = "${local.terra_run_family}-plan"
+  custom_role_policy_arns = [
+    aws_iam_policy.github_token_ssm_read_access.arn,
+    aws_iam_policy.ecs_write_logs.arn,
+    var.tf_state_read_access_policy
+  ]
+  statements = [
+    {
+      effect = "Allow"
+      actions = [
+        "states:SendTaskSuccess",
+        "states:SendTaskFailure"
+      ]
+      resources = [local.state_machine_arn]
+    }
+  ]
+  trusted_services = ["ecs-tasks.amazonaws.com"]
+}
+
+module "terra_run_apply_role" {
+  source    = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name = local.terra_run_family
   custom_role_policy_arns = [
     aws_iam_policy.github_token_ssm_read_access.arn,
     aws_iam_policy.merge_lock_ssm_param_full_access.arn,
     aws_iam_policy.ci_metadb_access.arn,
+    aws_iam_policy.ecs_write_logs.arn,
     var.tf_state_read_access_policy
   ]
   statements = [
@@ -382,14 +426,6 @@ module "apply_role" {
       effect    = "Allow"
       actions   = ["sts:AssumeRole"]
       resources = var.account_parent_cfg[*].apply_role_arn
-    },
-    {
-      effect = "Allow"
-      actions = [
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ]
-      resources = [aws_cloudwatch_log_group.ecs_tasks.arn]
     }
   ]
   trusted_services = ["ecs-tasks.amazonaws.com"]
@@ -399,13 +435,11 @@ resource "aws_ecs_task_definition" "terra_run" {
   family = local.terra_run_family
   container_definitions = jsonencode([
     {
-      name      = local.terra_run_container_name
-      essential = true
-      image     = local.ecs_image_address
-      command   = ["python", "/src/terra_run/run.py"]
-      repositoryCredentials = {
-        credentialsParameter = local.private_registry_secret_manager_arn
-      }
+      name                  = local.terra_run_container_name
+      essential             = true
+      image                 = local.ecs_image_address
+      command               = ["python", "/src/terra_run/run.py"]
+      repositoryCredentials = local.repository_credentials
       portMappings = [
         {
           containerPort = 80

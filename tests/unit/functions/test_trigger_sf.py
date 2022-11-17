@@ -27,6 +27,7 @@ def test_execution_finished_update_status():
         is_rollback="false",
         commit_id="mock-commit",
         cfg_path="/foo",
+        account_id="123456789012",
     )
     execution.update_status()
 
@@ -83,6 +84,7 @@ def test_abort_commit_records():
         is_rollback="false",
         commit_id=commit_id,
         cfg_path="/foo",
+        account_id="123456789012",
     )
     execution.abort_commit_records()
 
@@ -126,6 +128,7 @@ def test_abort_sf_executions():
         is_rollback="false",
         commit_id="mock-commit",
         cfg_path="/foo",
+        account_id="123456789012",
     )
 
     with patch.dict(os.environ, {"STATE_MACHINE_ARN": machine_arn}):
@@ -168,6 +171,7 @@ def test_create_rollback_records():
         is_rollback="false",
         commit_id=commit_id,
         cfg_path="/foo",
+        account_id="123456789012",
     )
     execution.create_rollback_records()
 
@@ -198,6 +202,7 @@ def test_handle_failed_execution_is_rollback():
         is_rollback="true",
         commit_id="mock-commit",
         cfg_path="/foo",
+        account_id="123456789012",
     )
 
     with pytest.raises(lambda_function.ClientException):
@@ -369,6 +374,7 @@ def test_start_executions(mock_sf, records, expected_running_ids):
     assert mock_sf.start_execution.call_count == len(expected_running_ids)
 
 
+# TODO: Put into integration test where function is runned within container
 @pytest.mark.parametrize(
     "records,expect_unlocked_merge_lock",
     [

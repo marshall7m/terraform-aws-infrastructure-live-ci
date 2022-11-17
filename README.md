@@ -26,8 +26,9 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >=1.3.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 3.44 |
+| <a name="requirement_docker"></a> [docker](#requirement\_docker) | >=2.23.0 |
 | <a name="requirement_github"></a> [github](#requirement\_github) | >= 4.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >=3.2.0 |
 
@@ -36,6 +37,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | Name | Version |
 |------|---------|
 | <a name="provider_aws"></a> [aws](#provider\_aws) | >= 3.44 |
+| <a name="provider_docker"></a> [docker](#provider\_docker) | >=2.23.0 |
 | <a name="provider_github"></a> [github](#provider\_github) | >= 4.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | n/a |
 | <a name="provider_random"></a> [random](#provider\_random) | >=3.2.0 |
@@ -44,17 +46,21 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_apply_role"></a> [apply\_role](#module\_apply\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_create_deploy_stack_role"></a> [create\_deploy\_stack\_role](#module\_create\_deploy\_stack\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_ecs_execution_role"></a> [ecs\_execution\_role](#module\_ecs\_execution\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+| <a name="module_create_deploy_stack_role"></a> [create\_deploy\_stack\_role](#module\_create\_deploy\_stack\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_cw_event_rule_role"></a> [cw\_event\_rule\_role](#module\_cw\_event\_rule\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_cw_event_terra_run"></a> [cw\_event\_terra\_run](#module\_cw\_event\_terra\_run) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_ecr_approval_response"></a> [ecr\_approval\_response](#module\_ecr\_approval\_response) | terraform-aws-modules/ecr/aws | 1.5.0 |
+| <a name="module_ecr_ecs_tasks"></a> [ecr\_ecs\_tasks](#module\_ecr\_ecs\_tasks) | terraform-aws-modules/ecr/aws | 1.5.0 |
+| <a name="module_ecr_receiver"></a> [ecr\_receiver](#module\_ecr\_receiver) | terraform-aws-modules/ecr/aws | 1.5.0 |
+| <a name="module_ecs_execution_role"></a> [ecs\_execution\_role](#module\_ecs\_execution\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
 | <a name="module_lambda_approval_request"></a> [lambda\_approval\_request](#module\_lambda\_approval\_request) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_lambda_approval_response"></a> [lambda\_approval\_response](#module\_lambda\_approval\_response) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_lambda_trigger_sf"></a> [lambda\_trigger\_sf](#module\_lambda\_trigger\_sf) | terraform-aws-modules/lambda/aws | 3.3.1 |
 | <a name="module_lambda_webhook_receiver"></a> [lambda\_webhook\_receiver](#module\_lambda\_webhook\_receiver) | terraform-aws-modules/lambda/aws | 3.3.1 |
-| <a name="module_plan_role"></a> [plan\_role](#module\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
-| <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.1.0 |
+| <a name="module_pr_plan_role"></a> [pr\_plan\_role](#module\_pr\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_sf_role"></a> [sf\_role](#module\_sf\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_terra_run_apply_role"></a> [terra\_run\_apply\_role](#module\_terra\_run\_apply\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
+| <a name="module_terra_run_plan_role"></a> [terra\_run\_plan\_role](#module\_terra\_run\_plan\_role) | github.com/marshall7m/terraform-aws-iam//modules/iam-role | v0.2.0 |
 
 ## Resources
 
@@ -65,13 +71,16 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | [aws_cloudwatch_event_target.sf_execution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_event_target.terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target) | resource |
 | [aws_cloudwatch_log_group.ecs_tasks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
+| [aws_db_subnet_group.metadb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group) | resource |
 | [aws_ecs_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_cluster) | resource |
 | [aws_ecs_task_definition.create_deploy_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
-| [aws_ecs_task_definition.plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
+| [aws_ecs_task_definition.pr_plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_ecs_task_definition.terra_run](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_task_definition) | resource |
 | [aws_iam_policy.approval_response](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.ecs_plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.ecs_write_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -99,6 +108,15 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | [aws_ssm_parameter.merge_lock](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.metadb_ci_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [aws_ssm_parameter.scan_type](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [docker_image.ecr_approval_response](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
+| [docker_image.ecr_ecs_tasks](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
+| [docker_image.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/image) | resource |
+| [docker_registry_image.ecr_approval_response](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
+| [docker_registry_image.ecr_ecs_tasks](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
+| [docker_registry_image.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/registry_image) | resource |
+| [docker_tag.ecr_approval_response](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/tag) | resource |
+| [docker_tag.ecr_ecs_tasks](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/tag) | resource |
+| [docker_tag.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/tag) | resource |
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
 | [github_repository_webhook.this](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_webhook) | resource |
 | [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
@@ -110,11 +128,14 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | [aws_iam_policy_document.approval_response](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.ci_metadb_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.commit_status_config](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.ecs_plan](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_iam_policy_document.ecs_write_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.github_token_ssm_read_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.lambda_approval_request](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.merge_lock_ssm_param_full_access](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.trigger_sf](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
 | [aws_iam_policy_document.webhook_receiver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) | data source |
+| [aws_kms_key.ssm_kms_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/kms_key) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region) | data source |
 | [aws_ses_email_identity.approval](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ses_email_identity) | data source |
 | [aws_ssm_parameter.github_token](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ssm_parameter) | data source |
@@ -129,13 +150,13 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="input_approval_response_image_address"></a> [approval\_response\_image\_address](#input\_approval\_response\_image\_address) | Docker registry image to use for the approval repsonse Lambda Function. If not specified, this Terraform module's GitHub registry image<br>will be used with the tag associated with the version of this module. | `string` | `null` | no |
 | <a name="input_approval_sender_arn"></a> [approval\_sender\_arn](#input\_approval\_sender\_arn) | AWS SES identity ARN used to send approval emails | `string` | `null` | no |
 | <a name="input_base_branch"></a> [base\_branch](#input\_base\_branch) | Base branch for repository that all PRs will compare to | `string` | `"master"` | no |
-| <a name="input_commit_status_config"></a> [commit\_status\_config](#input\_commit\_status\_config) | Determines which commit statuses should be sent for each of the specified pipeline components. <br>The commit status will contain the current state (e.g pending, success, failure) and will link to <br>the component's associated AWS console page.<br><br>Each of the following descriptions specify where and what the commit status links to:<br><br>PrPlan: CloudWatch log stream displaying the Terraform plan for a directory within the open pull request<br>CreateDeployStack: CloudWatch log stream displaying the execution metadb records that were created for <br>  the merged pull request<br>Plan: CloudWatch log stream displaying the Terraform plan for a directory within the merged pull request<br>Apply: CloudWatch log stream displaying the Terraform apply output for a directory within the merged pull request<br>Execution: AWS Step Function page for the deployment flow execution | <pre>object({<br>    PrPlan            = optional(bool)<br>    CreateDeployStack = optional(bool)<br>    Plan              = optional(bool)<br>    Apply             = optional(bool)<br>    Execution         = optional(bool)<br>  })</pre> | `{}` | no |
+| <a name="input_commit_status_config"></a> [commit\_status\_config](#input\_commit\_status\_config) | Determines which commit statuses should be sent for each of the specified pipeline components. <br>The commit status will contain the current state (e.g pending, success, failure) and will link to <br>the component's associated AWS console page.<br><br>Each of the following descriptions specify where and what the commit status links to:<br><br>PrPlan: CloudWatch log stream displaying the Terraform plan for a directory within the open pull request<br>CreateDeployStack: CloudWatch log stream displaying the execution metadb records that were created for <br>  the merged pull request<br>Plan: CloudWatch log stream displaying the Terraform plan for a directory within the merged pull request<br>Apply: CloudWatch log stream displaying the Terraform apply output for a directory within the merged pull request<br>Execution: AWS Step Function page for the deployment flow execution | <pre>object({<br>    PrPlan            = optional(bool, true)<br>    CreateDeployStack = optional(bool, true)<br>    Plan              = optional(bool, true)<br>    Apply             = optional(bool, true)<br>    Execution         = optional(bool, true)<br>  })</pre> | `{}` | no |
 | <a name="input_create_approval_sender_policy"></a> [create\_approval\_sender\_policy](#input\_create\_approval\_sender\_policy) | Determines if an identity policy should be attached to approval sender identity | `bool` | `true` | no |
 | <a name="input_create_deploy_stack_cpu"></a> [create\_deploy\_stack\_cpu](#input\_create\_deploy\_stack\_cpu) | Number of CPU units the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
 | <a name="input_create_deploy_stack_memory"></a> [create\_deploy\_stack\_memory](#input\_create\_deploy\_stack\_memory) | Amount of memory (MiB) the create deploy stack task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `string` | `512` | no |
 | <a name="input_create_deploy_stack_scan_type"></a> [create\_deploy\_stack\_scan\_type](#input\_create\_deploy\_stack\_scan\_type) | If set to `graph`, the create\_deploy\_stack build will use the git detected differences to determine what directories to run Step Function executions for.<br>If set to `plan`, the build will use terragrunt run-all plan detected differences to determine the executions.<br>Set to `plan` if changes to the terraform resources are also being controlled outside of the repository (e.g AWS console, separate CI pipeline, etc.)<br>which results in need to refresh the terraform remote state to accurately detect changes.<br>Otherwise set to `graph`, given that collecting changes via git will be significantly faster than collecting changes via terragrunt run-all plan. | `string` | `"graph"` | no |
 | <a name="input_create_deploy_stack_status_check_name"></a> [create\_deploy\_stack\_status\_check\_name](#input\_create\_deploy\_stack\_status\_check\_name) | Name of the create deploy stack GitHub status | `string` | `"CreateDeployStack"` | no |
-| <a name="input_create_github_token_ssm_param"></a> [create\_github\_token\_ssm\_param](#input\_create\_github\_token\_ssm\_param) | Determines if the merge lock AWS SSM Parameter Store value should be created | `bool` | n/a | yes |
+| <a name="input_create_github_token_ssm_param"></a> [create\_github\_token\_ssm\_param](#input\_create\_github\_token\_ssm\_param) | Determines if a AWS SSM Parameter Store value should be created for the GitHub token | `bool` | n/a | yes |
 | <a name="input_create_metadb_subnet_group"></a> [create\_metadb\_subnet\_group](#input\_create\_metadb\_subnet\_group) | Determines if a AWS RDS subnet group should be created for the metadb | `bool` | `false` | no |
 | <a name="input_create_private_registry_secret"></a> [create\_private\_registry\_secret](#input\_create\_private\_registry\_secret) | Determines if the module should create the AWS Secret Manager resource used for private registry authentification | `bool` | `true` | no |
 | <a name="input_ecs_assign_public_ip"></a> [ecs\_assign\_public\_ip](#input\_ecs\_assign\_public\_ip) | Determines if an public IP address will be associated with ECS tasks.<br>Value is required to be `true` if var.ecs\_subnet\_ids are public subnets.<br>Value can be `false` if var.ecs\_subnet\_ids are private subnets that have a route<br>to a NAT gateway. | `bool` | `false` | no |
@@ -166,7 +187,6 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="input_metadb_schema"></a> [metadb\_schema](#input\_metadb\_schema) | Schema for AWS RDS Postgres db | `string` | `"prod"` | no |
 | <a name="input_metadb_secret_arn"></a> [metadb\_secret\_arn](#input\_metadb\_secret\_arn) | Metadb secret ARN that will be used for metadb setup queries (used for local metadb testing) | `string` | `null` | no |
 | <a name="input_metadb_security_group_ids"></a> [metadb\_security\_group\_ids](#input\_metadb\_security\_group\_ids) | Additional AWS VPC security group to associate the metadb with | `list(string)` | `[]` | no |
-| <a name="input_metadb_subnet_group_name"></a> [metadb\_subnet\_group\_name](#input\_metadb\_subnet\_group\_name) | Name of the metab subnet group name (defaults to metadb cluster identifier) | `string` | `null` | no |
 | <a name="input_metadb_subnet_ids"></a> [metadb\_subnet\_ids](#input\_metadb\_subnet\_ids) | AWS VPC subnet IDs to host the metadb within | `list(string)` | n/a | yes |
 | <a name="input_metadb_username"></a> [metadb\_username](#input\_metadb\_username) | Master username of the metadb | `string` | `"root"` | no |
 | <a name="input_plan_cpu"></a> [plan\_cpu](#input\_plan\_cpu) | Number of CPU units the PR plan task will use. <br>See for more info: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html | `number` | `256` | no |
@@ -199,6 +219,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_approval_request_function_name"></a> [approval\_request\_function\_name](#output\_approval\_request\_function\_name) | Name of the Lambda Function used for sending approval requests |
 | <a name="output_approval_request_log_group_name"></a> [approval\_request\_log\_group\_name](#output\_approval\_request\_log\_group\_name) | Cloudwatch log group associated with the Lambda Function used for processing deployment approval responses |
 | <a name="output_approval_response_function_name"></a> [approval\_response\_function\_name](#output\_approval\_response\_function\_name) | Name of the Lambda Function used for handling approval responses |
+| <a name="output_approval_response_image_address"></a> [approval\_response\_image\_address](#output\_approval\_response\_image\_address) | Docker registry image used for the approval response Lambda Function |
 | <a name="output_approval_response_role_arn"></a> [approval\_response\_role\_arn](#output\_approval\_response\_role\_arn) | IAM Role ARN of the Lambda Function used for handling approval responses |
 | <a name="output_approval_response_ses_secret"></a> [approval\_response\_ses\_secret](#output\_approval\_response\_ses\_secret) | Secret value used for authenticating AWS SES approvals within the approval response Lambda Function |
 | <a name="output_approval_url"></a> [approval\_url](#output\_approval\_url) | Lambda Function URL used for casting deployment approval votes |
@@ -214,12 +235,14 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_ecs_create_deploy_stack_role_arn"></a> [ecs\_create\_deploy\_stack\_role\_arn](#output\_ecs\_create\_deploy\_stack\_role\_arn) | AWS ECS create deploy stack task IAM role ARN |
 | <a name="output_ecs_log_group_name"></a> [ecs\_log\_group\_name](#output\_ecs\_log\_group\_name) | Cloudwatch log group name for all ECS tasks |
 | <a name="output_ecs_network_config"></a> [ecs\_network\_config](#output\_ecs\_network\_config) | VPC network configurations for ECS tasks |
-| <a name="output_ecs_plan_role_arn"></a> [ecs\_plan\_role\_arn](#output\_ecs\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan and terra run task can assume |
 | <a name="output_ecs_pr_plan_container_name"></a> [ecs\_pr\_plan\_container\_name](#output\_ecs\_pr\_plan\_container\_name) | Name of the pr plan ECS task container |
 | <a name="output_ecs_pr_plan_family"></a> [ecs\_pr\_plan\_family](#output\_ecs\_pr\_plan\_family) | AWS ECS task definition family for the PR plan task |
+| <a name="output_ecs_pr_plan_role_arn"></a> [ecs\_pr\_plan\_role\_arn](#output\_ecs\_pr\_plan\_role\_arn) | IAM role ARN the AWS ECS pr plan task can assume |
 | <a name="output_ecs_pr_plan_task_definition_arn"></a> [ecs\_pr\_plan\_task\_definition\_arn](#output\_ecs\_pr\_plan\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_ecs_security_group_ids"></a> [ecs\_security\_group\_ids](#output\_ecs\_security\_group\_ids) | List of security groups IDs used ECS tasks |
 | <a name="output_ecs_subnet_ids"></a> [ecs\_subnet\_ids](#output\_ecs\_subnet\_ids) | AWS VPC subnets IDs that the ECS tasks will be hosted in |
+| <a name="output_ecs_terra_run_family"></a> [ecs\_terra\_run\_family](#output\_ecs\_terra\_run\_family) | AWS ECS task definition family for the Terra Run task |
+| <a name="output_ecs_terra_run_plan_role_arn"></a> [ecs\_terra\_run\_plan\_role\_arn](#output\_ecs\_terra\_run\_plan\_role\_arn) | IAM role ARN the Terra Run AWS ECS plan task can assume |
 | <a name="output_ecs_terra_run_task_container_name"></a> [ecs\_terra\_run\_task\_container\_name](#output\_ecs\_terra\_run\_task\_container\_name) | Name of the terra run ECS task container |
 | <a name="output_ecs_terra_run_task_definition_arn"></a> [ecs\_terra\_run\_task\_definition\_arn](#output\_ecs\_terra\_run\_task\_definition\_arn) | AWS ECS terra run task defintion ARN |
 | <a name="output_email_approval_secret"></a> [email\_approval\_secret](#output\_email\_approval\_secret) | Secret value used for authenticating email approval responses |
@@ -242,6 +265,7 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | <a name="output_receiver_function_name"></a> [receiver\_function\_name](#output\_receiver\_function\_name) | Name of the Lambda Receiver Function |
 | <a name="output_receiver_role_arn"></a> [receiver\_role\_arn](#output\_receiver\_role\_arn) | ARN of the Lambda Receiver Function |
 | <a name="output_scan_type_ssm_param_name"></a> [scan\_type\_ssm\_param\_name](#output\_scan\_type\_ssm\_param\_name) | Name of the AWS SSM Parameter store value used to determine the scan type within the create deploy stack task |
+| <a name="output_ses_approval_subject_template"></a> [ses\_approval\_subject\_template](#output\_ses\_approval\_subject\_template) | Template used for formulating SES approval email subject line |
 | <a name="output_step_function_arn"></a> [step\_function\_arn](#output\_step\_function\_arn) | ARN of the Step Function |
 | <a name="output_step_function_name"></a> [step\_function\_name](#output\_step\_function\_name) | Name of the Step Function |
 | <a name="output_trigger_sf_function_name"></a> [trigger\_sf\_function\_name](#output\_trigger\_sf\_function\_name) | Name of the Lambda Function used for triggering Step Function execution(s) |

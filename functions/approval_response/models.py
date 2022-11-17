@@ -4,13 +4,14 @@ from typing import Any, Literal
 import hmac
 
 import boto3
-from pydantic import BaseModel, Field, Extra, Json, root_validator
+from pydantic import BaseModel, Field, Extra, Json, root_validator, validator
 
 sys.path.append(os.path.dirname(__file__))
-from exceptions import InvalidSignatureError
+from exceptions import InvalidSignatureError, ExpiredVote
 from utils import aws_decode, get_email_approval_sig
 
 ssm = boto3.client("ssm", endpoint_url=os.environ.get("SSM_ENDPOINT_URL"))
+sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
 
 
 class RequestContext(BaseModel):
@@ -25,9 +26,11 @@ class QueryStringParameters(BaseModel):
     taskToken: str
     x_ses_signature_256: str = Field(alias="X-SES-Signature-256")
 
-    @root_validator(skip_on_failure=True)
+    @root_validator(pre=True)
     def validate_sig_content(cls, values):
-        if not values["x_ses_signature_256"].startswith("sha256="):
+        print(values)
+        values = {k: aws_decode(v) for k, v in values.items()}
+        if not values["X-SES-Signature-256"].startswith("sha256="):
             raise InvalidSignatureError("Signature is not a valid sha256 value")
 
         secret = ssm.get_parameter(
@@ -39,7 +42,7 @@ class QueryStringParameters(BaseModel):
         )
 
         authorized = hmac.compare_digest(
-            values["x_ses_signature_256"].rsplit("=", maxsplit=1)[-1], expected_sig
+            values["X-SES-Signature-256"].rsplit("=", maxsplit=1)[-1], expected_sig
         )
 
         if not authorized:
@@ -48,6 +51,18 @@ class QueryStringParameters(BaseModel):
             )
 
         return values
+
+    @validator("exArn")
+    def validate_execution_arn(cls, v):
+        execution = sf.describe_execution(executionArn=v)
+        status = execution["status"]
+
+        if status != "RUNNING":
+            raise ExpiredVote(
+                f"Approval submissions are not available anymore -- Execution Status: {status}"
+            )
+
+        return v
 
 
 class SESEvent(BaseModel):

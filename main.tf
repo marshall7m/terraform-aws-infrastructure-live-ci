@@ -37,11 +37,13 @@ resource "aws_sfn_state_machine" "this" {
             Cluster        = aws_ecs_cluster.this.arn
             TaskDefinition = aws_ecs_task_definition.terra_run.arn
             LaunchType     = "FARGATE"
+            # TODO: add once StartedBy parameter is supported: https://repost.aws/questions/QUFtDBO45hTWq3wxnMbsWWKg/aws-step-function-ecs-started-by-parameter-support
+            # StartedBy = "States.Format('{}-Plan', $.execution_id)"
             NetworkConfiguration = {
               AwsvpcConfiguration = local.sf_ecs_network_config
             }
             Overrides = {
-              TaskRoleArn = module.plan_role.role_arn
+              TaskRoleArn = module.terra_run_plan_role.role_arn
               ContainerOverrides = [
                 {
                   Name = local.terra_run_container_name
@@ -61,7 +63,7 @@ resource "aws_sfn_state_machine" "this" {
               ]
             }
           }
-          Resource   = "arn:aws:states:::ecs:runTask.sync"
+          Resource   = "arn:aws:states:::ecs:runTask.waitForTaskToken"
           Type       = "Task"
           ResultPath = "$.PlanOutput"
           Catch = [
@@ -86,7 +88,7 @@ resource "aws_sfn_state_machine" "this" {
               "ExecutionName.$"   = "$$.Execution.Name"
               "AccountName.$"     = "$.account_name"
               "PullRequestID.$"   = "$.pr_id"
-              "PlanOutput"        = "$.PlanOutput"
+              "PlanOutput.$"      = "$.PlanOutput"
             }
           }
           Resource   = "arn:aws:states:::sns:publish.waitForTaskToken"
@@ -121,11 +123,13 @@ resource "aws_sfn_state_machine" "this" {
             Cluster        = aws_ecs_cluster.this.arn
             TaskDefinition = aws_ecs_task_definition.terra_run.arn
             LaunchType     = "FARGATE"
+            # TODO: add once StartedBy parameter is supported: https://repost.aws/questions/QUFtDBO45hTWq3wxnMbsWWKg/aws-step-function-ecs-started-by-parameter-support
+            # StartedBy = "States.Format('{}-Apply', $.execution_id)"
             NetworkConfiguration = {
               AwsvpcConfiguration = local.sf_ecs_network_config
             }
             Overrides = {
-              TaskRoleArn = module.apply_role.role_arn
+              TaskRoleArn = module.terra_run_apply_role.role_arn
               ContainerOverrides = [
                 {
                   Name = local.terra_run_container_name
@@ -220,7 +224,7 @@ resource "aws_sfn_state_machine" "this" {
 }
 
 module "sf_role" {
-  source           = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source           = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
   role_name        = local.step_function_name
   trusted_services = ["states.amazonaws.com"]
   statements = [
@@ -248,8 +252,8 @@ module "sf_role" {
       ]
       resources = [
         module.ecs_execution_role.role_arn,
-        module.plan_role.role_arn,
-        module.apply_role.role_arn
+        module.terra_run_plan_role.role_arn,
+        module.terra_run_apply_role.role_arn
       ]
     },
     {
@@ -327,7 +331,7 @@ resource "aws_cloudwatch_event_rule" "sf_execution" {
 }
 
 module "cw_event_rule_role" {
-  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
 
   role_name        = local.cloudwatch_event_rule_name
   trusted_services = ["events.amazonaws.com"]
@@ -369,7 +373,7 @@ resource "aws_cloudwatch_event_rule" "ecs_terra_run" {
 }
 
 module "cw_event_terra_run" {
-  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.1.0"
+  source = "github.com/marshall7m/terraform-aws-iam//modules/iam-role?ref=v0.2.0"
 
   role_name        = local.cw_event_terra_run_rule
   trusted_services = ["events.amazonaws.com"]

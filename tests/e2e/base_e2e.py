@@ -1,343 +1,100 @@
-import pytest
 import os
 import logging
 import json
 import time
-from datetime import datetime
-from functions.common_lambda.utils import get_email_approval_sig, aws_encode
-import github
-import git
-from tests.e2e.conftest import mut_output
-import timeout_decorator
-import random
-import string
-import re
-from pytest_dependency import depends
+from pprint import pformat
+import uuid
+
+import pytest
 import aurora_data_api
 import boto3
-from pprint import pformat
-import requests
-from tests.e2e import utils
-from tests.helpers.utils import get_sf_approval_state_msg
+import github
+
+from tests.helpers.utils import (
+    get_finished_commit_status,
+    get_execution_arn,
+    ses_approval,
+    push,
+    get_finished_sf_execution,
+)
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 ecs = boto3.client("ecs")
+sf = boto3.client("stepfunctions")
 
 
 class E2E:
-    executions = []
+    """
+    Fixtures that interact with the CI/CD pipeline and/or retrieves data
+    associated with the pipeline execution. Fixture dependencies reflect the order
+    of the CI/CD workflow.
+    """
+
+    tested_execution_ids = []
 
     @pytest.fixture(scope="class")
-    def case_param(self, request):
-        """Class case fixture used to determine the actions within the CI flow and the expected test assertions"""
-        return request.cls.case
-
-    @pytest.fixture(scope="module")
-    def tf_destroy_commit_ids(self, mut_output):
-        """Creates a list of commit Ids to be used for the source version of the teardown Terragrunt destroy tasks"""
-        commit_ids = [mut_output["base_branch"]]
-
-        def _add(id=None):
-            if id:
-                commit_ids.append(id)
-            return commit_ids
-
-        yield _add
-
-    @pytest.fixture(scope="class", autouse=True)
-    def set_scan_type(self, case_param, mut_output):
-        ssm = boto3.client("ssm")
-
-        scan_type = case_param.get("scan_type", "graph")
-        log.info(f"Case scan type: {scan_type}")
-
-        ssm.put_parameter(
-            Name=mut_output["scan_type_ssm_param_name"],
-            Value=scan_type,
-            Type="String",
-            Overwrite=True,
+    def repo(self, mut_output):
+        return github.Github(os.environ["GITHUB_TOKEN"], retry=3).get_repo(
+            mut_output["repo_full_name"]
         )
-        yield None
 
-    @pytest.fixture(scope="class", autouse=True)
-    def pr(
-        self,
-        request,
-        repo,
-        case_param,
-        git_repo,
-        merge_pr,
-        mut_output,
-        tmp_path_factory,
-        tf_destroy_commit_ids,
-    ):
-        """Creates the PR used for testing the CI flow. Current implementation creates all PR changes within one commit."""
-        if "revert_ref" not in case_param:
-            base_commit = repo.get_branch(mut_output["base_branch"])
-            head_ref = repo.create_git_ref(
-                ref="refs/heads/" + case_param["head_ref"], sha=base_commit.commit.sha
-            )
-            elements = []
-            for dir, cfg in case_param["executions"].items():
-                if "pr_files_content" in cfg:
-                    for content in cfg["pr_files_content"]:
-                        filepath = (
-                            dir
-                            + "/"
-                            + "".join(
-                                random.choice(string.ascii_lowercase) for _ in range(8)
-                            )
-                            + ".tf"
-                        )
-                        log.debug(f"Creating file: {filepath}")
-                        blob = repo.create_git_blob(content, "utf-8")
-                        elements.append(
-                            github.InputGitTreeElement(
-                                path=filepath, mode="100644", type="blob", sha=blob.sha
-                            )
-                        )
-
-            head_sha = repo.get_branch(case_param["head_ref"]).commit.sha
-            base_tree = repo.get_git_tree(sha=head_sha)
-            tree = repo.create_git_tree(elements, base_tree)
-            parent = repo.get_git_commit(sha=head_sha)
-            commit_id = repo.create_git_commit("Case PR changes", tree, [parent]).sha
-            head_ref.edit(sha=commit_id)
-
-            log.info("Creating PR")
-            pr = repo.create_pull(
-                title=f"test-{case_param['head_ref']}",
-                body=f"test PR class: {request.cls.__name__}",
-                base=mut_output["base_branch"],
-                head=case_param["head_ref"],
-            )
-            log.debug(f"PR #{pr.number}")
-            log.debug(f"Head ref commit: {commit_id}")
-            log.debug(f"PR commits: {pr.commits}")
-
-            if case_param.get("destroy_tf_resources_with_pr", False):
-                # set attribute if PR contains new Terraform provider blocks that require credentials so teardown
-                # Terragrunt destroy tasks will have the provider blocks needed to destroy the provider resources
-                tf_destroy_commit_ids(commit_id)
-
-            yield {
-                "number": pr.number,
-                "head_commit_id": commit_id,
-                "base_ref": mut_output["base_branch"],
-                "head_ref": case_param["head_ref"],
-            }
-
-        else:
-            merge_commit = merge_pr()
-
-            if case_param["revert_ref"] in merge_commit:
-                log.info(
-                    f'Creating PR to revert changes from PR named: {case_param["revert_ref"]}'
-                )
-                dir = str(tmp_path_factory.mktemp("scenario-repo-revert"))
-
-                log.info(f'Creating revert branch: {case_param["head_ref"]}')
-                base_commit = repo.get_branch(mut_output["base_branch"])
-                head_ref = repo.create_git_ref(
-                    ref="refs/heads/" + case_param["head_ref"],
-                    sha=base_commit.commit.sha,
-                )
-
-                git_repo = git.Repo.clone_from(
-                    f'https://oauth2:{os.environ["TF_VAR_github_testing_token"]}@github.com/{os.environ["REPO_FULL_NAME"]}.git',
-                    dir,
-                    branch=case_param["head_ref"],
-                )
-
-                log.debug(f"Merged Commits: {merge_commit}")
-                log.debug(
-                    f'Reverting merge commit: {merge_commit[case_param["revert_ref"]].sha}'
-                )
-                git_repo.git.revert(
-                    "-m",
-                    "1",
-                    "--no-commit",
-                    str(merge_commit[case_param["revert_ref"]].sha),
-                )
-                git_repo.git.commit("-m", "Revert PR changes within PR case")
-                git_repo.git.push("origin")
-
-                log.debug("Creating PR")
-                pr = repo.create_pull(
-                    title=f'Revert {case_param["revert_ref"]}',
-                    body="Rollback PR",
-                    base=mut_output["base_branch"],
-                    head=case_param["head_ref"],
-                )
-
-                yield {
-                    "number": pr.number,
-                    "head_commit_id": git_repo.head.object.hexsha,
-                    "base_ref": mut_output["base_branch"],
-                    "head_ref": case_param["head_ref"],
+    @pytest.fixture(scope="class")
+    def pr(self, repo, mut_output, request):
+        """
+        Manages lifecycle of GitHub PR associated with the test case.
+        Current implementation creates all PR changes within one commit.
+        """
+        base_commit_id = repo.get_branch(mut_output["base_branch"]).commit.sha
+        for dir, cfg in request.cls.case["executions"].items():
+            if "pr_files_content" in cfg:
+                changes = {
+                    os.path.join(dir, str(uuid.uuid4()) + ".tf"): content
+                    for content in cfg["pr_files_content"]
                 }
+                head_commit_id = push(repo, request.cls.case["head_ref"], changes)
 
-                log.info(f"Removing PR head ref branch: {case_param['head_ref']}")
-                head_ref.delete()
-
-                log.info(f"Closing PR: #{pr.number}")
-                try:
-                    pr.edit(state="closed")
-                except Exception:
-                    log.info("PR is merged or already closed")
-            else:
-                pytest.skip(f"PR to revert does not exist: {case_param['head_ref']}")
-
-    @pytest.fixture(scope="module")
-    def destroy_scenario_tf_resources(self, mut_output, tf_destroy_commit_ids):
-        """
-        Starts a terra run task for each AWS account and runs terragrunt run-all destroy
-        within each account-level root directory
-        """
-        yield None
-        log.info("Destroying Terraform provisioned resources from test repository")
-
-        with aurora_data_api.connect(
-            aurora_cluster_arn=mut_output["metadb_arn"],
-            secret_arn=mut_output["metadb_secret_manager_master_arn"],
-            database=mut_output["metadb_name"],
-        ) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                SELECT account_name, account_path, apply_role_arn
-                FROM {mut_output["metadb_schema"]}.account_dim
-                """
-                )
-
-                results = cur.fetchall()
-                columns = cur.description
-
-            accounts = []
-            for result in results:
-                record = {}
-                for i, col in enumerate(columns):
-                    record[col.name] = result[i]
-                accounts.append(record)
-
-        log.debug(f"Accounts:\n{pformat(accounts)}")
-        log.info("Starting account-level terraform destroy tasks")
-        # reversed so newer commits are destroyed first
-        for source_version in reversed(tf_destroy_commit_ids()):
-            task_arns = []
-            log.debug(f"Source version: {source_version}")
-            for account in accounts:
-                log.debug(f'Account Name: {account["account_name"]}')
-                task = ecs.run_task(
-                    cluster=mut_output["ecs_cluster_arn"],
-                    count=1,
-                    launchType="FARGATE",
-                    taskDefinition=mut_output["ecs_terra_run_task_definition_arn"],
-                    networkConfiguration={
-                        "awsvpcConfiguration": {
-                            "subnets": mut_output["ecs_subnet_ids"],
-                            "securityGroups": mut_output["ecs_security_group_ids"],
-                            "assignPublicIp": "ENABLED",
-                        }
-                    },
-                    overrides={
-                        "containerOverrides": [
-                            {
-                                "name": mut_output["ecs_terra_run_task_container_name"],
-                                "command": f'terragrunt run-all destroy --terragrunt-working-dir {account["account_path"]} --terragrunt-iam-role {account["apply_role_arn"]} -auto-approve'.split(
-                                    " "
-                                ),
-                                "environment": [
-                                    {
-                                        "name": "SOURCE_VERSION",
-                                        "value": mut_output["base_branch"],
-                                    }
-                                ],
-                            }
-                        ],
-                        "taskRoleArn": mut_output["ecs_apply_role_arn"],
-                    },
-                )
-                log.debug(f"Run task response:\n{pformat(task)}")
-
-                task_arns.append(task["tasks"][0]["containers"][0]["taskArn"])
-
-            log.info("Waiting on destroy tasks to finish")
-            statuses = []
-            while all([s == "STOPPED" for s in statuses]):
-                time.sleep(5)
-                response = ecs.describe_tasks(
-                    cluster=mut_output["ecs_cluster_arn"], tasks=task_arns
-                )
-                statuses = [
-                    task["containers"][0]["lastStatus"] for task in response["tasks"]
-                ]
-                log.debug(f"Statuses:\n{statuses}")
-
-            if len(response["failures"]) > 0:
-                log.error("Cleanup ECS tasks failed")
-                log.error(response["failures"])
-
-    def get_finished_commit_status(self, context, repo, commit_id, wait=3):
-        state = None
-        log.info(f"Waiting for commit status check to finish: {context}")
-        while state in [None, "pending"]:
-            log.debug(f"Waiting {wait} seconds")
-            time.sleep(wait)
-            try:
-                status = [
-                    status
-                    for status in repo.get_commit(commit_id).get_statuses()
-                    if status.context == context
-                ][0]
-                state = status.state
-            except IndexError:
-                state = None
-
-            log.debug(f"Status state: {state}")
-
-        return status
-
-    @timeout_decorator.timeout(30)
-    @pytest.mark.dependency()
-    def test_merge_lock_pr_status(self, repo, mut_output, pr):
-        """Assert PR's head commit ID has a successful merge lock status"""
-
-        status = self.get_finished_commit_status(
-            mut_output["merge_lock_status_check_name"], repo, pr["head_commit_id"]
+        log.info("Creating PR")
+        pr = repo.create_pull(
+            title=request.cls.case.get("title", f"test-{request.cls.case['head_ref']}"),
+            body=request.cls.case.get("body", "Test PR"),
+            base=mut_output["base_branch"],
+            head=request.cls.case["head_ref"],
         )
 
-        log.info("Assert PR head commit status is successful")
-        log.debug(f"Logs URL: {status.target_url}")
-        assert status.state == "success"
-
-    @pytest.fixture(scope="class")
-    def case_param_modified_dirs(self, case_param):
-        """
-        Returns a list of directory paths that contains added or modified files
-        from the testing class's case attribute
-        """
-        return {
-            path: cfg
-            for path, cfg in case_param["executions"].items()
-            if cfg.get("pr_files_content", False)
+        yield {
+            "full_name": repo.full_name,
+            "number": pr.number,
+            "base_commit_id": base_commit_id,
+            "head_commit_id": head_commit_id,
+            "base_ref": pr.base.ref,
+            "head_ref": pr.head.ref,
         }
 
-    @timeout_decorator.timeout(300)
-    @pytest.mark.dependency()
-    def test_pr_plan_commit_status_created(
-        self, mut_output, pr, repo, case_param_modified_dirs
-    ):
-        """Assert PR plan tasks initial commit statuses were created"""
+        log.info(f"Removing PR head ref branch: {request.cls.case['head_ref']}")
+        repo.get_git_ref(f"heads/{request.cls.case['head_ref']}").delete()
 
+        log.info(f"Closing PR: #{pr.number}")
+        try:
+            pr.edit(state="closed")
+        except Exception:
+            log.info("PR is merged or already closed")
+
+    @pytest.fixture(scope="class")
+    def pr_plan_pending_statuses(self, request, mut_output, pr, repo):
+        """Returns list of PR plan tasks' initial commit statuses"""
         log.info("Waiting for all PR plan commit statuses to be created")
-        expected_count = len(case_param_modified_dirs)
+        expected_count = len(
+            [
+                1
+                for cfg in request.cls.case["executions"].values()
+                if "pr_files_content" in cfg
+            ]
+        )
         log.debug(f"Expected count: {expected_count}")
-
-        statuses = []
         wait = 10
+        statuses = []
         while len(statuses) != expected_count:
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
@@ -347,29 +104,15 @@ class E2E:
                 if status.context != mut_output["merge_lock_status_check_name"]
             ]
 
-        expected_status = "pending"
-        log.info(f"Assert plan commit statuses were set to {expected_status}")
-        for status in statuses:
-            log.debug(f"Context: {status.context}")
-            log.debug(f"Logs URL: {status.target_url}")
-            assert status.state == expected_status
+        return statuses
 
-    @timeout_decorator.timeout(300)
-    @pytest.mark.dependency()
-    def test_pr_plan_commit_status_updated(
-        self, request, mut_output, pr, repo, case_param_modified_dirs
-    ):
-        """Assert PR plan tasks commit statuses were updated"""
-        depends(
-            request, [f"{request.cls.__name__}::test_pr_plan_commit_status_created"]
-        )
+    @pytest.fixture(scope="class")
+    def pr_plan_finished_statuses(self, pr_plan_pending_statuses, mut_output, pr, repo):
+        """Returns list of PR plan tasks' finished commit statuses"""
         log.info("Waiting for all PR plan commit statuses to be updated")
-        expected_count = len(case_param_modified_dirs)
-        log.debug(f"Expected count: {expected_count}")
-
-        statuses = []
         wait = 15
-        while len(statuses) != expected_count:
+        statuses = []
+        while len(statuses) != len(pr_plan_pending_statuses):
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
             statuses = [
@@ -381,33 +124,15 @@ class E2E:
 
             log.debug(f"Finished count: {len(statuses)}")
 
-        log.info("Assert plan commit statuses were set to expected status")
-        for status in statuses:
-            expected_status = "success"
-            for path, cfg in case_param_modified_dirs.items():
-                # checks if the case directory's associated commit status is expected to fail
-                if re.match(f"Plan: {re.escape(path)}$", status.context) and cfg.get(
-                    "expect_failed_pr_plan", False
-                ):
-                    expected_status = "failure"
-                    break
-            log.debug(f"Expected status: {expected_status}")
-            log.debug(f"Context: {status.context}")
-            log.debug(f"Logs URL: {status.target_url}")
-            assert status.state == expected_status
+        return statuses
 
-    @timeout_decorator.timeout(30)
-    @pytest.mark.dependency()
-    def test_pr_merge(self, request, mut_output, merge_pr, pr, repo):
+    @pytest.fixture(scope="class")
+    def merge_pr(self, pr_plan_finished_statuses, mut_output, pr, repo, git_repo):
         """Ensure that the PR merges without error"""
-        depends(request, [f"{request.cls.__name__}::test_merge_lock_pr_status"])
-        depends(
-            request, [f"{request.cls.__name__}::test_pr_plan_commit_status_updated"]
-        )
 
         log.info(f"Merging PR: #{pr['number']}")
         try:
-            merge_pr(pr["base_ref"], pr["head_ref"])
+            commit = repo.merge(pr["base_ref"], pr["head_ref"])
         except Exception as e:
             branch = repo.get_branch(branch=mut_output["base_branch"])
             log.debug(
@@ -427,244 +152,72 @@ class E2E:
             log.error(e, exc_info=True)
             raise e
 
-    @timeout_decorator.timeout(600)
-    @pytest.mark.dependency()
-    def test_create_deploy_stack_task(self, request, repo, case_param, mut_output, pr):
-        """Assert create deploy stack status matches it's expected status"""
-        depends(request, [f"{request.cls.__name__}::test_pr_merge"])
+        yield commit
 
-        # needed for the wait_for_lambda_invocation() start_time arg within the first test_trigger_sf iteration so
-        # the log group filter will have a wide enough time range
-        log.info("Setting first target execution start time")
-        request.cls.execution_testing_start_time = int(
-            datetime.now().timestamp() * 1000
+        log.info(f'Removing PR changes from base branch: {mut_output["base_branch"]}')
+
+        log.debug("Pulling remote changes")
+        git_repo.git.reset("--hard")
+        git_repo.git.pull()
+
+        log.debug(
+            "Removing admin enforcement from branch protection to allow revert pushes to trunk branch"
         )
+        branch = repo.get_branch(branch=mut_output["base_branch"])
+        branch.remove_admin_enforcement()
 
-        status = self.get_finished_commit_status(
+        log.debug("Removing required status checks")
+        status_checks = branch.get_required_status_checks().contexts
+        branch.edit_required_status_checks(contexts=[])
+        current_status_checks = status_checks
+        while len(current_status_checks) > 0:
+            time.sleep(3)
+            current_status_checks = branch.get_required_status_checks().contexts
+
+        log.debug("Reverting all changes from testing PRs")
+        try:
+            log.debug(f"Merge Commit ID: {commit.sha}")
+
+            git_repo.git.revert("-m", "1", "--no-commit", str(commit.sha))
+            git_repo.git.commit(
+                "-m",
+                f"Revert changes from PR: {pr['head_ref']} within fixture teardown",
+            )
+            git_repo.git.push("origin", "--force")
+        except Exception as e:
+            raise e
+        finally:
+            log.debug("Adding admin enforcement back")
+            branch.set_admin_enforcement()
+
+            log.debug("Adding required status checks back")
+            branch.edit_required_status_checks(contexts=status_checks)
+
+    @pytest.fixture(scope="class")
+    def create_deploy_stack_task_status(self, request, repo, mut_output, pr, merge_pr):
+        """Returns create deploy stack finished commit status"""
+        return get_finished_commit_status(
             mut_output["create_deploy_stack_status_check_name"],
             repo,
             pr["head_commit_id"],
+            wait=10,
+            max_attempts=10,
         )
-        log.debug(f"Logs URL: {status.target_url}")
 
-        # used for cases where rollback new provider resources executions were not executed beforehand so task is expected to fail
-        if case_param.get("expect_failed_create_deploy_stack", False):
-            log.info("Assert task failed")
-            assert status.state == "failure"
-
-            log.info(
-                f'Assert no execution records exists for commit_id: {pr["head_commit_id"]}'
-            )
-            with aurora_data_api.connect(
-                aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_master_arn"],
-                database=mut_output["metadb_name"],
-            ) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        f"""
-                        SELECT COUNT(*)
-                        FROM {mut_output["metadb_schema"]}.executions
-                        WHERE commit_id = '{pr["head_commit_id"]}'
-                    """
-                    )
-                    results = cur.fetchone()
-
-            log.debug(f"Results: {results}")
-            assert results[0] == 0
-
-            pytest.skip(
-                "Skipping downstream tests since `expect_failed_create_deploy_stack` is set to True"
-            )
-        else:
-            log.info("Assert task succeeded")
-            assert status.state == "success"
-
-            with aurora_data_api.connect(
-                aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_master_arn"],
-                database=mut_output["metadb_name"],
-            ) as conn:
-                with conn.cursor() as cur:
-
-                    cur.execute(
-                        f"""
-                    SELECT array_agg(execution_id::TEXT)
-                    FROM {mut_output["metadb_schema"]}.executions
-                    WHERE commit_id = '{pr["head_commit_id"]}'
-                    """
-                    )
-                    results = cur.fetchone()
-
-            ids = results[0]
-
-            if ids is None:
-                target_execution_ids = []
-            else:
-                target_execution_ids = [id for id in ids]
-
-            log.debug(f"Commit execution IDs:\n{target_execution_ids}")
-
-            log.info(
-                "Assert that all expected execution records are within executions table"
-            )
-            assert len(case_param["executions"]) == len(target_execution_ids)
-
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_trigger_sf(self, request, mut_output):
-        """
-        Assert that there are no errors within the latest invocation of the trigger Step Function Lambda
-
-        Depends on create deploy stack task status to be successful to ensure that errors produce by
-        the Lambda function are not caused by the task
-        """
-        depends(request, [f"{request.cls.__name__}::test_create_deploy_stack_task"])
-
-        if int(request.node.callspec.id) + 1 != len(request.cls.executions):
-            # needed for the wait_for_lambda_invocation() start_time arg within the next test_trigger_sf iteration to
-            # ensure that the logs are only associated with the current target_execution parameter
-            log.info("Setting next target execution start time")
-            current_test_param = int(
-                re.search(
-                    r"(?<=\[).+(?=\])", os.environ.get("PYTEST_CURRENT_TEST")
-                ).group(0)
-            )
-            request.cls.executions[current_test_param + 1]["testing_start_time"] = int(
-                datetime.now().timestamp() * 1000
-            )
-        elif len(request.cls.executions) == 1:
-            # needed for the wait_for_lambda_invocation() start_time arg within the test_merge_lock_unlocked test
-            # sets the start_time for current execution iteration given there is only one execution
-            log.info("Setting target execution start time")
-            current_test_param = int(
-                re.search(
-                    r"(?<=\[).+(?=\])", os.environ.get("PYTEST_CURRENT_TEST")
-                ).group(0)
-            )
-            request.cls.executions[current_test_param]["testing_start_time"] = int(
-                datetime.now().timestamp() * 1000
-            )
-
-        if getattr(request.cls, "expect_failed_trigger_sf", False):
-            utils.wait_for_lambda_invocation(
-                mut_output["trigger_sf_function_name"],
-                datetime.utcfromtimestamp(
-                    request.cls.executions[int(request.node.callspec.id)][
-                        "testing_start_time"
-                    ]
-                    / 1000
-                ),
-                expected_count=1,
-                timeout=60,
-            )
-
-            results = utils.get_latest_log_stream_errs(
-                mut_output["trigger_sf_log_group_name"],
-                start_time=request.cls.testing_start_time,
-                end_time=int(datetime.now().timestamp() * 1000),
-            )
-
-            assert len(results) > 0
-
-        else:
-            results = utils.get_latest_log_stream_errs(
-                mut_output["trigger_sf_log_group_name"],
-                start_time=request.cls.execution_testing_start_time,
-                end_time=int(datetime.now().timestamp() * 1000),
-            )
-
-            assert len(results) == 0
-
-    @timeout_decorator.timeout(
-        300,
-        exception_message="Trigger SF Lambda did not create rollback provider executions",
-    )
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_rollback_providers_executions_exists(
-        self, request, mut_output, case_param, pr
+    @pytest.fixture(scope="class")
+    def record(
+        self, request, mut_output, pr, create_deploy_stack_task_status, target_execution
     ):
-        """Assert that trigger Step Function Lambda created the correct amount of rollback new provider resource executions"""
-        depends(
-            request,
-            [f"{request.cls.__name__}::test_trigger_sf[{request.node.callspec.id}]"],
-        )
+        """Queries metadb until the target execution record exists"""
+        log.debug(f"Already tested execution IDs:\n{request.cls.tested_execution_ids}")
 
-        if getattr(request.cls, "expect_failed_trigger_sf", False):
-            pytest.skip("Previous trigger SF Lambda invocation failed")
-
-        # get count of rollback provider executions expected
-        expected_execution_count = len(
-            [
-                1
-                for cfg in case_param["executions"].values()
-                if "rollback_providers" in cfg.get("actions", {})
-            ]
-        )
-
-        if (
-            not request.cls.executions[int(request.node.callspec.id)].get(
-                "test_rollback_providers_executions_exists", False
-            )
-            or expected_execution_count == 0
-        ):
-            return
-
-        target_execution_ids = []
-        while len(target_execution_ids) == 0:
-            time.sleep(10)
-            with aurora_data_api.connect(
-                aurora_cluster_arn=mut_output["metadb_arn"],
-                secret_arn=mut_output["metadb_secret_manager_master_arn"],
-                database=mut_output["metadb_name"],
-            ) as conn:
-                with conn.cursor() as cur:
-
-                    cur.execute(
-                        f"""
-                    SELECT array_agg(execution_id::TEXT)
-                    FROM {mut_output["metadb_schema"]}.executions
-                    WHERE commit_id = '{pr["head_commit_id"]}'
-                    AND is_rollback = true
-                    AND cardinality(new_providers) > 0
-                    """
-                    )
-                    results = cur.fetchone()
-
-            ids = results[0]
-            if ids is None:
-                target_execution_ids = []
-            else:
-                target_execution_ids = [id for id in ids]
-
-        log.debug(f"Commit execution IDs:\n{target_execution_ids}")
-
-        assert expected_execution_count == len(target_execution_ids)
-
-    @timeout_decorator.timeout(
-        300,
-        exception_message="Expected atleast one untested execution to have a status of ('running', 'aborted', 'failed')",
-    )
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_target_execution_record_exists(self, request, mut_output, pr, case_param):
-        """Queries metadb until the target execution record exists and adds record to request fixture"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_rollback_providers_executions_exists[{request.node.callspec.id}]"
-            ],
-        )
-        tested_executions = [
-            e["record"]["execution_id"]
-            for e in request.cls.executions
-            if e.get("record", False)
-        ]
-        log.debug(f"Already tested execution IDs:\n{tested_executions}")
-
+        log.info("Getting next target execution record")
+        max_attempts = 3
+        attempt = 0
         results = None
         while not results:
+            if attempt == max_attempts:
+                pytest.fail("Max attempts reached -- record is not found")
             time.sleep(10)
             with aurora_data_api.connect(
                 aurora_cluster_arn=mut_output["metadb_arn"],
@@ -679,11 +232,12 @@ class E2E:
                         FROM {mut_output["metadb_schema"]}.executions
                         WHERE commit_id = '{pr["head_commit_id"]}'
                         AND "status" IN ('running', 'aborted', 'failed')
-                        AND NOT (execution_id = ANY (ARRAY{tested_executions}::TEXT[]))
+                        AND NOT (execution_id = ANY (ARRAY{request.cls.tested_execution_ids}::TEXT[]))
                         LIMIT 1
                     """
                     )
                     results = cur.fetchone()
+            attempt += 1
 
         record = {}
         row = [value for value in results]
@@ -692,365 +246,51 @@ class E2E:
 
         log.debug(f"Target Execution Record:\n{pformat(record)}")
 
+        # ensures other parametrized record fixtures don't use this record
+        request.cls.tested_execution_ids.append(record["execution_id"])
+
+        return record
+
+    @pytest.fixture(scope="class")
+    def ses_approval_responses(self, request, mut_output, record) -> dict:
+        """Returns approval response Lambda Function's response to voter's email client"""
+        if record["status"] in ["failed", "aborted"]:
+            pytest.skip(f"Execution approval action is set to {record['status']}")
+
+        vote_config = request.cls.case["executions"][record["cfg_path"]]
         if record["is_rollback"]:
-            request.cls.executions[int(request.node.callspec.id)][
-                "action"
-            ] = case_param["executions"][record["cfg_path"]]["actions"][
-                "rollback_providers"
-            ]
+            votes = vote_config.get("rollback_votes", {}).get("email")
         else:
-            request.cls.executions[int(request.node.callspec.id)]["action"] = (
-                case_param["executions"][record["cfg_path"]]
-                .get("actions", {})
-                .get("apply", None)
+            votes = vote_config.get("deploy_votes", {}).get("email")
+        if not votes:
+            pytest.fail("Approval action is not set for record")
+
+        responses = {}
+        for address, action in votes.items():
+            log.debug(f"Sending vote for address: {address}")
+            log.debug(f"Action: {action}")
+            res = ses_approval(
+                username=address,
+                password=os.environ.get("APPROVAL_RECIPIENT_PASSWORD"),
+                msg_from=os.environ.get("APPROVAL_REQUEST_SENDER_EMAIL"),
+                msg_subject=mut_output["ses_approval_subject_template"].replace(
+                    "{{execution_name}}", record["execution_id"]
+                ),
+                action=action.capitalize(),
+                mailboxes=["INBOX", "[Gmail]/Spam"],
+                max_attempts=10,
             )
 
-        log.info("Putting record into request execution dict")
-        request.cls.executions[int(request.node.callspec.id)]["record"] = record
+            responses[address] = res
 
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_sf_execution_aborted(self, request, mut_output, case_param):
-        """
-        Assert that the execution record has an assoicated Step Function execution that is aborted or doesn't exist if
-        the upstream execution was rejected before the target Step Function execution was created
-        """
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
-        )
+        return responses
 
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        sf = boto3.client("stepfunctions")
-
-        log.debug(f'Target Execution Status: {record["status"]}')
-        if record["status"] != "aborted":
-            pytest.skip("Execution approval action is not set to `aborted`")
-
-        try:
-            execution_arn = [
-                execution["executionArn"]
-                for execution in sf.list_executions(
-                    stateMachineArn=mut_output["state_machine_arn"]
-                )["executions"]
-                if execution["name"] == record["execution_id"]
-            ][0]
-        except IndexError:
-            log.info(
-                "Execution record status was set to aborted before associated Step Function execution was created"
-            )
-            assert (
-                case_param["executions"][record["cfg_path"]]["sf_execution_exists"]
-                is False
-            )
-        else:
-            assert (
-                sf.describe_execution(executionArn=execution_arn)["status"] == "ABORTED"
-            )
-
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_sf_execution_exists(self, request, mut_output):
-        """Assert execution record has an associated Step Function execution that hasn't been aborted"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        sf = boto3.client("stepfunctions")
-
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        if record["status"] == "aborted":
-            pytest.skip("Execution approval action is set to `aborted`")
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == record["execution_id"]
-        ][0]
-
-        assert sf.describe_execution(executionArn=execution_arn)["status"] in [
-            "RUNNING",
-            "SUCCEEDED",
-            "FAILED",
-            "TIMED_OUT",
-        ]
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_terra_run_plan(self, request, mut_output):
-        """Assert terra run plan task within Step Function execution succeeded"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_sf_execution_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        execution_arn = utils.get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
-        utils.assert_terra_run_status(execution_arn, "Plan", "TaskSucceeded")
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.dependency()
-    @pytest.mark.usefixtures("target_execution")
-    def test_approval_request(self, request, mut_output):
-        """Assert that there are no errors within the latest invocation of the approval request Lambda function"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_terra_run_plan[{request.node.callspec.id}]"
-            ],
-        )
-
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        execution_arn = utils.get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
-        sf = boto3.client("stepfunctions")
-
-        status_code = None
-        while not status_code:
-            time.sleep(10)
-
-            events = sf.get_execution_history(
-                executionArn=execution_arn, includeExecutionData=True
-            )["events"]
-
-            for event in events:
-                if (
-                    event.get("taskSubmittedEventDetails", {}).get("resource")
-                    == "publish.waitForTaskToken"
-                ):
-                    out = json.loads(event["taskSubmittedEventDetails"]["output"])
-                    status_code = out["SdkHttpMetadata"]["HttpStatusCode"]
-
-        log.info("Assert approval request succeeded")
-        assert status_code == 200
-
-    @pytest.mark.dependency()
-    @pytest.mark.usefixtures("target_execution")
-    def test_approval_response(self, request, mut_output):
-        """Assert that the approval response returns a success status code"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_request[{request.node.callspec.id}]"
-            ],
-        )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-        sf = boto3.client("stepfunctions")
-
-        log.info("Testing Approval Task")
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == record["execution_id"]
-        ][0]
-        msg = get_sf_approval_state_msg(execution_arn)
-        approval_url = msg["ApprovalURL"]
-        task_token = msg["TaskToken"]
-        voter = msg["Voters"][0]
-
-        log.debug(f"Approval URL: {approval_url}")
-        log.debug(f"Voter: {voter}")
-        headers = {
-            "content-type": "application/json",
-        }
-        query_params = {
-            "X-SES-Signature-256": get_email_approval_sig(
-                mut_output["email_approval_secret"],
-                record["execution_id"],
-                voter,
-                request.cls.executions[int(request.node.callspec.id)]["action"],
-            ),
-            "taskToken": task_token,
-            "recipient": voter,
-            "action": request.cls.executions[int(request.node.callspec.id)]["action"],
-            "ex": record["execution_id"],
-            "exArn": execution_arn,
-        }
-        approval_url = (
-            approval_url
-            + "ses?"
-            + "&".join([f"{k}={aws_encode(v)}" for k, v in query_params.items()])
-        )
-
-        response = requests.post(approval_url, headers=headers)
-        log.debug(f"Response:\n{response.text}")
-
-        response.raise_for_status()
-
-    @pytest.mark.dependency()
-    @pytest.mark.usefixtures("target_execution")
-    def test_approval_denied(self, request, mut_output):
-        """Assert that the Reject task state is executed and that the Step Function output includes a failed status attribute"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
-            ],
-        )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-        sf = boto3.client("stepfunctions")
-
-        if request.cls.executions[int(request.node.callspec.id)]["action"] == "approve":
-            pytest.skip("Approval action is set to `approve`")
-
-        if record["is_rollback"]:
-            request.cls.expect_failed_trigger_sf = True
-        else:
-            request.cls.executions[int(request.node.callspec.id) + 1][
-                "test_rollback_providers_executions_exists"
-            ] = True
-
-        execution_arn = utils.get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
+    @pytest.fixture(scope="class")
+    def finished_sf_execution(self, mut_output, record, ses_approval_responses):
+        """Returns Step Function execution finished status"""
         log.info("Waiting for execution to finish")
-        execution_status = None
-        while execution_status not in ["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]:
-            time.sleep(5)
-            response = sf.describe_execution(executionArn=execution_arn)
-            execution_status = response["status"]
-            log.debug(f"Execution status: {execution_status}")
+        arn = get_execution_arn(mut_output["state_machine_arn"], record["execution_id"])
+        res = get_finished_sf_execution(arn, wait=10, max_attempts=100)
+        log.debug(f"Finished Step Function describe response:\n{pformat(res)}")
 
-        out = json.loads(response["output"])
-        log.debug(f"Execution output: {pformat(out)}")
-
-        log.info(
-            "Assert that the Reject task passed a failed status within execution output"
-        )
-        assert out["status"] == "failed"
-
-    @timeout_decorator.timeout(300, exception_message="Task was not submitted")
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    def test_terra_run_deploy(self, request, mut_output):
-        """Assert terra run deploy task within Step Function execution succeeded"""
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_approval_response[{request.node.callspec.id}]"
-            ],
-        )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        if request.cls.executions[int(request.node.callspec.id)]["action"] == "reject":
-            pytest.skip("Approval action is set to `reject`")
-
-        execution_arn = utils.get_execution_arn(
-            mut_output["state_machine_arn"], record["execution_id"]
-        )
-
-        utils.assert_terra_run_status(execution_arn, "Apply", "TaskSucceeded")
-
-    @pytest.mark.usefixtures("target_execution")
-    @pytest.mark.dependency()
-    # runs cleanup tasks only if step function deploy task was executed
-    @pytest.mark.usefixtures("destroy_scenario_tf_resources")
-    def test_sf_execution_status(self, request, mut_output):
-        """Assert Step Function execution succeeded"""
-        sf = boto3.client("stepfunctions")
-
-        # ensure that if test_target_execution_record_exists fails/skips and doesn't
-        # create the request.executions 'action' key, this test won't raise a key error
-        # finding the 'action' key within the second dependency logic below and results in skipping the test entirely
-        depends(
-            request,
-            [
-                f"{request.cls.__name__}::test_target_execution_record_exists[{request.node.callspec.id}]"
-            ],
-        )
-
-        if request.cls.executions[int(request.node.callspec.id)]["action"] == "approve":
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_terra_run_deploy[{request.node.callspec.id}]"
-                ],
-            )
-        else:
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_approval_denied[{request.node.callspec.id}]"
-                ],
-            )
-        record = request.cls.executions[int(request.node.callspec.id)]["record"]
-
-        execution_arn = [
-            execution["executionArn"]
-            for execution in sf.list_executions(
-                stateMachineArn=mut_output["state_machine_arn"]
-            )["executions"]
-            if execution["name"] == record["execution_id"]
-        ][0]
-        response = sf.describe_execution(executionArn=execution_arn)
-        assert response["status"] == "SUCCEEDED"
-
-    @pytest.mark.dependency()
-    def test_merge_lock_unlocked(self, request, mut_output, case_param):
-        """Assert that the merge lock is unlocked after the deploy stack is finished"""
-        ssm = boto3.client("ssm")
-
-        # if trigger SF fails, the merge lock will not be unlocked
-        if getattr(request.cls, "expect_failed_trigger_sf", False):
-            pytest.skip("One of the trigger sf Lambda invocations was expected to fail")
-
-        elif case_param.get("expect_failed_create_deploy_stack", False):
-            # merge lock should be unlocked if error is caught within
-            # task's update_executions_with_new_deploy_stack()
-            log.info("Assert merge lock is unlocked")
-            assert (
-                ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
-                    "Value"
-                ]
-                == "none"
-            )
-
-        else:
-            last_execution = request.cls.executions[len(request.cls.executions) - 1]
-
-            log.debug(f"Last execution request dict:\n{pformat(last_execution)}")
-
-            depends(
-                request,
-                [
-                    f"{request.cls.__name__}::test_sf_execution_status[{len(request.cls.executions) - 1}]"
-                ],
-            )
-
-            utils.wait_for_lambda_invocation(
-                mut_output["trigger_sf_function_name"],
-                datetime.utcfromtimestamp(last_execution["testing_start_time"] / 1000),
-                expected_count=1,
-                timeout=60,
-            )
-
-            log.info("Assert merge lock is unlocked")
-            assert (
-                ssm.get_parameter(Name=mut_output["merge_lock_ssm_key"])["Parameter"][
-                    "Value"
-                ]
-                == "none"
-            )
+        return res

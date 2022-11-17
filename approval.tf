@@ -1,8 +1,12 @@
 locals {
-  approval_request_name  = "${var.prefix}-request"
-  approval_response_name = "${var.prefix}-response"
-  approval_logs          = "${var.prefix}-approval"
-  approval_sender_arn    = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn, var.approval_sender_arn)
+  approval_request_name = "${var.prefix}-request"
+
+  approval_response_name    = "${var.prefix}-response"
+  approval_response_context = "${path.module}/functions/approval_response"
+
+  approval_logs                 = "${var.prefix}-approval"
+  approval_sender_arn           = try(aws_ses_email_identity.approval[0].arn, data.aws_ses_email_identity.approval[0].arn, var.approval_sender_arn)
+  ses_approval_subject_template = "Approval Request: {{execution_name}}"
 }
 
 resource "aws_sns_topic" "approval" {
@@ -20,10 +24,9 @@ data "aws_iam_policy_document" "lambda_approval_request" {
     sid    = "SESAccess"
     effect = "Allow"
     actions = [
-      "ses:SendRawEmail",
-      "ses:SendEmail"
+      "ses:SendBulkTemplatedEmail"
     ]
-    resources = ["*"]
+    resources = [aws_ses_template.approval.arn]
     condition {
       test     = "StringEquals"
       variable = "ses:FromAddress"
@@ -95,7 +98,7 @@ module "lambda_approval_request" {
       source_arn = aws_sns_topic.approval.arn
     }
   }
-  create_unqualified_alias_allowed_triggers = false
+  create_unqualified_alias_allowed_triggers = true
   publish                                   = true
   policies = [
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
@@ -142,6 +145,55 @@ resource "aws_iam_policy" "approval_response" {
   policy      = data.aws_iam_policy_document.approval_response.json
 }
 
+module "ecr_approval_response" {
+  count                   = var.approval_response_image_address == null ? 1 : 0
+  source                  = "terraform-aws-modules/ecr/aws"
+  version                 = "1.5.0"
+  repository_name         = "${var.prefix}/approval-response"
+  repository_force_delete = true
+  repository_type         = "private"
+  repository_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1,
+        description  = "Keep last 5 images",
+        selection = {
+          tagStatus     = "tagged",
+          tagPrefixList = ["v"],
+          countType     = "imageCountMoreThan",
+          countNumber   = 5
+        },
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "docker_image" "ecr_approval_response" {
+  count        = var.approval_response_image_address == null ? 1 : 0
+  name         = "${module.ecr_approval_response[0].repository_url}:${local.module_docker_img_tag}"
+  keep_locally = true
+  build {
+    path     = local.approval_response_context
+    no_cache = true
+  }
+  triggers = { for f in fileset(local.approval_response_context, "**") :
+  f => filesha256(format("${local.approval_response_context}/%s", f)) }
+}
+
+resource "docker_tag" "ecr_approval_response" {
+  count        = var.approval_response_image_address == null ? 1 : 0
+  source_image = docker_image.ecr_approval_response[0].image_id
+  target_image = "${module.ecr_approval_response[0].repository_url}:${local.module_docker_img_tag}-${split(":", docker_image.ecr_approval_response[0].image_id)[1]}"
+}
+
+resource "docker_registry_image" "ecr_approval_response" {
+  count = var.approval_response_image_address == null ? 1 : 0
+  name  = docker_tag.ecr_approval_response[0].target_image
+}
+
 module "lambda_approval_response" {
   source  = "terraform-aws-modules/lambda/aws"
   version = "3.3.1"
@@ -150,10 +202,7 @@ module "lambda_approval_response" {
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
 
-  image_uri = coalesce(
-    var.approval_response_image_address,
-    "ghcr.io/marshall7m/terraform-aws-infrastructure-live/approval-response:${local.module_docker_img_tag}"
-  )
+  image_uri      = try(docker_registry_image.ecr_approval_response[0].name, var.approval_response_image_address)
   create_package = false
   package_type   = "Image"
   architectures  = ["x86_64"]
@@ -216,6 +265,6 @@ resource "aws_ses_identity_policy" "approval" {
 
 resource "aws_ses_template" "approval" {
   name    = local.approval_request_name
-  subject = "${local.step_function_name} - Need Approval for Path: {{path}}"
+  subject = local.ses_approval_subject_template
   html    = file("${path.module}/approval_template.html")
 }

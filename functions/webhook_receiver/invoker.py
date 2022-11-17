@@ -112,7 +112,7 @@ def trigger_pr_plan(
             log.info("Running ECS tasks")
             for path in account_diff_paths:
                 log.info(f"Directory: {path}")
-                context = f"Plan: {path}"
+                status_check_name = f"Plan: {path}"
                 try:
                     task = ecs.run_task(
                         cluster=os.environ["ECS_CLUSTER_ARN"],
@@ -145,7 +145,10 @@ def trigger_pr_plan(
                                             "name": "ROLE_ARN",
                                             "value": account["plan_role_arn"],
                                         },
-                                        {"name": "CONTEXT", "value": context},
+                                        {
+                                            "name": "STATUS_CHECK_NAME",
+                                            "value": status_check_name,
+                                        },
                                     ],
                                 }
                             ]
@@ -157,7 +160,7 @@ def trigger_pr_plan(
                     status_data = {
                         "state": "pending",
                         "description": "Terraform Plan",
-                        "context": context,
+                        "context": status_check_name,
                         "target_url": f'https://{os.environ["AWS_REGION"]}.console.aws.amazon.com/cloudwatch/home?region={os.environ["AWS_REGION"]}#logsV2:log-groups/log-group/{aws_encode(log_options["awslogs-group"])}/log-events/{aws_encode(log_options["awslogs-stream-prefix"] + "/" + os.environ["PR_PLAN_TASK_CONTAINER_NAME"] + "/" + task_id)}',
                     }
                 except Exception as e:
@@ -165,7 +168,7 @@ def trigger_pr_plan(
                     status_data = {
                         "state": "failure",
                         "description": "Terraform Plan",
-                        "context": context,
+                        "context": status_check_name,
                         "target_url": logs_url,
                     }
 
@@ -181,20 +184,27 @@ def trigger_pr_plan(
 
 
 def trigger_create_deploy_stack(
-    repo_full_name,
-    base_ref,
-    head_ref,
-    head_sha,
-    pr_id,
-    logs_url,
-    send_commit_status,
+    repo_full_name: str,
+    base_ref: str,
+    head_ref: str,
+    base_sha: str,
+    head_sha: str,
+    pr_id: int,
+    logs_url: str,
+    send_commit_status: bool,
 ) -> None:
     """
     Runs the Create Deploy Stack ECS task
 
     Arguments:
-        pr_id: PR ID or also referred to as PR number
-        send_commit_status: Send a pending commit status for each of the PR plan ECS task
+        repo_full_name: Full name of GitHub repo (e.g. user/repo-name)
+        base_ref: Pull request base ref name
+        head_ref: Pull request base ref name
+        base_sha: Pull request base sha value
+        head_sha: Pull request head sha value
+        pr_id: Pull request ID or also referred to as Pull request number
+        logs_url: CloudWatch log stream URL of the the calling Lambda Function
+        send_commit_status: If True, sends a pending commit status for Create Deploy Stack ECS task
     """
 
     log_options = ecs.describe_task_definition(
@@ -217,6 +227,7 @@ def trigger_create_deploy_stack(
                             {"name": "BASE_REF", "value": base_ref},
                             {"name": "HEAD_REF", "value": head_ref},
                             {"name": "PR_ID", "value": str(pr_id)},
+                            {"name": "BASE_COMMIT_ID", "value": base_sha},
                             {"name": "COMMIT_ID", "value": head_sha},
                         ],
                     }
@@ -242,7 +253,7 @@ def trigger_create_deploy_stack(
         }
     if send_commit_status:
         log.info("Sending commit status")
-        log.debug(f"Status data:\n{pformat(status_data)}")
+        log.debug(f"Status data:\n{json.dumps(status_data, indent=4)}")
         gh = github.Github(login_or_token=os.environ["GITHUB_TOKEN"])
         head = gh.get_repo(repo_full_name).get_branch(head_ref)
         head.commit.create_status(**status_data)

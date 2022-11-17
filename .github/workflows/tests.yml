@@ -104,6 +104,8 @@ jobs:
       TESTING_GITHUB_TOKEN: ${{ secrets.TESTING_GITHUB_TOKEN }}
       REGISTRY_PASSWORD: ${{ secrets.TESTING_GITHUB_TOKEN }}
       APPROVAL_REQUEST_SENDER_EMAIL: ${{ secrets.APPROVAL_REQUEST_SENDER_EMAIL }}
+      APPROVAL_RECIPIENT_EMAIL: ${{ secrets.APPROVAL_RECIPIENT_EMAIL }}
+      APPROVAL_RECIPIENT_PASSWORD: ${{ secrets.APPROVAL_RECIPIENT_PASSWORD }}
     steps:
     - uses: actions/checkout@v3
 
@@ -112,6 +114,8 @@ jobs:
         echo "::add-mask::$TESTING_GITHUB_TOKEN"
         echo "::add-mask::$REGISTRY_PASSWORD"
         echo "::add-mask::$APPROVAL_REQUEST_SENDER_EMAIL"
+        echo "::add-mask::$APPROVAL_RECIPIENT_EMAIL"
+        echo "::add-mask::$APPROVAL_RECIPIENT_PASSWORD"
 
     - name: Configure AWS Credentials for remote workflow
       uses: aws-actions/configure-aws-credentials@v1

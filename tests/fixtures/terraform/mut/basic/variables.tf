@@ -130,12 +130,6 @@ variable "create_approval_sender_policy" {
   default     = true
 }
 
-variable "metadb_subnet_group_name" {
-  description = "Name of the metab subnet group name (defaults to metadb cluster identifier)"
-  type        = string
-  default     = null
-}
-
 variable "create_metadb_subnet_group" {
   description = "Determines if a AWS RDS subnet group should be created for the metadb"
   type        = bool
@@ -172,6 +166,15 @@ EOF
   default     = null
 }
 
+variable "approval_response_image_address" {
+  description = <<EOF
+Docker registry image to use for the approval repsonse Lambda Function. If not specified, this Terraform module's GitHub registry image
+will be used with the tag associated with the version of this module. 
+EOF
+  type        = string
+  default     = null
+}
+
 variable "local_task_common_env_vars" {
   description = "ECS task env vars to set for local testing terraform module"
   type = list(object({
@@ -179,4 +182,10 @@ variable "local_task_common_env_vars" {
     value = string
   }))
   default = []
+}
+
+variable "approval_recipient_emails" {
+  description = "List of email addresses that will be sent approval request to"
+  type        = list(string)
+  default     = ["success@simulator.amazonses.com"]
 }

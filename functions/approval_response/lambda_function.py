@@ -4,7 +4,7 @@ import os
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from mangum import Mangum
 
 sys.path.append(os.path.dirname(__file__))
@@ -27,7 +27,9 @@ async def value_error_exception_handler(request: Request, exc: ValueError):
 
 
 @app.exception_handler(InvalidSignatureError)
-async def invalid_signature_error_exception_handler(request: Request, exc: ValueError):
+async def invalid_signature_error_exception_handler(
+    request: Request, exc: InvalidSignatureError
+):
     return JSONResponse(
         status_code=403,
         content={"message": str(exc)},
@@ -35,7 +37,7 @@ async def invalid_signature_error_exception_handler(request: Request, exc: Value
 
 
 @app.exception_handler(ExpiredVote)
-async def expired_vote_error_exception_handler(request: Request, exc: ValueError):
+async def expired_vote_error_exception_handler(request: Request, exc: ExpiredVote):
     return JSONResponse(
         status_code=410,
         content={"message": str(exc)},
@@ -43,10 +45,11 @@ async def expired_vote_error_exception_handler(request: Request, exc: ValueError
 
 
 @app.post("/ses")
-def ses_approve(request: Request):
+async def ses_approve(request: Request, background_tasks: BackgroundTasks):
     event = SESEvent(**request.scope["aws.event"])
-    update_vote(
-        execution_arn=event.queryStringParameters.exArn,
+
+    background_tasks.add_task(
+        update_vote,
         execution_id=event.queryStringParameters.ex,
         action=event.queryStringParameters.action,
         voter=event.queryStringParameters.recipient,
@@ -57,6 +60,15 @@ def ses_approve(request: Request):
         status_code=200,
         content={"message": "Vote was successfully submitted"},
     )
+
+
+@app.middleware("http")
+async def log_exchange(request: Request, call_next):
+    log.debug(f"Method: {request.method} Path: {request.url.path}")
+    response = await call_next(request)
+    log.debug(f"Status Code: {response.status_code}")
+
+    return response
 
 
 handler = Mangum(app, lifespan="off")

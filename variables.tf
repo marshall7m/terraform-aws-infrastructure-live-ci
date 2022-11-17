@@ -284,7 +284,7 @@ EOF
 # SSM #
 
 variable "create_github_token_ssm_param" {
-  description = "Determines if the merge lock AWS SSM Parameter Store value should be created"
+  description = "Determines if a AWS SSM Parameter Store value should be created for the GitHub token"
   type        = bool
 }
 
@@ -502,11 +502,11 @@ Apply: CloudWatch log stream displaying the Terraform apply output for a directo
 Execution: AWS Step Function page for the deployment flow execution 
 EOF
   type = object({
-    PrPlan            = optional(bool)
-    CreateDeployStack = optional(bool)
-    Plan              = optional(bool)
-    Apply             = optional(bool)
-    Execution         = optional(bool)
+    PrPlan            = optional(bool, true)
+    CreateDeployStack = optional(bool, true)
+    Plan              = optional(bool, true)
+    Apply             = optional(bool, true)
+    Execution         = optional(bool, true)
   })
   default = {}
 }
@@ -518,11 +518,6 @@ variable "approval_sender_arn" {
   default     = null
 }
 
-variable "metadb_subnet_group_name" {
-  description = "Name of the metab subnet group name (defaults to metadb cluster identifier)"
-  type        = string
-  default     = null
-}
 
 variable "create_metadb_subnet_group" {
   description = "Determines if a AWS RDS subnet group should be created for the metadb"

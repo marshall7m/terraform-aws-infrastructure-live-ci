@@ -2,7 +2,6 @@ from urllib.parse import urlparse, parse_qs
 import sys
 import os
 import logging
-import json
 
 import pytest
 from unittest.mock import patch
@@ -15,31 +14,6 @@ stream = logging.StreamHandler(sys.stdout)
 log.addHandler(stream)
 log.setLevel(logging.DEBUG)
 
-
-# TODO: use for integration testing when lambda function is invoked
-event = {
-    "Records": [
-        {
-            "Sns": {
-                "Message": json.dumps(
-                    {
-                        "ApprovalURL": "https://1234.approval.us-west-2.on.aws",
-                        "Voters": ["success@simulator.amazonses.com"],
-                        "Path": "test/foo",
-                        "AccountName": "mock-account",
-                        "ExecutionName": "run-123",
-                        "ExecutionArn": "mock-execution-arn",
-                        "StateMachineArn": "mock-state-machine-arn",
-                        "TaskToken": "mock-token",
-                        "PullRequestID": "1",
-                        "LogsUrl": "mock-log-url",
-                    }
-                )
-            }
-        }
-    ]
-}
-
 msg = {
     "ApprovalURL": "https://1234.approval.us-west-2.on.aws/",
     "Voters": ["success@simulator.amazonses.com"],
@@ -50,7 +24,7 @@ msg = {
     "StateMachineArn": "mock-state-machine-arn",
     "TaskToken": "mock-token",
     "PullRequestID": "1",
-    "LogsUrl": "mock-log-url",
+    "PlanOutput": {"LogsUrl": "mock-log-url"},
 }
 
 
@@ -77,7 +51,7 @@ def test_get_ses_urls():
         assert params["recipient"][0] == aws_encode(voter)
         assert params["taskToken"][0] == msg["TaskToken"]
         assert params["action"][0] == action
-        assert len(params["X-SES-Signature-256"][0]) == 64
+        assert params["X-SES-Signature-256"][0].startswith("sha256")
 
 
 @pytest.mark.parametrize(

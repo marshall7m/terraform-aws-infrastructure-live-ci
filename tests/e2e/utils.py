@@ -119,21 +119,3 @@ def get_latest_log_stream_errs(
         return logs.filter_log_events(
             logGroupName=log_group, logStreamNames=[stream], filterPattern="ERROR"
         )["events"]
-
-
-def get_execution_arn(arn: str, execution_id: str) -> int:
-    """
-    Gets the task ID for a given Step Function execution type and name.
-    If the execution type and name is not found, None is returned
-
-    Arguments:
-        arn: ARN of the Step Function execution
-        execution_id: Name of the Step Function execution
-        task_name: Task name within the Step Function definition
-    """
-    sf = boto3.client("stepfunctions")
-    for execution in sf.list_executions(stateMachineArn=arn)["executions"]:
-        if execution["name"] == execution_id:
-            return execution["executionArn"]
-
-    ClientException(f"No Step Function execution exists with name: {execution_id}")

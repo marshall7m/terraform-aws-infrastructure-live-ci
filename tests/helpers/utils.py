@@ -3,14 +3,21 @@ import logging
 import os
 import json
 import time
+from typing import Union
 from pprint import pformat
 import subprocess
 import shlex
 import requests
+from requests.models import Response
+import imaplib
+import email
 
 import boto3
 import aurora_data_api
 import github
+import timeout_decorator
+from mechanize._form import parse_forms
+from mechanize._html import content_parser
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -281,8 +288,29 @@ def wait_for_finished_task(
     return task_status
 
 
+def get_finished_commit_status(
+    context, repo, commit_id, wait=3, token=None, max_attempts=30
+):
+    attempts = 0
+    state = None
+    while state in [None, "pending"]:
+        if attempts == max_attempts:
+            raise TimeoutError(
+                "Max Attempts reached -- Finished commit status is not found"
+            )
+        log.debug(f"Waiting {wait} seconds")
+        time.sleep(wait)
+        status = get_commit_status(repo.full_name, commit_id, context, token)
+        state = getattr(status, "state", None)
+        log.debug(f"Status state: {state}")
+
+        attempts += 1
+
+    return status
+
+
 def get_commit_status(
-    repo_full_name: str, commit_id: str, context: str, token: str = None, wait: int = 3
+    repo_full_name: str, commit_id: str, context: str, token: str = None
 ) -> str:
     """Returns commit status associated with the passed context argument"""
     if not token:
@@ -292,9 +320,21 @@ def get_commit_status(
     repo = gh.get_repo(repo_full_name)
     for status in repo.get_commit(commit_id).get_statuses():
         if status.context == context:
-            return status.state
+            return status
 
 
+def get_sf_status_event(arn, state, wait=10):
+    exited_event = None
+    log.debug(f"Waiting on state to finish: {state}")
+    while not exited_event:
+        time.sleep(wait)
+        exited_event = get_sf_state_event(arn, state, "stateExitedEventDetails")
+    status_event = [e for e in exited_event if e["id"] == exited_event["id"] - 1][0]
+    "taskFailedEventDetails"
+    return status_event
+
+
+# TODO: remove and replace with get_sf_status_event() in integration tests
 def assert_sf_state_type(
     execution_arn: str, state_name: str, expected_status: str
 ) -> None:
@@ -328,6 +368,7 @@ def assert_sf_state_type(
         raise e
 
 
+@timeout_decorator.timeout(30)
 def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
     """
     Returns the Step Funciton execution event associated with the passed state name
@@ -338,6 +379,7 @@ def get_sf_state_event(execution_arn: str, state: str, event_type: str) -> dict:
         event_type: Step Function execution event type (e.g. taskScheduledEventDetails, stateExitedEventDetails)
     """
     sf = boto3.client("stepfunctions", endpoint_url=os.environ.get("SF_ENDPOINT_URL"))
+
     events = sf.get_execution_history(
         executionArn=execution_arn, includeExecutionData=True
     )["events"]
@@ -362,3 +404,121 @@ def get_sf_approval_state_msg(arn: str) -> dict:
             return json.loads(event["taskScheduledEventDetails"]["parameters"])[
                 "Message"
             ]
+
+
+def ses_approval(
+    username: str,
+    password: str,
+    msg_from: str,
+    msg_subject: str,
+    action: str,
+    host=None,
+    mailboxes=["INBOX"],
+    wait=5,
+    max_attempts=3,
+) -> Response:
+    """
+    Finds the approval email within email inbox, extracts approval action
+    form from email and clicks on the requested approval action button
+
+    Arguments:
+        username: Email username/address
+        password: Email password/token
+        msg_from: Sender email address to filter the incoming emails from
+        msg_subject: Email subject to filter the incoming emails from
+        action: Approval action to choose within form
+        host: Email's associated host
+        mailboxes: Mailboxes to check within
+        wait: Seconds to wait before refreshing inbox
+        max_attempts: Maximum number of attempts to retreive approval email
+    """
+    url = "http://placeholder.com"
+    if not host:
+        if username.split("@")[-1] == "gmail.com":
+            host = "imap.gmail.com"
+        else:
+            raise Exception("Could not identify host")
+
+    with imaplib.IMAP4_SSL(host=host, port=imaplib.IMAP4_SSL_PORT) as imap_ssl:
+        log.debug("Logging into mailbox")
+        imap_ssl.login(username, password)
+
+        attempt = 0
+        mail_ids = []
+        while len(mail_ids) == 0:
+            if attempt == max_attempts:
+                raise TimeoutError("Timeout reached -- Message is not found")
+
+            time.sleep(wait)
+            imap_ssl.noop()
+
+            for box in mailboxes:
+                imap_ssl.select(mailbox=box, readonly=True)
+                # filters messages by sender, subject and recipient
+                _, mails = imap_ssl.search(
+                    None, f'(FROM "{msg_from}" Subject "{msg_subject}" To "{username}")'
+                )
+                mail_ids = [int(i) for i in mails[0].decode().split()]
+                log.debug(f"Total Mail IDs : {len(mail_ids)}")
+
+                if len(mail_ids) > 0:
+                    # gets largest email ID which is the most recent
+                    log.debug(f"Found message in mailbox: {box}")
+                    mail_id = max(mail_ids)
+                    break
+
+            attempt += 1
+
+        log.debug(f"Mail ID: {mail_id}")
+        _, mail_data = imap_ssl.fetch(str(mail_id), "(RFC822)")
+        message = email.message_from_bytes(mail_data[0][1])
+        for part in message.walk():
+            # parses only html data
+            if part.get_content_type() == "text/html":
+                html = f"{part.get_payload(decode=True)}".replace("b'", "")
+                # parses form data from html
+                root = content_parser(html, url)
+                form, _ = parse_forms(root, url)
+                for f in form:
+                    # finds submit button within form
+                    if f.find_control(type="submit").value == action:
+                        # gets request instance associated with clicking on the button
+                        req = f.click()
+                        return requests.post(req.full_url)
+
+                log.debug(
+                    f"Action was not found in any HTML form -- check if action is valid: {action}"
+                )
+
+
+def get_execution_arn(arn: str, name: str) -> Union[str, None]:
+    """
+    Gets the Step Function execution ARN associated with the passed execution name
+
+    Arguments:
+        arn: ARN of the Step Function state machine
+        execution_id: Name of the Step Function execution
+    """
+    sf = boto3.client("stepfunctions")
+    for execution in sf.list_executions(stateMachineArn=arn)["executions"]:
+        if execution["name"] == name:
+            return execution["executionArn"]
+
+
+def get_finished_sf_execution(arn: str, wait=5, max_attempts=3):
+    """Waits till Step Function execution is finished and returns describe execution response"""
+    sf = boto3.client("stepfunctions")
+    status = None
+    attempts = 0
+    while status not in ["SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"]:
+        if attempts == max_attempts:
+            raise TimeoutError("Max attempts reached -- Execution is still running")
+
+        response = sf.describe_execution(executionArn=arn)
+        status = response["status"]
+        log.debug(f"Execution status: {status}")
+
+        attempts += 1
+        time.sleep(wait)
+
+    return response

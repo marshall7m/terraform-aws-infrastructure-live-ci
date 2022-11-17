@@ -3,11 +3,6 @@ import hmac
 import re
 import urllib.parse
 import urllib
-import logging
-
-
-log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
 
 
 class ClientException(Exception):

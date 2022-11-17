@@ -5,6 +5,12 @@ locals {
 }
 
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+data "aws_ecr_authorization_token" "token" {
+  # count is needed since if running locally, tf will fail since moto currently doesn't support endpoint
+  count = var.is_remote ? 1 : 0
+}
 
 module "mut_infrastructure_live_ci" {
   source = "../../../../../../../..//"
@@ -32,13 +38,9 @@ module "mut_infrastructure_live_ci" {
   vpc_id         = module.vpc.vpc_id
   ecs_subnet_ids = module.vpc.public_subnets
 
-  private_registry_auth          = true
-  create_private_registry_secret = true
-  registry_username              = var.registry_username
-  registry_password              = var.registry_password
-  ecs_image_address              = var.ecs_image_address
-
-  webhook_receiver_image_address = var.webhook_receiver_image_address
+  ecs_image_address               = var.ecs_image_address
+  approval_response_image_address = var.approval_response_image_address
+  webhook_receiver_image_address  = var.webhook_receiver_image_address
 
   # repo specific env vars required to conditionally set the terraform backend configurations
   ecs_tasks_common_env_vars = concat([
@@ -52,8 +54,8 @@ module "mut_infrastructure_live_ci" {
     }
   ], var.local_task_common_env_vars)
 
-  tf_state_read_access_policy = aws_iam_policy.trigger_sf_tf_state_access.arn
-
+  tf_state_read_access_policy   = aws_iam_policy.trigger_sf_tf_state_access.arn
+  ecs_assign_public_ip          = true
   create_github_token_ssm_param = var.create_github_token_ssm_param
   github_token_ssm_value        = var.github_token_ssm_value
 
@@ -62,7 +64,6 @@ module "mut_infrastructure_live_ci" {
 
   approval_sender_arn           = var.approval_sender_arn
   create_approval_sender_policy = var.create_approval_sender_policy
-  metadb_subnet_group_name      = var.metadb_subnet_group_name
   create_metadb_subnet_group    = var.create_metadb_subnet_group
 
   account_parent_cfg = [
@@ -70,7 +71,7 @@ module "mut_infrastructure_live_ci" {
       name                = "dev"
       path                = "directory_dependency/dev-account"
       dependencies        = ["shared_services"]
-      voters              = ["success@simulator.amazonses.com"]
+      voters              = var.approval_recipient_emails
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"
@@ -80,7 +81,7 @@ module "mut_infrastructure_live_ci" {
       name                = "shared_services"
       path                = "directory_dependency/shared-services-account"
       dependencies        = []
-      voters              = ["success@simulator.amazonses.com"]
+      voters              = var.approval_recipient_emails
       min_approval_count  = 1
       min_rejection_count = 1
       plan_role_arn       = "arn:aws:iam::${data.aws_caller_identity.current.id}:role/${local.plan_role_name}"

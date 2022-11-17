@@ -81,9 +81,9 @@ def test_successful_execution(mut_output, push_changes, expected_status):
         mut_output["ecs_cluster_arn"], task_arn, mut_output.get("ecs_endpoint_url")
     )
 
-    status = get_commit_status(
+    status_state = get_commit_status(
         mut_output["repo_full_name"], push_changes["commit_id"], cfg_path
-    )
+    ).state
 
     log.info("Assert that expected commit status state is sent")
-    assert status == expected_status
+    assert status_state == expected_status

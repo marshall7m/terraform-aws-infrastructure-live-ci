@@ -1,12 +1,13 @@
 <h3>AWS Account Name: {{account_name}}</h3>
 <h3>Pull Request: #{{pr_id}}</h3>
 <h3>Execution ID: {{execution_name}}</h3>
+<h3>Directory: {{path}}</h3>
 <h3>Terraform Plan Logs: {{logs_url}}</h3>
 
-<form method="post" action="{{approve_url}}" enctype="application/json" formtarget="_blank">
+<form method="post" action="{{approve_url}}" enctype="application/x-www-form-urlencoded" formtarget="_blank">
    <input type="submit" value="Approve" style="background-color:green;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
 </form>
 <br><br>
-<form method="post" action="{{reject_url}}" enctype="application/json" formtarget="_blank">
+<form method="post" action="{{reject_url}}" enctype="application/x-www-form-urlencoded" formtarget="_blank">
    <input type="submit" value="Reject" style="background-color:red;color:white;padding:5px;font-size:18px;border:none;padding:8px;">
 </form>

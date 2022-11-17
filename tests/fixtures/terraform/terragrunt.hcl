@@ -50,6 +50,8 @@ provider "aws" {
     sns            = var.moto_endpoint_url
     ssm            = var.moto_endpoint_url
     sts            = var.moto_endpoint_url
+    kms = var.moto_endpoint_url
+    ecr = var.moto_endpoint_url
   }
 }
 
@@ -109,6 +111,12 @@ variable "s3_use_path_style" {
   description = "Enable the request to use path-style addressing (set to True for local testing)"
   type        = bool
   default     = null
+}
+
+variable "is_remote" {
+  description = "Determines if module under testing is provisioned locally or not"
+  type = bool
+  default = true
 }
 EOF
 }
