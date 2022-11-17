@@ -6,7 +6,9 @@ import pytest
 import boto3
 import github
 import aurora_data_api
-from tests.helpers.utils import dummy_tf_output
+from python_on_whales import docker
+
+from tests.helpers.utils import dummy_tf_output, get_finished_commit_status
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -50,7 +52,7 @@ def send_commit_status(push_changes, mut_output):
 
 
 @pytest.fixture
-def run_task(mut_output, push_changes):
+def run_task(request, mut_output, push_changes):
     ecs = boto3.client("ecs", endpoint_url=mut_output.get("ecs_endpoint_url"))
 
     res = ecs.run_task(
@@ -60,6 +62,10 @@ def run_task(mut_output, push_changes):
                 {
                     "name": mut_output["ecs_create_deploy_stack_container_name"],
                     "environment": [
+                        {
+                            "name": "AWS_DEFAULT_REGION",
+                            "value": mut_output["aws_region"],
+                        },
                         {
                             "name": "BASE_REF",
                             "value": push_changes["branch"],
@@ -84,11 +90,14 @@ def run_task(mut_output, push_changes):
 
     yield res
 
-    if not os.environ.get("IS_REMOTE"):
-        log.debug("Removing local ecs task")
-    #     # if any test(s) failed, keep container to access docker logs for debugging
-    #     if not getattr(request.node.obj, "any_failures", False):
-    #         docker.container.remove(container, force=True)
+    # if any test(s) failed, keep container to access docker logs for debugging
+    if not getattr(request.node.obj, "any_failures", False):
+        log.info("Removing local ecs task containers")
+        container_ids = [
+            c["containerArn"].split("/")[-1] for c in res["tasks"][0]["containers"]
+        ]
+        log.debug(f"Container IDs: {container_ids}")
+        docker.container.remove(container_ids, force=True)
 
 
 @pytest.mark.usefixtures("truncate_executions", "send_commit_status")
@@ -118,11 +127,13 @@ def test_successful_execution(expected_cfg_paths, mut_output, push_changes, run_
     ) == sorted(actual_cfg_paths)
 
     repo = gh.get_repo(mut_output["repo_full_name"])
-    status = [
-        status
-        for status in repo.get_commit(push_changes["commit_id"]).get_statuses()
-        if status.context == mut_output["create_deploy_stack_status_check_name"]
-    ][0]
+    status = get_finished_commit_status(
+        mut_output["create_deploy_stack_status_check_name"],
+        repo,
+        push_changes["commit_id"],
+        wait=10,
+        max_attempts=10,
+    )
 
     log.info("Assert that expected commit status state is sent")
     assert status.state == "success"
@@ -158,11 +169,13 @@ def test_failed_execution(mut_output, push_changes, run_task):
     assert len(actual_cfg_paths) == 0
 
     repo = gh.get_repo(mut_output["repo_full_name"])
-    status = [
-        status
-        for status in repo.get_commit(push_changes["commit_id"]).get_statuses()
-        if status.context == mut_output["create_deploy_stack_status_check_name"]
-    ][0]
+    status = get_finished_commit_status(
+        mut_output["create_deploy_stack_status_check_name"],
+        repo,
+        push_changes["commit_id"],
+        wait=10,
+        max_attempts=10,
+    )
 
     log.info("Assert that expected commit status state is sent")
     assert status.state == "failure"
