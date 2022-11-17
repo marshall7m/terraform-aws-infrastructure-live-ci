@@ -67,6 +67,14 @@ def run_task(request, mut_output, push_changes):
                             "value": mut_output["aws_region"],
                         },
                         {
+                            "name": "AURORA_CLUSTER_ARN",
+                            "value": os.environ["AURORA_CLUSTER_ARN"],
+                        },
+                        {
+                            "name": "AURORA_SECRET_ARN",
+                            "value": os.environ["AURORA_SECRET_ARN"],
+                        },
+                        {
                             "name": "BASE_REF",
                             "value": push_changes["branch"],
                         },
@@ -77,6 +85,10 @@ def run_task(request, mut_output, push_changes):
                         {
                             "name": "PR_ID",
                             "value": "1",
+                        },
+                        {
+                            "name": "BASE_COMMIT_ID",
+                            "value": push_changes["base_commit_id"],
                         },
                         {
                             "name": "COMMIT_ID",
@@ -91,7 +103,7 @@ def run_task(request, mut_output, push_changes):
     yield res
 
     # if any test(s) failed, keep container to access docker logs for debugging
-    if not getattr(request.node.item, "test_failed", False):
+    if not getattr(request.node, "test_failed", False):
         log.info("Test succeeded -- Removing local ecs task containers")
         container_ids = [
             c["containerArn"].split("/")[-1] for c in res["tasks"][0]["containers"]
@@ -100,6 +112,9 @@ def run_task(request, mut_output, push_changes):
         docker.container.remove(container_ids, force=True)
 
 
+# need support in order to pass custom endpoint URL for terragrunt provider cmd with
+# --terragrunt-iam-role flag
+@pytest.mark.skip("Waiting on Terragrunt Issue: #2282")
 @pytest.mark.usefixtures("truncate_executions", "send_commit_status")
 @pytest.mark.parametrize(
     "push_changes,expected_cfg_paths",
@@ -122,7 +137,6 @@ def test_successful_execution(expected_cfg_paths, mut_output, push_changes, run_
     actual_cfg_paths = get_commit_cfg_paths(push_changes["commit_id"])
 
     log.info("Assert that all expected cfg_paths are within executions table")
-    assert len(expected_cfg_paths) == len(actual_cfg_paths)
     assert sorted(expected_cfg_paths) == sorted(actual_cfg_paths)
 
     repo = gh.get_repo(mut_output["repo_full_name"])
