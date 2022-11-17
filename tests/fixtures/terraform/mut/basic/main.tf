@@ -38,9 +38,9 @@ module "mut_infrastructure_live_ci" {
   vpc_id         = module.vpc.vpc_id
   ecs_subnet_ids = module.vpc.public_subnets
 
-  ecs_image_address = var.ecs_image_address
-
-  webhook_receiver_image_address = var.webhook_receiver_image_address
+  ecs_image_address               = var.ecs_image_address
+  approval_response_image_address = var.approval_response_image_address
+  webhook_receiver_image_address  = var.webhook_receiver_image_address
 
   # repo specific env vars required to conditionally set the terraform backend configurations
   ecs_tasks_common_env_vars = concat([
