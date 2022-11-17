@@ -28,8 +28,9 @@ class QueryStringParameters(BaseModel):
 
     @root_validator(pre=True)
     def validate_sig_content(cls, values):
+        print(values)
         values = {k: aws_decode(v) for k, v in values.items()}
-        if not values["x_ses_signature_256"].startswith("sha256="):
+        if not values["X-SES-Signature-256"].startswith("sha256="):
             raise InvalidSignatureError("Signature is not a valid sha256 value")
 
         secret = ssm.get_parameter(
@@ -41,7 +42,7 @@ class QueryStringParameters(BaseModel):
         )
 
         authorized = hmac.compare_digest(
-            values["x_ses_signature_256"].rsplit("=", maxsplit=1)[-1], expected_sig
+            values["X-SES-Signature-256"].rsplit("=", maxsplit=1)[-1], expected_sig
         )
 
         if not authorized:
