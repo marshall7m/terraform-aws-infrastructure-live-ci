@@ -91,8 +91,8 @@ def run_task(request, mut_output, push_changes):
     yield res
 
     # if any test(s) failed, keep container to access docker logs for debugging
-    if not getattr(request.node.obj, "any_failures", False):
-        log.info("Removing local ecs task containers")
+    if not getattr(request.node.item, "test_failed", False):
+        log.info("Test succeeded -- Removing local ecs task containers")
         container_ids = [
             c["containerArn"].split("/")[-1] for c in res["tasks"][0]["containers"]
         ]
@@ -122,9 +122,8 @@ def test_successful_execution(expected_cfg_paths, mut_output, push_changes, run_
     actual_cfg_paths = get_commit_cfg_paths(push_changes["commit_id"])
 
     log.info("Assert that all expected cfg_paths are within executions table")
-    assert len(expected_cfg_paths) == len(actual_cfg_paths) and sorted(
-        expected_cfg_paths
-    ) == sorted(actual_cfg_paths)
+    assert len(expected_cfg_paths) == len(actual_cfg_paths)
+    assert sorted(expected_cfg_paths) == sorted(actual_cfg_paths)
 
     repo = gh.get_repo(mut_output["repo_full_name"])
     status = get_finished_commit_status(
