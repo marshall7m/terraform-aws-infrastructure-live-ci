@@ -99,7 +99,7 @@ FROM (
         'terragrunt plan --terragrunt-working-dir ' || cfg_path
         || ' --terragrunt-iam-role ' || plan_role_arn || target_resources(
             new_resources
-        ) || ' -no-color' -destroy' AS plan_command,
+        ) || ' -no-color -destroy' AS plan_command,
         'terragrunt destroy --terragrunt-working-dir ' || cfg_path
         || ' --terragrunt-iam-role ' || apply_role_arn || target_resources(
             new_resources
