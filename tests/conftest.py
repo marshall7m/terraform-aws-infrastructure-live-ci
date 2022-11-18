@@ -353,5 +353,5 @@ def mut_output(request, reset_moto_server, tfvars_files):
 
     yield tf.output(use_cache=True)
 
-    # log.debug("Running terraform destroy")
-    # tf.destroy(auto_approve=True)
+    log.debug("Running terraform destroy")
+    tf.destroy(auto_approve=True)
