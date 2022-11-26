@@ -347,8 +347,9 @@ def mut_output(request, reset_moto_server, tfvars_files):
     log.debug("Running terraform apply")
     try:
         tf.apply(auto_approve=True, use_cache=True)
-    except TerraformTestError as err:
-        log.debug(err, exc_info=True)
+    except TerraformTestError:
+        # TODO: figure out how to parse tf apply exception message and log with pretty formatting
+        # json.dumps() can't decode parts of it
         pytest.fail("terraform apply failed")
 
     yield tf.output(use_cache=True)
