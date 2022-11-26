@@ -1,68 +1,68 @@
 locals {
   metadb_name        = coalesce(var.metadb_name, replace("${var.prefix}_metadb", "-", "_"))
   cluster_identifier = replace("${var.prefix}-cluster", "_", "-")
-  metadb_setup_script = templatefile("${path.module}/sql/metadb_setup_script.sh", {
-    tf_module_path    = path.module
-    cluster_arn       = coalesce(var.metadb_cluster_arn, aws_rds_cluster.metadb.arn)
-    secret_arn        = coalesce(var.metadb_secret_arn, aws_secretsmanager_secret_version.master_metadb_user.arn)
-    db_name           = aws_rds_cluster.metadb.database_name
-    schema            = var.metadb_schema
-    endpoint_url_flag = var.metadb_endpoint_url != null ? "--endpoint-url=${var.metadb_endpoint_url}" : ""
-    create_tables_sql = templatefile("${path.module}/sql/create_metadb_tables.sql", {
-      metadb_schema = var.metadb_schema,
-      metadb_name   = local.metadb_name
-    })
-    create_ci_user_sql = templatefile("${path.module}/sql/create_metadb_user.sql", {
-      metadb_ci_username = var.metadb_ci_username
-      metadb_ci_password = var.metadb_ci_password
-      metadb_username    = var.metadb_username
-      metadb_name        = local.metadb_name
-      metadb_schema      = var.metadb_schema
-    })
-    insert_account_dim_sql = templatefile("${path.module}/sql/insert_account_dim.sql", {
-      metadb_schema = var.metadb_schema
-    })
-    insert_account_dim_parameter_sets = replace(jsonencode([for account in var.account_parent_cfg :
-      [
-        {
-          name  = "account_name"
-          value = { stringValue = account.name }
-        },
-        {
-          name  = "account_path"
-          value = { stringValue = account.path }
-        },
-        {
-          name = "account_deps"
-          value = {
-            stringValue = "{${join(", ", account.dependencies)}}"
-          }
-        },
-        {
-          name  = "min_approval_count"
-          value = { doubleValue = account.min_approval_count }
-        },
-        {
-          name  = "min_rejection_count"
-          value = { doubleValue = account.min_rejection_count }
-        },
-        {
-          name = "voters"
-          value = {
-            stringValue = "{${join(", ", account.voters)}}"
-          }
-        },
-        {
-          name  = "plan_role_arn"
-          value = { stringValue = account.plan_role_arn }
-        },
-        {
-          name  = "apply_role_arn"
-          value = { stringValue = account.apply_role_arn }
-        }
-      ]
-    ]), "\"", "\\\"")
+  endpoint_url_flag  = var.metadb_endpoint_url != null ? "--endpoint-url=${var.metadb_endpoint_url}" : ""
+  cluster_arn        = coalesce(var.metadb_cluster_arn, aws_rds_cluster.metadb.arn)
+  secret_arn         = coalesce(var.metadb_secret_arn, aws_secretsmanager_secret_version.master_metadb_user.arn)
+
+  create_metadb_tables_sql_fp = "${path.module}/sql/create_metadb_tables.sql"
+  create_ci_user_sql_fp       = "${path.module}/sql/create_metadb_user.sql"
+  insert_account_dim_sql_fp   = "${path.module}/sql/insert_account_dim.sql"
+
+  create_metadb_tables_sql = templatefile(local.create_metadb_tables_sql_fp, {
+    metadb_schema = var.metadb_schema,
+    metadb_name   = local.metadb_name
   })
+  create_ci_user_sql = templatefile(local.create_ci_user_sql_fp, {
+    metadb_ci_username = var.metadb_ci_username
+    metadb_ci_password = var.metadb_ci_password
+    metadb_username    = var.metadb_username
+    metadb_name        = local.metadb_name
+    metadb_schema      = var.metadb_schema
+  })
+  insert_account_dim_sql = templatefile(local.insert_account_dim_sql_fp, {
+    metadb_schema = var.metadb_schema
+  })
+  insert_account_dim_parameter_sets = replace(jsonencode([for account in var.account_parent_cfg :
+    [
+      {
+        name  = "account_name"
+        value = { stringValue = account.name }
+      },
+      {
+        name  = "account_path"
+        value = { stringValue = account.path }
+      },
+      {
+        name = "account_deps"
+        value = {
+          stringValue = "{${join(", ", account.dependencies)}}"
+        }
+      },
+      {
+        name  = "min_approval_count"
+        value = { doubleValue = account.min_approval_count }
+      },
+      {
+        name  = "min_rejection_count"
+        value = { doubleValue = account.min_rejection_count }
+      },
+      {
+        name = "voters"
+        value = {
+          stringValue = "{${join(", ", account.voters)}}"
+        }
+      },
+      {
+        name  = "plan_role_arn"
+        value = { stringValue = account.plan_role_arn }
+      },
+      {
+        name  = "apply_role_arn"
+        value = { stringValue = account.apply_role_arn }
+      }
+    ]
+  ]), "\"", "\\\"")
 }
 
 resource "aws_ssm_parameter" "metadb_ci_password" {
@@ -133,14 +133,67 @@ resource "aws_secretsmanager_secret_version" "ci_metadb_user" {
   })
 }
 
-resource "null_resource" "metadb_setup" {
+resource "null_resource" "metadb_setup_tables" {
   provisioner "local-exec" {
-    command     = local.metadb_setup_script
+    command     = <<EOF
+aws ${local.endpoint_url_flag} rds-data execute-statement \
+  --continue-after-timeout \
+  --resource-arn ${local.cluster_arn} \
+  --secret-arn ${local.secret_arn} \
+  --database ${local.metadb_name} \
+  --sql "${local.create_metadb_tables_sql}"
+EOF
     interpreter = ["bash", "-c"]
   }
   triggers = {
-    metadb_setup_script = sha256(local.metadb_setup_script)
-    cluster_arn         = aws_rds_cluster.metadb.arn
-    db_name             = aws_rds_cluster.metadb.database_name
+    query       = filesha256(local.create_metadb_tables_sql_fp)
+    cluster_arn = local.cluster_arn
+    db_name     = local.metadb_name
   }
+}
+
+resource "null_resource" "metadb_setup_user" {
+  provisioner "local-exec" {
+    command     = <<EOF
+aws ${local.endpoint_url_flag} rds-data execute-statement \
+  --continue-after-timeout \
+  --resource-arn ${local.cluster_arn} \
+  --secret-arn ${local.secret_arn} \
+  --database ${local.metadb_name} \
+  --sql "${local.create_ci_user_sql}"
+EOF
+    interpreter = ["bash", "-c"]
+  }
+  triggers = {
+    query       = filesha256(local.create_ci_user_sql_fp)
+    cluster_arn = local.cluster_arn
+    db_name     = local.metadb_name
+  }
+  depends_on = [
+    null_resource.metadb_setup_tables
+  ]
+}
+
+
+resource "null_resource" "metadb_setup_account_dim" {
+  provisioner "local-exec" {
+    command     = <<EOF
+aws ${local.endpoint_url_flag} rds-data batch-execute-statement \
+  --resource-arn ${local.cluster_arn} \
+  --secret-arn ${local.secret_arn} \
+  --database ${local.metadb_name} \
+  --sql "${local.insert_account_dim_sql}" \
+  --parameter-sets "${local.insert_account_dim_parameter_sets}"
+EOF
+    interpreter = ["bash", "-c"]
+  }
+  triggers = {
+    query       = filesha256(local.insert_account_dim_sql_fp)
+    records     = sha256(local.insert_account_dim_parameter_sets)
+    cluster_arn = local.cluster_arn
+    db_name     = local.metadb_name
+  }
+  depends_on = [
+    null_resource.metadb_setup_tables
+  ]
 }

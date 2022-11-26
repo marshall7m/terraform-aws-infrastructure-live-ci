@@ -119,7 +119,9 @@ Terraform module that provisions an AWS serverless CI/CD pipeline used for manag
 | [docker_tag.ecr_receiver](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs/resources/tag) | resource |
 | [github_branch_protection.merge_lock](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/branch_protection) | resource |
 | [github_repository_webhook.this](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_webhook) | resource |
-| [null_resource.metadb_setup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.metadb_setup_account_dim](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.metadb_setup_tables](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.metadb_setup_user](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.metadb_users](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [random_password.email_approval_secret](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 | [random_password.github_webhook_secret](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |

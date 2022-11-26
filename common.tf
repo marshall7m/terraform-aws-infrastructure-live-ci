@@ -102,7 +102,7 @@ data "aws_iam_policy_document" "ci_metadb_access" {
 }
 
 resource "aws_iam_policy" "ci_metadb_access" {
-  name        = replace("${local.metadb_name}-access", "_", "-")
+  name        = replace("${var.prefix}-${local.metadb_name}-access", "_", "-")
   description = "Allows CI services to connect to metadb"
   policy      = data.aws_iam_policy_document.ci_metadb_access.json
 }
