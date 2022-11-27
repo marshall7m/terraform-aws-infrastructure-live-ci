@@ -30,12 +30,13 @@ def open_pr(request: Request):
     )
 
     trigger_pr_plan(
-        event.body.repository.full_name,
-        event.body.pull_request.base.ref,
-        event.body.pull_request.head.ref,
-        event.body.pull_request.head.sha,
-        context.logs_url,
-        event.body.commit_status_config.get("PrPlan"),
+        repo_full_name=event.body.repository.full_name,
+        base_ref=event.body.pull_request.base.ref,
+        head_ref=event.body.pull_request.head.ref,
+        head_sha=event.body.pull_request.head.sha,
+        pr_id=event.body.pull_request.number,
+        logs_url=context.logs_url,
+        send_commit_status=event.body.commit_status_config.get("PrPlan"),
     )
 
     return JSONResponse(

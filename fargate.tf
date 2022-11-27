@@ -247,6 +247,10 @@ resource "aws_ecs_task_definition" "pr_plan" {
           {
             name  = "LOG_STREAM_PREFIX"
             value = local.pr_plan_log_stream_prefix
+          },
+          {
+            name  = "COMMENT_PLAN"
+            value = var.enable_gh_comment_pr_plan ? "true" : ""
           }
         ],
         local.ecs_tasks_base_env_vars,

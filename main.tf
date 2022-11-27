@@ -57,6 +57,18 @@ resource "aws_sfn_state_machine" "this" {
                         "Name"    = "TASK_TOKEN"
                         "Value.$" = "$$.Task.Token"
                       },
+                      {
+                        "Name"    = "CFG_PATH"
+                        "Value.$" = "$.cfg_path"
+                      },
+                      {
+                        "Name"    = "PR_ID"
+                        "Value.$" = "States.Format('{}', $.pr_id)"
+                      },
+                      {
+                        "Name"  = "COMMENT_PLAN"
+                        "Value" = var.enable_gh_comment_approval ? "true" : ""
+                      }
                     ]
                   )
                 }

@@ -3,9 +3,11 @@ import logging
 import subprocess
 import sys
 import json
-from typing import List
-import aurora_data_api
 import ast
+from typing import List
+
+import aurora_data_api
+import github
 import boto3
 
 sys.path.append(os.path.dirname(__file__) + "/..")
@@ -13,6 +15,7 @@ from common.utils import (
     subprocess_run,
     send_commit_status,
     get_task_log_url,
+    get_diff_block,
 )
 
 log = logging.getLogger(__name__)
@@ -89,6 +92,29 @@ def update_new_resources() -> None:
         log.info("New provider resources were not created -- skipping")
 
 
+def comment_terra_run_plan(plan) -> str:
+    """Sends a GitHub PR comment for the run's Terraform plan"""
+    plan_block = get_diff_block(plan)
+    comment = f"""
+## Deployment Infrastructure Changes
+### Directory: {os.environ["CFG_PATH"]}
+### Execution ID: {os.environ["EXECUTION_ID"]}
+<details open>
+<summary>Plan</summary>
+<br>
+{plan_block}
+</details>
+"""
+    pr = (
+        github.Github(os.environ["GITHUB_TOKEN"], retry=3)
+        .get_repo(os.environ["REPO_FULL_NAME"])
+        .get_pull(int(os.environ["PR_ID"]))
+    )
+    pr.create_issue_comment(comment)
+
+    return comment
+
+
 def main() -> None:
     """
     Primarily this function prints the results of the Terragrunt command. If the
@@ -106,11 +132,10 @@ def main() -> None:
             text=True,
             check=True,
         )
-        print(run.stdout)
+        log.info(run.stdout)
         state = "success"
     except subprocess.CalledProcessError as e:
-        print(e.stderr)
-        print(e)
+        log.error(e)
         state = "failure"
 
     log_url = get_task_log_url()
@@ -122,6 +147,9 @@ def main() -> None:
             )
             # send ECS task log url with task token to allow Request Approval state to use log url
             # within approval email
+            if os.environ.get("COMMENT_PLAN"):
+                log.info("Commenting Terraform plan results")
+                comment_terra_run_plan(run.stdout)
             if state == "success":
                 output = json.dumps({"LogsUrl": log_url})
                 sf.send_task_success(taskToken=os.environ["TASK_TOKEN"], output=output)

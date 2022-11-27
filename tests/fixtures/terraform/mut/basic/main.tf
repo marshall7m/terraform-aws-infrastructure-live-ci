@@ -22,7 +22,9 @@ module "mut_infrastructure_live_ci" {
 
   enforce_admin_branch_protection = var.enforce_admin_branch_protection
 
-  commit_status_config = var.commit_status_config
+  enable_gh_comment_pr_plan  = true
+  enable_gh_comment_approval = true
+  commit_status_config       = var.commit_status_config
 
   metadb_name         = var.metadb_name
   metadb_username     = var.metadb_username
