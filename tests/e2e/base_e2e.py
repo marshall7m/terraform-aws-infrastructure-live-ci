@@ -94,8 +94,14 @@ class E2E:
         )
         log.debug(f"Expected count: {expected_count}")
         wait = 10
+        attempts = 0
+        max_attempts = 12
         statuses = []
         while len(statuses) != expected_count:
+            if attempts == max_attempts:
+                pytest.fail(
+                    "Max attempt reached -- Lambda Function might have failed beforehand"
+                )
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
             statuses = [
@@ -104,6 +110,8 @@ class E2E:
                 if status.context != mut_output["merge_lock_status_check_name"]
             ]
 
+            attempts += 1
+
         return statuses
 
     @pytest.fixture(scope="class")
@@ -111,8 +119,14 @@ class E2E:
         """Returns list of PR plan tasks' finished commit statuses"""
         log.info("Waiting for all PR plan commit statuses to be updated")
         wait = 15
+        attempts = 0
+        max_attempts = 12
         statuses = []
         while len(statuses) != len(pr_plan_pending_statuses):
+            if attempts == max_attempts:
+                pytest.fail(
+                    "Max attempt reached -- ECS task might have failed beforehand"
+                )
             log.debug(f"Waiting {wait} seconds")
             time.sleep(wait)
             statuses = [
@@ -123,6 +137,7 @@ class E2E:
             ]
 
             log.debug(f"Finished count: {len(statuses)}")
+            attempts += 1
 
         return statuses
 

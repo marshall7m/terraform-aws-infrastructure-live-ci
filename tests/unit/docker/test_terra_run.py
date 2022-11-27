@@ -1,18 +1,20 @@
-from docker.src.common.utils import ServerException
-import pytest
 import os
 import logging
 from subprocess import CalledProcessError
 import json
-import aurora_data_api
 from unittest.mock import patch, call
-from tests.helpers.utils import null_provider_resource, insert_records, rds_data_client
+
+import aurora_data_api
+import pytest
+
+from docker.src.common.utils import ServerException, subprocess_run
 from docker.src.terra_run.run import (
     update_new_resources,
     get_new_provider_resources,
     main,
+    comment_terra_run_plan,
 )
-from docker.src.common.utils import subprocess_run
+from tests.helpers.utils import null_provider_resource, insert_records, rds_data_client
 from tests.unit.docker.conftest import mock_subprocess_run
 
 log = logging.getLogger(__name__)
@@ -183,3 +185,65 @@ def test_main(
 
     main()
     assert mock_send_commit_status.call_args_list == [call(expected_status, log_url)]
+
+
+@patch("github.Github")
+@patch.dict(
+    os.environ,
+    {
+        "CFG_PATH": "terraform/cfg",
+        "EXECUTION_ID": "run-123",
+        "REPO_FULL_NAME": "user/repo",
+        "PR_ID": "1",
+    },
+)
+def test_comment_terra_run_plan(mock_gh):
+    """Ensures comment_terra_run_plan() formats the comment's diff block properly and returns the expected comment"""
+    plan = """
+
+Changes to Outputs:
+  - bar = "old" -> null
+  + baz = "new"
+  ~ foo = "old" -> "new"
+
+You can apply this plan to save these new output values to the Terraform
+state, without changing any real infrastructure.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
+
+"""
+    expected = """
+## Deployment Infrastructure Changes
+### Directory: terraform/cfg
+### Execution ID: run-123
+<details open>
+<summary>Plan</summary>
+<br>
+
+``` diff
+
+
+Changes to Outputs:
+-   bar = "old" -> null
++   baz = "new"
+!   foo = "old" -> "new"
+
+You can apply this plan to save these new output values to the Terraform
+state, without changing any real infrastructure.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
+
+
+```
+
+</details>
+"""
+    actual = comment_terra_run_plan(plan)
+
+    assert actual == expected
