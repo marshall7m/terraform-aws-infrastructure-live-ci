@@ -82,3 +82,37 @@ def send_commit_status(state: str, target_url: str):
         context=os.environ["STATUS_CHECK_NAME"],
         target_url=target_url,
     )
+
+
+def tf_to_diff(matchobj) -> str:
+    """Replaces Terraform plan syntax with GitHub markdown diff syntax"""
+    if matchobj["add"]:
+        return matchobj["add"].replace("+", " ").replace(" ", "+", 1)
+
+    elif matchobj["minus"]:
+        return matchobj["minus"].replace("-", " ").replace(" ", "-", 1)
+
+    elif matchobj["update"]:
+        # replace ~ with ! to highlight with orange
+        return matchobj["update"].replace("~", " ").replace(" ", "!", 1)
+
+
+def get_diff_block(plan) -> str:
+    """
+    Returns Terraform plan as a markdown diff code block
+
+    Arguments:
+        plan: Terraform Plan stdout without color formatting (use -no-color flag for plan cmd)
+    """
+    diff = re.sub(
+        r"((?P<add>^\s*\+)|(?P<minus>^\s*\-)|(?P<update>^\s*\~))",
+        tf_to_diff,
+        plan,
+        flags=re.MULTILINE,
+    )
+
+    return f"""
+``` diff
+{diff}
+```
+"""
