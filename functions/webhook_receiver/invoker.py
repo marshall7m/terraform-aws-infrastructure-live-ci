@@ -56,6 +56,7 @@ def trigger_pr_plan(
     base_ref: str,
     head_ref: str,
     head_sha: str,
+    pr_id: int,
     logs_url: str,
     send_commit_status: bool,
 ) -> None:
@@ -140,6 +141,7 @@ def trigger_pr_plan(
                                             "name": "COMMIT_ID",
                                             "value": head_sha,
                                         },
+                                        {"name": "PR_ID", "value": str(pr_id)},
                                         {"name": "CFG_PATH", "value": path},
                                         {
                                             "name": "ROLE_ARN",
