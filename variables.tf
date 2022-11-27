@@ -302,9 +302,11 @@ variable "github_token_ssm_description" {
 
 variable "github_token_ssm_value" {
   description = <<EOF
-Registered Github webhook token associated with the Github provider. The token will be used by the Merge Lock Lambda Function.
-If not provided, module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
-GitHub token needs the `repo` permission to send commit statuses for private repos. (see more about OAuth scopes here: https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
+Registered Github token associated with the Github provider. If not provided, 
+module looks for pre-existing SSM parameter via `var.github_token_ssm_key`".
+GitHub token needs the `repo` permission to send commit statuses and write comments 
+for private repos (see more about OAuth scopes here: 
+https://docs.github.com/en/developers/apps/building-oauth-apps/scopes-for-oauth-apps)
   EOF
   type        = string
   default     = ""
@@ -511,7 +513,6 @@ EOF
   default = {}
 }
 
-
 variable "approval_sender_arn" {
   description = "AWS SES identity ARN used to send approval emails"
   type        = string
@@ -554,3 +555,19 @@ variable "metadb_name" {
   type        = string
   default     = null
 }
+
+variable "enable_gh_comment_pr_plan" {
+  description = "Determines if Terraform plans will be commented within open PR page"
+  type        = bool
+  default     = false
+}
+
+variable "enable_gh_comment_approval" {
+  description = <<EOF
+Determines if execution approval votes can be sent via GitHub comments.
+This will also enable Terraform plans to be commented within merged PR page
+EOF
+  type        = bool
+  default     = false
+}
+
